@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import DirectoryPath
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -9,4 +9,4 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TSDB_BENCHMARKS_", extra="ignore")
 
 
-SETTINGS = Settings()
+SETTINGS = Settings()  # type: ignore[call-arg]
