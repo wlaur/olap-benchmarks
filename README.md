@@ -1,3 +1,3 @@
-# tsdv-benchmarks
+# tsdb-benchmarks
 
 > Time series database benchmarks
