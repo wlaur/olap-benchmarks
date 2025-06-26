@@ -1,0 +1,7 @@
+[project]
+name = "tsdb-benchmarks"
+version = "0.1.0"
+description = "Time series database benchmarks"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
