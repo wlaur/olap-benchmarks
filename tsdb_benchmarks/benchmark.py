@@ -10,27 +10,27 @@ BenchmarkStep = Literal["insert", "query", "append", "upsert"]
 STEPS: list[BenchmarkStep] = list(get_args(BenchmarkStep))
 
 
-class QueryResult(BaseModel):
+class Result(BaseModel):
     iterations: int = 1
     elapsed_sec: float
     peak_memory_mb: float
 
 
-class InsertResult(QueryResult):
+class ResultWithDiskUsage(Result):
     disk_usage_mb: float
 
 
 class CombinedResult(BaseModel):
     iterations: int = 1
-    insert: InsertResult
-    query: QueryResult
+    insert: ResultWithDiskUsage
+    query: Result
 
 
 class BenchmarkResults(BaseModel):
     name: DatabaseName
 
-    insert: InsertResult | None = None
-    query: QueryResult | None = None
+    insert: ResultWithDiskUsage | None = None
+    query: Result | None = None
     append: CombinedResult | None = None
     upsert: CombinedResult | None = None
 
@@ -48,7 +48,7 @@ def average(values: list[float]) -> float:
     return sum(values) / len(values)
 
 
-def benchmark_insert(db: Database) -> InsertResult:
+def benchmark_insert(db: Database) -> ResultWithDiskUsage:
     elapsed: list[float] = []
     memory: list[float] = []
     disk: list[float] = []
@@ -58,7 +58,7 @@ def benchmark_insert(db: Database) -> InsertResult:
         memory.append(1)
         disk.append(1)
 
-    return InsertResult(
+    return ResultWithDiskUsage(
         iterations=SETTINGS.insert_iterations,
         elapsed_sec=average(elapsed),
         peak_memory_mb=average(memory),
@@ -66,7 +66,7 @@ def benchmark_insert(db: Database) -> InsertResult:
     )
 
 
-def benchmark_query(db: Database) -> QueryResult:
+def benchmark_query(db: Database) -> Result:
     elapsed: list[float] = []
     memory: list[float] = []
 
@@ -74,7 +74,7 @@ def benchmark_query(db: Database) -> QueryResult:
         elapsed.append(1)
         memory.append(1)
 
-    return QueryResult(
+    return Result(
         iterations=SETTINGS.query_iterations,
         elapsed_sec=average(elapsed),
         peak_memory_mb=average(memory),
