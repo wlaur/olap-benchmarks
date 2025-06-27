@@ -10,6 +10,8 @@ TableName = Annotated[str, "Table name"]
 class Settings(BaseSettings):
     input_data_directory: DirectoryPath
     database_directory: DirectoryPath
+    temporary_directory: DirectoryPath
+
     results_directory: DirectoryPath
 
     insert_iterations: int = 1
