@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fire>=0.7.0",
+    "numpy>=2.3.1",
     "polars>=1.31.0",
     "pre-commit>=4.2.0",
     "pydantic>=2.11.7",
