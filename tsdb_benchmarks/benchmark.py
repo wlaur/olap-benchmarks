@@ -9,6 +9,9 @@ BenchmarkStep = Literal["insert", "query", "append", "upsert"]
 
 STEPS: list[BenchmarkStep] = list(get_args(BenchmarkStep))
 
+# TODO: collect time series data for benchmarks, e.g. mem usage, cpu, disk usage vs. time
+# can be used to find patterns and calculate aggregates later on
+
 
 class Result(BaseModel):
     iterations: int = 1
