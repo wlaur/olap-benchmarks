@@ -7,11 +7,14 @@ requires-python = ">=3.12"
 dependencies = [
     "fire>=0.7.0",
     "numpy>=2.3.1",
+    "pandas>=2.3.0",
     "polars>=1.31.0",
     "pre-commit>=4.2.0",
+    "pyarrow>=20.0.0",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.10.1",
     "pymonetdb==1.8.4",
+    "setuptools>=80.9.0",
     "sqlalchemy>=2.0.41",
     "sqlalchemy-monetdb==2.0.0",
 ]
@@ -20,6 +23,7 @@ dependencies = [
 dev = [
     "ipykernel>=6.29.5",
     "mypy>=1.16.1",
+    "pandas-stubs>=2.2.3.250527",
     "pyinstrument>=5.0.2",
     "ruff>=0.12.0",
 ]

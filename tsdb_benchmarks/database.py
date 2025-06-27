@@ -13,11 +13,13 @@ class Database(BaseModel, ABC):
     start: str
     stop: str
 
-    @abstractmethod
-    def connect(self) -> Connection: ...
+    _connection: Connection | None = None
 
     @abstractmethod
-    def fetch(self, query: str) -> pl.DataFrame: ...
+    def connect(self, reconnect: bool = False) -> Connection: ...
+
+    @abstractmethod
+    def fetch(self, query: str, schema: dict[str, pl.DataType] | None = None) -> pl.DataFrame: ...
 
     @abstractmethod
     def insert(self, df: pl.DataFrame, table: TableName) -> None: ...
