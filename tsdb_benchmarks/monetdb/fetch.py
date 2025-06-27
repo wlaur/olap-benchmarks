@@ -1,4 +1,5 @@
 import contextlib
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -82,31 +83,37 @@ def read_timestamp_column(path: Path) -> pl.Series:
 
     records = np.frombuffer(data, dtype=record_dtype)
 
-    dt_index = pd.to_datetime(
-        {
-            "year": records["year"],
-            "month": records["month"],
-            "day": records["day"],
-            "hour": records["hours"],
-            "minute": records["minutes"],
-            "second": records["seconds"],
-            "microsecond": records["ms"] * 1000,
-        },
-        errors="coerce",
-    )
+    null_mask = records["year"] == -1
 
-    return pl.Series(dt_index)
+    out = np.full(len(records), np.datetime64("NaT"), dtype="datetime64[ms]")
+
+    if (~null_mask).any():
+        dt_index = pd.to_datetime(  # type: ignore[call-overload]
+            {
+                "year": records["year"][~null_mask],
+                "month": records["month"][~null_mask],
+                "day": records["day"][~null_mask],
+                "hour": records["hours"][~null_mask],
+                "minute": records["minutes"][~null_mask],
+                "second": records["seconds"][~null_mask],
+                "microsecond": records["ms"][~null_mask] * 1_000,
+            },
+            errors="raise",
+        ).values
+
+        out[~null_mask] = dt_index
+
+    return pl.Series(out)
 
 
-def read_column_bin(path: Path, dtype: pl.DataType) -> pl.Series:
+def read_column_bin(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
     if dtype == pl.Datetime("ms"):
         return read_timestamp_column(path)
 
     with path.open("rb") as f:
         data = f.read()
 
-    # 128-bit int is not supported
-    np_dtype = {
+    np_dtype_map: dict[pl.DataType | type[pl.DataType], str] = {
         pl.Boolean: "<u1",
         pl.Int8: "<i1",
         pl.Int16: "<i2",
@@ -118,18 +125,42 @@ def read_column_bin(path: Path, dtype: pl.DataType) -> pl.Series:
         pl.UInt64: "<u8",
         pl.Float32: "<f4",
         pl.Float64: "<f8",
-    }.get(dtype)
+    }
+
+    np_dtype = np_dtype_map.get(dtype)
 
     if np_dtype is None:
         raise ValueError(f"Unsupported dtype: {dtype}")
 
+    if dtype == pl.Boolean:
+        is_bool = True
+        dtype = pl.UInt8
+    else:
+        is_bool = False
+
     values = np.frombuffer(data, dtype=np_dtype)
-    s = pl.Series(values).cast(dtype)
+
+    s = pl.Series(values, dtype=dtype)
+
+    if is_bool:
+        dtype = pl.Boolean
+        s = s.replace(128, None).cast(dtype)
+
+    if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64):
+        sentinel = np.iinfo(values.dtype).min
+        s = s.replace(sentinel, None)
 
     with contextlib.suppress(Exception):
         s = s.fill_nan(None)
 
     return s
+
+
+def _get_limit_query(query: str) -> str:
+    query = query.rstrip().rstrip(";")
+    limit_regex = re.compile(r"\s+limit\s+\d+\s*$", re.IGNORECASE)
+    query = re.sub(limit_regex, "", query)
+    return f"{query} limit 1"
 
 
 def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataType] | None = None) -> pl.DataFrame:
@@ -138,7 +169,7 @@ def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataTy
     _ensure_downloader(con)
 
     if schema is None:
-        schema = fetch_pymonetdb(f"{query} limit 1", connection).schema
+        schema = fetch_pymonetdb(_get_limit_query(query), connection).schema
 
     temp_dir = DOWNLOAD_DIRECTORY / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
@@ -149,7 +180,7 @@ def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataTy
     try:
         con.execute(f"copy {query} into little endian binary {output_files_repr} on client")
 
-        columns = {}
+        columns: dict[str, pl.Series] = {}
         for (col_name, dtype), path in zip(schema.items(), output_files, strict=True):
             columns[col_name] = read_column_bin(path, dtype)
 
