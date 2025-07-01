@@ -45,7 +45,7 @@ def ensure_uploader(connection: MonetDBConnection) -> None:
     UPLOAD_DOWNLOAD_DIRECTORY.mkdir(exist_ok=True)
 
     transfer_handler = pymonetdb.SafeDirectoryHandler(UPLOAD_DOWNLOAD_DIRECTORY)
-    connection.set_downloader(transfer_handler)
+    connection.set_uploader(transfer_handler)
 
 
 def get_pymonetdb_connection(connection: Connection) -> MonetDBConnection:
