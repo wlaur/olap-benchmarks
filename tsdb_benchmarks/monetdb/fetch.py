@@ -3,45 +3,12 @@ import re
 import shutil
 import uuid
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import polars as pl
-import pymonetdb  # type: ignore[import-untyped]
-from pymonetdb import Connection as MonetDBConnection
 from sqlalchemy import Connection
 
-from ..settings import SETTINGS
-
-DOWNLOAD_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
-
-
-def get_pymonetdb_connection(connection: Connection) -> MonetDBConnection:
-    return cast(MonetDBConnection, connection._dbapi_connection)
-
-
-MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
-    "tinyint": pl.Int8,
-    "smallint": pl.Int16,
-    "int": pl.Int32,
-    "bigint": pl.Int64,
-    "hugeint": pl.Int128,
-    "char": pl.String,
-    "blob": pl.Binary,
-    "real": pl.Float32,
-    "double": pl.Float64,
-    "decimal": pl.Decimal,
-    "boolean": pl.Boolean,
-    "timestamp": pl.Datetime("ms"),
-    "time": pl.Time,
-}
-
-
-def _get_type(type_code: str) -> pl.DataType | type[pl.DataType]:
-    try:
-        return MONETDB_POLARS_TYPE_MAP[type_code]
-    except KeyError:
-        raise ValueError(f"Unknown type code: '{type_code}'") from None
+from .utils import UPLOAD_DOWNLOAD_DIRECTORY, ensure_downloader, get_polars_type, get_pymonetdb_connection
 
 
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
@@ -53,14 +20,7 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
     description = c.description
     assert description is not None
 
-    return pl.DataFrame(ret, schema={n.name: _get_type(n.type_code) for n in description}, orient="row")
-
-
-def _ensure_downloader(connection: MonetDBConnection) -> None:
-    DOWNLOAD_DIRECTORY.mkdir(exist_ok=True)
-
-    transfer_handler = pymonetdb.SafeDirectoryHandler(DOWNLOAD_DIRECTORY)
-    connection.set_downloader(transfer_handler)
+    return pl.DataFrame(ret, schema={n.name: get_polars_type(n.type_code) for n in description}, orient="row")
 
 
 def read_timestamp_column(path: Path) -> pl.Series:
@@ -166,12 +126,12 @@ def _get_limit_query(query: str) -> str:
 def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataType] | None = None) -> pl.DataFrame:
     con = get_pymonetdb_connection(connection)
 
-    _ensure_downloader(con)
+    ensure_downloader(con)
 
     if schema is None:
         schema = fetch_pymonetdb(_get_limit_query(query), connection).schema
 
-    temp_dir = DOWNLOAD_DIRECTORY / str(uuid.uuid4())[:4]
+    temp_dir = UPLOAD_DOWNLOAD_DIRECTORY / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 
     output_files = [temp_dir / f"{idx}.bin" for idx in range(len(schema))]
