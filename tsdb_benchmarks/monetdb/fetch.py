@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
-import pandas as pd
 import polars as pl
 import pymonetdb  # type: ignore[import-untyped]
 from pymonetdb import Connection as MonetDBConnection
@@ -83,27 +82,28 @@ def read_timestamp_column(path: Path) -> pl.Series:
 
     records = np.frombuffer(data, dtype=record_dtype)
 
-    null_mask = records["year"] == -1
+    df = pl.DataFrame(
+        {
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
+            "hour": records["hours"],
+            "minute": records["minutes"],
+            "second": records["seconds"],
+            "microsecond": records["ms"] * 1000,
+        }
+    )
 
-    out = np.full(len(records), np.datetime64("NaT"), dtype="datetime64[ms]")
-
-    if (~null_mask).any():
-        dt_index = pd.to_datetime(  # type: ignore[call-overload]
-            {
-                "year": records["year"][~null_mask],
-                "month": records["month"][~null_mask],
-                "day": records["day"][~null_mask],
-                "hour": records["hours"][~null_mask],
-                "minute": records["minutes"][~null_mask],
-                "second": records["seconds"][~null_mask],
-                "microsecond": records["ms"][~null_mask] * 1_000,
-            },
-            errors="raise",
-        ).values
-
-        out[~null_mask] = dt_index
-
-    return pl.Series(out)
+    return df.select(
+        pl.when(pl.col("year") == -1)
+        .then(None)
+        .otherwise(
+            pl.datetime(
+                "year", "month", "day", "hour", "minute", "second", "microsecond", time_unit="ms", time_zone=None
+            )
+        )
+        .alias("timestamp")
+    ).get_column("timestamp")
 
 
 def read_column_bin(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
