@@ -26,7 +26,13 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "boolean": pl.Boolean,
     "timestamp": pl.Datetime("ms"),
     "time": pl.Time,
+    "timestamptz": pl.Datetime("ms"),  # tz info is not stored in binary data, this will be dumped as UTC
+    "timetz": pl.Time,
     "varchar": pl.String,
+    "json": pl.String,
+    "sec_interval": pl.Int64,  # int64 ms
+    "day_interval": pl.Int64,  # int64 ms
+    "month_interval": pl.Int32,
 }
 
 
@@ -35,6 +41,7 @@ UPLOAD_DOWNLOAD_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
 
 class SchemaMeta(BaseModel):
     size: int | None = None
+    tz: str | None = None
 
 
 def get_schema_meta(description: Description) -> SchemaMeta:

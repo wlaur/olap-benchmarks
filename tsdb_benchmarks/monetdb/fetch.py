@@ -45,7 +45,7 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     return {n.name: (get_polars_type(n.type_code), get_schema_meta(n)) for n in description}
 
 
-def read_timestamp_column(path: Path) -> pl.Series:
+def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
@@ -84,11 +84,67 @@ def read_timestamp_column(path: Path) -> pl.Series:
                 "year", "month", "day", "hour", "minute", "second", "microsecond", time_unit="ms", time_zone=None
             )
         )
+        .cast(dtype)
         .alias("time")
     ).get_column("time")
 
 
-def read_text_column(path: Path) -> pl.Series:
+def read_time_column(path: Path) -> pl.Series:
+    with path.open("rb") as f:
+        data = f.read()
+
+    record_dtype = np.dtype(
+        [
+            ("ms", "<u4"),
+            ("seconds", "u1"),
+            ("minutes", "u1"),
+            ("hours", "u1"),
+            ("padding", "u1"),
+        ]
+    )
+
+    records = np.frombuffer(data, dtype=record_dtype)
+
+    millis = (
+        (records["hours"].astype(np.uint64) * 3600_000)
+        + (records["minutes"].astype(np.uint64) * 60_000)
+        + (records["seconds"].astype(np.uint64) * 1000)
+        + records["ms"].astype(np.uint64)
+    )
+
+    nanos = millis * 1_000_000
+
+    return pl.Series(nanos, dtype=pl.Time)
+
+
+def read_date_column(path: Path) -> pl.Series:
+    with path.open("rb") as f:
+        data = f.read()
+
+    record_dtype = np.dtype(
+        [
+            ("day", "u1"),
+            ("month", "u1"),
+            ("year", "<i2"),
+        ]
+    )
+
+    records = np.frombuffer(data, dtype=record_dtype)
+
+    df = pl.DataFrame(
+        {
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
+        }
+    )
+
+    return df.select(
+        pl.when(pl.col("year") == -1).then(None).otherwise(pl.date("year", "month", "day")).alias("date")
+    ).get_column("date")
+
+
+def read_string_column(path: Path) -> pl.Series:
     data = path.read_bytes()
     nul_positions = np.flatnonzero(np.frombuffer(data, dtype=np.uint8) == 0x00)
 
@@ -113,13 +169,34 @@ def read_text_column(path: Path) -> pl.Series:
     return cast(pl.Series, pl.from_arrow(string_array))
 
 
-def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
-    if dtype == pl.Datetime("ms"):
-        return read_timestamp_column(path)
+def read_blob_column(path: Path) -> pl.Series:
+    with path.open("rb") as f:
+        data = f.read()
 
-    if dtype == pl.String:
-        return read_text_column(path)
+    result: list[bytes | None] = []
 
+    offset = 0
+    data_len = len(data)
+
+    while offset + 8 <= data_len:
+        length_bytes = data[offset : offset + 8]
+        length = int.from_bytes(length_bytes, byteorder="little")
+        offset += 8
+
+        if length == 0xFFFFFFFFFFFFFFFF:
+            result.append(None)
+        else:
+            if offset + length > data_len:
+                raise ValueError("File ends prematurely while reading blob data")
+
+            blob_data = data[offset : offset + length]
+            result.append(blob_data)
+            offset += length
+
+    return pl.Series(result, dtype=pl.Binary)
+
+
+def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
@@ -164,6 +241,22 @@ def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], 
         s = s.fill_nan(None)
 
     return s
+
+
+def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
+    match dtype:
+        case pl.Datetime:
+            return read_datetime_column(path, dtype)
+        case pl.Time:
+            return read_time_column(path)
+        case pl.Date:
+            return read_date_column(path)
+        case pl.String:
+            return read_string_column(path)
+        case pl.Binary:
+            return read_blob_column(path)
+        case _:
+            return read_numeric_column(path, dtype)
 
 
 def fetch_binary(
