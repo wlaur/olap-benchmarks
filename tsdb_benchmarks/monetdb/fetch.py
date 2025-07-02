@@ -12,8 +12,9 @@ import pyarrow as pa
 from sqlalchemy import Connection
 
 from .utils import (
-    BOOLEAN_TRUE,
-    UPLOAD_DOWNLOAD_DIRECTORY,
+    BOOLEAN_NULL,
+    MONETDB_TEMPORARY_DIRECTORY,
+    POLARS_NUMPY_STRUCT_PACKING_CODE_MAP,
     SchemaMeta,
     ensure_downloader_uploader,
     get_limit_query,
@@ -27,6 +28,9 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
     con = get_pymonetdb_connection(connection)
     c = con.cursor()
     c.execute(query)
+
+    # TODO: bug with pymonetdb where the initial 100 rows are fetched using normal and the rest with binary
+    # the behavior is not identical for JSON columns (binary fetch does not call json.loads)
     ret = c.fetchall()
 
     description = c.description
@@ -110,16 +114,29 @@ def read_time_column(path: Path) -> pl.Series:
 
     records = np.frombuffer(data, dtype=record_dtype)
 
-    millis = (
+    is_null = (
+        (records["ms"] == 0xFFFFFFFF)
+        | (records["seconds"] >= 60)
+        | (records["minutes"] >= 60)
+        | (records["hours"] >= 24)
+    )
+
+    nanos = (
         (records["hours"].astype(np.uint64) * 3600_000)
         + (records["minutes"].astype(np.uint64) * 60_000)
         + (records["seconds"].astype(np.uint64) * 1000)
         + records["ms"].astype(np.uint64)
+    ) * 1_000_000
+
+    series = pl.Series(nanos, dtype=pl.UInt64)
+
+    result = (
+        series.to_frame()
+        .select(pl.when(pl.Series(is_null)).then(None).otherwise(pl.col(series.name)).cast(pl.Time))
+        .to_series()
     )
 
-    nanos = millis * 1_000_000
-
-    return pl.Series(nanos, dtype=pl.Time)
+    return result
 
 
 def read_date_column(path: Path) -> pl.Series:
@@ -181,6 +198,7 @@ def read_json_column(path: Path) -> pl.Series:
     return s.map_elements(json.loads, pl.Object)
 
     # maybe not safe to convert to pl.Struct, only makes sense if all JSON values are similar
+    # TODO: make this a configurable setting
     # return s.str.json_decode(infer_schema_length=None)
 
 
@@ -215,21 +233,7 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
     with path.open("rb") as f:
         data = f.read()
 
-    np_dtype_map: dict[pl.DataType | type[pl.DataType], str] = {
-        pl.Boolean: "<u1",
-        pl.Int8: "<i1",
-        pl.Int16: "<i2",
-        pl.Int32: "<i4",
-        pl.Int64: "<i8",
-        pl.UInt8: "<u1",
-        pl.UInt16: "<u2",
-        pl.UInt32: "<u4",
-        pl.UInt64: "<u8",
-        pl.Float32: "<f4",
-        pl.Float64: "<f8",
-    }
-
-    np_dtype = np_dtype_map.get(dtype)
+    np_dtype = POLARS_NUMPY_STRUCT_PACKING_CODE_MAP.get(dtype)
 
     if np_dtype is None:
         raise ValueError(f"Unsupported dtype: {dtype}")
@@ -246,7 +250,7 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
 
     if is_bool:
         dtype = pl.Boolean
-        s = s.replace(BOOLEAN_TRUE, None).cast(dtype)
+        s = s.replace(BOOLEAN_NULL, None).cast(dtype)
 
     if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64):
         sentinel = np.iinfo(values.dtype).min
@@ -260,12 +264,12 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
 
 def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
     match dtype:
-        case pl.Datetime:
-            return read_datetime_column(path, dtype)
         case pl.Time:
             return read_time_column(path)
         case pl.Date:
             return read_date_column(path)
+        case pl.Datetime:
+            return read_datetime_column(path, dtype)
         case pl.String:
             return read_string_column(path)
         case pl.Object:
@@ -293,14 +297,14 @@ def fetch_binary(
             for k, v in schema.items()
         }
 
-    temp_dir = UPLOAD_DOWNLOAD_DIRECTORY / str(uuid.uuid4())[:4]
+    temp_dir = MONETDB_TEMPORARY_DIRECTORY / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 
     output_files = [temp_dir / f"{idx}.bin" for idx in range(len(expanded_schema))]
-    output_files_repr = ",".join(f"'{temp_dir.name}/{n.name}'" for n in output_files)
+    files_clause = ",".join(f"'{temp_dir.name}/{n.name}'" for n in output_files)
 
     try:
-        con.execute(f"copy {query} into little endian binary {output_files_repr} on client")
+        con.execute(f"copy {query} into little endian binary {files_clause} on client")
 
         columns: dict[str, pl.Series] = {}
 
