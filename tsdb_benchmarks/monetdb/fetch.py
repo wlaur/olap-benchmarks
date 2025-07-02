@@ -1,19 +1,24 @@
 import contextlib
-import re
 import shutil
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import polars as pl
+import pyarrow as pa
 from sqlalchemy import Connection
 
 from .utils import (
     BOOLEAN_TRUE,
     UPLOAD_DOWNLOAD_DIRECTORY,
+    SchemaMeta,
     ensure_downloader_uploader,
+    get_limit_query,
     get_polars_type,
     get_pymonetdb_connection,
+    get_schema_meta,
 )
 
 
@@ -25,8 +30,19 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
 
     description = c.description
     assert description is not None
-
     return pl.DataFrame(ret, schema={n.name: get_polars_type(n.type_code) for n in description}, orient="row")
+
+
+def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
+    query = get_limit_query(query)
+
+    con = get_pymonetdb_connection(connection)
+    c = con.cursor()
+    c.execute(query)
+
+    description = c.description
+    assert description is not None
+    return {n.name: (get_polars_type(n.type_code), get_schema_meta(n)) for n in description}
 
 
 def read_timestamp_column(path: Path) -> pl.Series:
@@ -68,42 +84,41 @@ def read_timestamp_column(path: Path) -> pl.Series:
                 "year", "month", "day", "hour", "minute", "second", "microsecond", time_unit="ms", time_zone=None
             )
         )
-        .alias("timestamp")
-    ).get_column("timestamp")
+        .alias("time")
+    ).get_column("time")
 
 
-def read_text_column(path: Path) -> pl.Series:
+def read_text_column(path: Path, meta: SchemaMeta) -> pl.Series:
     data = path.read_bytes()
+    nul_positions = np.flatnonzero(np.frombuffer(data, dtype=np.uint8) == 0x00)
 
-    result: list[str | None] = []
-    i = 0
+    result: list[bytes | None] = []
+    start = 0
+    max_size = meta.size
 
-    while i < len(data):
-        if i + 1 < len(data) and data[i] == 0x80 and data[i + 1] == 0x00:
+    for end in nul_positions:
+        if end - start == 1 and data[start] == 0x80:
             result.append(None)
-            i += 2
+        elif end == start:
+            result.append(b"")
         else:
-            start = i
-            while i < len(data) and data[i] != 0x00:
-                i += 1
-            if i > start:
-                try:
-                    result.append(data[start:i].decode("utf-8"))
-                except UnicodeDecodeError:
-                    result.append(None)
-            else:
-                result.append("")
-            i += 1
+            slice_end = end
+            if max_size is not None and (end - start) > max_size:
+                slice_end = start + max_size
+            result.append(data[start:slice_end])
+        start = end + 1
 
-    return pl.Series(result, dtype=pl.String)
+    decoded_array = pa.array(result, type=pa.binary())
+    string_array = pa.compute.cast(decoded_array, pa.string())
+    return cast(pl.Series, pl.from_arrow(string_array))
 
 
-def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
+def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
     if dtype == pl.Datetime("ms"):
         return read_timestamp_column(path)
 
     if dtype == pl.String:
-        return read_text_column(path)
+        return read_text_column(path, meta)
 
     with path.open("rb") as f:
         data = f.read()
@@ -151,25 +166,27 @@ def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType]) 
     return s
 
 
-def _get_limit_query(query: str) -> str:
-    query = query.rstrip().rstrip(";")
-    limit_regex = re.compile(r"\s+limit\s+\d+\s*$", re.IGNORECASE)
-    query = re.sub(limit_regex, "", query)
-    return f"{query} limit 1"
-
-
-def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataType] | None = None) -> pl.DataFrame:
+def fetch_binary(
+    query: str,
+    connection: Connection,
+    schema: Mapping[str, pl.DataType | type[pl.DataType] | tuple[pl.DataType | type[pl.DataType], SchemaMeta]]
+    | None = None,
+) -> pl.DataFrame:
     con = get_pymonetdb_connection(connection)
-
     ensure_downloader_uploader(con)
 
     if schema is None:
-        schema = fetch_pymonetdb(_get_limit_query(query), connection).schema
+        expanded_schema = fetch_schema(query, connection)
+    else:
+        expanded_schema = {
+            k: (v if not isinstance(v, tuple) else v[0], v[1] if isinstance(v, tuple) else SchemaMeta())
+            for k, v in schema.items()
+        }
 
     temp_dir = UPLOAD_DOWNLOAD_DIRECTORY / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 
-    output_files = [temp_dir / f"{idx}.bin" for idx in range(len(schema))]
+    output_files = [temp_dir / f"{idx}.bin" for idx in range(len(expanded_schema))]
     output_files_repr = ",".join(f"'{temp_dir.name}/{n.name}'" for n in output_files)
 
     try:
@@ -177,11 +194,11 @@ def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataTy
 
         columns: dict[str, pl.Series] = {}
 
-        for (col_name, dtype), path in zip(schema.items(), output_files, strict=True):
-            columns[col_name] = read_binary_column_data(path, dtype)
+        for (col_name, (dtype, meta)), path in zip(expanded_schema.items(), output_files, strict=True):
+            columns[col_name] = read_binary_column_data(path, dtype, meta)
 
-        df = pl.DataFrame(columns, orient="row")
     finally:
         shutil.rmtree(temp_dir)
 
+    df = pl.DataFrame(columns, orient="row")
     return df

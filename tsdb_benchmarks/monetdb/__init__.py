@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import polars as pl
 from sqlalchemy import Connection, create_engine
 
@@ -29,7 +31,7 @@ class MonetDB(Database):
 
         return self._connection
 
-    def fetch(self, query: str, schema: dict[str, pl.DataType] | None = None) -> pl.DataFrame:
+    def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:
         return fetch_binary(query, self.connect(), schema)
 
     def fetch_pymonetdb(self, query: str) -> pl.DataFrame:

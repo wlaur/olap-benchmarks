@@ -968,6 +968,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pyarrow-stubs"
+version = "20.0.0.20250627"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyarrow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/96/614dacc9957bf130a8ad0da117b663703615bc8ae2b4332f9419c0c5de6d/pyarrow_stubs-20.0.0.20250627.tar.gz", hash = "sha256:eb1dfc2433316cfe7a2c7d3950224aa47cd68a9ced60c5f6c183c05516588c65", size = 236144, upload-time = "2025-06-27T03:16:04.195Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/1f/e965765d0643fba3b591b9cc65a539d59478a06e3ba8da271b5f3cd19c7c/pyarrow_stubs-20.0.0.20250627-py3-none-any.whl", hash = "sha256:1ffd64931665f7a5a9cf77b8e7beb621f5a7e00f8b4119004dea55c1662c3619", size = 235446, upload-time = "2025-06-27T03:16:05.888Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "2.22"
 source = { registry = "https://pypi.org/simple" }
@@ -1406,6 +1418,7 @@ dev = [
     { name = "ipykernel" },
     { name = "mypy" },
     { name = "pandas-stubs" },
+    { name = "pyarrow-stubs" },
     { name = "pyinstrument" },
     { name = "ruff" },
 ]
@@ -1433,6 +1446,7 @@ dev = [
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "mypy", specifier = ">=1.16.1" },
     { name = "pandas-stubs", specifier = ">=2.2.3.250527" },
+    { name = "pyarrow-stubs", specifier = ">=20.0.0.20250627" },
     { name = "pyinstrument", specifier = ">=5.0.2" },
     { name = "ruff", specifier = ">=0.12.0" },
 ]
