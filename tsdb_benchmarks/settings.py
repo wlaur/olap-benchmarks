@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     append_iterations: int = 1
     upsert_iterations: int = 1
 
-    model_config = SettingsConfigDict(env_prefix="TSDB_BENCHMARKS_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="TSDB_BENCHMARKS_", extra="ignore")
 
 
 SETTINGS = Settings()  # type: ignore[call-arg]

@@ -7,6 +7,8 @@ from sqlalchemy import Connection
 
 from ..settings import SETTINGS
 
+BOOLEAN_TRUE = 128
+
 MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "tinyint": pl.Int8,
     "smallint": pl.Int16,
@@ -21,6 +23,7 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "boolean": pl.Boolean,
     "timestamp": pl.Datetime("ms"),
     "time": pl.Time,
+    "varchar": pl.String,
 }
 
 
@@ -34,17 +37,14 @@ def get_polars_type(type_code: str) -> pl.DataType | type[pl.DataType]:
 UPLOAD_DOWNLOAD_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
 
 
-def ensure_downloader(connection: MonetDBConnection) -> None:
+def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
     UPLOAD_DOWNLOAD_DIRECTORY.mkdir(exist_ok=True)
+
+    if connection.mapi.downloader is not None and connection.mapi.uploader is not None:
+        return
 
     transfer_handler = pymonetdb.SafeDirectoryHandler(UPLOAD_DOWNLOAD_DIRECTORY)
     connection.set_downloader(transfer_handler)
-
-
-def ensure_uploader(connection: MonetDBConnection) -> None:
-    UPLOAD_DOWNLOAD_DIRECTORY.mkdir(exist_ok=True)
-
-    transfer_handler = pymonetdb.SafeDirectoryHandler(UPLOAD_DOWNLOAD_DIRECTORY)
     connection.set_uploader(transfer_handler)
 
 

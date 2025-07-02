@@ -8,7 +8,13 @@ import numpy as np
 import polars as pl
 from sqlalchemy import Connection
 
-from .utils import UPLOAD_DOWNLOAD_DIRECTORY, ensure_downloader, get_polars_type, get_pymonetdb_connection
+from .utils import (
+    BOOLEAN_TRUE,
+    UPLOAD_DOWNLOAD_DIRECTORY,
+    ensure_downloader_uploader,
+    get_polars_type,
+    get_pymonetdb_connection,
+)
 
 
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
@@ -66,9 +72,38 @@ def read_timestamp_column(path: Path) -> pl.Series:
     ).get_column("timestamp")
 
 
-def read_column_bin(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
+def read_text_column(path: Path) -> pl.Series:
+    data = path.read_bytes()
+
+    result: list[str | None] = []
+    i = 0
+
+    while i < len(data):
+        if i + 1 < len(data) and data[i] == 0x80 and data[i + 1] == 0x00:
+            result.append(None)
+            i += 2
+        else:
+            start = i
+            while i < len(data) and data[i] != 0x00:
+                i += 1
+            if i > start:
+                try:
+                    result.append(data[start:i].decode("utf-8"))
+                except UnicodeDecodeError:
+                    result.append(None)
+            else:
+                result.append("")
+            i += 1
+
+    return pl.Series(result, dtype=pl.String)
+
+
+def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
     if dtype == pl.Datetime("ms"):
         return read_timestamp_column(path)
+
+    if dtype == pl.String:
+        return read_text_column(path)
 
     with path.open("rb") as f:
         data = f.read()
@@ -104,7 +139,7 @@ def read_column_bin(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Se
 
     if is_bool:
         dtype = pl.Boolean
-        s = s.replace(128, None).cast(dtype)
+        s = s.replace(BOOLEAN_TRUE, None).cast(dtype)
 
     if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64):
         sentinel = np.iinfo(values.dtype).min
@@ -126,7 +161,7 @@ def _get_limit_query(query: str) -> str:
 def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataType] | None = None) -> pl.DataFrame:
     con = get_pymonetdb_connection(connection)
 
-    ensure_downloader(con)
+    ensure_downloader_uploader(con)
 
     if schema is None:
         schema = fetch_pymonetdb(_get_limit_query(query), connection).schema
@@ -141,8 +176,9 @@ def fetch_binary(query: str, connection: Connection, schema: dict[str, pl.DataTy
         con.execute(f"copy {query} into little endian binary {output_files_repr} on client")
 
         columns: dict[str, pl.Series] = {}
+
         for (col_name, dtype), path in zip(schema.items(), output_files, strict=True):
-            columns[col_name] = read_column_bin(path, dtype)
+            columns[col_name] = read_binary_column_data(path, dtype)
 
         df = pl.DataFrame(columns, orient="row")
     finally:
