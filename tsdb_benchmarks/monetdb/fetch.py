@@ -88,24 +88,24 @@ def read_timestamp_column(path: Path) -> pl.Series:
     ).get_column("time")
 
 
-def read_text_column(path: Path, meta: SchemaMeta) -> pl.Series:
+def read_text_column(path: Path) -> pl.Series:
     data = path.read_bytes()
     nul_positions = np.flatnonzero(np.frombuffer(data, dtype=np.uint8) == 0x00)
 
-    result: list[bytes | None] = []
-    start = 0
-    max_size = meta.size
+    n = len(nul_positions)
+    result: list[bytes | None] = [None] * n
 
-    for end in nul_positions:
+    start = 0
+
+    for idx, end in enumerate(nul_positions):
         if end - start == 1 and data[start] == 0x80:
-            result.append(None)
+            result[idx] = None
         elif end == start:
-            result.append(b"")
+            result[idx] = b""
         else:
             slice_end = end
-            if max_size is not None and (end - start) > max_size:
-                slice_end = start + max_size
-            result.append(data[start:slice_end])
+            result[idx] = data[start:slice_end]
+
         start = end + 1
 
     decoded_array = pa.array(result, type=pa.binary())
@@ -118,7 +118,7 @@ def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], 
         return read_timestamp_column(path)
 
     if dtype == pl.String:
-        return read_text_column(path, meta)
+        return read_text_column(path)
 
     with path.open("rb") as f:
         data = f.read()
