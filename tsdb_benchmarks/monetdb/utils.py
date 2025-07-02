@@ -1,8 +1,11 @@
+import re
 from typing import cast
 
 import polars as pl
 import pymonetdb  # type: ignore[import-untyped]
+from pydantic import BaseModel
 from pymonetdb import Connection as MonetDBConnection
+from pymonetdb.sql.cursors import Description  # type: ignore[import-untyped]
 from sqlalchemy import Connection
 
 from ..settings import SETTINGS
@@ -27,6 +30,22 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
 }
 
 
+UPLOAD_DOWNLOAD_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
+
+
+class SchemaMeta(BaseModel):
+    size: int | None = None
+
+
+def get_schema_meta(description: Description) -> SchemaMeta:
+    meta = SchemaMeta()
+
+    if description.type_code == "varchar" and description.internal_size > 0:
+        meta.size = description.internal_size
+
+    return meta
+
+
 def get_polars_type(type_code: str) -> pl.DataType | type[pl.DataType]:
     try:
         return MONETDB_POLARS_TYPE_MAP[type_code]
@@ -34,7 +53,11 @@ def get_polars_type(type_code: str) -> pl.DataType | type[pl.DataType]:
         raise ValueError(f"Unknown type code: '{type_code}'") from None
 
 
-UPLOAD_DOWNLOAD_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
+def get_limit_query(query: str) -> str:
+    query = query.rstrip().rstrip(";")
+    limit_regex = re.compile(r"\s+limit\s+\d+\s*$", re.IGNORECASE)
+    query = re.sub(limit_regex, "", query)
+    return f"{query} limit 1"
 
 
 def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
