@@ -1,4 +1,5 @@
 import contextlib
+import json
 import shutil
 import uuid
 from collections.abc import Mapping
@@ -30,7 +31,11 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
 
     description = c.description
     assert description is not None
-    return pl.DataFrame(ret, schema={n.name: get_polars_type(n.type_code) for n in description}, orient="row")
+    schema = schema = {n.name: get_polars_type(n.type_code) for n in description}
+
+    df = pl.DataFrame(ret, schema, orient="row")
+
+    return df
 
 
 def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
@@ -169,6 +174,16 @@ def read_string_column(path: Path) -> pl.Series:
     return cast(pl.Series, pl.from_arrow(string_array))
 
 
+def read_json_column(path: Path) -> pl.Series:
+    s = read_string_column(path).alias("json")
+
+    # inefficient map with json.loads to match pymonetdb behavior
+    return s.map_elements(json.loads, pl.Object)
+
+    # maybe not safe to convert to pl.Struct, only makes sense if all JSON values are similar
+    # return s.str.json_decode(infer_schema_length=None)
+
+
 def read_blob_column(path: Path) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
@@ -253,6 +268,8 @@ def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], 
             return read_date_column(path)
         case pl.String:
             return read_string_column(path)
+        case pl.Object:
+            return read_json_column(path)
         case pl.Binary:
             return read_blob_column(path)
         case _:
