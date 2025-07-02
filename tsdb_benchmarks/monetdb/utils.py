@@ -29,7 +29,7 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "timestamptz": pl.Datetime("ms"),  # tz info is not stored in binary data, this will be dumped as UTC
     "timetz": pl.Time,
     "varchar": pl.String,
-    "json": pl.String,
+    "json": pl.Object,  # would be better to use pl.String and convert to pl.Struct as needed
     "sec_interval": pl.Int64,  # int64 ms
     "day_interval": pl.Int64,  # int64 ms
     "month_interval": pl.Int32,
