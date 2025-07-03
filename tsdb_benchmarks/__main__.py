@@ -15,7 +15,9 @@ def run(name: DatabaseName, command: Literal["start", "stop"]) -> None:
         case "monetdb":
             from .monetdb import MonetDB
 
-            os.system(getattr(MonetDB(), command))
+            cmd = getattr(MonetDB(), command)
+            print(f"Running command {command}: {cmd}")
+            os.system(cmd)
 
         case _:
             raise ValueError(f"Unknown database name: '{name}'")

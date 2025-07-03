@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.types import UserDefinedType
 
 from ..settings import SETTINGS, TableName
+from .settings import SETTINGS as MONETDB_SETTINGS
 
 # MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
 BOOLEAN_NULL = 128
@@ -123,10 +124,13 @@ def get_limit_query(query: str) -> str:
 
 
 def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
-    MONETDB_TEMPORARY_DIRECTORY.mkdir(exist_ok=True)
+    if not MONETDB_SETTINGS.client_file_transfer:
+        return
 
     if connection.mapi.downloader is not None and connection.mapi.uploader is not None:
         return
+
+    MONETDB_TEMPORARY_DIRECTORY.mkdir(exist_ok=True, parents=True)
 
     transfer_handler = pymonetdb.SafeDirectoryHandler(MONETDB_TEMPORARY_DIRECTORY)
     connection.set_downloader(transfer_handler)

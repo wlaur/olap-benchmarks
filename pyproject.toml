@@ -15,6 +15,7 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "pymonetdb==1.8.4",
     "pyparsing>=3.2.3",
+    "python-dotenv>=1.1.1",
     "setuptools>=80.9.0",
     "sqlalchemy>=2.0.41",
     "sqlalchemy-monetdb==2.0.0",

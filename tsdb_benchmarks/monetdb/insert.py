@@ -8,6 +8,7 @@ import polars as pl
 from sqlalchemy import Connection
 
 from ..settings import TableName
+from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
     MONETDB_TEMPORARY_DIRECTORY,
     POLARS_NUMPY_TYPE_MAP,
@@ -178,10 +179,12 @@ def insert(
     con = get_pymonetdb_connection(connection)
     ensure_downloader_uploader(con)
 
-    temp_dir = MONETDB_TEMPORARY_DIRECTORY / str(uuid.uuid4())[:4]
+    temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 
     column_files: list[Path] = []
+
+    path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
 
     try:
         for idx, col in enumerate(df.columns):
@@ -189,9 +192,14 @@ def insert(
             write_binary_column_data(df[col], path)
             column_files.append(path)
 
-        files_clause = ", ".join(f"'{temp_dir.name}/{path.name}'" for path in column_files)
+        files_clause = ", ".join(
+            f"'{path_prefix}{path.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()}'" for path in column_files
+        )
 
-        con.execute(f"copy little endian binary into {table} from {files_clause} on client")
+        con.execute(
+            f"copy little endian binary into {table} from {files_clause} "
+            f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
+        )
         con.commit()
 
     finally:
