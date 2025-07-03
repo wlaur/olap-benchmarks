@@ -11,7 +11,7 @@ from ..settings import TableName
 from .utils import (
     MONETDB_TEMPORARY_DIRECTORY,
     POLARS_NUMPY_TYPE_MAP,
-    create_table_if_not_exists,
+    create_table,
     ensure_downloader_uploader,
     get_pymonetdb_connection,
 )
@@ -169,10 +169,10 @@ def insert(
     df: pl.DataFrame,
     table: TableName,
     connection: Connection,
-    primary_key: str | tuple[str, ...] | None = None,
-    json_columns: list[str] | str | None = None,
+    primary_key: str | list[str] | None = None,
+    json_columns: str | list[str] | None = None,
 ) -> None:
-    create_table_if_not_exists(table, df, connection, primary_key, json_columns)
+    create_table(table, df.schema, connection, primary_key, json_columns)
 
     con = get_pymonetdb_connection(connection)
     ensure_downloader_uploader(con)
@@ -198,7 +198,7 @@ def insert(
 
 
 def upsert(
-    df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | tuple[str, ...] | None = None
+    df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str] | None = None
 ) -> None:
     # insert into unlogged temp table, use merge statement to update target
     raise NotImplementedError

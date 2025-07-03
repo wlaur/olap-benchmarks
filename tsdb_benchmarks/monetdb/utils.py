@@ -1,4 +1,5 @@
 import re
+from collections.abc import Mapping
 from typing import cast
 
 import numpy as np
@@ -7,10 +8,18 @@ import pymonetdb  # type: ignore[import-untyped]
 from pydantic import BaseModel
 from pymonetdb import Connection as MonetDBConnection
 from pymonetdb.sql.cursors import Description  # type: ignore[import-untyped]
-from sqlalchemy import Connection, text
+from sqlalchemy import (
+    Column,
+    Connection,
+    MetaData,
+    Table,
+    text,
+)
+from sqlalchemy.types import UserDefinedType
 
 from ..settings import SETTINGS, TableName
 
+# MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
 BOOLEAN_NULL = 128
 
 # NOTE: the order matters, see get_monetdb_type
@@ -65,7 +74,16 @@ POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], type] = {
     pl.Float64: np.float64,
 }
 
+
 MONETDB_TEMPORARY_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
+
+
+class MonetDBType(UserDefinedType):
+    def __init__(self, type_name: str):
+        self.type_name = type_name
+
+    def get_col_spec(self, **kwargs):
+        return self.type_name
 
 
 class SchemaMeta(BaseModel):
@@ -119,37 +137,63 @@ def get_pymonetdb_connection(connection: Connection) -> MonetDBConnection:
     return cast(MonetDBConnection, connection._dbapi_connection)
 
 
-def create_table_if_not_exists(
+def get_table(
     table: TableName,
-    df: pl.DataFrame,
-    connection: Connection,
-    primary_key: str | tuple[str, ...] | None = None,
-    json_columns: list[str] | str | None = None,
-) -> None:
-    col_defs: list[str] = []
-
+    schema: Mapping[str, pl.DataType | type[pl.DataType]],
+    metadata: MetaData | None = None,
+    primary_key: str | list[str] | None = None,
+    json_columns: str | list[str] | None = None,
+) -> Table:
     if json_columns is None:
         json_columns = []
 
     if isinstance(json_columns, str):
         json_columns = [json_columns]
 
-    for name, dtype in zip(df.columns, df.dtypes, strict=True):
-        sql_type = "json" if name in json_columns else get_monetdb_type(dtype)
+    if primary_key is None:
+        primary_key = []
 
-        col_defs.append(f"{name} {sql_type}")
+    if isinstance(primary_key, str):
+        primary_key = [primary_key]
 
-    if primary_key:
-        if isinstance(primary_key, str):
-            primary_key = (primary_key,)
+    if metadata is None:
+        metadata = MetaData()
 
-        pk = ", ".join(f'"{n}"' for n in primary_key)
-        col_defs.append(f"primary key ({pk})")
+    columns: list[Column] = []
 
-    col_def_clause = ", ".join(col_defs)
-    sql = f'create table if not exists "{table}" ({col_def_clause})'
-    connection.execute(text(sql))
-    connection.commit()
+    for name, dtype in schema.items():
+        # SQLAlchemy does not have all types that exist in MonetDB (e.g. tinyint)
+        # can use custom types instead, this causes issues if accessing data via the ORM but this is not done here
+        col_type_name = "json" if name in json_columns else get_monetdb_type(dtype)
+
+        columns.append(
+            Column(
+                name=name,
+                type_=MonetDBType(col_type_name),
+                primary_key=name in primary_key,
+            )
+        )
+
+    return Table(table, metadata, *columns)
+
+
+def create_table(
+    table: TableName,
+    schema: Mapping[str, pl.DataType | type[pl.DataType]],
+    connection: Connection,
+    primary_key: str | list[str] | None = None,
+    json_columns: str | list[str] | None = None,
+) -> None:
+    metadata = MetaData()
+    tbl = get_table(
+        table=table,
+        schema=schema,
+        metadata=metadata,
+        primary_key=primary_key,
+        json_columns=json_columns,
+    )
+
+    metadata.create_all(connection, tables=[tbl], checkfirst=False)
 
 
 def drop_table(table: TableName, connection: Connection) -> None:
