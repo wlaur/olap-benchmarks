@@ -43,7 +43,7 @@ def write_numeric_column(series: pl.Series, path: Path) -> None:
         sentinel = np.iinfo(np_dtype).min
         values = series.fill_null(sentinel).to_numpy().astype(np_dtype)
     elif np.issubdtype(np_dtype, np.floating):
-        values = series.fill_nan(0.0).fill_null(np.nan).to_numpy().astype(np_dtype)
+        values = series.fill_null(np.nan).to_numpy().astype(np_dtype)
     else:
         raise ValueError(f"Unsupported numeric type: {series.dtype}")
 
@@ -172,6 +172,7 @@ def insert(
     primary_key: str | list[str] | None = None,
     json_columns: str | list[str] | None = None,
 ) -> None:
+    # NOTE: when inserting into an existing table, the column order and types must match exactly
     create_table(table, df.schema, connection, primary_key, json_columns)
 
     con = get_pymonetdb_connection(connection)
