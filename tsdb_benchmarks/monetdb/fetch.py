@@ -11,6 +11,7 @@ import polars as pl
 import pyarrow as pa
 from sqlalchemy import Connection
 
+from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
     BOOLEAN_NULL,
     MONETDB_TEMPORARY_DIRECTORY,
@@ -297,14 +298,20 @@ def fetch_binary(
             for k, v in schema.items()
         }
 
-    temp_dir = MONETDB_TEMPORARY_DIRECTORY / str(uuid.uuid4())[:4]
+    temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
+    path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
 
     output_files = [temp_dir / f"{idx}.bin" for idx in range(len(expanded_schema))]
-    files_clause = ",".join(f"'{temp_dir.name}/{n.name}'" for n in output_files)
+    files_clause = ",".join(
+        f"'{path_prefix}{n.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()}'" for n in output_files
+    )
 
     try:
-        con.execute(f"copy {query} into little endian binary {files_clause} on client")
+        con.execute(
+            f"copy {query} into little endian binary {files_clause} "
+            f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
+        )
 
         columns: dict[str, pl.Series] = {}
 

@@ -7,16 +7,27 @@ from ..database import Database
 from ..settings import SETTINGS, TableName
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
+from .settings import SETTINGS as MONETDB_SETTINGS
+
+
+def get_start_command() -> str:
+    parts = [
+        "docker run --platform linux/amd64 --name monetdb-benchmark --rm -d -p 50000:50000",
+        f"-v {SETTINGS.database_directory.as_posix()}/monetdb:/var/monetdb5/dbfarm",
+        f"-v {SETTINGS.temporary_directory.as_posix()}/monetdb/data:/data"
+        if not MONETDB_SETTINGS.client_file_transfer
+        else "",
+        "-e MDB_DB_ADMIN_PASS=monetdb -e MDB_CREATE_DBS=benchmark",
+        "monetdb/monetdb:Mar2025",
+    ]
+
+    return " ".join(parts)
 
 
 class MonetDB(Database):
     name: str = "monetdb"
-    start: str = (
-        f"docker run --platform linux/amd64 --name monetdb-benchmark --rm -d -p 50000:50000 "
-        f"-v {SETTINGS.database_directory.as_posix()}/monetdb:/var/monetdb5/dbfarm "
-        "-e MDB_DB_ADMIN_PASS=monetdb -e MDB_CREATE_DBS=benchmark "
-        "monetdb/monetdb:Mar2025"
-    )
+
+    start: str = get_start_command()
     stop: str = "docker kill monetdb-benchmark"
 
     def connect(self, reconnect: bool = False) -> Connection:
