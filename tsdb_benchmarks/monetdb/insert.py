@@ -8,9 +8,9 @@ from sqlalchemy import Connection
 from ..settings import TableName
 from .binary import (
     write_blob_column,
-    write_boolean_column,
     write_date_column,
     write_datetime_column,
+    write_json_column,
     write_numeric_column,
     write_string_column,
     write_time_column,
@@ -28,8 +28,6 @@ def write_binary_column_data(series: pl.Series, path: Path) -> None:
     dtype = series.dtype
 
     match dtype:
-        case pl.Boolean:
-            write_boolean_column(series, path)
         case (
             pl.Int8
             | pl.Int16
@@ -41,16 +39,19 @@ def write_binary_column_data(series: pl.Series, path: Path) -> None:
             | pl.UInt64
             | pl.Float32
             | pl.Float64
+            | pl.Boolean
         ):
             write_numeric_column(series, path)
-        case pl.String:
-            write_string_column(series, path)
         case pl.Date:
             write_date_column(series, path)
         case pl.Time:
             write_time_column(series, path)
         case pl.Datetime:
             write_datetime_column(series, path)
+        case pl.String:
+            write_string_column(series, path)
+        case pl.Struct | pl.Object:
+            write_json_column(series, path)
         case pl.Binary:
             write_blob_column(series, path)
         case _:
@@ -62,10 +63,9 @@ def insert(
     table: TableName,
     connection: Connection,
     primary_key: str | list[str] | None = None,
-    json_columns: str | list[str] | None = None,
 ) -> None:
     # NOTE: when inserting into an existing table, the column order and types must match exactly
-    create_table(table, df.schema, connection, primary_key, json_columns)
+    create_table(table, df.schema, connection, primary_key)
 
     con = get_pymonetdb_connection(connection)
     ensure_downloader_uploader(con)
