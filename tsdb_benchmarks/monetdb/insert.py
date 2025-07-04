@@ -1,5 +1,4 @@
 import shutil
-import struct
 import uuid
 from pathlib import Path
 
@@ -10,12 +9,43 @@ from sqlalchemy import Connection
 from ..settings import TableName
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
+    MONETDB_DATE_RECORD_TYPE,
+    MONETDB_DATETIME_RECORD_TYPE,
     MONETDB_TEMPORARY_DIRECTORY,
+    MONETDB_TIME_RECORD_TYPE,
     POLARS_NUMPY_TYPE_MAP,
     create_table,
     ensure_downloader_uploader,
     get_pymonetdb_connection,
 )
+
+BLOB_NULL_MARKER = (0xFFFFFFFFFFFFFFFF).to_bytes(8, byteorder="little")
+STRING_NULL_MARKER = b"\x80\x00"
+
+DATETIME_NULL_RECORD = {
+    "ms": 0xFFFFFFFF,
+    "seconds": 255,
+    "minutes": 255,
+    "hours": 255,
+    "padding": 255,
+    "day": 255,
+    "month": 255,
+    "year": -1,
+}
+
+DATE_NULL_RECORD = {
+    "day": 255,
+    "month": 255,
+    "year": -1,
+}
+
+TIME_NULL_RECORD = {
+    "ms": 0xFFFFFFFF,
+    "seconds": 255,
+    "minutes": 255,
+    "hours": 255,
+    "padding": 255,
+}
 
 
 def write_boolean_column(series: pl.Series, path: Path) -> None:
@@ -53,84 +83,132 @@ def write_numeric_column(series: pl.Series, path: Path) -> None:
 
 
 def write_string_column(series: pl.Series, path: Path) -> None:
-    with path.open("wb") as f:
-        for val in series:
-            if val is None:
-                f.write(b"\x80\x00")
-            else:
-                f.write(val.encode("utf-8") + b"\x00")
+    buffer = bytearray()
+
+    for val in series:
+        if val is None:
+            buffer.extend(STRING_NULL_MARKER)
+        else:
+            buffer.extend(val.encode("utf-8"))
+            buffer.append(0)
+
+    path.write_bytes(buffer)
 
 
 def write_date_column(series: pl.Series, path: Path) -> None:
-    with path.open("wb") as f:
-        for val in series:
-            if val is None:
-                f.write(struct.pack("<BBh", 255, 255, -1))
-            else:
-                f.write(struct.pack("<BBh", val.day, val.month, val.year))
+    null_mask = series.is_null().to_numpy()
+    n = len(series)
+    data = np.zeros(n, dtype=MONETDB_DATE_RECORD_TYPE)
+
+    for k, v in DATE_NULL_RECORD.items():
+        data[k][null_mask] = v
+
+    valid_mask = ~null_mask
+
+    if valid_mask.any():
+        parts = (
+            series.to_frame("dt")
+            .with_columns(
+                day=pl.col("dt").dt.day(),
+                month=pl.col("dt").dt.month(),
+                year=pl.col("dt").dt.year(),
+            )
+            .filter(pl.col("dt").is_not_null())
+            .drop("dt")
+        )
+        parts_np = parts.to_numpy()
+
+        data["day"][valid_mask] = parts_np[:, 0]
+        data["month"][valid_mask] = parts_np[:, 1]
+        data["year"][valid_mask] = parts_np[:, 2]
+
+    path.write_bytes(data.tobytes())
 
 
 def write_time_column(series: pl.Series, path: Path) -> None:
-    with path.open("wb") as f:
-        for val in series:
-            if val is None:
-                f.write(struct.pack("<I4B", 0xFFFFFFFF, 255, 255, 255, 255))
-            else:
-                ms = val.microsecond // 1000
-                seconds = val.second
-                minutes = val.minute
-                hours = val.hour
-                f.write(struct.pack("<I4B", ms, seconds, minutes, hours, 0))
+    null_mask = series.is_null().to_numpy()
+    n = len(series)
+    data = np.zeros(n, dtype=MONETDB_TIME_RECORD_TYPE)
+
+    for k, v in TIME_NULL_RECORD.items():
+        data[k][null_mask] = v
+
+    valid_mask = ~null_mask
+    if valid_mask.any():
+        parts = (
+            series.to_frame("dt")
+            .with_columns(
+                ms=pl.col("dt").dt.millisecond(),
+                seconds=pl.col("dt").dt.second(),
+                minutes=pl.col("dt").dt.minute(),
+                hours=pl.col("dt").dt.hour(),
+            )
+            .filter(pl.col("dt").is_not_null())
+            .drop("dt")
+        )
+        parts_np = parts.to_numpy()
+
+        data["ms"][valid_mask] = parts_np[:, 0]
+        data["seconds"][valid_mask] = parts_np[:, 1]
+        data["minutes"][valid_mask] = parts_np[:, 2]
+        data["hours"][valid_mask] = parts_np[:, 3]
+        data["padding"][valid_mask] = 0
+
+    path.write_bytes(data.tobytes())
 
 
 def write_datetime_column(series: pl.Series, path: Path) -> None:
-    with path.open("wb") as f:
-        for val in series.cast(pl.Datetime("ms")):
-            if val is None:
-                f.write(
-                    struct.pack(
-                        "<I4B2Bh",
-                        0xFFFFFFFF,
-                        255,
-                        255,
-                        255,
-                        255,
-                        255,
-                        255,
-                        -1,
-                    )
-                )
-            else:
-                ms = val.microsecond // 1000
-                seconds = val.second
-                minutes = val.minute
-                hours = val.hour
-                day = val.day
-                month = val.month
-                year = val.year
-                f.write(
-                    struct.pack(
-                        "<I4B2Bh",
-                        ms,
-                        seconds,
-                        minutes,
-                        hours,
-                        0,
-                        day,
-                        month,
-                        year,
-                    )
-                )
+    series = series.cast(pl.Datetime("ms"))
+    null_mask = series.is_null().to_numpy()
+    n = len(series)
+
+    data = np.zeros(n, dtype=MONETDB_DATETIME_RECORD_TYPE)
+    for k, v in DATETIME_NULL_RECORD.items():
+        data[k][null_mask] = v
+
+    valid_mask = ~null_mask
+    if valid_mask.any():
+        parts = (
+            series.to_frame("dt")
+            .with_columns(
+                ms=pl.col("dt").dt.millisecond(),
+                seconds=pl.col("dt").dt.second(),
+                minutes=pl.col("dt").dt.minute(),
+                hours=pl.col("dt").dt.hour(),
+                day=pl.col("dt").dt.day(),
+                month=pl.col("dt").dt.month(),
+                year=pl.col("dt").dt.year(),
+            )
+            .filter(pl.col("dt").is_not_null())
+            .drop("dt")
+        )
+
+        parts_np = parts.to_numpy()
+
+        data["ms"][valid_mask] = parts_np[:, 0]
+        data["seconds"][valid_mask] = parts_np[:, 1]
+        data["minutes"][valid_mask] = parts_np[:, 2]
+        data["hours"][valid_mask] = parts_np[:, 3]
+        data["padding"][valid_mask] = 0
+        data["day"][valid_mask] = parts_np[:, 4]
+        data["month"][valid_mask] = parts_np[:, 5]
+        data["year"][valid_mask] = parts_np[:, 6]
+
+    path.write_bytes(data.tobytes())
 
 
-def write_binary_column(series: pl.Series, path: Path) -> None:
-    with path.open("wb") as f:
-        for val in series:
-            if val is None:
-                f.write((0xFFFFFFFFFFFFFFFF).to_bytes(8, byteorder="little"))
-            else:
-                f.write(len(val).to_bytes(8, byteorder="little"))
-                f.write(val)
+def write_blob_column(series: pl.Series, path: Path) -> None:
+    buffer = bytearray()
+
+    for val in series:
+        if val is None:
+            buffer += BLOB_NULL_MARKER
+        else:
+            length = len(val)
+            buffer += length.to_bytes(8, byteorder="little")
+            buffer += val
+
+    path.write_bytes(buffer)
 
 
 def write_binary_column_data(series: pl.Series, path: Path) -> None:
@@ -161,7 +239,7 @@ def write_binary_column_data(series: pl.Series, path: Path) -> None:
         case pl.Datetime:
             write_datetime_column(series, path)
         case pl.Binary:
-            write_binary_column(series, path)
+            write_blob_column(series, path)
         case _:
             raise ValueError(f"Unsupported Polars dtype for binary export: {dtype}, {series.name=}")
 
