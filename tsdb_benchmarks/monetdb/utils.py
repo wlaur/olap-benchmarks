@@ -23,6 +23,39 @@ from .settings import SETTINGS as MONETDB_SETTINGS
 # MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
 BOOLEAN_NULL = 128
 
+
+MONETDB_DATETIME_RECORD_TYPE = np.dtype(
+    [
+        ("ms", "<u4"),
+        ("seconds", "u1"),
+        ("minutes", "u1"),
+        ("hours", "u1"),
+        ("padding", "u1"),
+        ("day", "u1"),
+        ("month", "u1"),
+        ("year", "<i2"),
+    ]
+)
+
+MONETDB_TIME_RECORD_TYPE = np.dtype(
+    [
+        ("ms", "<u4"),
+        ("seconds", "u1"),
+        ("minutes", "u1"),
+        ("hours", "u1"),
+        ("padding", "u1"),
+    ]
+)
+
+
+MONETDB_DATE_RECORD_TYPE = np.dtype(
+    [
+        ("day", "u1"),
+        ("month", "u1"),
+        ("year", "<i2"),
+    ]
+)
+
 # NOTE: the order matters, see get_monetdb_type
 MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "tinyint": pl.Int8,

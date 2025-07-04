@@ -14,7 +14,10 @@ from sqlalchemy import Connection
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
     BOOLEAN_NULL,
+    MONETDB_DATE_RECORD_TYPE,
+    MONETDB_DATETIME_RECORD_TYPE,
     MONETDB_TEMPORARY_DIRECTORY,
+    MONETDB_TIME_RECORD_TYPE,
     POLARS_NUMPY_STRUCT_PACKING_CODE_MAP,
     SchemaMeta,
     ensure_downloader_uploader,
@@ -59,20 +62,7 @@ def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> 
     with path.open("rb") as f:
         data = f.read()
 
-    record_dtype = np.dtype(
-        [
-            ("ms", "<u4"),
-            ("seconds", "u1"),
-            ("minutes", "u1"),
-            ("hours", "u1"),
-            ("padding", "u1"),
-            ("day", "u1"),
-            ("month", "u1"),
-            ("year", "<i2"),
-        ]
-    )
-
-    records = np.frombuffer(data, dtype=record_dtype)
+    records = np.frombuffer(data, dtype=MONETDB_DATETIME_RECORD_TYPE)
 
     df = pl.DataFrame(
         {
@@ -103,17 +93,7 @@ def read_time_column(path: Path) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
-    record_dtype = np.dtype(
-        [
-            ("ms", "<u4"),
-            ("seconds", "u1"),
-            ("minutes", "u1"),
-            ("hours", "u1"),
-            ("padding", "u1"),
-        ]
-    )
-
-    records = np.frombuffer(data, dtype=record_dtype)
+    records = np.frombuffer(data, dtype=MONETDB_TIME_RECORD_TYPE)
 
     is_null = (
         (records["ms"] == 0xFFFFFFFF)
@@ -144,15 +124,7 @@ def read_date_column(path: Path) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
-    record_dtype = np.dtype(
-        [
-            ("day", "u1"),
-            ("month", "u1"),
-            ("year", "<i2"),
-        ]
-    )
-
-    records = np.frombuffer(data, dtype=record_dtype)
+    records = np.frombuffer(data, dtype=MONETDB_DATE_RECORD_TYPE)
 
     df = pl.DataFrame(
         {
