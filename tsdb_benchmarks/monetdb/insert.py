@@ -82,19 +82,6 @@ def write_numeric_column(series: pl.Series, path: Path) -> None:
         f.write(values.tobytes())
 
 
-def write_string_column(series: pl.Series, path: Path) -> None:
-    buffer = bytearray()
-
-    for val in series:
-        if val is None:
-            buffer.extend(STRING_NULL_MARKER)
-        else:
-            buffer.extend(val.encode("utf-8"))
-            buffer.append(0)
-
-    path.write_bytes(buffer)
-
-
 def write_date_column(series: pl.Series, path: Path) -> None:
     null_mask = series.is_null().to_numpy()
     n = len(series)
@@ -197,6 +184,19 @@ def write_datetime_column(series: pl.Series, path: Path) -> None:
     path.write_bytes(data.tobytes())
 
 
+def write_string_column(series: pl.Series, path: Path) -> None:
+    buffer = bytearray()
+
+    for val in series:
+        if val is None:
+            buffer += STRING_NULL_MARKER
+        else:
+            buffer += val.encode("utf-8")
+            buffer += b"\x00"
+
+    path.write_bytes(buffer)
+
+
 def write_blob_column(series: pl.Series, path: Path) -> None:
     buffer = bytearray()
 
@@ -260,6 +260,8 @@ def insert(
     temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 
+    subdir = temp_dir.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()
+
     column_files: list[Path] = []
 
     path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
@@ -270,10 +272,7 @@ def insert(
             write_binary_column_data(df[col], path)
             column_files.append(path)
 
-        files_clause = ", ".join(
-            f"'{path_prefix}{path.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()}'" for path in column_files
-        )
-
+        files_clause = ", ".join(f"'{path_prefix}{subdir}/{path.name}'" for path in column_files)
         con.execute(
             f"copy little endian binary into {table} from {files_clause} "
             f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
