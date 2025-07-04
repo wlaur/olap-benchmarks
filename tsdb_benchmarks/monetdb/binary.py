@@ -45,38 +45,23 @@ TIME_NULL_RECORD = {
 }
 
 
-def write_boolean_column(series: pl.Series, path: Path) -> None:
-    encoded = (
-        series.to_frame()
-        .select(
-            pl.when(pl.col(series.name).is_null())
-            .then(128)
-            .when(pl.col(series.name))
-            .then(1)
-            .otherwise(0)
-            .cast(pl.UInt8)
-        )
-        .to_series()
+def read_date_column(path: Path) -> pl.Series:
+    with path.open("rb") as f:
+        data = f.read()
+
+    records = np.frombuffer(data, dtype=MONETDB_DATE_RECORD_TYPE)
+
+    df = pl.DataFrame(
+        {
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
+        }
     )
-    with path.open("wb") as f:
-        f.write(encoded.to_numpy().tobytes())
 
-
-def write_numeric_column(series: pl.Series, path: Path) -> None:
-    np_dtype = POLARS_NUMPY_TYPE_MAP[series.dtype]
-
-    values: np.ndarray
-
-    if np.issubdtype(np_dtype, np.integer):
-        sentinel = np.iinfo(np_dtype).min
-        values = series.fill_null(sentinel).to_numpy().astype(np_dtype)
-    elif np.issubdtype(np_dtype, np.floating):
-        values = series.fill_null(np.nan).to_numpy().astype(np_dtype)
-    else:
-        raise ValueError(f"Unsupported numeric type: {series.dtype}")
-
-    with path.open("wb") as f:
-        f.write(values.tobytes())
+    return df.select(
+        pl.when(pl.col("year") == -1).then(None).otherwise(pl.date("year", "month", "day")).alias("date")
+    ).get_column("date")
 
 
 def write_date_column(series: pl.Series, path: Path) -> None:
@@ -109,6 +94,37 @@ def write_date_column(series: pl.Series, path: Path) -> None:
     path.write_bytes(data.tobytes())
 
 
+def read_time_column(path: Path) -> pl.Series:
+    with path.open("rb") as f:
+        data = f.read()
+
+    records = np.frombuffer(data, dtype=MONETDB_TIME_RECORD_TYPE)
+
+    is_null = (
+        (records["ms"] == 0xFFFFFFFF)
+        | (records["seconds"] >= 60)
+        | (records["minutes"] >= 60)
+        | (records["hours"] >= 24)
+    )
+
+    nanos = (
+        (records["hours"].astype(np.uint64) * 3600_000)
+        + (records["minutes"].astype(np.uint64) * 60_000)
+        + (records["seconds"].astype(np.uint64) * 1000)
+        + records["ms"].astype(np.uint64)
+    ) * 1_000_000
+
+    series = pl.Series(nanos, dtype=pl.UInt64)
+
+    result = (
+        series.to_frame()
+        .select(pl.when(pl.Series(is_null)).then(None).otherwise(pl.col(series.name)).cast(pl.Time))
+        .to_series()
+    )
+
+    return result
+
+
 def write_time_column(series: pl.Series, path: Path) -> None:
     null_mask = series.is_null().to_numpy()
     n = len(series)
@@ -139,6 +155,37 @@ def write_time_column(series: pl.Series, path: Path) -> None:
         data["padding"][valid_mask] = 0
 
     path.write_bytes(data.tobytes())
+
+
+def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
+    with path.open("rb") as f:
+        data = f.read()
+
+    records = np.frombuffer(data, dtype=MONETDB_DATETIME_RECORD_TYPE)
+
+    df = pl.DataFrame(
+        {
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
+            "hour": records["hours"],
+            "minute": records["minutes"],
+            "second": records["seconds"],
+            "microsecond": records["ms"] * 1000,
+        }
+    )
+
+    return df.select(
+        pl.when(pl.col("year") == -1)
+        .then(None)
+        .otherwise(
+            pl.datetime(
+                "year", "month", "day", "hour", "minute", "second", "microsecond", time_unit="ms", time_zone=None
+            )
+        )
+        .cast(dtype)
+        .alias("time")
+    ).get_column("time")
 
 
 def write_datetime_column(series: pl.Series, path: Path) -> None:
@@ -181,114 +228,6 @@ def write_datetime_column(series: pl.Series, path: Path) -> None:
     path.write_bytes(data.tobytes())
 
 
-def write_string_column(series: pl.Series, path: Path) -> None:
-    buffer = bytearray()
-
-    for val in series:
-        if val is None:
-            buffer += STRING_NULL_MARKER
-        else:
-            buffer += val.encode("utf-8")
-            buffer += b"\x00"
-
-    path.write_bytes(buffer)
-
-
-def write_blob_column(series: pl.Series, path: Path) -> None:
-    buffer = bytearray()
-
-    for val in series:
-        if val is None:
-            buffer += BLOB_NULL_MARKER
-        else:
-            length = len(val)
-            buffer += length.to_bytes(8, byteorder="little")
-            buffer += val
-
-    path.write_bytes(buffer)
-
-
-def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
-    with path.open("rb") as f:
-        data = f.read()
-
-    records = np.frombuffer(data, dtype=MONETDB_DATETIME_RECORD_TYPE)
-
-    df = pl.DataFrame(
-        {
-            "year": records["year"],
-            "month": records["month"],
-            "day": records["day"],
-            "hour": records["hours"],
-            "minute": records["minutes"],
-            "second": records["seconds"],
-            "microsecond": records["ms"] * 1000,
-        }
-    )
-
-    return df.select(
-        pl.when(pl.col("year") == -1)
-        .then(None)
-        .otherwise(
-            pl.datetime(
-                "year", "month", "day", "hour", "minute", "second", "microsecond", time_unit="ms", time_zone=None
-            )
-        )
-        .cast(dtype)
-        .alias("time")
-    ).get_column("time")
-
-
-def read_time_column(path: Path) -> pl.Series:
-    with path.open("rb") as f:
-        data = f.read()
-
-    records = np.frombuffer(data, dtype=MONETDB_TIME_RECORD_TYPE)
-
-    is_null = (
-        (records["ms"] == 0xFFFFFFFF)
-        | (records["seconds"] >= 60)
-        | (records["minutes"] >= 60)
-        | (records["hours"] >= 24)
-    )
-
-    nanos = (
-        (records["hours"].astype(np.uint64) * 3600_000)
-        + (records["minutes"].astype(np.uint64) * 60_000)
-        + (records["seconds"].astype(np.uint64) * 1000)
-        + records["ms"].astype(np.uint64)
-    ) * 1_000_000
-
-    series = pl.Series(nanos, dtype=pl.UInt64)
-
-    result = (
-        series.to_frame()
-        .select(pl.when(pl.Series(is_null)).then(None).otherwise(pl.col(series.name)).cast(pl.Time))
-        .to_series()
-    )
-
-    return result
-
-
-def read_date_column(path: Path) -> pl.Series:
-    with path.open("rb") as f:
-        data = f.read()
-
-    records = np.frombuffer(data, dtype=MONETDB_DATE_RECORD_TYPE)
-
-    df = pl.DataFrame(
-        {
-            "year": records["year"],
-            "month": records["month"],
-            "day": records["day"],
-        }
-    )
-
-    return df.select(
-        pl.when(pl.col("year") == -1).then(None).otherwise(pl.date("year", "month", "day")).alias("date")
-    ).get_column("date")
-
-
 def read_string_column(path: Path) -> pl.Series:
     data = path.read_bytes()
     nul_positions = np.flatnonzero(np.frombuffer(data, dtype=np.uint8) == 0x00)
@@ -314,6 +253,19 @@ def read_string_column(path: Path) -> pl.Series:
     return cast(pl.Series, pl.from_arrow(string_array))
 
 
+def write_string_column(series: pl.Series, path: Path) -> None:
+    buffer = bytearray()
+
+    for val in series:
+        if val is None:
+            buffer += STRING_NULL_MARKER
+        else:
+            buffer += val.encode("utf-8")
+            buffer += b"\x00"
+
+    path.write_bytes(buffer)
+
+
 def read_json_column(path: Path) -> pl.Series:
     s = read_string_column(path).alias("json")
 
@@ -323,6 +275,11 @@ def read_json_column(path: Path) -> pl.Series:
     # maybe not safe to convert to pl.Struct, only makes sense if all JSON values are similar
     # TODO: make this a configurable setting
     # return s.str.json_decode(infer_schema_length=None)
+
+
+def write_json_column(series: pl.Series, path: Path) -> None:
+    series = series.cast(pl.String)
+    write_string_column(series, path)
 
 
 def read_blob_column(path: Path) -> pl.Series:
@@ -350,6 +307,20 @@ def read_blob_column(path: Path) -> pl.Series:
             offset += length
 
     return pl.Series(result, dtype=pl.Binary)
+
+
+def write_blob_column(series: pl.Series, path: Path) -> None:
+    buffer = bytearray()
+
+    for val in series:
+        if val is None:
+            buffer += BLOB_NULL_MARKER
+        else:
+            length = len(val)
+            buffer += length.to_bytes(8, byteorder="little")
+            buffer += val
+
+    path.write_bytes(buffer)
 
 
 def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
@@ -383,3 +354,37 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
         s = s.fill_nan(None)
 
     return s
+
+
+def write_numeric_column(series: pl.Series, path: Path) -> None:
+    np_dtype = POLARS_NUMPY_TYPE_MAP[series.dtype]
+
+    values: np.ndarray
+
+    if np.issubdtype(np_dtype, np.integer):
+        sentinel = np.iinfo(np_dtype).min
+        values = series.fill_null(sentinel).to_numpy().astype(np_dtype)
+    elif np.issubdtype(np_dtype, np.floating):
+        values = series.fill_null(np.nan).to_numpy().astype(np_dtype)
+    else:
+        raise ValueError(f"Unsupported numeric type: {series.dtype}")
+
+    with path.open("wb") as f:
+        f.write(values.tobytes())
+
+
+def write_boolean_column(series: pl.Series, path: Path) -> None:
+    encoded = (
+        series.to_frame()
+        .select(
+            pl.when(pl.col(series.name).is_null())
+            .then(128)
+            .when(pl.col(series.name))
+            .then(1)
+            .otherwise(0)
+            .cast(pl.UInt8)
+        )
+        .to_series()
+    )
+    with path.open("wb") as f:
+        f.write(encoded.to_numpy().tobytes())
