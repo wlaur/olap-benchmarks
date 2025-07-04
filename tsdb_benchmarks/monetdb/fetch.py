@@ -272,12 +272,13 @@ def fetch_binary(
 
     temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
+
     path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
+    subdir = temp_dir.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()
 
     output_files = [temp_dir / f"{idx}.bin" for idx in range(len(expanded_schema))]
-    files_clause = ",".join(
-        f"'{path_prefix}{n.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()}'" for n in output_files
-    )
+
+    files_clause = ",".join(f"'{path_prefix}{subdir}/{n.name}'" for n in output_files)
 
     try:
         con.execute(
