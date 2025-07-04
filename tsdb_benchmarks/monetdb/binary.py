@@ -266,19 +266,30 @@ def write_string_column(series: pl.Series, path: Path) -> None:
     path.write_bytes(buffer)
 
 
-def read_json_column(path: Path) -> pl.Series:
+def read_json_column_object(path: Path) -> pl.Series:
     s = read_string_column(path).alias("json")
-
     # inefficient map with json.loads to match pymonetdb behavior
     return s.map_elements(json.loads, pl.Object)
 
-    # maybe not safe to convert to pl.Struct, only makes sense if all JSON values are similar
-    # TODO: make this a configurable setting
-    # return s.str.json_decode(infer_schema_length=None)
+
+def read_json_column_struct(path: Path) -> pl.Series:
+    s = read_string_column(path).alias("json")
+    return s.str.json_decode(infer_schema_length=None)
 
 
 def write_json_column(series: pl.Series, path: Path) -> None:
-    series = series.cast(pl.String)
+    if series.dtype == pl.Object:
+        series = series.map_elements(str, pl.String).str.replace_all("'", '"')
+    elif series.dtype == pl.Struct:
+        series = series.struct.json_encode()
+    elif series.dtype == pl.String:
+        raise ValueError(
+            f"Cannot write string column {series.name} ({series.name=}) as JSON, "
+            "convert to pl.Struct or pl.Object first"
+        )
+    else:
+        raise ValueError(f"Invalid dtype for JSON column: {series.dtype} ({series.name=})")
+
     write_string_column(series, path)
 
 
@@ -327,10 +338,10 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
     with path.open("rb") as f:
         data = f.read()
 
-    np_dtype = POLARS_NUMPY_STRUCT_PACKING_CODE_MAP.get(dtype)
+    packing_code = POLARS_NUMPY_STRUCT_PACKING_CODE_MAP.get(dtype)
 
-    if np_dtype is None:
-        raise ValueError(f"Unsupported dtype: {dtype}")
+    if packing_code is None:
+        raise ValueError(f"Cannot determine Numpy packing code for Polars dtype: {dtype}")
 
     if dtype == pl.Boolean:
         is_bool = True
@@ -338,7 +349,7 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
     else:
         is_bool = False
 
-    values = np.frombuffer(data, dtype=np_dtype)
+    values = np.frombuffer(data, dtype=packing_code)
 
     s = pl.Series(values, dtype=dtype)
 
@@ -357,34 +368,28 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
 
 
 def write_numeric_column(series: pl.Series, path: Path) -> None:
-    np_dtype = POLARS_NUMPY_TYPE_MAP[series.dtype]
-
     values: np.ndarray
 
-    if np.issubdtype(np_dtype, np.integer):
-        sentinel = np.iinfo(np_dtype).min
-        values = series.fill_null(sentinel).to_numpy().astype(np_dtype)
-    elif np.issubdtype(np_dtype, np.floating):
-        values = series.fill_null(np.nan).to_numpy().astype(np_dtype)
+    if series.dtype == pl.Boolean:
+        values = (
+            series.to_frame("value")
+            .select(pl.when(pl.col.value.is_null()).then(128).when(pl.col.value).then(1).otherwise(0).cast(pl.UInt8))
+            .to_series()
+            .to_numpy()
+        )
+
     else:
-        raise ValueError(f"Unsupported numeric type: {series.dtype}")
+        np_dtype = POLARS_NUMPY_TYPE_MAP.get(series.dtype)
+        if np_dtype is None:
+            raise ValueError(f"Cannot determine corresponding Numpy type for {series.dtype} ({series.name=})")
+
+        if np.issubdtype(np_dtype, np.integer):
+            sentinel = np.iinfo(np_dtype).min
+            values = series.fill_null(sentinel).to_numpy().astype(np_dtype)
+        elif np.issubdtype(np_dtype, np.floating):
+            values = series.fill_null(np.nan).to_numpy().astype(np_dtype)
+        else:
+            raise ValueError(f"Unsupported numeric type: {series.dtype}")
 
     with path.open("wb") as f:
         f.write(values.tobytes())
-
-
-def write_boolean_column(series: pl.Series, path: Path) -> None:
-    encoded = (
-        series.to_frame()
-        .select(
-            pl.when(pl.col(series.name).is_null())
-            .then(128)
-            .when(pl.col(series.name))
-            .then(1)
-            .otherwise(0)
-            .cast(pl.UInt8)
-        )
-        .to_series()
-    )
-    with path.open("wb") as f:
-        f.write(encoded.to_numpy().tobytes())

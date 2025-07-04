@@ -56,6 +56,19 @@ MONETDB_DATE_RECORD_TYPE = np.dtype(
     ]
 )
 
+
+JSON_POLARS_DTYPE: type[pl.Object] | type[pl.String] | type[pl.Struct]
+
+match MONETDB_SETTINGS.json_polars_dtype:
+    case "object":
+        JSON_POLARS_DTYPE = pl.Object
+    case "string":
+        JSON_POLARS_DTYPE = pl.String
+    case "struct":
+        JSON_POLARS_DTYPE = pl.Struct
+    case _:
+        raise ValueError(f"Invalid value for setting 'json_polars_dtype': {MONETDB_SETTINGS.json_polars_dtype}")
+
 # NOTE: the order matters, see get_monetdb_type
 MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "tinyint": pl.Int8,
@@ -74,7 +87,7 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "timetz": pl.Time,
     "varchar": pl.String,
     "char": pl.String,
-    "json": pl.Object,  # would be better to use pl.String and convert to pl.Struct as needed
+    "json": JSON_POLARS_DTYPE,
     "sec_interval": pl.Int64,  # int64 ms
     "day_interval": pl.Int64,  # int64 ms
     "month_interval": pl.Int32,
@@ -95,7 +108,6 @@ POLARS_NUMPY_STRUCT_PACKING_CODE_MAP: dict[pl.DataType | type[pl.DataType], str]
 }
 
 POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], type] = {
-    pl.Boolean: np.uint8,
     pl.Int8: np.int8,
     pl.Int16: np.int16,
     pl.Int32: np.int32,
@@ -106,6 +118,7 @@ POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], type] = {
     pl.UInt64: np.uint64,
     pl.Float32: np.float32,
     pl.Float64: np.float64,
+    pl.Boolean: np.uint8,
 }
 
 
@@ -135,18 +148,21 @@ def get_schema_meta(description: Description) -> SchemaMeta:
 
 
 def get_polars_type(type_code: str) -> pl.DataType | type[pl.DataType]:
-    try:
+    if type_code in MONETDB_POLARS_TYPE_MAP:
         return MONETDB_POLARS_TYPE_MAP[type_code]
-    except KeyError:
-        raise ValueError(f"Unknown type code: '{type_code}'") from None
+
+    raise ValueError(f"Unknown type code: '{type_code}'") from None
 
 
 def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
+    if dtype == pl.Struct or dtype == pl.Object:
+        return "json"
+
     for k, v in MONETDB_POLARS_TYPE_MAP.items():
         if dtype == v:
             return k
 
-    raise ValueError(f"Unsupported type: {dtype}")
+    raise ValueError(f"Could not determine MonetDB type for Polars type: {dtype}")
 
 
 def get_limit_query(query: str) -> str:
@@ -179,14 +195,7 @@ def get_table(
     schema: Mapping[str, pl.DataType | type[pl.DataType]],
     metadata: MetaData | None = None,
     primary_key: str | list[str] | None = None,
-    json_columns: str | list[str] | None = None,
 ) -> Table:
-    if json_columns is None:
-        json_columns = []
-
-    if isinstance(json_columns, str):
-        json_columns = [json_columns]
-
     if primary_key is None:
         primary_key = []
 
@@ -201,7 +210,7 @@ def get_table(
     for name, dtype in schema.items():
         # SQLAlchemy does not have all types that exist in MonetDB (e.g. tinyint)
         # can use custom types instead, this causes issues if accessing data via the ORM but this is not done here
-        col_type_name = "json" if name in json_columns else get_monetdb_type(dtype)
+        col_type_name = get_monetdb_type(dtype)
 
         columns.append(
             Column(
@@ -219,7 +228,6 @@ def create_table(
     schema: Mapping[str, pl.DataType | type[pl.DataType]],
     connection: Connection,
     primary_key: str | list[str] | None = None,
-    json_columns: str | list[str] | None = None,
 ) -> None:
     metadata = MetaData()
     tbl = get_table(
@@ -227,7 +235,6 @@ def create_table(
         schema=schema,
         metadata=metadata,
         primary_key=primary_key,
-        json_columns=json_columns,
     )
 
     metadata.create_all(connection, tables=[tbl], checkfirst=False)
