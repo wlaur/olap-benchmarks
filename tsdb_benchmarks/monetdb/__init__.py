@@ -9,6 +9,15 @@ from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
 from .settings import SETTINGS as MONETDB_SETTINGS
 
+# does not seem to be SP1 (is actually Mar2025)
+# MONETDB_IMAGE = "monetdb/monetdb:Mar2025-SP1"
+
+# built from https://github.com/MonetDBSolutions/monetdb-docker
+# with
+# docker build -t monetdb-local:Mar2025-SP1 -f ubuntu.dockerfile \
+# --platform linux/amd64 --build-arg BRANCH=Mar2025_SP1_release .
+MONETDB_IMAGE = "monetdb-local:Mar2025-SP1"
+
 
 def get_start_command() -> str:
     parts = [
@@ -18,7 +27,7 @@ def get_start_command() -> str:
         if not MONETDB_SETTINGS.client_file_transfer
         else "",
         "-e MDB_DB_ADMIN_PASS=monetdb -e MDB_CREATE_DBS=benchmark",
-        "monetdb/monetdb:Mar2025",
+        MONETDB_IMAGE,
     ]
 
     return " ".join(parts)
