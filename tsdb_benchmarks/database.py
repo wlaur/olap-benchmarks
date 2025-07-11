@@ -12,6 +12,7 @@ class Database(BaseModel, ABC):
 
     start: str
     stop: str
+    restart: str
 
     _connection: Connection | None = None
 
