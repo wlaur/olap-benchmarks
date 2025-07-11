@@ -38,6 +38,7 @@ class MonetDB(Database):
 
     start: str = get_start_command()
     stop: str = "docker kill monetdb-benchmark"
+    restart: str = "docker restart monetdb-benchmark"
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
