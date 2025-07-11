@@ -57,8 +57,8 @@ class MonetDB(Database):
     def fetch_pymonetdb(self, query: str) -> pl.DataFrame:
         return fetch_pymonetdb(query, self.connect())
 
-    def insert(self, df: pl.DataFrame, table: TableName):
+    def insert(self, df: pl.DataFrame, table: TableName) -> None:
         return insert(df, table, self.connect())
 
-    def upsert(self, df: pl.DataFrame, table: TableName):
+    def upsert(self, df: pl.DataFrame, table: TableName) -> None:
         return upsert(df, table, self.connect())

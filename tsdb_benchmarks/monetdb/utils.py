@@ -126,10 +126,10 @@ MONETDB_TEMPORARY_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
 
 
 class MonetDBType(UserDefinedType):
-    def __init__(self, type_name: str):
+    def __init__(self, type_name: str) -> None:
         self.type_name = type_name
 
-    def get_col_spec(self, **kwargs):
+    def get_col_spec(self, **kwargs) -> str:  # noqa: ANN003
         return self.type_name
 
 
