@@ -1,9 +1,15 @@
+import logging
 import os
 from typing import Literal
 
 from fire import Fire  # type: ignore[import-untyped]
 
-from .settings import DatabaseName
+from .generate import download_rtabench_data
+from .settings import DatabaseName, setup_stdout_logging
+
+setup_stdout_logging()
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def benchmark(name: DatabaseName) -> None:
@@ -16,7 +22,7 @@ def run(name: DatabaseName, command: Literal["start", "stop"]) -> None:
             from .monetdb import MonetDB
 
             cmd = getattr(MonetDB(), command)
-            print(f"Running command {command}: {cmd}")
+            _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
         case _:
@@ -28,11 +34,26 @@ def query(name: DatabaseName, query: str) -> None:
         case "monetdb":
             from .monetdb import MonetDB
 
-            print(MonetDB().fetch(query))
+            _LOGGER.info(MonetDB().fetch(query))
 
         case _:
             raise ValueError(f"Unknown database name: '{name}'")
 
 
+def download(dataset: str) -> None:
+    match dataset:
+        case "rtabench":
+            download_rtabench_data()
+        case _:
+            raise ValueError(f"Unknown dataset: '{dataset}'")
+
+
 if __name__ == "__main__":
-    Fire({"benchmark": benchmark, "run": run, "query": query})
+    Fire(
+        {
+            "benchmark": benchmark,
+            "run": run,
+            "query": query,
+            "download": download,
+        }
+    )

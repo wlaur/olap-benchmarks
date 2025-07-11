@@ -1,7 +1,7 @@
 import polars as pl
 
 
-def compare(df1: pl.DataFrame, df2: pl.DataFrame):
+def compare(df1: pl.DataFrame, df2: pl.DataFrame) -> None:
     print("✅ Checking DataFrames...")
 
     if "time" in df1.columns and "time" in df2.columns:
