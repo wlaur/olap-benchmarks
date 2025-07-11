@@ -1,3 +1,4 @@
+import logging
 import shutil
 import uuid
 from pathlib import Path
@@ -11,6 +12,7 @@ from .binary import (
     write_blob_column,
     write_date_column,
     write_datetime_column,
+    write_decimal_column,
     write_json_column,
     write_numeric_column,
     write_string_column,
@@ -24,6 +26,8 @@ from .utils import (
     get_pymonetdb_connection,
     get_table,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def write_binary_column_data(series: pl.Series, path: Path) -> None:
@@ -44,6 +48,8 @@ def write_binary_column_data(series: pl.Series, path: Path) -> None:
             | pl.Boolean
         ):
             write_numeric_column(series, path)
+        case pl.Decimal:
+            write_decimal_column(series, path, dtype)
         case pl.Date:
             write_date_column(series, path)
         case pl.Time:
@@ -71,6 +77,7 @@ def insert(
     if create:
         # NOTE: when inserting into an existing table, the column order and types must match exactly
         create_table(table, df.schema, connection, primary_key)
+        _LOGGER.info(f"Created table '{table}' with {len(df.columns):_} columns")
 
     con = get_pymonetdb_connection(connection)
     ensure_downloader_uploader(con)
@@ -97,6 +104,9 @@ def insert(
         if commit:
             con.commit()
 
+    except Exception as e:
+        col_indexes = dict(enumerate(df.columns))
+        raise ValueError(f"Could not insert binary data for '{table}', columns:\n{col_indexes}\n") from e
     finally:
         shutil.rmtree(temp_dir)
 
@@ -114,18 +124,18 @@ def upsert(
 
     insert(df, source.name, connection, create=False, commit=False)
 
-    primary_key = [primary_key] if isinstance(primary_key, str) else list(primary_key)
+    primary_keys = [primary_key] if isinstance(primary_key, str) else list(primary_key)
     shared_cols = sorted({c.name for c in dest.columns} & {c.name for c in dest.columns})
 
     if not shared_cols:
         raise ValueError("No overlapping columns to upsert")
 
-    update_cols = [col for col in shared_cols if col not in primary_key]
+    update_cols = [col for col in shared_cols if col not in primary_keys]
 
     if not update_cols:
         raise ValueError("No non-PK columns to upsert")
 
-    on_clause = " and ".join(f'dest."{pk}" = source."{pk}"' for pk in primary_key)
+    on_clause = " and ".join(f'dest."{pk}" = source."{pk}"' for pk in primary_keys)
     update_assignments = ", ".join(f'"{col}" = source."{col}"' for col in update_cols)
 
     insert_cols = ", ".join(f'"{col}"' for col in shared_cols)

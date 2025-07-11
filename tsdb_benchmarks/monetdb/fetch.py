@@ -10,6 +10,7 @@ from .binary import (
     read_blob_column,
     read_date_column,
     read_datetime_column,
+    read_decimal_column,
     read_json_column_object,
     read_json_column_struct,
     read_numeric_column,
@@ -39,7 +40,7 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
 
     description = c.description
     assert description is not None
-    schema = schema = {n.name: get_polars_type(n.type_code) for n in description}
+    schema = schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
 
     df = pl.DataFrame(ret, schema, orient="row")
 
@@ -55,7 +56,7 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     description = c.description
     assert description is not None
-    return {n.name: (get_polars_type(n.type_code), get_schema_meta(n)) for n in description}
+    return {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
 
 
 def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
@@ -74,6 +75,8 @@ def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], 
             | pl.Boolean
         ):
             return read_numeric_column(path, dtype)
+        case pl.Decimal:
+            return read_decimal_column(path, dtype)
         case pl.Date:
             return read_date_column(path)
         case pl.Time:

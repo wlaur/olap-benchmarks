@@ -63,6 +63,8 @@ def compare(df1: pl.DataFrame, df2: pl.DataFrame) -> None:
             return
 
         row_mask = diffs.select(pl.any_horizontal(pl.all())).to_series().fill_null(False)
+        index = df1.select("time")
+
         if row_mask.sum() > 0:
             print(f"⚠️ Number of differing rows: {row_mask.sum():_}")
             comparison = (
@@ -71,18 +73,19 @@ def compare(df1: pl.DataFrame, df2: pl.DataFrame) -> None:
                         df1_diff.select(pl.all().name.suffix("_left")),
                         df2_diff.select(pl.all().name.suffix("_right")),
                         row_mask.to_frame("mismatch"),
+                        index,
                     ],
                     how="horizontal",
                 )
                 .filter(pl.col.mismatch)
                 .drop("mismatch")
             )
-            cols_ordered: list[str] = []
+            cols_ordered = ["time"]
 
             for n in sorted({n.removesuffix("_left") for n in comparison.columns if n.endswith("_left")}):
                 cols_ordered.extend([f"{n}_left", f"{n}_right"])
 
-            comparison = comparison.select(*cols_ordered)
+            comparison = comparison.select(*cols_ordered).sort("time")
 
             print(comparison)
         else:
