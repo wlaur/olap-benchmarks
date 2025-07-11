@@ -1,9 +1,10 @@
 import shutil
 import uuid
 from pathlib import Path
+from textwrap import dedent
 
 import polars as pl
-from sqlalchemy import Connection
+from sqlalchemy import Connection, text
 
 from ..settings import TableName
 from .binary import (
@@ -21,6 +22,7 @@ from .utils import (
     create_table,
     ensure_downloader_uploader,
     get_pymonetdb_connection,
+    get_table,
 )
 
 
@@ -63,9 +65,12 @@ def insert(
     table: TableName,
     connection: Connection,
     primary_key: str | list[str] | None = None,
+    create: bool = True,
+    commit: bool = True,
 ) -> None:
-    # NOTE: when inserting into an existing table, the column order and types must match exactly
-    create_table(table, df.schema, connection, primary_key)
+    if create:
+        # NOTE: when inserting into an existing table, the column order and types must match exactly
+        create_table(table, df.schema, connection, primary_key)
 
     con = get_pymonetdb_connection(connection)
     ensure_downloader_uploader(con)
@@ -74,9 +79,7 @@ def insert(
     temp_dir.mkdir()
 
     subdir = temp_dir.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()
-
     column_files: list[Path] = []
-
     path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
 
     try:
@@ -90,7 +93,9 @@ def insert(
             f"copy little endian binary into {table} from {files_clause} "
             f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
         )
-        con.commit()
+
+        if commit:
+            con.commit()
 
     finally:
         shutil.rmtree(temp_dir)
@@ -99,5 +104,42 @@ def insert(
 def upsert(
     df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str] | None = None
 ) -> None:
-    # insert into unlogged temp table, use merge statement to update target
-    raise NotImplementedError
+    if primary_key is None:
+        raise ValueError("primary_key must be provided when upserting data")
+
+    dest = get_table(table, df.schema)
+
+    temp_table_name = f"_temporary_{str(uuid.uuid4())[:4]}"
+    source = create_table(temp_table_name, df.schema, connection, primary_key=primary_key, temporary=True)
+
+    insert(df, source.name, connection, create=False, commit=False)
+
+    primary_key = [primary_key] if isinstance(primary_key, str) else list(primary_key)
+    shared_cols = sorted({c.name for c in dest.columns} & {c.name for c in dest.columns})
+
+    if not shared_cols:
+        raise ValueError("No overlapping columns to upsert")
+
+    update_cols = [col for col in shared_cols if col not in primary_key]
+
+    if not update_cols:
+        raise ValueError("No non-PK columns to upsert")
+
+    on_clause = " and ".join(f'dest."{pk}" = source."{pk}"' for pk in primary_key)
+    update_assignments = ", ".join(f'"{col}" = source."{col}"' for col in update_cols)
+
+    insert_cols = ", ".join(f'"{col}"' for col in shared_cols)
+    insert_values = ", ".join(f'source."{col}"' for col in shared_cols)
+
+    merge_statement = dedent(f"""
+        merge into "{dest.name}" as dest
+        using "{source.name}" as source
+            on {on_clause}
+        when matched then
+            update set {update_assignments}
+        when not matched then
+            insert ({insert_cols}) values ({insert_values})
+    """)
+
+    connection.execute(text(merge_statement))
+    connection.commit()

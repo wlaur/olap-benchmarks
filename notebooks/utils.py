@@ -28,7 +28,7 @@ def compare(df1: pl.DataFrame, df2: pl.DataFrame) -> None:
     if df1.shape != df2.shape:
         print(f"⚠️ Shape mismatch: df1={df1.shape}, df2={df2.shape}")
 
-    diff_cols = []
+    diff_cols: list[str] = []
     for col in df1.columns:
         dtype = df1[col].dtype
         if dtype == pl.Object:
@@ -68,8 +68,8 @@ def compare(df1: pl.DataFrame, df2: pl.DataFrame) -> None:
             comparison = (
                 pl.concat(
                     [
-                        df1_diff.select(pl.all().name.suffix("_1")),
-                        df2_diff.select(pl.all().name.suffix("_2")),
+                        df1_diff.select(pl.all().name.suffix("_left")),
+                        df2_diff.select(pl.all().name.suffix("_right")),
                         row_mask.to_frame("mismatch"),
                     ],
                     how="horizontal",
@@ -77,6 +77,12 @@ def compare(df1: pl.DataFrame, df2: pl.DataFrame) -> None:
                 .filter(pl.col.mismatch)
                 .drop("mismatch")
             )
+            cols_ordered: list[str] = []
+
+            for n in sorted({n.removesuffix("_left") for n in comparison.columns if n.endswith("_left")}):
+                cols_ordered.extend([f"{n}_left", f"{n}_right"])
+
+            comparison = comparison.select(*cols_ordered)
 
             print(comparison)
         else:
