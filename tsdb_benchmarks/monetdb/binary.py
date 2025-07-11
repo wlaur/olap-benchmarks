@@ -11,8 +11,9 @@ from .utils import (
     BOOLEAN_NULL,
     MONETDB_DATE_RECORD_TYPE,
     MONETDB_DATETIME_RECORD_TYPE,
+    MONETDB_DEFAULT_DECIMAL_PRECISION,
+    MONETDB_DEFAULT_DECIMAL_SCALE,
     MONETDB_TIME_RECORD_TYPE,
-    POLARS_NUMPY_STRUCT_PACKING_CODE_MAP,
     POLARS_NUMPY_TYPE_MAP,
 )
 
@@ -43,6 +44,30 @@ TIME_NULL_RECORD = {
     "hours": 255,
     "padding": 255,
 }
+
+
+def decimal_numpy_dtype(precision: int) -> np.dtype:
+    if 1 <= precision <= 2:
+        return np.int8  # type: ignore[return-value]
+    if 3 <= precision <= 4:
+        return np.int16  # type: ignore[return-value]
+    if 5 <= precision <= 9:
+        return np.int32  # type: ignore[return-value]
+    if 10 <= precision <= 18:
+        return np.int64  # type: ignore[return-value]
+    raise ValueError(f"Decimal precision {precision} too large for integer-based encoding (needs 16 bytes)")
+
+
+def numpy_to_polars_int_dtype(np_dtype: np.dtype) -> type[pl.DataType]:
+    if np_dtype == np.int8:
+        return pl.Int8
+    if np_dtype == np.int16:
+        return pl.Int16
+    if np_dtype == np.int32:
+        return pl.Int32
+    if np_dtype == np.int64:
+        return pl.Int64
+    raise ValueError(f"Unsupported NumPy integer dtype: {np_dtype}")
 
 
 def read_date_column(path: Path) -> pl.Series:
@@ -334,14 +359,17 @@ def write_blob_column(series: pl.Series, path: Path) -> None:
     path.write_bytes(buffer)
 
 
-def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
+def read_numeric_column(
+    path: Path, dtype: pl.DataType | type[pl.DataType], np_dtype: np.dtype | None = None
+) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
-    packing_code = POLARS_NUMPY_STRUCT_PACKING_CODE_MAP.get(dtype)
+    if np_dtype is None:
+        np_dtype = cast(np.dtype | None, POLARS_NUMPY_TYPE_MAP.get(dtype))
 
-    if packing_code is None:
-        raise ValueError(f"Cannot determine Numpy packing code for Polars dtype: {dtype}")
+        if np_dtype is None:
+            raise ValueError(f"Cannot determine corresponding Numpy type for {path}: {dtype}")
 
     if dtype == pl.Boolean:
         is_bool = True
@@ -349,7 +377,7 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
     else:
         is_bool = False
 
-    values = np.frombuffer(data, dtype=packing_code)
+    values = np.frombuffer(data, dtype=np_dtype)
 
     s = pl.Series(values, dtype=dtype)
 
@@ -367,7 +395,7 @@ def read_numeric_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> p
     return s
 
 
-def write_numeric_column(series: pl.Series, path: Path) -> None:
+def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype | None = None) -> None:
     values: np.ndarray
 
     if series.dtype == pl.Boolean:
@@ -379,9 +407,11 @@ def write_numeric_column(series: pl.Series, path: Path) -> None:
         )
 
     else:
-        np_dtype = POLARS_NUMPY_TYPE_MAP.get(series.dtype)
         if np_dtype is None:
-            raise ValueError(f"Cannot determine corresponding Numpy type for {series.dtype} ({series.name=})")
+            np_dtype = cast(np.dtype | None, POLARS_NUMPY_TYPE_MAP.get(series.dtype))
+
+            if np_dtype is None:
+                raise ValueError(f"Cannot determine corresponding Numpy type for {series.dtype} ({series.name=})")
 
         if np.issubdtype(np_dtype, np.integer):
             sentinel = np.iinfo(np_dtype).min
@@ -393,3 +423,25 @@ def write_numeric_column(series: pl.Series, path: Path) -> None:
 
     with path.open("wb") as f:
         f.write(values.tobytes())
+
+
+def read_decimal_column(path: Path, dtype: pl.Decimal | type[pl.Decimal]) -> pl.Series:
+    precision = dtype.precision or MONETDB_DEFAULT_DECIMAL_PRECISION
+    scale = dtype.scale or MONETDB_DEFAULT_DECIMAL_SCALE
+    np_dtype = decimal_numpy_dtype(precision)
+    values = read_numeric_column(path, numpy_to_polars_int_dtype(np_dtype), np_dtype)
+
+    # avoid float conversion issues when dividing by scale
+    return (values.cast(pl.Decimal(MONETDB_DEFAULT_DECIMAL_PRECISION, MONETDB_DEFAULT_DECIMAL_SCALE)) / 10**scale).cast(
+        dtype
+    )
+
+
+def write_decimal_column(series: pl.Series, path: Path, dtype: pl.Decimal) -> None:
+    precision = dtype.precision or MONETDB_DEFAULT_DECIMAL_PRECISION
+    scale = dtype.scale or MONETDB_DEFAULT_DECIMAL_SCALE
+    np_dtype = decimal_numpy_dtype(precision)
+
+    scaled_int = (series * 10**scale).cast(pl.Int64)
+
+    write_numeric_column(scaled_int, path, np_dtype=np_dtype)

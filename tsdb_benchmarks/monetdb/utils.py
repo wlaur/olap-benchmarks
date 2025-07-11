@@ -23,6 +23,9 @@ from .settings import SETTINGS as MONETDB_SETTINGS
 # MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
 BOOLEAN_NULL = 128
 
+MONETDB_DEFAULT_DECIMAL_PRECISION = 18
+MONETDB_DEFAULT_DECIMAL_SCALE = 3
+
 
 MONETDB_DATETIME_RECORD_TYPE = np.dtype(
     [
@@ -93,19 +96,6 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "month_interval": pl.Int32,
 }
 
-POLARS_NUMPY_STRUCT_PACKING_CODE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
-    pl.Boolean: "<u1",
-    pl.Int8: "<i1",
-    pl.Int16: "<i2",
-    pl.Int32: "<i4",
-    pl.Int64: "<i8",
-    pl.UInt8: "<u1",
-    pl.UInt16: "<u2",
-    pl.UInt32: "<u4",
-    pl.UInt64: "<u8",
-    pl.Float32: "<f4",
-    pl.Float64: "<f8",
-}
 
 POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], type] = {
     pl.Int8: np.int8,
@@ -137,9 +127,12 @@ class SchemaMeta(BaseModel):
     size: int | None = None
     tz: str | None = None
 
+    precision: int | None = None
+    scale: int | None = None
+
 
 def get_schema_meta(description: Description) -> SchemaMeta:
-    meta = SchemaMeta()
+    meta = SchemaMeta(precision=description.precision, scale=description.scale)
 
     if description.type_code == "varchar" and description.internal_size > 0:
         meta.size = description.internal_size
@@ -147,7 +140,10 @@ def get_schema_meta(description: Description) -> SchemaMeta:
     return meta
 
 
-def get_polars_type(type_code: str) -> pl.DataType | type[pl.DataType]:
+def get_polars_type(type_code: str, precision: int | None, scale: int | None) -> pl.DataType | type[pl.DataType]:
+    if type_code == "decimal":
+        return pl.Decimal(precision or MONETDB_DEFAULT_DECIMAL_PRECISION, scale=scale or MONETDB_DEFAULT_DECIMAL_SCALE)
+
     if type_code in MONETDB_POLARS_TYPE_MAP:
         return MONETDB_POLARS_TYPE_MAP[type_code]
 
@@ -155,6 +151,12 @@ def get_polars_type(type_code: str) -> pl.DataType | type[pl.DataType]:
 
 
 def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
+    if isinstance(dtype, pl.Decimal):
+        return f"decimal({dtype.precision or MONETDB_DEFAULT_DECIMAL_PRECISION},{dtype.scale})"
+
+    if dtype == pl.Decimal:
+        return f"decimal({MONETDB_DEFAULT_DECIMAL_PRECISION},{MONETDB_DEFAULT_DECIMAL_SCALE})"
+
     if dtype == pl.Struct or dtype == pl.Object:
         return "json"
 
@@ -230,6 +232,7 @@ def create_table(
     connection: Connection,
     primary_key: str | list[str] | None = None,
     temporary: bool = False,
+    commit: bool = False,
 ) -> Table:
     metadata = MetaData()
     tbl = get_table(
@@ -242,9 +245,14 @@ def create_table(
 
     metadata.create_all(connection, tables=[tbl], checkfirst=False)
 
+    if commit:
+        connection.commit()
+
     return tbl
 
 
-def drop_table(table: TableName, connection: Connection) -> None:
+def drop_table(table: TableName, connection: Connection, commit: bool = True) -> None:
     connection.execute(text(f'drop table if exists "{table}"'))
-    connection.commit()
+
+    if commit:
+        connection.commit()
