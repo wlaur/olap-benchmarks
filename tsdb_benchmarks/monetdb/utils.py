@@ -195,6 +195,7 @@ def get_table(
     schema: Mapping[str, pl.DataType | type[pl.DataType]],
     metadata: MetaData | None = None,
     primary_key: str | list[str] | None = None,
+    prefixes: list[str] | None = None,
 ) -> Table:
     if primary_key is None:
         primary_key = []
@@ -220,7 +221,7 @@ def get_table(
             )
         )
 
-    return Table(table, metadata, *columns)
+    return Table(table, metadata, *columns, prefixes=prefixes)
 
 
 def create_table(
@@ -228,16 +229,20 @@ def create_table(
     schema: Mapping[str, pl.DataType | type[pl.DataType]],
     connection: Connection,
     primary_key: str | list[str] | None = None,
-) -> None:
+    temporary: bool = False,
+) -> Table:
     metadata = MetaData()
     tbl = get_table(
         table=table,
         schema=schema,
         metadata=metadata,
-        primary_key=primary_key,
+        primary_key=primary_key if MONETDB_SETTINGS.use_primary_key else None,
+        prefixes=["LOCAL", "TEMPORARY"] if temporary else None,
     )
 
     metadata.create_all(connection, tables=[tbl], checkfirst=False)
+
+    return tbl
 
 
 def drop_table(table: TableName, connection: Connection) -> None:
