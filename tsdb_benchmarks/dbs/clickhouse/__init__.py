@@ -111,6 +111,8 @@ class Clickhouse(Database):
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
         time_columns: list[str] | None = None,
     ) -> pl.DataFrame:
+        query = query.strip().removesuffix(";")
+
         # query_arrow converts datetime to epoch second
         df = cast(pl.DataFrame, pl.from_arrow(self.get_client().query_arrow(query)))
 
