@@ -10,9 +10,17 @@ from .settings import DatabaseName, TableName
 class Database(BaseModel, ABC):
     name: DatabaseName
 
-    start: str
-    stop: str
-    restart: str
+    @property
+    @abstractmethod
+    def start(self) -> str: ...
+
+    @property
+    def stop(self) -> str:
+        return f"docker stop {self.name}-benchmark"
+
+    @property
+    def restart(self) -> str:
+        return f"docker restart {self.name}-benchmark"
 
     _connection: Connection | None = None
 
