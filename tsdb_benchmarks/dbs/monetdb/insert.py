@@ -111,12 +111,7 @@ def insert(
         shutil.rmtree(temp_dir)
 
 
-def upsert(
-    df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str] | None = None
-) -> None:
-    if primary_key is None:
-        raise ValueError("primary_key must be provided when upserting data")
-
+def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str]) -> None:
     dest = get_table(table, df.schema)
 
     temp_table_name = f"_temporary_{str(uuid.uuid4())[:4]}"
