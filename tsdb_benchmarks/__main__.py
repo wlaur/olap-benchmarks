@@ -26,16 +26,12 @@ def run(name: DatabaseName, command: Literal["start", "stop"]) -> None:
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
-        case _:
-            raise ValueError(f"Unknown database name: '{name}'")
+        case "clickhouse":
+            from .dbs.clickhouse import Clickhouse
 
-
-def query(name: DatabaseName, query: str) -> None:
-    match name:
-        case "monetdb":
-            from .dbs.monetdb import MonetDB
-
-            _LOGGER.info(MonetDB().fetch(query))
+            cmd = getattr(Clickhouse(), command)
+            _LOGGER.info(f"Running command {command}: {cmd}")
+            os.system(cmd)
 
         case _:
             raise ValueError(f"Unknown database name: '{name}'")
@@ -56,7 +52,6 @@ if __name__ == "__main__":
         {
             "benchmark": benchmark,
             "run": run,
-            "query": query,
             "generate": generate,
         }
     )
