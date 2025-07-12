@@ -1,14 +1,12 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
-import numpy as np
 import polars as pl
 
-from .settings import REPO_ROOT
+from ...settings import REPO_ROOT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,24 +53,6 @@ RTA_BENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
 }
 
 
-def generate_data(n_rows: int, n_cols: int) -> pl.DataFrame:
-    end = datetime(2025, 1, 1)
-    start = end - timedelta(minutes=n_rows - 1)
-
-    time = pl.datetime_range(start, end, interval="1m", eager=True, time_unit="ms")
-
-    df = pl.DataFrame({"time": time})
-
-    data = np.random.rand(n_rows, n_cols)
-
-    df = pl.concat(
-        [df, pl.from_numpy(data, schema={f"col_{n}": pl.Float32 for n in range(1, n_cols + 1)}, orient="row")],
-        how="horizontal",
-    )
-
-    return df
-
-
 async def download_file(client: httpx.AsyncClient, url: str, dest_path: Path) -> None:
     if dest_path.exists():
         raise ValueError(f"Already exists: {dest_path.name}")
@@ -88,8 +68,8 @@ async def download_file(client: httpx.AsyncClient, url: str, dest_path: Path) ->
     _LOGGER.info(f"Downloaded and extracted {dest_path.name}")
 
 
-async def download_rtabench_data_async(target: Path) -> None:
-    target.mkdir(parents=True, exist_ok=True)
+async def download_rtabench_data_async(output_directory: Path) -> None:
+    output_directory.mkdir(parents=True, exist_ok=True)
 
     urls = [f"https://rtadatasets.timescale.com/{name}.csv.gz" for name in RTA_BENCH_SCHEMAS]
 
@@ -97,7 +77,7 @@ async def download_rtabench_data_async(target: Path) -> None:
         tasks = []
         for url in urls:
             filename = url.split("/")[-1]
-            dest_path = target / filename
+            dest_path = output_directory / filename
             tasks.append(download_file(client, url, dest_path))
 
         await asyncio.gather(*tasks)
@@ -114,10 +94,10 @@ def convert_rtabench_data_to_parquet(data_dir: Path) -> None:
 
 
 def download_rtabench_data() -> None:
-    target = REPO_ROOT / "data/input/rtabench"
+    output_directory = REPO_ROOT / "data/input/rtabench"
 
-    asyncio.run(download_rtabench_data_async(target))
+    asyncio.run(download_rtabench_data_async(output_directory))
 
     # convert to Parquet, size goes from 22 GB to 3.8 GB
     # benchmark assumes Parquet inputs for all batch data
-    convert_rtabench_data_to_parquet(target)
+    convert_rtabench_data_to_parquet(output_directory)
