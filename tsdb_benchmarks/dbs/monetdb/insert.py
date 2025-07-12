@@ -7,7 +7,7 @@ from textwrap import dedent
 import polars as pl
 from sqlalchemy import Connection, text
 
-from ..settings import TableName
+from ...settings import TableName
 from .binary import (
     write_blob_column,
     write_date_column,

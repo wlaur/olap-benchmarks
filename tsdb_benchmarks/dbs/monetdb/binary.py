@@ -13,6 +13,8 @@ from .utils import (
     MONETDB_DATETIME_RECORD_TYPE,
     MONETDB_DEFAULT_DECIMAL_PRECISION,
     MONETDB_DEFAULT_DECIMAL_SCALE,
+    MONETDB_MAX_DECIMAL_PRECISION,
+    MONETDB_MAX_DECIMAL_SCALE,
     MONETDB_TIME_RECORD_TYPE,
     POLARS_NUMPY_TYPE_MAP,
 )
@@ -432,9 +434,7 @@ def read_decimal_column(path: Path, dtype: pl.Decimal | type[pl.Decimal]) -> pl.
     values = read_numeric_column(path, numpy_to_polars_int_dtype(np_dtype), np_dtype)
 
     # avoid float conversion issues when dividing by scale
-    return (values.cast(pl.Decimal(MONETDB_DEFAULT_DECIMAL_PRECISION, MONETDB_DEFAULT_DECIMAL_SCALE)) / 10**scale).cast(
-        dtype
-    )
+    return (values.cast(pl.Decimal(MONETDB_MAX_DECIMAL_PRECISION, MONETDB_MAX_DECIMAL_SCALE)) / 10**scale).cast(dtype)
 
 
 def write_decimal_column(series: pl.Series, path: Path, dtype: pl.Decimal) -> None:

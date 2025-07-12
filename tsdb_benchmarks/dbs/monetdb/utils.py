@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.types import UserDefinedType
 
-from ..settings import SETTINGS, TableName
+from ...settings import SETTINGS, TableName
 from .settings import SETTINGS as MONETDB_SETTINGS
 
 # MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
@@ -26,6 +26,8 @@ BOOLEAN_NULL = 128
 MONETDB_DEFAULT_DECIMAL_PRECISION = 18
 MONETDB_DEFAULT_DECIMAL_SCALE = 3
 
+MONETDB_MAX_DECIMAL_PRECISION = 18
+MONETDB_MAX_DECIMAL_SCALE = 3
 
 MONETDB_DATETIME_RECORD_TYPE = np.dtype(
     [
