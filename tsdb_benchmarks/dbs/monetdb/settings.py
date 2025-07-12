@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    default_fetch_method: Literal["binary", "pymonetdb"] = "binary"
     client_file_transfer: bool = True
     use_primary_key: bool = True
 

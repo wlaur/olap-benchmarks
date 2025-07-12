@@ -1,8 +1,7 @@
 with hourly_stats as (
 select
 	date_trunc('hour', event_created) as "hour",
-	trim(json.filter(event_payload,
-	'$.terminal'), '"') as terminal,
+	trim(json.filter(event_payload, '$.terminal'), '"') as terminal,
 	count(*) as event_count
 from
 	order_events

@@ -28,6 +28,9 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...
 
+    def rollback(self) -> None:
+        self.connect().rollback()
+
     @abstractmethod
     def fetch(
         self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None

@@ -122,6 +122,8 @@ def fetch_binary(
 
     files_clause = ",".join(f"'{path_prefix}{subdir}/{n.name}'" for n in output_files)
 
+    query = query.strip().removesuffix(";")
+
     try:
         con.execute(
             f"copy {query} into little endian binary {files_clause} "
