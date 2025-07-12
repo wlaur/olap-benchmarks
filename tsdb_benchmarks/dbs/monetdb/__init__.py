@@ -1,11 +1,12 @@
 from collections.abc import Mapping
+from typing import Literal
 
 import polars as pl
 from sqlalchemy import Connection, create_engine
 
 from ...database import Database
 from ...settings import SETTINGS, TableName
-from .fetch import fetch_binary
+from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
 from .settings import SETTINGS as MONETDB_SETTINGS
 
@@ -51,8 +52,20 @@ class MonetDB(Database):
 
         return self._connection
 
-    def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:
-        return fetch_binary(query, self.connect(), schema)
+    def fetch(
+        self,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+        method: Literal["binary", "pymonetdb"] | None = None,
+    ) -> pl.DataFrame:
+        method = method or MONETDB_SETTINGS.default_fetch_method
+
+        if method == "binary":
+            return fetch_binary(query, self.connect(), schema)
+        elif method == "pymonetdb":
+            return fetch_pymonetdb(query, self.connect())
+        else:
+            raise ValueError(f"Invalid method: '{method}'")
 
     def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
         return insert(df, table, self.connect(), primary_key)
