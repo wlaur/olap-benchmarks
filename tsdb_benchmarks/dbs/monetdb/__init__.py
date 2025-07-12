@@ -24,6 +24,9 @@ class MonetDB(Database):
 
     @property
     def start(self) -> str:
+        (SETTINGS.database_directory / "monetdb").mkdir(exist_ok=True)
+        (SETTINGS.database_directory / "monetdb/data").mkdir(exist_ok=True)
+
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 50000:50000",
             f"-v {SETTINGS.database_directory.as_posix()}/monetdb:/var/monetdb5/dbfarm",
@@ -51,8 +54,8 @@ class MonetDB(Database):
     def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:
         return fetch_binary(query, self.connect(), schema)
 
-    def insert(self, df: pl.DataFrame, table: TableName) -> None:
-        return insert(df, table, self.connect())
+    def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
+        return insert(df, table, self.connect(), primary_key)
 
-    def upsert(self, df: pl.DataFrame, table: TableName) -> None:
-        return upsert(df, table, self.connect())
+    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        return upsert(df, table, self.connect(), primary_key=primary_key)
