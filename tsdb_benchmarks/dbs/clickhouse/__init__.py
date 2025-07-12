@@ -109,7 +109,7 @@ class Clickhouse(Database):
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-        time_columns: list[str] | None = None,
+        time_columns: str | list[str] | None = None,
     ) -> pl.DataFrame:
         query = query.strip().removesuffix(";")
 
@@ -121,6 +121,9 @@ class Clickhouse(Database):
 
         if time_columns is None:
             time_columns = []
+
+        if isinstance(time_columns, str):
+            time_columns = [time_columns]
 
         if "time" not in time_columns:
             time_columns.append("time")
