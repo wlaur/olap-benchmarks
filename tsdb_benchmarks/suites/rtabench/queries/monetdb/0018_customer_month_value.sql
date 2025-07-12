@@ -1,6 +1,6 @@
 
 SELECT
-    c.customer_id,
+    customer_id,
     c.name,
     sum(oi.amount * p.price)
 FROM
@@ -11,7 +11,7 @@ FROM
 WHERE
     o.created_at >= '2024-01-01' and o.created_at < '2024-02-01'
 GROUP BY
-    c.customer_id, c.name
+    customer_id, c.name
 ORDER BY
     sum(oi.amount * p.price) DESC
 LIMIT 10;

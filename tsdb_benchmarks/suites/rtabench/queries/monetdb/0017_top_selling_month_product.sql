@@ -1,4 +1,4 @@
-SELECT p.product_id, p.name, sum(amount)
+SELECT product_id, p.name, sum(amount)
 FROM products p
 INNER JOIN order_items oi USING(product_id)
 INNER JOIN order_events oe USING(order_id)
