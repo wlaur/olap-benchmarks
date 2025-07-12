@@ -1,7 +1,7 @@
 SELECT
-    c.customer_id,
+    customer_id,
     c.name,
-    count(o.order_id)
+    count(order_id)
 FROM
     customers c
     INNER JOIN orders o USING (customer_id)
@@ -10,7 +10,7 @@ WHERE
     oe.event_created >= '2024-01-01' and oe.event_created < '2024-07-01'
     and oe.event_type = 'Delivered'
 GROUP BY
-    c.customer_id, c.name
+    customer_id, c.name
 ORDER BY
-    count(o.order_id) DESC
+    count(order_id) DESC
 LIMIT 10;
