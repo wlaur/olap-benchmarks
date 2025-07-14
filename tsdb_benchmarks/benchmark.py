@@ -2,7 +2,7 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel
 
-from .database import Database
+from .dbs import Database
 from .settings import SETTINGS, DatabaseName
 
 BenchmarkStep = Literal["insert", "query", "append", "upsert"]

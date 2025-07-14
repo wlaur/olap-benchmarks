@@ -4,6 +4,7 @@ from typing import Literal
 
 from fire import Fire  # type: ignore[import-untyped]
 
+from .dbs import Database
 from .settings import DatabaseName, setup_stdout_logging
 from .suites.rtabench.generate import download_rtabench_data
 from .suites.time_series.generate import generate_datasets
@@ -17,22 +18,48 @@ def benchmark(name: DatabaseName) -> None:
     pass
 
 
-def run(name: DatabaseName, command: Literal["start", "stop"]) -> None:
+def run(name: DatabaseName, command: Literal["start", "stop", "setup"]) -> None:
+    db: Database
     match name:
         case "monetdb":
             from .dbs.monetdb import MonetDB
 
-            cmd = getattr(MonetDB(), command)
+            db = MonetDB()
+
+            if command == "setup":
+                db.setup()
+                return
+
+            cmd = getattr(db, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
         case "clickhouse":
             from .dbs.clickhouse import Clickhouse
 
-            cmd = getattr(Clickhouse(), command)
+            db = Clickhouse()
+
+            if command == "setup":
+                db.setup()
+                return
+
+            cmd = getattr(db, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
+        case "timescaledb":
+            from .dbs.timescaledb import TimescaleDB
+
+            db = TimescaleDB()
+
+            if command == "setup":
+                db.setup()
+                return
+
+            cmd = getattr(db, command)
+            _LOGGER.info(f"Running command {command}: {cmd}")
+
+            os.system(cmd)
         case _:
             raise ValueError(f"Unknown database name: '{name}'")
 

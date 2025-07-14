@@ -5,7 +5,7 @@ import polars as pl
 from pydantic import BaseModel
 from sqlalchemy import Connection
 
-from .settings import DatabaseName, TableName
+from ..settings import DatabaseName, TableName
 
 
 class Database(BaseModel, ABC):
@@ -22,6 +22,9 @@ class Database(BaseModel, ABC):
     @property
     def restart(self) -> str:
         return f"docker restart {self.name}-benchmark"
+
+    def setup(self) -> None:
+        pass
 
     _connection: Connection | None = None
 

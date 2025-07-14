@@ -10,8 +10,8 @@ import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
-from ...database import Database
 from ...settings import SETTINGS, TableName
+from .. import Database
 
 CLICKHOUSE_IMAGE = "clickhouse:25.6.3.116-jammy"
 
@@ -70,7 +70,7 @@ class Clickhouse(Database):
     @property
     def start(self) -> str:
         (SETTINGS.database_directory / "clickhouse").mkdir(exist_ok=True)
-        (SETTINGS.database_directory / "clickhouse/data").mkdir(exist_ok=True)
+        (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 18123:8123 -p 19000:9000",

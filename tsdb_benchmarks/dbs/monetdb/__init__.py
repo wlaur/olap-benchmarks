@@ -4,8 +4,8 @@ from typing import Literal
 import polars as pl
 from sqlalchemy import Connection, create_engine
 
-from ...database import Database
 from ...settings import SETTINGS, TableName
+from .. import Database
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
 from .settings import SETTINGS as MONETDB_SETTINGS
