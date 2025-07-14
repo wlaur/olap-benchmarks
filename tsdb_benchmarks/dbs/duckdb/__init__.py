@@ -2,12 +2,11 @@ from collections.abc import Mapping
 from typing import cast
 
 import polars as pl
+from duckdb import DuckDBPyConnection
 from sqlalchemy import Connection, create_engine
 
-from duckdb import DuckDBPyConnection
-
-from ...database import Database
 from ...settings import SETTINGS, TableName
+from .. import Database
 
 
 def get_duckdb_connection(connection: Connection) -> DuckDBPyConnection:
