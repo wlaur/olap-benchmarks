@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from typing import Literal
 
 import polars as pl
-from sqlalchemy import Connection, create_engine
+from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
 from .. import Database
@@ -47,7 +47,13 @@ class MonetDB(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine("monetdb://monetdb:monetdb@localhost:50000/benchmark")
+        engine = create_engine(
+            "monetdb://monetdb:monetdb@localhost:50000/benchmark",
+            # avoid crash "ImportError: sys.meta_path is None, Python is likely shutting down",
+            # not clear why this happens
+            pool_reset_on_return=None,
+        )
+
         self._connection = engine.connect()
 
         return self._connection
@@ -68,7 +74,12 @@ class MonetDB(Database):
             raise ValueError(f"Invalid method: '{method}'")
 
     def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
-        return insert(df, table, self.connect(), primary_key)
+        result = self.connect().execute(
+            text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
+        )
+        exists = bool(result.scalar())
+
+        return insert(df, table, self.connect(), primary_key, create=not exists)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)

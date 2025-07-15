@@ -10,7 +10,41 @@ from ...settings import REPO_ROOT
 
 _LOGGER = logging.getLogger(__name__)
 
-RTA_BENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
+RTABENCH_QUERY_NAMES = [
+    "0000_terminal_hourly_stats",
+    "0001_count_orders_from_terminal",
+    "0002_global_agg",
+    "0003_exists_order_delivered_from_terminal",
+    "0004_count_delayed_orders_per_day",
+    "0005_search_events_for_processor",
+    "0006_order_events_without_backups",
+    "0007_last_order_event_for_order",
+    "0008_most_week_delayed_order",
+    "0009_departed_orders_count",
+    "0010_last_event_for_an_order",
+    "0011_events_for_an_order",
+    "0012_max_satisfaction_for_order_per_day",
+    "0013_satisfaction_with_without_backup",
+    "0014_sum_prod_stock_price_per_category",
+    "0015_exists_order_delivered_for_customer",
+    "0016_customers_with_most_orders",
+    "0017_top_selling_month_product",
+    "0018_customer_month_value",
+    "0019_out_of_stock_products",
+    "0020_customers_outstanding",
+    "0021_sales_volume_by_country",
+    "0022_sales_volume_by_country_state",
+    "0023_top_sales_volume_product_from_terminal",
+    "0024_top_customer_by_revenue",
+    "0025_product_category_performance",
+    "0026_average_order_value",
+    "0027_country_category_performance",
+    "0028_sales_volume_by_age_group",
+    "0029_top_product_in_age_group",
+    "0030_customers_with_most_orders_delivered",
+]
+
+RTABENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
     "customers": {
         "customer_id": pl.Int32,
         "name": pl.String,
@@ -71,7 +105,7 @@ async def download_file(client: httpx.AsyncClient, url: str, dest_path: Path) ->
 async def download_rtabench_data_async(output_directory: Path) -> None:
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    urls = [f"https://rtadatasets.timescale.com/{name}.csv.gz" for name in RTA_BENCH_SCHEMAS]
+    urls = [f"https://rtadatasets.timescale.com/{name}.csv.gz" for name in RTABENCH_SCHEMAS]
 
     async with httpx.AsyncClient() as client:
         tasks = []
@@ -84,7 +118,7 @@ async def download_rtabench_data_async(output_directory: Path) -> None:
 
 
 def convert_rtabench_data_to_parquet(data_dir: Path) -> None:
-    for name, schema in RTA_BENCH_SCHEMAS.items():
+    for name, schema in RTABENCH_SCHEMAS.items():
         fname = data_dir / f"{name}.csv"
         df = pl.read_csv(fname, has_header=False, schema=schema)
         df.write_parquet(fname.with_suffix(".parquet"))

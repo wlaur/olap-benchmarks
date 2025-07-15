@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Mapping
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
 import clickhouse_connect
@@ -217,3 +217,7 @@ class Clickhouse(Database):
 
         finally:
             temp_file.unlink()
+
+    @property
+    def rtabench_fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["hour", "day"]}
