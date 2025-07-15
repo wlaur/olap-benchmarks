@@ -49,7 +49,7 @@ class MonetDB(Database):
 
         engine = create_engine(
             "monetdb://monetdb:monetdb@localhost:50000/benchmark",
-            # avoid crash "ImportError: sys.meta_path is None, Python is likely shutting down",
+            # avoid crash "ImportError: sys.meta_path is None, Python is likely shutting down"
             # not clear why this happens
             pool_reset_on_return=None,
         )
