@@ -3,7 +3,7 @@ from typing import Literal, get_args
 from pydantic import BaseModel
 
 from .dbs import Database
-from .settings import SETTINGS, DatabaseName
+from .settings import DatabaseName
 
 BenchmarkStep = Literal["insert", "query", "append", "upsert"]
 
@@ -56,13 +56,16 @@ def benchmark_insert(db: Database) -> ResultWithDiskUsage:
     memory: list[float] = []
     disk: list[float] = []
 
-    for _ in range(SETTINGS.insert_iterations):
+    # TODO: determine based on dataset size
+    iterations = 5
+
+    for _ in range(iterations):
         elapsed.append(1)
         memory.append(1)
         disk.append(1)
 
     return ResultWithDiskUsage(
-        iterations=SETTINGS.insert_iterations,
+        iterations=iterations,
         elapsed_sec=average(elapsed),
         peak_memory_mb=average(memory),
         disk_usage_mb=average(disk),
@@ -73,12 +76,15 @@ def benchmark_query(db: Database) -> Result:
     elapsed: list[float] = []
     memory: list[float] = []
 
-    for _ in range(SETTINGS.query_iterations):
+    # TODO: determine based on query
+    iterations = 5
+
+    for _ in range(iterations):
         elapsed.append(1)
         memory.append(1)
 
     return Result(
-        iterations=SETTINGS.query_iterations,
+        iterations=iterations,
         elapsed_sec=average(elapsed),
         peak_memory_mb=average(memory),
     )
@@ -88,8 +94,11 @@ def benchmark_append(db: Database) -> CombinedResult:
     insert_result = benchmark_insert(db)
     query_result = benchmark_query(db)
 
+    # TODO: determine based on dataset size
+    iterations = 1
+
     return CombinedResult(
-        iterations=SETTINGS.append_iterations,
+        iterations=iterations,
         insert=insert_result,
         query=query_result,
     )
@@ -99,8 +108,11 @@ def benchmark_upsert(db: Database) -> CombinedResult:
     insert_result = benchmark_insert(db)
     query_result = benchmark_query(db)
 
+    # TODO: determine based on dataset size
+    iterations = 1
+
     return CombinedResult(
-        iterations=SETTINGS.upsert_iterations,
+        iterations=iterations,
         insert=insert_result,
         query=query_result,
     )

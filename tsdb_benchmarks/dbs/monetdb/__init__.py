@@ -17,11 +17,11 @@ from .settings import SETTINGS as MONETDB_SETTINGS
 # with
 # docker build -t monetdb-local:Mar2025-SP1 -f ubuntu.dockerfile \
 # --platform linux/amd64 --build-arg BRANCH=Mar2025_SP1_release .
-MONETDB_IMAGE = "monetdb-local:Mar2025-SP1"
+DOCKER_IMAGE = "monetdb-local:Mar2025-SP1"
 
 
 class MonetDB(Database):
-    name: str = "monetdb"
+    name: Literal["monetdb"] = "monetdb"
 
     @property
     def start(self) -> str:
@@ -35,7 +35,7 @@ class MonetDB(Database):
             if not MONETDB_SETTINGS.client_file_transfer
             else "",
             "-e MDB_DB_ADMIN_PASS=monetdb -e MDB_CREATE_DBS=benchmark",
-            MONETDB_IMAGE,
+            DOCKER_IMAGE,
         ]
 
         return " ".join(parts)
@@ -72,3 +72,10 @@ class MonetDB(Database):
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)
+
+    def run_rtabench(self) -> None:
+        # RTA bench has heavy queries that do not return much data, avoid using binary
+        # fetch since this emits a "... limit 1" query to determine the result schema
+        MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
+
+        return super().run_rtabench()

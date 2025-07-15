@@ -2,6 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from typing import Literal
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -11,7 +12,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-TIMESCALEDB_IMAGE = "timescale/timescaledb:2.21.0-pg16"
+DOCKER_IMAGE = "timescale/timescaledb:2.21.0-pg16"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
 
 
@@ -65,7 +66,7 @@ def table_exists(connection: Connection, table: str) -> bool:
 
 
 class TimescaleDB(Database):
-    name: str = "timescaledb"
+    name: Literal["timescaledb"] = "timescaledb"
 
     @property
     def start(self) -> str:
@@ -77,7 +78,7 @@ class TimescaleDB(Database):
             f"-v {SETTINGS.database_directory.as_posix()}/timescaledb:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
-            TIMESCALEDB_IMAGE,
+            DOCKER_IMAGE,
         ]
 
         return " ".join(parts)
@@ -169,28 +170,29 @@ class TimescaleDB(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
 
+    def compress_rtabench_tables(self) -> None:
+        conn = self.connect()
 
-def compress_rtabench_tables() -> None:
-    conn = TimescaleDB().connect()
+        result = conn.execute(text("SELECT show_chunks('order_events')"))
+        chunks = [row[0] for row in result.fetchall()]
 
-    result = conn.execute(text("SELECT show_chunks('order_events')"))
-    chunks = [row[0] for row in result.fetchall()]
+        if not chunks:
+            raise RuntimeError
 
-    if not chunks:
-        raise RuntimeError
+        _LOGGER.info(f"Found {len(chunks)} chunks to compress.")
 
-    _LOGGER.info(f"Found {len(chunks)} chunks to compress.")
+        for idx, chunk in enumerate(chunks):
+            _LOGGER.info(f"Compressing chunk {idx + 1:_}/{len(chunks):_}: {chunk}")
+            conn.execute(text(f"select compress_chunk('{chunk}'::regclass)"))
 
-    for idx, chunk in enumerate(chunks):
-        _LOGGER.info(f"Compressing chunk {idx + 1:_}/{len(chunks):_}: {chunk}")
-        conn.execute(text(f"select compress_chunk('{chunk}'::regclass)"))
+        conn.commit()
 
-    conn.commit()
+        con = self.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze orders"))
 
-    con = TimescaleDB().connect()
+        con = self.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
 
-    con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze orders"))
-
-    con = TimescaleDB().connect()
-
-    con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
+    def populate_rtabench(self) -> None:
+        super().populate_rtabench()
+        self.compress_rtabench_tables()

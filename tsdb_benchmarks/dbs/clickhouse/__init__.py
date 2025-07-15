@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Mapping
-from typing import cast
+from typing import Literal, cast
 from urllib.parse import urlparse
 
 import clickhouse_connect
@@ -13,7 +13,7 @@ from sqlalchemy import Connection, create_engine
 from ...settings import SETTINGS, TableName
 from .. import Database
 
-CLICKHOUSE_IMAGE = "clickhouse:25.6.3.116-jammy"
+DOCKER_IMAGE = "clickhouse:25.6.3.116-jammy"
 
 CLICKHOUSE_CONNECTION_STRING = "clickhouse://user:password@localhost:18123/default"
 
@@ -63,7 +63,7 @@ def get_clickhouse_client() -> ClickhouseClient:
 
 
 class Clickhouse(Database):
-    name: str = "clickhouse"
+    name: Literal["clickhouse"] = "clickhouse"
 
     _clickhouse_client: clickhouse_connect.driver.client.Client | None = None
 
@@ -81,7 +81,7 @@ class Clickhouse(Database):
             "-e CLICKHOUSE_PASSWORD=password",
             "-e CLICKHOUSE_USER=user",
             "-e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1",
-            CLICKHOUSE_IMAGE,
+            DOCKER_IMAGE,
         ]
 
         return " ".join(parts)

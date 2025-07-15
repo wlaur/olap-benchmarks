@@ -5,9 +5,20 @@ from typing import Literal
 from fire import Fire  # type: ignore[import-untyped]
 
 from .dbs import Database
+from .dbs.clickhouse import Clickhouse
+from .dbs.duckdb import DuckDB
+from .dbs.monetdb import MonetDB
+from .dbs.timescaledb import TimescaleDB
 from .settings import DatabaseName, setup_stdout_logging
 from .suites.rtabench.generate import download_rtabench_data
-from .suites.time_series.generate import generate_datasets
+from .suites.time_series.generate import generate_time_series_datasets
+
+DBS: dict[DatabaseName, Database] = {
+    "monetdb": MonetDB(),
+    "clickhouse": Clickhouse(),
+    "timescaledb": TimescaleDB(),
+    "duckdb": DuckDB(),
+}
 
 setup_stdout_logging()
 
@@ -15,63 +26,37 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def benchmark(name: DatabaseName) -> None:
-    pass
+    raise NotImplementedError
 
 
-def run(name: DatabaseName, command: Literal["start", "stop", "setup"]) -> None:
-    db: Database
-    match name:
-        case "monetdb":
-            from .dbs.monetdb import MonetDB
+def run(name: DatabaseName, command: Literal["start", "stop", "restart", "setup", "create"]) -> None:
+    db = DBS[name]
 
-            db = MonetDB()
+    match command:
+        case "create":
+            run(name, "start")
+            run(name, "setup")
 
-            if command == "setup":
-                db.setup()
-                return
-
-            cmd = getattr(db, command)
+        case "start" | "stop" | "restart":
+            cmd: str = getattr(db, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
-        case "clickhouse":
-            from .dbs.clickhouse import Clickhouse
+        case "setup":
+            db.setup()
 
-            db = Clickhouse()
-
-            if command == "setup":
-                db.setup()
-                return
-
-            cmd = getattr(db, command)
-            _LOGGER.info(f"Running command {command}: {cmd}")
-            os.system(cmd)
-
-        case "timescaledb":
-            from .dbs.timescaledb import TimescaleDB
-
-            db = TimescaleDB()
-
-            if command == "setup":
-                db.setup()
-                return
-
-            cmd = getattr(db, command)
-            _LOGGER.info(f"Running command {command}: {cmd}")
-
-            os.system(cmd)
         case _:
-            raise ValueError(f"Unknown database name: '{name}'")
+            raise ValueError(f"Unknown command: '{command}'")
 
 
-def generate(dataset: str) -> None:
-    match dataset:
+def generate(suite: str) -> None:
+    match suite:
         case "rtabench":
             download_rtabench_data()
         case "time_series":
-            generate_datasets()
+            generate_time_series_datasets()
         case _:
-            raise ValueError(f"Unknown dataset: '{dataset}'")
+            raise ValueError(f"Unknown suite: '{suite}'")
 
 
 if __name__ == "__main__":
