@@ -27,7 +27,7 @@ def generate_time_series_data(n_rows: int, n_cols: int) -> pl.DataFrame:
     return df
 
 
-def generate_datasets() -> None:
+def generate_time_series_datasets() -> None:
     output_directory = REPO_ROOT / "data/input/time_series"
 
     for rows, cols in [(200_000, 500), (1_000_000, 2_000)]:

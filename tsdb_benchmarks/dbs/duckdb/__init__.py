@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import cast
+from typing import Literal, cast
 
 import polars as pl
 from duckdb import DuckDBPyConnection
@@ -14,7 +14,7 @@ def get_duckdb_connection(connection: Connection) -> DuckDBPyConnection:
 
 
 class DuckDB(Database):
-    name: str = "duckdb"
+    name: Literal["duckdb"] = "duckdb"
 
     # in-process, no docker commands necessary
     @property
