@@ -9,7 +9,7 @@ from .dbs.clickhouse import Clickhouse
 from .dbs.duckdb import DuckDB
 from .dbs.monetdb import MonetDB
 from .dbs.timescaledb import TimescaleDB
-from .settings import DatabaseName, setup_stdout_logging
+from .settings import DatabaseName, SuiteName, setup_stdout_logging
 from .suites.rtabench.generate import download_rtabench_data
 from .suites.time_series.generate import generate_time_series_datasets
 
@@ -25,8 +25,10 @@ setup_stdout_logging()
 _LOGGER = logging.getLogger(__name__)
 
 
-def benchmark(name: DatabaseName) -> None:
-    raise NotImplementedError
+def benchmark(name: DatabaseName, suite: SuiteName, operation: Literal["run", "populate"]) -> None:
+    db = DBS[name]
+
+    db.benchmark(suite, operation)
 
 
 def run(name: DatabaseName, command: Literal["start", "stop", "restart", "setup", "create"]) -> None:
