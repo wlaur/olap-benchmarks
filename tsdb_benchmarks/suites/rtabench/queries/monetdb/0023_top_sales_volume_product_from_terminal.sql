@@ -9,7 +9,7 @@ FROM
 WHERE
     oe.event_created >= '2024-07-01' and oe.event_created < '2025-01-01'
     AND oe.event_type = 'Delivered'
-    AND trim(json.filter(oe.event_payload, '$.terminal'), '"') = 'Berlin'
+    AND json.filter(oe.event_payload, '$.terminal') = '"Berlin"'
 GROUP BY
     product_id, p.name
 ORDER BY
