@@ -4,11 +4,13 @@ import uuid
 from collections.abc import Mapping
 from typing import Literal
 
+import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
 from .. import Database
+from ..utils import wait_for_sqlalchemy_connection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,6 +98,7 @@ class TimescaleDB(Database):
         return self._connection
 
     def setup(self) -> None:
+        wait_for_sqlalchemy_connection(TIMESCALEDB_CONNECTION_STRING)
         con = self.connect()
 
         # only applies to new connections created after this is executed
@@ -112,7 +115,58 @@ class TimescaleDB(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        df = pl.read_database_uri(query.strip().removesuffix(";"), TIMESCALEDB_CONNECTION_STRING)
+        # fetch_python is fastest for small result sets
+        # fetch_connectorx might be better for large results and simple queries
+        # (e.g. "select time, col_23 from data order by time")
+        # fetch_polars is slightly slower than fetch_connectorx
+
+        # schemas do not match exactly between these (i32 vs i64 for example)
+        return self.fetch_python(query, schema)
+
+    def fetch_python(
+        self,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+    ) -> pl.DataFrame:
+        result = self.connect().execute(text(query.strip().removesuffix(";")))
+
+        columns = result.keys()
+        rows = result.fetchall()
+
+        if not rows:
+            if schema:
+                return pl.DataFrame(schema=schema)
+            return pl.DataFrame({col: [] for col in columns})
+
+        df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
+
+        if schema is not None:
+            df = df.cast(schema)  # type: ignore[arg-type]
+
+        return df
+
+    def fetch_connectorx(
+        self,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+    ) -> pl.DataFrame:
+        df = connectorx.read_sql(TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars")
+
+        if schema is not None:
+            df = df.cast(schema)  # type: ignore[arg-type]
+
+        return df
+
+    def fetch_polars(
+        self,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+    ) -> pl.DataFrame:
+        # (maybe) emits a separate "select ... limit 1" query to determine the output schema
+        # avoid doing this for complex queries with small result sizes
+        # not clear if postgres actually does this, could check source if this is important to know
+        # engine="adbc" is slower that "connectorx"
+        df = pl.read_database_uri(query.strip().removesuffix(";"), TIMESCALEDB_CONNECTION_STRING, engine="connectorx")
 
         if schema is not None:
             df = df.cast(schema)  # type: ignore[arg-type]

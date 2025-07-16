@@ -1,7 +1,7 @@
 with hourly_stats as (
 select
 	date_trunc('hour', event_created) as "hour",
-	trim(json.filter(event_payload, '$.terminal'), '"') as terminal,
+	json.filter(event_payload, '$.terminal') as terminal,
 	count(*) as event_count
 from
 	order_events
@@ -26,7 +26,7 @@ order by
 from
 	hourly_stats
 where
-	terminal in ('Berlin', 'Hamburg', 'Munich')
+	terminal in ('"Berlin"', '"Hamburg"', '"Munich"')
 order by
 	terminal,
 	"hour"
