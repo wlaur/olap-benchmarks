@@ -24,7 +24,7 @@ def sampling_loop(
 
         storage.insert_metric(
             benchmark_id=benchmark_id,
-            ts=now,
+            time=now,
             cpu_percent=metric.cpu_percent,
             mem_mb=metric.mem_mb,
             disk_mb=metric.disk_mb,
