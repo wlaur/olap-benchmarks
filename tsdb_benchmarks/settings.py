@@ -57,7 +57,9 @@ def setup_stdout_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
 
-    formatter = ColoredFormatter("[%(asctime)s] [%(levelname)s] %(message)s", "%H:%M:%S")
+    formatter = ColoredFormatter(
+        "%(asctime)s %(process)d %(levelname)s %(name)s %(threadName)s : %(message)s", "%H:%M:%S"
+    )
     handler.setFormatter(formatter)
 
     root = logging.getLogger()
