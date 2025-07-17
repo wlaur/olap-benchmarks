@@ -392,6 +392,20 @@ wheels = [
 ]
 
 [[package]]
+name = "docker"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
+]
+
+[[package]]
 name = "duckdb"
 version = "1.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1684,6 +1698,7 @@ dependencies = [
     { name = "clickhouse-sqlalchemy" },
     { name = "colorama" },
     { name = "connectorx" },
+    { name = "docker" },
     { name = "duckdb" },
     { name = "duckdb-engine" },
     { name = "fire" },
@@ -1714,6 +1729,7 @@ dev = [
     { name = "pyinstrument" },
     { name = "ruff" },
     { name = "types-colorama" },
+    { name = "types-docker" },
 ]
 
 [package.metadata]
@@ -1722,6 +1738,7 @@ requires-dist = [
     { name = "clickhouse-sqlalchemy", specifier = ">=0.3.2" },
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "connectorx", specifier = ">=0.4.3" },
+    { name = "docker", specifier = ">=7.1.0" },
     { name = "duckdb", specifier = ">=1.3.2" },
     { name = "duckdb-engine", specifier = ">=0.17.0" },
     { name = "fire", specifier = ">=0.7.0" },
@@ -1752,6 +1769,7 @@ dev = [
     { name = "pyinstrument", specifier = ">=5.0.2" },
     { name = "ruff", specifier = ">=0.12.0" },
     { name = "types-colorama", specifier = ">=0.4.15.20240311" },
+    { name = "types-docker", specifier = ">=7.1.0.20250705" },
 ]
 
 [[package]]
@@ -1764,12 +1782,37 @@ wheels = [
 ]
 
 [[package]]
+name = "types-docker"
+version = "7.1.0.20250705"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "types-requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/92/79/54907dc50fe4e877ab96cb1bcc513178ad7801e4730ffec1e8dcb694b24d/types_docker-7.1.0.20250705.tar.gz", hash = "sha256:92972f7c49f0e40dd45f4f343c624505a4c176602439183b38a6f002110d1c6f", size = 31041, upload-time = "2025-07-05T03:07:58.106Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/f6/244fd4de58d31aec725fff20eb70e4123c9d8b75c8f20c9a8f3458d0673a/types_docker-7.1.0.20250705-py3-none-any.whl", hash = "sha256:f269103e1d21236bb64434a90ecaa5660250b115461463f8c2e991293b215ad2", size = 45838, upload-time = "2025-07-05T03:07:57.009Z" },
+]
+
+[[package]]
 name = "types-pytz"
 version = "2025.2.0.20250516"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bd/72/b0e711fd90409f5a76c75349055d3eb19992c110f0d2d6aabbd6cfbc14bf/types_pytz-2025.2.0.20250516.tar.gz", hash = "sha256:e1216306f8c0d5da6dafd6492e72eb080c9a166171fa80dd7a1990fd8be7a7b3", size = 10940, upload-time = "2025-05-16T03:07:01.91Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/ba/e205cd11c1c7183b23c97e4bcd1de7bc0633e2e867601c32ecfc6ad42675/types_pytz-2025.2.0.20250516-py3-none-any.whl", hash = "sha256:e0e0c8a57e2791c19f718ed99ab2ba623856b11620cb6b637e5f62ce285a7451", size = 10136, upload-time = "2025-05-16T03:07:01.075Z" },
+]
+
+[[package]]
+name = "types-requests"
+version = "2.32.4.20250611"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6d/7f/73b3a04a53b0fd2a911d4ec517940ecd6600630b559e4505cc7b68beb5a0/types_requests-2.32.4.20250611.tar.gz", hash = "sha256:741c8777ed6425830bf51e54d6abe245f79b4dcb9019f1622b773463946bf826", size = 23118, upload-time = "2025-06-11T03:11:41.272Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/ea/0be9258c5a4fa1ba2300111aa5a0767ee6d18eb3fd20e91616c12082284d/types_requests-2.32.4.20250611-py3-none-any.whl", hash = "sha256:ad2fe5d3b0cb3c2c902c8815a70e7fb2302c4b8c1f77bdcd738192cdb3878072", size = 20643, upload-time = "2025-06-11T03:11:40.186Z" },
 ]
 
 [[package]]
