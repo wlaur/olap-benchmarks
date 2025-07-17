@@ -57,8 +57,9 @@ class Database(BaseModel, ABC):
         pass
 
     def event(self, name: str, type: EventType) -> None:
+        now = datetime.now(UTC).replace(tzinfo=None)
         with self.result_storage.connect():
-            self.result_storage.insert_event(self.benchmark_id, datetime.now(UTC).replace(tzinfo=None), name, type)
+            self.result_storage.insert_event(self.benchmark_id, now, name, type)
 
         _LOGGER.info(f"Registered event {name}:{type}")
 
