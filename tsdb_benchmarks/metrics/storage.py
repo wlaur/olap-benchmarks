@@ -1,19 +1,55 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
+from time import perf_counter, sleep
+from typing import Literal
 
 import duckdb
 
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation
 
+EventType = Literal["start", "end"]
+
 
 class Storage:
     def __init__(self) -> None:
         self.db_path = SETTINGS.results_directory / "results.db"
-        self.conn = duckdb.connect(self.db_path)
-        self.init_schema()
+        self._connection: duckdb.DuckDBPyConnection | None = None
+
+        with self.connect():
+            self.init_schema()
+
+    @property
+    def conn(self) -> duckdb.DuckDBPyConnection:
+        if self._connection is None:
+            raise RuntimeError("Connection is not open, use with storage.db() as con: ...")
+
+        return self._connection
+
+    @contextmanager
+    def connect(self, timeout: float = 30.0, wait_interval_seconds: float = 0.1) -> Iterator[None]:
+        # hacky way of ensure the db can be opened (after waiting) even if other processes are writing
+        start = perf_counter()
+        while True:
+            try:
+                self._connection = duckdb.connect(self.db_path)
+                break
+            except duckdb.Error as e:
+                if "lock" in str(e).lower() and ((perf_counter() - start) < timeout):
+                    sleep(wait_interval_seconds)
+                else:
+                    raise
+
+        try:
+            yield
+        finally:
+            self._connection.close()
+            self._connection = None
 
     def init_schema(self) -> None:
         with (REPO_ROOT / "tsdb_benchmarks/metrics/schema.sql").open() as f:
             sql = f.read()
+
         self.conn.execute(sql)
 
     def insert_benchmark(
@@ -49,4 +85,15 @@ class Storage:
             values (?, ?, ?, ?, ?)
             """,
             [benchmark_id, time, cpu_percent, mem_mb, disk_mb],
+        )
+
+    def insert_event(self, benchmark_id: int, time: datetime, name: str, type: EventType) -> None:
+        self.conn.execute(
+            """
+            insert into event (
+                benchmark_id, time, name, type
+            )
+            values (?, ?, ?, ?)
+            """,
+            [benchmark_id, time, name, type],
         )

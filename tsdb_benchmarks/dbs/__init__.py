@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
 
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
+from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.rtabench.generate import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
 
@@ -20,7 +22,24 @@ RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/rtabench/querie
 
 class Database(BaseModel, ABC):
     name: DatabaseName
+
     _connection: Connection | None = None
+    _result_storage: Storage | None = None
+    _benchmark_id: int | None = None
+
+    @property
+    def result_storage(self) -> Storage:
+        if self._result_storage is None:
+            raise ValueError("self._result_storage is not set")
+
+        return self._result_storage
+
+    @property
+    def benchmark_id(self) -> int:
+        if self._benchmark_id is None:
+            raise ValueError("self._benchmark_id is not set")
+
+        return self._benchmark_id
 
     @property
     @abstractmethod
@@ -37,11 +56,19 @@ class Database(BaseModel, ABC):
     def setup(self) -> None:
         pass
 
+    def event(self, name: str, type: EventType) -> None:
+        with self.result_storage.connect():
+            self.result_storage.insert_event(self.benchmark_id, datetime.now(UTC).replace(tzinfo=None), name, type)
+
+        _LOGGER.info(f"Registered event {name}:{type}")
+
     def populate_rtabench(self) -> None:
         with (REPO_ROOT / f"tsdb_benchmarks/suites/rtabench/schemas/{self.name}.sql").open() as f:
             sql = f.read()
 
         con = self.connect()
+
+        self.event("schema", "start")
 
         for stmt in sql.split(";"):
             if not stmt.strip():
@@ -50,12 +77,20 @@ class Database(BaseModel, ABC):
             con.execute(text(stmt))
 
         con.commit()
+
+        self.event("schema", "end")
+
         _LOGGER.info(f"Created RTABench tables for {self.name}")
 
         for table_name in RTABENCH_SCHEMAS:
             df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+
+            self.event(f"insert_{table_name}", "start")
+
             self.insert(df, table_name)
             _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+            self.event(f"insert_{table_name}", "end")
 
     @property
     def rtabench_fetch_kwargs(self) -> dict[str, Any]:
@@ -66,17 +101,27 @@ class Database(BaseModel, ABC):
             return f.read()
 
     def run_rtabench(self) -> None:
+        self.event("queries", "start")
+
         total_seconds = 0.0
-        for idx, n in enumerate(RTABENCH_QUERY_NAMES):
-            query = self.load_rtabench_query(n)
+        for idx, query_name in enumerate(RTABENCH_QUERY_NAMES):
+            query = self.load_rtabench_query(query_name)
+
+            self.event(f"query_{query_name}", "start")
 
             t0 = perf_counter()
             df = self.fetch(query, **self.rtabench_fetch_kwargs)
             t = perf_counter() - t0
 
-            _LOGGER.info(f"Executed {n} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) in {1_000 * (t):_.2f} ms\ndf={df}")
+            self.event(f"query_{query_name}", "end")
+
+            _LOGGER.info(
+                f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) in {1_000 * (t):_.2f} ms\ndf={df}"
+            )
 
             total_seconds += t
+
+        self.event("queries", "end")
 
         _LOGGER.info(f"Executed {len(RTABENCH_QUERY_NAMES):_} queries in {total_seconds:_.2f} seconds")
 
@@ -87,6 +132,8 @@ class Database(BaseModel, ABC):
         raise NotImplementedError
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+        self._result_storage = Storage()
+
         operations: dict[SuiteName, dict[Operation, Callable[[], None]]] = {
             "rtabench": {
                 "populate": self.populate_rtabench,
@@ -98,31 +145,25 @@ class Database(BaseModel, ABC):
             },
         }
 
-        if SETTINGS.collect_metrics:
-            benchmark_id, process, stop_event = start_metric_sampler(
-                self.name,
-                operation,
-                interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
-            )
-        else:
-            benchmark_id = None
-            process = None
-            stop_event = None
+        self._benchmark_id, process, stop_event = start_metric_sampler(
+            self.name,
+            operation,
+            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
+        )
 
         t0 = perf_counter()
         _LOGGER.info(
-            f"Starting benchmark with ID {benchmark_id} (database: {self.name}, suite: {suite}, "
-            f"operation: {operation}) (collect: {SETTINGS.collect_metrics})"
+            f"Starting benchmark with ID {self._benchmark_id} (database: {self.name}, suite: {suite}, "
+            f"operation: {operation})"
         )
 
         try:
             operations[suite][operation]()
         finally:
-            if stop_event is not None and process is not None:
-                stop_event.set()
-                process.join()
+            stop_event.set()
+            process.join()
 
-        _LOGGER.info(f"Finished benchmark with ID {benchmark_id} in {perf_counter() - t0:_.2f} seconds")
+        _LOGGER.info(f"Finished benchmark with ID {self._benchmark_id} in {perf_counter() - t0:_.2f} seconds")
 
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...

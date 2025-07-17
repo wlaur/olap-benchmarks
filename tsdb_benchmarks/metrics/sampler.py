@@ -22,13 +22,14 @@ def sampling_loop(
         now = datetime.now(UTC).replace(tzinfo=None)
         metric = get_container_metrics(name)
 
-        storage.insert_metric(
-            benchmark_id=benchmark_id,
-            time=now,
-            cpu_percent=metric.cpu_percent,
-            mem_mb=metric.mem_mb,
-            disk_mb=metric.disk_mb,
-        )
+        with storage.connect():
+            storage.insert_metric(
+                benchmark_id=benchmark_id,
+                time=now,
+                cpu_percent=metric.cpu_percent,
+                mem_mb=metric.mem_mb,
+                disk_mb=metric.disk_mb,
+            )
 
         _LOGGER.info(f"Inserted metrics at {now}")
 
@@ -36,7 +37,9 @@ def sampling_loop(
             time.sleep(interval_seconds)
 
     finished_at = datetime.now(UTC).replace(tzinfo=None)
-    storage.finish_benchmark(benchmark_id, finished_at)
+
+    with storage.connect():
+        storage.finish_benchmark(benchmark_id, finished_at)
 
     _LOGGER.info(f"Finished benchmark at {finished_at}")
 
@@ -47,7 +50,9 @@ def start_metric_sampler(
     stop_event = create_event()
     storage = Storage()
     started_at = datetime.now(UTC).replace(tzinfo=None)
-    benchmark_id = storage.insert_benchmark(name=name, operation=operation, started_at=started_at, notes=notes)
+
+    with storage.connect():
+        benchmark_id = storage.insert_benchmark(name=name, operation=operation, started_at=started_at, notes=notes)
 
     process = Process(
         target=sampling_loop,
