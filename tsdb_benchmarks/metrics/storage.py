@@ -40,13 +40,13 @@ class Storage:
             [finished_at, benchmark_id],
         )
 
-    def insert_metric(self, benchmark_id: int, ts: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:
+    def insert_metric(self, benchmark_id: int, time: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:
         self.conn.execute(
             """
             insert into metric (
-                benchmark_id, ts, cpu_percent, mem_mb, disk_mb
+                benchmark_id, time, cpu_percent, mem_mb, disk_mb
             )
             values (?, ?, ?, ?, ?)
             """,
-            [benchmark_id, ts, cpu_percent, mem_mb, disk_mb],
+            [benchmark_id, time, cpu_percent, mem_mb, disk_mb],
         )
