@@ -2,6 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from queue import Queue
 from time import perf_counter
 from typing import Any
 
@@ -26,6 +27,17 @@ class Database(BaseModel, ABC):
     _connection: Connection | None = None
     _result_storage: Storage | None = None
     _benchmark_id: int | None = None
+
+    _queue: Queue | None = None
+    _result_queue: Queue | None = None
+
+    def set_queues(self, queue: Queue, result_queue: Queue) -> None:
+        self._queue = queue
+        self._result_queue = result_queue
+
+    def create_result_storage(self) -> Storage:
+        assert self._queue is not None and self._result_queue is not None
+        return Storage(self._queue, self._result_queue)
 
     @property
     def result_storage(self) -> Storage:
@@ -130,7 +142,7 @@ class Database(BaseModel, ABC):
         raise NotImplementedError
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
-        self._result_storage = Storage()
+        self._result_storage = self.create_result_storage()
 
         operations: dict[SuiteName, dict[Operation, Callable[[], None]]] = {
             "rtabench": {
@@ -147,6 +159,7 @@ class Database(BaseModel, ABC):
             suite,
             self.name,
             operation,
+            self._result_storage,
             interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
         )
 
