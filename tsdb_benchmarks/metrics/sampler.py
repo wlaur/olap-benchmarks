@@ -5,7 +5,7 @@ from multiprocessing import Event as create_event
 from multiprocessing import Process
 from multiprocessing.synchronize import Event
 
-from ..settings import DatabaseName, Operation
+from ..settings import DatabaseName, Operation, setup_stdout_logging
 from .measure import get_container_metrics
 from .storage import Storage
 
@@ -15,6 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 def sampling_loop(
     name: DatabaseName, benchmark_id: int, stop_event: Event, interval_seconds: float | None = 1.0
 ) -> None:
+    setup_stdout_logging()
     storage = Storage()
 
     while not stop_event.is_set():
@@ -54,7 +55,6 @@ def start_metric_sampler(
         daemon=True,
     )
 
-    # TODO: logs not visible
     process.start()
 
     return benchmark_id, process, stop_event
