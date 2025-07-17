@@ -11,6 +11,7 @@ from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, 
 _LOGGER = logging.getLogger(__name__)
 
 EventType = Literal["start", "end"]
+
 MessageType = Literal[
     "insert_benchmark",
     "finish_benchmark",
@@ -78,6 +79,8 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
 
             case _:
                 raise ValueError(f"Unknown message type: {msg['type']}")
+
+        _LOGGER.info(f"Wrote message with type {msg['type']}")
 
 
 def start_writer_process() -> tuple[Queue, Queue]:
