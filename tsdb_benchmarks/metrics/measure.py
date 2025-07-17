@@ -74,6 +74,7 @@ def get_container_metrics(name: DatabaseName) -> BenchmarkMetric:
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = container.stats(stream=False)
+
     cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])
 
     mem_usage = stats["memory_stats"]["usage"]

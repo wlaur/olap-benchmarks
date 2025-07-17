@@ -24,8 +24,6 @@ class Settings(BaseSettings):
     database_directory: DirectoryPath
     temporary_directory: DirectoryPath
 
-    collect_metrics: bool = True
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="TSDB_BENCHMARKS_",

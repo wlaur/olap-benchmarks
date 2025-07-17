@@ -19,4 +19,11 @@ CREATE TABLE IF NOT EXISTS metric (
 );
 
 
--- TODO: add event
+CREATE TYPE IF NOT EXISTS event_type AS ENUM ('start', 'end');
+
+CREATE TABLE IF NOT EXISTS event (
+    benchmark_id INTEGER REFERENCES benchmark(id),
+    time TIMESTAMP NOT NULL,
+    name TEXT NOT NULL,
+    type event_type NOT NULL
+);
