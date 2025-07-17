@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess
 import uuid
 from collections.abc import Mapping
@@ -249,4 +250,11 @@ class TimescaleDB(Database):
 
     def populate_rtabench(self) -> None:
         super().populate_rtabench()
-        self.compress_rtabench_tables()
+
+        with self.event_context("compress"):
+            self.compress_rtabench_tables()
+
+        with self.event_context("restart"):
+            os.system(self.restart)
+            wait_for_sqlalchemy_connection(TIMESCALEDB_CONNECTION_STRING)
+            self.fetch("select 1")
