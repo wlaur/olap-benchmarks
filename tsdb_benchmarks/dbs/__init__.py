@@ -1,6 +1,8 @@
 import logging
+import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from queue import Queue
 from time import perf_counter
@@ -72,35 +74,44 @@ class Database(BaseModel, ABC):
         self.result_storage.insert_event(self.benchmark_id, datetime.now(UTC).replace(tzinfo=None), name, type)
         _LOGGER.info(f"Registered event {name}:{type}")
 
-    def populate_rtabench(self) -> None:
+    @contextmanager
+    def event_context(self, name: str) -> Iterator[None]:
+        self.event(name, "start")
+
+        yield
+
+        self.event(name, "end")
+
+    def populate_rtabench(self, restart: bool = True) -> None:
         with (REPO_ROOT / f"tsdb_benchmarks/suites/rtabench/schemas/{self.name}.sql").open() as f:
             sql = f.read()
 
         con = self.connect()
 
-        self.event("schema", "start")
+        with self.event_context("schema"):
+            for stmt in sql.split(";"):
+                if not stmt.strip():
+                    continue
 
-        for stmt in sql.split(";"):
-            if not stmt.strip():
-                continue
+                con.execute(text(stmt))
 
-            con.execute(text(stmt))
-
-        con.commit()
-
-        self.event("schema", "end")
+            con.commit()
 
         _LOGGER.info(f"Created RTABench tables for {self.name}")
 
         for table_name in RTABENCH_SCHEMAS:
             df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
-            self.event(f"insert_{table_name}", "start")
+            with self.event_context(f"insert_{table_name}"):
+                self.insert(df, table_name)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
-            self.insert(df, table_name)
-            _LOGGER.info(f"Inserted {table_name} for {self.name}")
-
-            self.event(f"insert_{table_name}", "end")
+        if restart:
+            with self.event_context("restart"):
+                # restart db to ensure data is not kept in-memory by the db, and also
+                # ensure that WAL is processed etc...
+                os.system(self.restart)
+                self.fetch("select 1")
 
     @property
     def rtabench_fetch_kwargs(self) -> dict[str, Any]:
@@ -117,19 +128,17 @@ class Database(BaseModel, ABC):
         for idx, query_name in enumerate(RTABENCH_QUERY_NAMES):
             query = self.load_rtabench_query(query_name)
 
-            self.event(f"query_{query_name}", "start")
+            with self.event_context(f"query_{query_name}"):
+                t0 = perf_counter()
+                df = self.fetch(query, **self.rtabench_fetch_kwargs)
+                t = perf_counter() - t0
 
-            t0 = perf_counter()
-            df = self.fetch(query, **self.rtabench_fetch_kwargs)
-            t = perf_counter() - t0
+                _LOGGER.info(
+                    f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                )
 
-            self.event(f"query_{query_name}", "end")
-
-            _LOGGER.info(
-                f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) in {1_000 * (t):_.2f} ms\ndf={df}"
-            )
-
-            total_seconds += t
+                total_seconds += t
 
         self.event("queries", "end")
 

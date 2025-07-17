@@ -37,7 +37,10 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
         conn.execute(f.read())
 
     while True:
-        msg = cast(WriterMessage, queue.get())
+        try:
+            msg = cast(WriterMessage, queue.get())
+        except EOFError:
+            return
 
         match msg["type"]:
             case "insert_benchmark":
