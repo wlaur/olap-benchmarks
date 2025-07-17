@@ -128,7 +128,6 @@ class Clickhouse(Database):
         if "time" not in time_columns:
             time_columns.append("time")
 
-        # TODO: automatically determine what columns are timestamps
         for n in time_columns:
             if n in df.columns:
                 df = df.with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")))
