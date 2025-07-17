@@ -5,7 +5,7 @@ from multiprocessing import Event as create_event
 from multiprocessing import Process
 from multiprocessing.synchronize import Event
 
-from ..settings import DatabaseName, Operation, setup_stdout_logging
+from ..settings import DatabaseName, Operation, SuiteName, setup_stdout_logging
 from .measure import get_container_metrics
 from .storage import Storage
 
@@ -45,18 +45,24 @@ def sampling_loop(
 
 
 def start_metric_sampler(
-    name: DatabaseName, operation: Operation, interval_seconds: float | None = 1.0, notes: str | None = None
+    suite: SuiteName,
+    db: DatabaseName,
+    operation: Operation,
+    interval_seconds: float | None = 1.0,
+    notes: str | None = None,
 ) -> tuple[int, Process, Event]:
     stop_event = create_event()
     storage = Storage()
     started_at = datetime.now(UTC).replace(tzinfo=None)
 
     with storage.connect():
-        benchmark_id = storage.insert_benchmark(name=name, operation=operation, started_at=started_at, notes=notes)
+        benchmark_id = storage.insert_benchmark(
+            suite=suite, db=db, operation=operation, started_at=started_at, notes=notes
+        )
 
     process = Process(
         target=sampling_loop,
-        args=(name, benchmark_id, stop_event, interval_seconds),
+        args=(db, benchmark_id, stop_event, interval_seconds),
         daemon=True,
     )
 

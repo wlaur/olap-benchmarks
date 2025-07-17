@@ -147,6 +147,7 @@ class Database(BaseModel, ABC):
         }
 
         self._benchmark_id, process, stop_event = start_metric_sampler(
+            suite,
             self.name,
             operation,
             interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here

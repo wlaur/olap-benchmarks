@@ -6,7 +6,7 @@ from typing import Literal
 
 import duckdb
 
-from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation
+from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName
 
 EventType = Literal["start", "end"]
 
@@ -53,15 +53,15 @@ class Storage:
         self.conn.execute(sql)
 
     def insert_benchmark(
-        self, name: DatabaseName, operation: Operation, started_at: datetime, notes: str | None = None
+        self, suite: SuiteName, db: DatabaseName, operation: Operation, started_at: datetime, notes: str | None = None
     ) -> int:
         result = self.conn.execute(
             """
-            insert into benchmark (name, operation, started_at, notes)
-            values (?, ?, ?, ?)
+            insert into benchmark (suite, db, operation, started_at, notes)
+            values (?, ?, ?, ?, ?)
             returning id
             """,
-            [name, operation, started_at, notes],
+            [suite, db, operation, started_at, notes],
         ).fetchone()
         assert result is not None
         return result[0]
