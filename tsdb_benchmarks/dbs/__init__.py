@@ -2,13 +2,14 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
 import polars as pl
 from pydantic import BaseModel
 from sqlalchemy import Connection, text
 
-from ..settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
+from ..metrics.sampler import start_metric_sampler
+from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.rtabench.generate import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,8 +86,8 @@ class Database(BaseModel, ABC):
     def run_time_series(self) -> None:
         raise NotImplementedError
 
-    def benchmark(self, suite: SuiteName, operation: Literal["populate", "run"]) -> None:
-        operations: dict[SuiteName, dict[Literal["populate", "run"], Callable[[], None]]] = {
+    def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+        operations: dict[SuiteName, dict[Operation, Callable[[], None]]] = {
             "rtabench": {
                 "populate": self.populate_rtabench,
                 "run": self.run_rtabench,
@@ -97,7 +98,31 @@ class Database(BaseModel, ABC):
             },
         }
 
-        operations[suite][operation]()
+        if SETTINGS.collect_metrics:
+            benchmark_id, process, stop_event = start_metric_sampler(
+                self.name,
+                operation,
+                interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
+            )
+        else:
+            benchmark_id = None
+            process = None
+            stop_event = None
+
+        t0 = perf_counter()
+        _LOGGER.info(
+            f"Starting benchmark with ID {benchmark_id} (database: {self.name}, suite: {suite}, "
+            f"operation: {operation}) (collect: {SETTINGS.collect_metrics})"
+        )
+
+        try:
+            operations[suite][operation]()
+        finally:
+            if stop_event is not None and process is not None:
+                stop_event.set()
+                process.join()
+
+        _LOGGER.info(f"Finished benchmark with ID {benchmark_id} in {perf_counter() - t0:_.2f} seconds")
 
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...

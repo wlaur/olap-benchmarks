@@ -1,3 +1,5 @@
+import os
+import platform
 import subprocess
 from pathlib import Path
 
@@ -6,7 +8,40 @@ from pydantic import BaseModel
 
 from ..settings import SETTINGS, DatabaseName
 
-client = docker.from_env()
+
+def get_docker_socket() -> str:
+    if "DOCKER_HOST" in os.environ:
+        return os.environ["DOCKER_HOST"]
+
+    system = platform.system()
+
+    if system == "Darwin":
+        # if using orbstack on macos
+        try:
+            result = subprocess.check_output(
+                ["docker", "context", "inspect", "orbstack", "--format", "{{json .Endpoints.docker.Host}}"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip('" \n')
+
+            if result.startswith("unix://"):
+                return result
+
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+    if system == "Linux":
+        default_socket = Path("/var/run/docker.sock")
+        if default_socket.exists():
+            return f"unix://{default_socket.as_posix()}"
+
+    raise RuntimeError(
+        "Could not determine Docker socket path. "
+        "Set environment variable DOCKER_HOST or ensure Docker is installed and running."
+    )
+
+
+DOCKER_CLIENT = docker.DockerClient(base_url=get_docker_socket())
 
 
 class BenchmarkMetric(BaseModel):
@@ -23,15 +58,23 @@ def get_database_directory(name: DatabaseName) -> Path:
     return SETTINGS.database_directory / name
 
 
+def calculate_cpu_percent(cpu_stats: dict, precpu_stats: dict) -> float:
+    cpu_delta = cpu_stats["cpu_usage"]["total_usage"] - precpu_stats["cpu_usage"]["total_usage"]
+    system_delta = cpu_stats["system_cpu_usage"] - precpu_stats["system_cpu_usage"]
+    online_cpus = cpu_stats["online_cpus"]
+
+    if cpu_delta > 0 and system_delta > 0 and online_cpus > 0:
+        return (cpu_delta / system_delta) * online_cpus * 100.0
+
+    return 0.0
+
+
 def get_container_metrics(name: DatabaseName) -> BenchmarkMetric:
-    container = client.containers.get(get_container_name(name))
+    container = DOCKER_CLIENT.containers.get(get_container_name(name))
+
+    # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = container.stats(stream=False)
-
-    cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
-    system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
-    num_cpus = len(stats["cpu_stats"]["cpu_usage"].get("percpu_usage", []))
-
-    cpu_percent = cpu_delta / system_delta * num_cpus * 100.0 if system_delta > 0.0 and cpu_delta > 0.0 else 0.0
+    cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])
 
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))

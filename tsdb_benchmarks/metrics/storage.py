@@ -2,7 +2,7 @@ from datetime import datetime
 
 import duckdb
 
-from ..settings import REPO_ROOT, SETTINGS, DatabaseName
+from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation
 
 
 class Storage:
@@ -16,14 +16,16 @@ class Storage:
             sql = f.read()
         self.conn.execute(sql)
 
-    def insert_benchmark(self, name: DatabaseName, started_at: datetime, notes: str | None = None) -> int:
+    def insert_benchmark(
+        self, name: DatabaseName, operation: Operation, started_at: datetime, notes: str | None = None
+    ) -> int:
         result = self.conn.execute(
             """
-            insert into benchmark (name, started_at, notes)
-            values (?, ?, ?)
+            insert into benchmark (name, operation, started_at, notes)
+            values (?, ?, ?, ?)
             returning id
             """,
-            [name, started_at, notes],
+            [name, operation, started_at, notes],
         ).fetchone()
         assert result is not None
         return result[0]
@@ -48,6 +50,3 @@ class Storage:
             """,
             [benchmark_id, ts, cpu_percent, mem_mb, disk_mb],
         )
-
-    def close(self) -> None:
-        self.conn.close()

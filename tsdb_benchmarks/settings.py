@@ -12,6 +12,7 @@ TableName = Annotated[str, "Table name"]
 
 DatabaseName = Literal["monetdb", "clickhouse", "timescaledb", "duckdb"]
 SuiteName = Literal["rtabench", "time_series"]
+Operation = Literal["populate", "run"]
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
@@ -22,6 +23,8 @@ class Settings(BaseSettings):
 
     database_directory: DirectoryPath
     temporary_directory: DirectoryPath
+
+    collect_metrics: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
