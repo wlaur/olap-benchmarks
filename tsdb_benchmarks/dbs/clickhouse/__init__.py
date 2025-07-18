@@ -1,5 +1,7 @@
+import logging
 import uuid
 from collections.abc import Mapping
+from time import sleep
 from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
@@ -12,6 +14,8 @@ from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, TableName
 from .. import Database
+
+_LOGGER = logging.getLogger(__name__)
 
 DOCKER_IMAGE = "clickhouse:25.6.3.116-jammy"
 
@@ -135,6 +139,19 @@ class Clickhouse(Database):
 
         return df
 
+    def run_sql(self, statement: str) -> None:
+        retries = 10
+        for retry in range(retries):
+            try:
+                self.get_client().command(statement)
+                return
+            except Exception as e:
+                if "error code 1001" in str(e):
+                    _LOGGER.warning(f"Could not execute statement: '{e}', retrying {retry + 1:_}/{retries:_}")
+                    sleep(0.1)
+                    continue
+                raise
+
     def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
         client = self.get_client()
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
@@ -185,13 +202,12 @@ class Clickhouse(Database):
                     SELECT * FROM file('{relative_path}', Parquet)
                 """
 
-            client.command(sql)
+            self.run_sql(sql)
 
         finally:
             temp_file.unlink()
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        client = self.get_client()
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
 
         temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.parquet"
@@ -206,14 +222,14 @@ class Clickhouse(Database):
             )
 
             delete_sql = f"delete from {table} where {where_clause}"
-            client.command(delete_sql)
+            self.run_sql(delete_sql)
 
             sql = f"""
                 insert into {table}
                 select * from file('{relative_path}', parquet)
             """
 
-            client.command(sql)
+            self.run_sql(sql)
 
         finally:
             temp_file.unlink()
