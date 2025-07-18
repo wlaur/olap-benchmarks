@@ -94,8 +94,6 @@ class Database(BaseModel, ABC):
 
         con = self.connect()
 
-        self.event("populate", "start")
-
         with self.event_context("schema"):
             for stmt in sql.split(";"):
                 if not stmt.strip():
@@ -119,8 +117,6 @@ class Database(BaseModel, ABC):
         if restart:
             self.restart_event()
 
-        self.event("populate", "end")
-
     @property
     def rtabench_fetch_kwargs(self) -> dict[str, Any]:
         return {}
@@ -130,8 +126,6 @@ class Database(BaseModel, ABC):
             return f.read()
 
     def run_rtabench(self) -> None:
-        self.event("queries", "start")
-
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
             query = self.load_rtabench_query(query_name)
@@ -150,8 +144,6 @@ class Database(BaseModel, ABC):
                     f"iteration {it:_}/{iterations:_} "
                     f"in {1_000 * (t):_.2f} ms\ndf={df}"
                 )
-
-        self.event("queries", "end")
 
         _LOGGER.info(
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
@@ -192,7 +184,8 @@ class Database(BaseModel, ABC):
         )
 
         try:
-            operations[suite][operation]()
+            with self.event_context(operation):
+                operations[suite][operation]()
         finally:
             stop_event.set()
             process.join()
