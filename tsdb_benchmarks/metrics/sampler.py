@@ -43,6 +43,7 @@ def sampling_loop(
 
     finished_at = datetime.now(UTC).replace(tzinfo=None)
 
+    # TODO: this is called even if the main process raises an exception
     storage.finish_benchmark(benchmark_id, finished_at)
 
     _LOGGER.info(f"Finished benchmark at {finished_at}")
