@@ -44,11 +44,15 @@ def run(name: DatabaseName, command: Literal["start", "stop", "restart", "setup"
         case "create":
             run(name, "start")
             run(name, "setup")
+            db.wait_until_accessible()
 
         case "start" | "stop" | "restart":
             cmd: str = getattr(db, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
+
+            if command == "start" or command == "restart":
+                db.wait_until_accessible()
 
         case "setup":
             db.setup()
