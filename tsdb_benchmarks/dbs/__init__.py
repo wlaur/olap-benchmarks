@@ -105,7 +105,7 @@ class Database(BaseModel, ABC):
 
             con.commit()
 
-        _LOGGER.info(f"Created RTABench tables for {self.name}")
+        _LOGGER.info(f"Created rtabench tables for {self.name}")
 
         for table_name in RTABENCH_SCHEMAS:
             df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
@@ -140,6 +140,9 @@ class Database(BaseModel, ABC):
                     df = self.fetch(query, **self.rtabench_fetch_kwargs)
                     t = perf_counter() - t1
 
+                # time delta t will not match time at end - time at start exactly, but within a couple of milliseconds
+                # there is a small overhead when the event is sent to the queue
+                # (the actual write to result db happens later)
                 _LOGGER.info(
                     f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
                     f"iteration {it:_}/{iterations:_} "
