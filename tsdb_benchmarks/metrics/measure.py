@@ -4,9 +4,12 @@ import subprocess
 from pathlib import Path
 
 import docker
+import psutil
 from pydantic import BaseModel
 
-from ..settings import SETTINGS, DatabaseName
+from ..settings import MAIN_PROCESS_TITLE, SETTINGS, DatabaseName
+
+IN_PROCESS_DBS: list[DatabaseName] = ["duckdb"]
 
 
 def get_docker_socket() -> str:
@@ -69,7 +72,40 @@ def calculate_cpu_percent(cpu_stats: dict, precpu_stats: dict) -> float:
     return 0.0
 
 
+def find_main_process() -> psutil.Process:
+    # this process title is set in __main__.py, so the result writer subprocess will not have it
+    for proc in psutil.process_iter(attrs=["pid", "name", "cmdline"]):
+        try:
+            if proc.info["cmdline"] is not None and MAIN_PROCESS_TITLE in " ".join(proc.info["cmdline"]):
+                return proc
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    raise RuntimeError(f"Process with title '{MAIN_PROCESS_TITLE}' not found")
+
+
+def get_main_process_metrics(name: DatabaseName) -> BenchmarkMetric:
+    proc = find_main_process()
+
+    proc.cpu_percent(interval=None)  # snapshot baseline
+
+    cpu_percent = proc.cpu_percent(interval=1.0)
+
+    mem_info = proc.memory_info()
+    mem_mb = int(mem_info.rss / (1024 * 1024))
+
+    return BenchmarkMetric(
+        cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=get_directory_size_mb(get_database_directory(name))
+    )
+
+
 def get_container_metrics(name: DatabaseName) -> BenchmarkMetric:
+    if name in IN_PROCESS_DBS:
+        # contains potentially significant overhead from e.g. the insert methods
+        # using docker stats only shows the resource usage from the database itself, not the main process that
+        # reads and processes input Parquet files
+        return get_main_process_metrics(name)
+
     container = DOCKER_CLIENT.containers.get(get_container_name(name))
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second

@@ -16,6 +16,8 @@ Operation = Literal["populate", "run"]
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
+MAIN_PROCESS_TITLE = "tsdb-benchmark-main"
+
 
 class Settings(BaseSettings):
     input_data_directory: DirectoryPath
