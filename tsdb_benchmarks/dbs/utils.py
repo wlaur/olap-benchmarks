@@ -2,7 +2,6 @@ import logging
 from time import perf_counter, sleep
 
 from sqlalchemy import Connection, create_engine, text
-from sqlalchemy.exc import OperationalError
 
 from ..settings import TableName
 
@@ -30,7 +29,7 @@ def wait_for_sqlalchemy_connection(
                 connection.execute(text("select 1"))
             _LOGGER.info("Database is ready to accept connections")
             return
-        except OperationalError as e:
+        except Exception as e:
             _LOGGER.debug(f"Database not ready yet: {e}")
             sleep(interval_seconds)
 

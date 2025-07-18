@@ -140,11 +140,11 @@ class Database(BaseModel, ABC):
                     df = self.fetch(query, **self.rtabench_fetch_kwargs)
                     t = perf_counter() - t1
 
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+                _LOGGER.info(
+                    f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
+                    f"iteration {it:_}/{iterations:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                )
 
         self.event("queries", "end")
 
