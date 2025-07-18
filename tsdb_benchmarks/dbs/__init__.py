@@ -16,6 +16,7 @@ from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
+from .utils import wait_for_sqlalchemy_connection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/rtabench/querie
 
 class Database(BaseModel, ABC):
     name: DatabaseName
+    connection_string: str
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
@@ -82,6 +84,12 @@ class Database(BaseModel, ABC):
 
         self.event(name, "end")
 
+    def restart_event(self) -> None:
+        with self.event_context("restart"):
+            os.system(self.restart)
+            self.wait()
+            self.fetch("select 1")
+
     def populate_rtabench(self, restart: bool = True) -> None:
         with (REPO_ROOT / f"tsdb_benchmarks/suites/rtabench/schemas/{self.name}.sql").open() as f:
             sql = f.read()
@@ -106,12 +114,10 @@ class Database(BaseModel, ABC):
                 self.insert(df, table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
+        # restart db to ensure data is not kept in-memory by the db, and also
+        # ensure that WAL is processed etc...
         if restart:
-            with self.event_context("restart"):
-                # restart db to ensure data is not kept in-memory by the db, and also
-                # ensure that WAL is processed etc...
-                os.system(self.restart)
-                self.fetch("select 1")
+            self.restart_event()
 
     @property
     def rtabench_fetch_kwargs(self) -> dict[str, Any]:
@@ -195,6 +201,9 @@ class Database(BaseModel, ABC):
         if self._connection is None:
             return
         self._connection.rollback()
+
+    def wait(self) -> None:
+        wait_for_sqlalchemy_connection(self.connection_string)
 
     @abstractmethod
     def fetch(

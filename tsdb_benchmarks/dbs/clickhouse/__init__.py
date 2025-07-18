@@ -64,6 +64,7 @@ def get_clickhouse_client() -> ClickhouseClient:
 
 class Clickhouse(Database):
     name: Literal["clickhouse"] = "clickhouse"
+    connection_string: str = CLICKHOUSE_CONNECTION_STRING
 
     _clickhouse_client: clickhouse_connect.driver.client.Client | None = None
 
@@ -93,7 +94,7 @@ class Clickhouse(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine(CLICKHOUSE_CONNECTION_STRING)
+        engine = create_engine(self.connection_string)
         self._connection = engine.connect()
 
         return self._connection
