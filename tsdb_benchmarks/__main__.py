@@ -29,39 +29,39 @@ setup_stdout_logging()
 _LOGGER = logging.getLogger(__name__)
 
 
-def benchmark(name: DatabaseName, suite: SuiteName, operation: Literal["run", "populate"]) -> None:
+def benchmark(db: DatabaseName, suite: SuiteName, operation: Literal["run", "populate"]) -> None:
     _, queue, result_queue = start_writer_process()
-    db = DBS[name]
+    db_instance = DBS[db]
 
-    db.set_queues(queue, result_queue)
-    db.benchmark(suite, operation)
+    db_instance.set_queues(queue, result_queue)
+    db_instance.benchmark(suite, operation)
 
 
-def run(name: DatabaseName, command: Literal["start", "stop", "restart", "setup", "create"]) -> None:
-    db = DBS[name]
+def run(db: DatabaseName, command: Literal["start", "stop", "restart", "setup", "create"]) -> None:
+    db_instance = DBS[db]
 
     match command:
         case "create":
-            run(name, "start")
-            run(name, "setup")
-            db.wait_until_accessible()
+            run(db, "start")
+            run(db, "setup")
+            db_instance.wait_until_accessible()
 
         case "start" | "stop" | "restart":
-            cmd: str = getattr(db, command)
+            cmd: str = getattr(db_instance, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
             if command == "start" or command == "restart":
-                db.wait_until_accessible()
+                db_instance.wait_until_accessible()
 
         case "setup":
-            db.setup()
+            db_instance.setup()
 
         case _:
             raise ValueError(f"Unknown command: '{command}'")
 
 
-def generate(suite: str) -> None:
+def generate(suite: SuiteName) -> None:
     match suite:
         case "rtabench":
             download_rtabench_data()
