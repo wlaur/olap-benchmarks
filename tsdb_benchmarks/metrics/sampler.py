@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def sampling_loop(
-    name: DatabaseName,
+    db: DatabaseName,
     benchmark_id: int,
     stop_event: Event,
     queue: Queue,
@@ -26,7 +26,7 @@ def sampling_loop(
 
     while not stop_event.is_set():
         now = datetime.now(UTC).replace(tzinfo=None)
-        metric = get_container_metrics(name)
+        metric = get_container_metrics(db)
 
         storage.insert_metric(
             benchmark_id=benchmark_id,

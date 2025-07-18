@@ -53,12 +53,12 @@ class BenchmarkMetric(BaseModel):
     disk_mb: int
 
 
-def get_container_name(name: DatabaseName) -> str:
-    return f"{name}-benchmark"
+def get_container_name(db: DatabaseName) -> str:
+    return f"{db}-benchmark"
 
 
-def get_database_directory(name: DatabaseName) -> Path:
-    return SETTINGS.database_directory / name
+def get_database_directory(db: DatabaseName) -> Path:
+    return SETTINGS.database_directory / db
 
 
 def calculate_cpu_percent(cpu_stats: dict, precpu_stats: dict) -> float:
@@ -84,7 +84,7 @@ def find_main_process() -> psutil.Process:
     raise RuntimeError(f"Process with title '{MAIN_PROCESS_TITLE}' not found")
 
 
-def get_main_process_metrics(name: DatabaseName) -> BenchmarkMetric:
+def get_main_process_metrics(db: DatabaseName) -> BenchmarkMetric:
     proc = find_main_process()
 
     proc.cpu_percent(interval=None)  # snapshot baseline
@@ -95,18 +95,18 @@ def get_main_process_metrics(name: DatabaseName) -> BenchmarkMetric:
     mem_mb = int(mem_info.rss / (1024 * 1024))
 
     return BenchmarkMetric(
-        cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=get_directory_size_mb(get_database_directory(name))
+        cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=get_directory_size_mb(get_database_directory(db))
     )
 
 
-def get_container_metrics(name: DatabaseName) -> BenchmarkMetric:
-    if name in IN_PROCESS_DBS:
+def get_container_metrics(db: DatabaseName) -> BenchmarkMetric:
+    if db in IN_PROCESS_DBS:
         # contains potentially significant overhead from e.g. the insert methods
         # using docker stats only shows the resource usage from the database itself, not the main process that
         # reads and processes input Parquet files
-        return get_main_process_metrics(name)
+        return get_main_process_metrics(db)
 
-    container = DOCKER_CLIENT.containers.get(get_container_name(name))
+    container = DOCKER_CLIENT.containers.get(get_container_name(db))
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = container.stats(stream=False)
@@ -119,7 +119,7 @@ def get_container_metrics(name: DatabaseName) -> BenchmarkMetric:
     return BenchmarkMetric(
         cpu_percent=cpu_percent,
         mem_mb=mem_mb,
-        disk_mb=get_directory_size_mb(get_database_directory(name)),
+        disk_mb=get_directory_size_mb(get_database_directory(db)),
     )
 
 
