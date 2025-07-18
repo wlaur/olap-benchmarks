@@ -98,7 +98,7 @@ class TimescaleDB(Database):
         return self._connection
 
     def setup(self) -> None:
-        self.wait()
+        self.wait_until_accessible()
         con = self.connect()
 
         # only applies to new connections created after this is executed
