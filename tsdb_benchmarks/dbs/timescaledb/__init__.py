@@ -209,6 +209,7 @@ class TimescaleDB(Database):
             "--file",
             temp_file_str,
             "--workers",
+            # possible that using more workers could speed things up, but this is not linear
             "8",
             "--batch-size",
             "50000",
@@ -247,7 +248,7 @@ class TimescaleDB(Database):
         con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
 
     def populate_rtabench(self, restart: bool = True) -> None:
-        super().populate_rtabench()
+        super().populate_rtabench(restart=False)
 
         with self.event_context("compress"):
             self.compress_rtabench_tables()
