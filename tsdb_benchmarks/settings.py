@@ -58,11 +58,12 @@ def setup_stdout_logging(level: int = logging.INFO) -> None:
     handler.setLevel(level)
 
     formatter = ColoredFormatter(
-        "%(asctime)s %(process)d %(levelname)s %(name)s %(threadName)s : %(message)s", "%H:%M:%S"
+        "%(asctime)s.%(msecs)03d %(process)d %(levelname)s %(name)s %(threadName)s : %(message)s", "%H:%M:%S"
     )
+
     handler.setFormatter(formatter)
 
     root = logging.getLogger()
     root.setLevel(level)
-    root.handlers.clear()  # Remove existing handlers
+    root.handlers.clear()
     root.addHandler(handler)
