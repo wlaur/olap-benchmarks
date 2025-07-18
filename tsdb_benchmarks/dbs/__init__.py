@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from queue import Queue
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 
 import polars as pl
@@ -16,7 +16,6 @@ from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
-from .utils import wait_for_sqlalchemy_connection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,14 +86,15 @@ class Database(BaseModel, ABC):
     def restart_event(self) -> None:
         with self.event_context("restart"):
             os.system(self.restart)
-            self.wait()
-            self.fetch("select 1")
+            self.wait_until_accessible()
 
     def populate_rtabench(self, restart: bool = True) -> None:
         with (REPO_ROOT / f"tsdb_benchmarks/suites/rtabench/schemas/{self.name}.sql").open() as f:
             sql = f.read()
 
         con = self.connect()
+
+        self.event("populate", "start")
 
         with self.event_context("schema"):
             for stmt in sql.split(";"):
@@ -118,6 +118,8 @@ class Database(BaseModel, ABC):
         # ensure that WAL is processed etc...
         if restart:
             self.restart_event()
+
+        self.event("populate", "end")
 
     @property
     def rtabench_fetch_kwargs(self) -> dict[str, Any]:
@@ -205,8 +207,21 @@ class Database(BaseModel, ABC):
             return
         self._connection.rollback()
 
-    def wait(self) -> None:
-        wait_for_sqlalchemy_connection(self.connection_string)
+    def wait_until_accessible(self, timeout_seconds: float = 300.0, interval_seconds: float = 0.1) -> None:
+        _LOGGER.info(f"Waiting for database {self.name}...")
+
+        deadline = perf_counter() + timeout_seconds
+
+        while perf_counter() < deadline:
+            try:
+                self.fetch("select 1")
+                _LOGGER.info("Database is ready to accept connections")
+                return
+            except Exception as e:
+                _LOGGER.debug(f"Database not ready yet: {e}")
+                sleep(interval_seconds)
+
+        raise TimeoutError("Timed out waiting for database to become ready")
 
     @abstractmethod
     def fetch(
