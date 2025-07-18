@@ -92,7 +92,7 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
             case _:
                 raise ValueError(f"Unknown message type: {msg['type']}")
 
-        _LOGGER.info(f"Wrote message with type {msg['type']}")
+        _LOGGER.debug(f"Wrote message with type {msg['type']}")
 
 
 def start_writer_process() -> tuple[SyncManager, Queue, Queue]:

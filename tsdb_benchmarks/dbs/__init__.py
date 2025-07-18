@@ -216,13 +216,13 @@ class Database(BaseModel, ABC):
             try:
                 self.connect(reconnect=True)
                 self.fetch("select 1")
-                _LOGGER.info("Database is ready to accept connections")
+                _LOGGER.info(f"Database {self.name} is ready to accept connections")
                 return
             except Exception as e:
-                _LOGGER.info(f"Database not ready yet: {e}")
+                _LOGGER.debug(f"Database not ready yet: {e}")
                 sleep(interval_seconds)
 
-        raise TimeoutError("Timed out waiting for database to become ready")
+        raise TimeoutError(f"Timed out waiting for database {self.name} to become ready")
 
     @abstractmethod
     def fetch(
