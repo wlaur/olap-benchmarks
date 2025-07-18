@@ -30,16 +30,16 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def benchmark(db: DatabaseName, suite: SuiteName, operation: Literal["run", "populate", "both"]) -> None:
-    if operation == "both":
-        benchmark(db, suite, "populate")
-        benchmark(db, suite, "run")
-        return
-
     _, queue, result_queue = start_writer_process()
     db_instance = DBS[db]
 
     db_instance.set_queues(queue, result_queue)
-    db_instance.benchmark(suite, operation)
+
+    if operation == "both":
+        db_instance.benchmark(suite, "populate")
+        db_instance.benchmark(suite, "run")
+    else:
+        db_instance.benchmark(suite, operation)
 
 
 def run(db: DatabaseName, command: Literal["start", "stop", "restart", "setup", "create"]) -> None:
