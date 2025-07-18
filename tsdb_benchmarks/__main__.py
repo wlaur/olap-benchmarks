@@ -27,11 +27,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def benchmark(name: DatabaseName, suite: SuiteName, operation: Literal["run", "populate"]) -> None:
-    queue, result_queue = start_writer_process()
+    _, queue, result_queue = start_writer_process()
     db = DBS[name]
 
     db.set_queues(queue, result_queue)
-
     db.benchmark(suite, operation)
 
 

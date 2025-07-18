@@ -1,6 +1,8 @@
 import logging
+import uuid
 from datetime import datetime
 from multiprocessing import Manager, Process
+from multiprocessing.managers import SyncManager
 from queue import Queue
 from typing import Any, Literal, TypedDict, cast
 
@@ -12,12 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 
 EventType = Literal["start", "end"]
 
-MessageType = Literal[
-    "insert_benchmark",
-    "finish_benchmark",
-    "insert_metric",
-    "insert_event",
-]
+MessageType = Literal["insert_benchmark", "finish_benchmark", "insert_metric", "insert_event", "debug"]
 
 
 class WriterMessage(TypedDict, total=False):
@@ -43,6 +40,18 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
             return
 
         match msg["type"]:
+            case "debug":
+                result = conn.execute(
+                    """
+                    insert into debug (content)
+                    values (?)
+                    returning id
+                    """,
+                    msg["args"],
+                ).fetchone()
+
+                result_queue.put(result[0] if result else None)
+
             case "insert_benchmark":
                 result = conn.execute(
                     """
@@ -86,7 +95,7 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
         _LOGGER.info(f"Wrote message with type {msg['type']}")
 
 
-def start_writer_process() -> tuple[Queue, Queue]:
+def start_writer_process() -> tuple[SyncManager, Queue, Queue]:
     manager = Manager()
     queue = manager.Queue()
     result_queue = manager.Queue()
@@ -94,7 +103,8 @@ def start_writer_process() -> tuple[Queue, Queue]:
     writer_process: Process = Process(target=writer_loop, args=(queue, result_queue))
     writer_process.start()
 
-    return queue, result_queue
+    # need to return manger also here, if it goes out of scope and is gc'd the queues stop working
+    return manager, queue, result_queue
 
 
 class Storage:
@@ -119,3 +129,10 @@ class Storage:
 
     def insert_event(self, benchmark_id: int, time: datetime, name: str, type: EventType) -> None:
         self.put("insert_event", [benchmark_id, time, name, type])
+
+    def debug(self, content: str | None = None) -> int:
+        if content is None:
+            content = uuid.uuid4().hex
+
+        self.put("debug", [content])
+        return self.result_queue.get()

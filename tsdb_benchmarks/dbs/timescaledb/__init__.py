@@ -248,13 +248,14 @@ class TimescaleDB(Database):
         con = self.connect(reconnect=True)
         con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
 
-    def populate_rtabench(self) -> None:
+    def populate_rtabench(self, restart: bool = True) -> None:
         super().populate_rtabench()
 
         with self.event_context("compress"):
             self.compress_rtabench_tables()
 
-        with self.event_context("restart"):
-            os.system(self.restart)
-            wait_for_sqlalchemy_connection(TIMESCALEDB_CONNECTION_STRING)
-            self.fetch("select 1")
+        if restart:
+            with self.event_context("restart"):
+                os.system(self.restart)
+                wait_for_sqlalchemy_connection(TIMESCALEDB_CONNECTION_STRING)
+                self.fetch("select 1")

@@ -28,3 +28,11 @@ CREATE TABLE IF NOT EXISTS event (
     name TEXT NOT NULL,
     type event_type NOT NULL
 );
+
+
+CREATE SEQUENCE IF NOT EXISTS seq_debug START 1;
+
+CREATE TABLE IF NOT EXISTS debug (
+    id INTEGER PRIMARY KEY DEFAULT nextval('seq_debug'),
+    content TEXT NOT NULL
+);
