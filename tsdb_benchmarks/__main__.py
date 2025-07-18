@@ -44,7 +44,6 @@ def run(db: DatabaseName, command: Literal["start", "stop", "restart", "setup", 
         case "create":
             run(db, "start")
             run(db, "setup")
-            db_instance.wait_until_accessible()
 
         case "start" | "stop" | "restart":
             cmd: str = getattr(db_instance, command)
