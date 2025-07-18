@@ -19,9 +19,12 @@ from .settings import SETTINGS as MONETDB_SETTINGS
 # --platform linux/amd64 --build-arg BRANCH=Mar2025_SP1_release .
 DOCKER_IMAGE = "monetdb-local:Mar2025-SP1"
 
+MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
+
 
 class MonetDB(Database):
     name: Literal["monetdb"] = "monetdb"
+    connection_string: str = MONETDB_CONNECTION_STRING
 
     @property
     def start(self) -> str:
@@ -48,7 +51,7 @@ class MonetDB(Database):
             return self._connection
 
         engine = create_engine(
-            "monetdb://monetdb:monetdb@localhost:50000/benchmark",
+            self.connection_string,
             # avoid crash "ImportError: sys.meta_path is None, Python is likely shutting down"
             # not clear why this happens
             pool_reset_on_return=None,

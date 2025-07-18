@@ -1,5 +1,4 @@
 import logging
-import os
 import subprocess
 import uuid
 from collections.abc import Mapping
@@ -11,7 +10,6 @@ from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
 from .. import Database
-from ..utils import wait_for_sqlalchemy_connection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +68,7 @@ def table_exists(connection: Connection, table: str) -> bool:
 
 class TimescaleDB(Database):
     name: Literal["timescaledb"] = "timescaledb"
+    connection_string: str = TIMESCALEDB_CONNECTION_STRING
 
     @property
     def start(self) -> str:
@@ -93,13 +92,13 @@ class TimescaleDB(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine(TIMESCALEDB_CONNECTION_STRING)
+        engine = create_engine(self.connection_string)
         self._connection = engine.connect()
 
         return self._connection
 
     def setup(self) -> None:
-        wait_for_sqlalchemy_connection(TIMESCALEDB_CONNECTION_STRING)
+        self.wait()
         con = self.connect()
 
         # only applies to new connections created after this is executed
@@ -255,7 +254,4 @@ class TimescaleDB(Database):
             self.compress_rtabench_tables()
 
         if restart:
-            with self.event_context("restart"):
-                os.system(self.restart)
-                wait_for_sqlalchemy_connection(TIMESCALEDB_CONNECTION_STRING)
-                self.fetch("select 1")
+            self.restart_event()

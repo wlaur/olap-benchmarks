@@ -8,6 +8,9 @@ from sqlalchemy import Connection, create_engine
 from ...settings import SETTINGS, TableName
 from .. import Database
 
+(SETTINGS.database_directory / "duckdb").mkdir(exist_ok=True)
+DUCKDB_CONNECTION_STRING = f"duckdb:///{SETTINGS.database_directory.as_posix()}/duckdb/duck.db"
+
 
 def get_duckdb_connection(connection: Connection) -> DuckDBPyConnection:
     return cast(DuckDBPyConnection, connection._dbapi_connection)
@@ -15,6 +18,7 @@ def get_duckdb_connection(connection: Connection) -> DuckDBPyConnection:
 
 class DuckDB(Database):
     name: Literal["duckdb"] = "duckdb"
+    connection_string: str = DUCKDB_CONNECTION_STRING
 
     # in-process, no docker commands necessary
     @property
@@ -33,8 +37,7 @@ class DuckDB(Database):
         if self._connection is not None:
             return self._connection
 
-        (SETTINGS.database_directory / "duckdb").mkdir(exist_ok=True)
-        engine = create_engine(f"duckdb:///{SETTINGS.database_directory.as_posix()}/duckdb/duck.db")
+        engine = create_engine(self.connection_string)
         self._connection = engine.connect()
 
         return self._connection

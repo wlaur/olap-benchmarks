@@ -27,7 +27,7 @@ def wait_for_sqlalchemy_connection(
         try:
             engine = create_engine(connection_string)
             with engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
+                connection.execute(text("select 1"))
             _LOGGER.info("Database is ready to accept connections")
             return
         except OperationalError as e:
