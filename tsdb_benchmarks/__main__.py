@@ -3,6 +3,7 @@ import os
 from typing import Literal
 
 from fire import Fire  # type: ignore[import-untyped]
+from setproctitle import setproctitle
 
 from .dbs import Database
 from .dbs.clickhouse import Clickhouse
@@ -10,9 +11,11 @@ from .dbs.duckdb import DuckDB
 from .dbs.monetdb import MonetDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
-from .settings import DatabaseName, SuiteName, setup_stdout_logging
-from .suites.rtabench.generate import download_rtabench_data
-from .suites.time_series.generate import generate_time_series_datasets
+from .settings import MAIN_PROCESS_TITLE, DatabaseName, SuiteName, setup_stdout_logging
+from .suites.rtabench.config import download_rtabench_data
+from .suites.time_series.config import generate_time_series_datasets
+
+setproctitle(MAIN_PROCESS_TITLE)
 
 DBS: dict[DatabaseName, Database] = {
     "monetdb": MonetDB(),

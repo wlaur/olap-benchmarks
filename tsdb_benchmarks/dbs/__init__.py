@@ -15,7 +15,7 @@ from sqlalchemy import Connection, text
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
-from ..suites.rtabench.generate import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
+from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -124,25 +124,27 @@ class Database(BaseModel, ABC):
     def run_rtabench(self) -> None:
         self.event("queries", "start")
 
-        total_seconds = 0.0
-        for idx, query_name in enumerate(RTABENCH_QUERY_NAMES):
+        t0 = perf_counter()
+        for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
             query = self.load_rtabench_query(query_name)
 
-            with self.event_context(f"query_{query_name}"):
-                t0 = perf_counter()
-                df = self.fetch(query, **self.rtabench_fetch_kwargs)
-                t = perf_counter() - t0
+            for it in range(1, iterations + 1):
+                with self.event_context(f"query_{query_name}_iteration_{it}"):
+                    t1 = perf_counter()
+                    df = self.fetch(query, **self.rtabench_fetch_kwargs)
+                    t = perf_counter() - t1
 
-                _LOGGER.info(
-                    f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                )
-
-                total_seconds += t
+                    _LOGGER.info(
+                        f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
+                        f"iteration {it:_}/{iterations:_} "
+                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                    )
 
         self.event("queries", "end")
 
-        _LOGGER.info(f"Executed {len(RTABENCH_QUERY_NAMES):_} queries in {total_seconds:_.2f} seconds")
+        _LOGGER.info(
+            f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
+        )
 
     def populate_time_series(self) -> None:
         raise NotImplementedError
