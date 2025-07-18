@@ -29,7 +29,12 @@ setup_stdout_logging()
 _LOGGER = logging.getLogger(__name__)
 
 
-def benchmark(db: DatabaseName, suite: SuiteName, operation: Literal["run", "populate"]) -> None:
+def benchmark(db: DatabaseName, suite: SuiteName, operation: Literal["run", "populate", "both"]) -> None:
+    if operation == "both":
+        benchmark(db, suite, "populate")
+        benchmark(db, suite, "run")
+        return
+
     _, queue, result_queue = start_writer_process()
     db_instance = DBS[db]
 
