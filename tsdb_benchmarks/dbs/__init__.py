@@ -78,14 +78,14 @@ class Database(BaseModel, ABC):
     @contextmanager
     def event_context(self, name: str) -> Iterator[None]:
         self.event(name, "start")
-
         yield
-
         self.event(name, "end")
 
     def restart_event(self) -> None:
         with self.event_context("restart"):
+            _LOGGER.info(f"Restarting service {self.name}")
             os.system(self.restart)
+            _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
     def populate_rtabench(self, restart: bool = True) -> None:
@@ -207,18 +207,19 @@ class Database(BaseModel, ABC):
             return
         self._connection.rollback()
 
-    def wait_until_accessible(self, timeout_seconds: float = 300.0, interval_seconds: float = 0.1) -> None:
+    def wait_until_accessible(self, timeout_seconds: float = 900.0, interval_seconds: float = 0.1) -> None:
         _LOGGER.info(f"Waiting for database {self.name}...")
 
         deadline = perf_counter() + timeout_seconds
 
         while perf_counter() < deadline:
             try:
+                self.connect(reconnect=True)
                 self.fetch("select 1")
                 _LOGGER.info("Database is ready to accept connections")
                 return
             except Exception as e:
-                _LOGGER.debug(f"Database not ready yet: {e}")
+                _LOGGER.info(f"Database not ready yet: {e}")
                 sleep(interval_seconds)
 
         raise TimeoutError("Timed out waiting for database to become ready")
