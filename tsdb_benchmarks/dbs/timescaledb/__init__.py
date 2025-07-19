@@ -210,7 +210,7 @@ class TimescaleDB(Database):
             temp_file_str,
             "--workers",
             # possible that using more workers could speed things up, but this is not linear
-            "8",
+            "12",
             "--batch-size",
             "50000",
             "--skip-header",
