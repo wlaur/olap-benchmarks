@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -161,16 +162,53 @@ def _add_downtime_periods(
     return df
 
 
-def generate_time_series_datasets(method: Literal["process", "random"]) -> None:
+def write_eav_dataset(fpath: Path, overwrite: bool = False) -> None:
+    eav_fpath = fpath.with_name(fpath.name.replace("_wide_", "_eav_"))
+
+    if eav_fpath.is_file() and not overwrite:
+        return
+
+    df = pl.scan_parquet(fpath)
+
+    columns = df.collect_schema().names()
+
+    assert columns[0] == "time"
+
+    columns.pop(0)
+
+    col_id_map = {n: str(idx) for idx, n in enumerate(columns)}
+    df = df.rename(col_id_map)
+
+    # boolean is converted to float32 (0.0 and 1.0)
+    df.unpivot(index="time", variable_name="id", value_name="value").sort("id", "time").with_columns(
+        pl.col.id.cast(pl.Int16), pl.col.value.cast(pl.Float32)
+    ).sink_parquet(eav_fpath)
+
+    _LOGGER.info(f"Wrote EAV dataset {eav_fpath.name}")
+
+
+def generate_time_series_datasets(method: Literal["process", "random"], overwrite: bool = False) -> None:
     output_directory = REPO_ROOT / "data/input/time_series"
 
-    for rows, cols in [(200_000, 500), (1_000_000, 2_000)]:
+    fpaths: list[Path] = []
+
+    # don't exceed 1_600 columns (max for postgres/timescaledb)
+    # TODO: make a separate benchmark for very wide data (only use EAV for timescaledb)
+    for rows, cols in [(200_000, 100), (2_000_000, 100), (2_000_000, 500), (2_000_000, 1_000)]:
+        fpath = output_directory / f"{method}_wide_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
+        fpaths.append(fpath)
+
+        if fpath.is_file() and not overwrite:
+            continue
+
         if method == "random":
             df = generate_random_time_series_data(rows, cols)
         else:
             df = generate_time_series_data(rows, cols)
 
-        fname = f"{method}_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
-        df.write_parquet(output_directory / fname)
+        df.write_parquet(fpath)
 
-        _LOGGER.info(f"Wrote dataset {fname}")
+        _LOGGER.info(f"Wrote dataset {fpath.name}")
+
+    for fpath in fpaths:
+        write_eav_dataset(fpath, overwrite)
