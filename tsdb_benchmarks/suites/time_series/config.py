@@ -14,11 +14,11 @@ _LOGGER = logging.getLogger(__name__)
 
 METHOD: Literal["process"] = "process"
 
-
+# TODO: EAV tables take too long and use too much disk space
 DatasetSize = Literal[
     "small",
     "medium",
-    "large",
+    # "large",
     # "huge",
 ]
 
@@ -26,8 +26,7 @@ DatasetSize = Literal[
 TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "small": (200_000, 100),
     "medium": (2_000_000, 100),
-    "large": (2_000_000, 500),
-    # not enough disk space for this one
+    # "large": (2_000_000, 500),
     # "huge": (2_000_000, 1_000),
 }
 

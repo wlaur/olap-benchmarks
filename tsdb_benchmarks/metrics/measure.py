@@ -1,13 +1,17 @@
+import logging
 import os
 import platform
 import subprocess
 from pathlib import Path
+from time import sleep
 
 import docker
 import psutil
 from pydantic import BaseModel
 
 from ..settings import MAIN_PROCESS_TITLE, SETTINGS, DatabaseName
+
+_LOGGER = logging.getLogger(__name__)
 
 IN_PROCESS_DBS: list[DatabaseName] = ["duckdb"]
 
@@ -110,6 +114,11 @@ def get_container_metrics(db: DatabaseName) -> BenchmarkMetric:
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = container.stats(stream=False)
+
+    if "precpu_stats" not in stats or "system_cpu_usage" not in stats["precpu_stats"]:
+        _LOGGER.warning(f"docker stats output invalid: {stats}, sleeping and retrying...")
+        sleep(1)
+        return get_container_metrics(db)
 
     cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])
 
