@@ -65,21 +65,12 @@ def run(db: DatabaseName, command: Literal["start", "stop", "restart", "setup", 
             raise ValueError(f"Unknown command: '{command}'")
 
 
-def generate(suite: SuiteName) -> None:
-    match suite:
-        case "rtabench":
-            download_rtabench_data()
-        case "time_series":
-            generate_time_series_datasets()
-        case _:
-            raise ValueError(f"Unknown suite: '{suite}'")
-
-
 if __name__ == "__main__":
     Fire(
         {
             "benchmark": benchmark,
             "run": run,
-            "generate": generate,
+            "download_rtabench": download_rtabench_data,
+            "generate_time_series": generate_time_series_datasets,
         }
     )
