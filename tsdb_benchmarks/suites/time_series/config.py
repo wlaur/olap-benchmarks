@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -9,6 +10,57 @@ import polars as pl
 from ...settings import REPO_ROOT
 
 _LOGGER = logging.getLogger(__name__)
+
+
+METHOD: Literal["process"] = "process"
+
+
+DatasetSize = Literal[
+    "small",
+    "medium",
+    "large",
+    # "huge",
+]
+
+
+TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
+    "small": (200_000, 100),
+    "medium": (2_000_000, 100),
+    "large": (2_000_000, 500),
+    # not enough disk space for this one
+    # "huge": (2_000_000, 1_000),
+}
+
+
+TIME_SERIES_QUERY_NAMES = {
+    "0001_select_timestamp": 10,
+    "0002_select_timestamps": 10,
+}
+
+EAV_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
+    "time": pl.Datetime("ms"),
+    "id": pl.Int16,
+    "value": pl.Float32,
+}
+
+
+def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl.DataType]]]:
+    return {f"process_{size}_eav": EAV_SCHEMA for size in TIME_SERIES_DATASET_SIZES} | {
+        f"process_{size}_wide": pl.read_parquet_schema(
+            REPO_ROOT / "data/input/time_series" / get_dataset_name("process", "wide", rows, cols)
+        )
+        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
+    }
+
+
+def get_time_series_input_files() -> dict[str, Path]:
+    return {
+        f"process_{size}_wide": REPO_ROOT / "data/input/time_series" / get_dataset_name("process", "wide", rows, cols)
+        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
+    } | {
+        f"process_{size}_eav": REPO_ROOT / "data/input/time_series" / get_dataset_name("process", "eav", rows, cols)
+        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
+    }
 
 
 def generate_random_time_series_data(n_rows: int, n_cols: int) -> pl.DataFrame:
@@ -187,21 +239,27 @@ def write_eav_dataset(fpath: Path, overwrite: bool = False) -> None:
     _LOGGER.info(f"Wrote EAV dataset {eav_fpath.name}")
 
 
-def generate_time_series_datasets(method: Literal["process", "random"], overwrite: bool = False) -> None:
+def get_dataset_name(
+    method: Literal["process", "random"], orientation: Literal["wide", "eav"], rows: int, cols: int
+) -> str:
+    return f"{method}_{orientation}_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
+
+
+def generate_time_series_datasets(overwrite: bool = False) -> None:
     output_directory = REPO_ROOT / "data/input/time_series"
 
     fpaths: list[Path] = []
 
     # don't exceed 1_600 columns (max for postgres/timescaledb)
     # TODO: make a separate benchmark for very wide data (only use EAV for timescaledb)
-    for rows, cols in [(200_000, 100), (2_000_000, 100), (2_000_000, 500), (2_000_000, 1_000)]:
-        fpath = output_directory / f"{method}_wide_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
+    for rows, cols in TIME_SERIES_DATASET_SIZES.values():
+        fpath = output_directory / get_dataset_name(METHOD, "wide", rows, cols)
         fpaths.append(fpath)
 
         if fpath.is_file() and not overwrite:
             continue
 
-        if method == "random":
+        if METHOD == "random":
             df = generate_random_time_series_data(rows, cols)
         else:
             df = generate_time_series_data(rows, cols)
