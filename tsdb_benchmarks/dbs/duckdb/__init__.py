@@ -68,7 +68,7 @@ class DuckDB(Database):
             con.execute(f'insert into "{table}" select * from source')
             con.commit()
 
-            # assume the pkey is correctly set if the table already exists
+            # assume the primary key is correctly set if the table already exists
             return
 
         con.execute(f'create table "{table}" as select * from source')

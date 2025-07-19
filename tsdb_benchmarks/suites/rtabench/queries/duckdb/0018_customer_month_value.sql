@@ -1,4 +1,3 @@
-
 SELECT
     c.customer_id,
     c.name,
@@ -9,9 +8,12 @@ FROM
     INNER JOIN order_items oi USING (order_id)
     INNER JOIN products p USING (product_id)
 WHERE
-    o.created_at >= '2024-01-01' and o.created_at < '2024-02-01'
+    o.created_at >= '2024-01-01'
+    and o.created_at < '2024-02-01'
 GROUP BY
-    c.customer_id, c.name
+    c.customer_id,
+    c.name
 ORDER BY
     sum(oi.amount * p.price) DESC
-LIMIT 10;
+LIMIT
+    10;

@@ -1,7 +1,14 @@
-SELECT EXISTS (SELECT *
-               FROM order_events
-               JOIN orders USING (order_id)
-               WHERE customer_id = 124
-                 AND event_type = 'Delivered'
-                 AND event_created >= '2024-03-01' and event_created < '2024-04-01'
-                 AND JSONExtractString(event_payload, 'terminal') = 'London');
+SELECT
+  EXISTS (
+    SELECT
+      *
+    FROM
+      order_events
+      JOIN orders USING (order_id)
+    WHERE
+      customer_id = 124
+      AND event_type = 'Delivered'
+      AND event_created >= '2024-03-01'
+      and event_created < '2024-04-01'
+      AND JSONExtractString(event_payload, 'terminal') = 'London'
+  );

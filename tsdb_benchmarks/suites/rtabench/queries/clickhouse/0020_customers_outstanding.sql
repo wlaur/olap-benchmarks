@@ -10,8 +10,9 @@ WHERE
         FROM
             orders o
         WHERE
-            o.created_at >= '2024-12-25' AND o.created_at < '2025-01-01' AND
-            o.order_id NOT IN (
+            o.created_at >= '2024-12-25'
+            AND o.created_at < '2025-01-01'
+            AND o.order_id NOT IN (
                 SELECT
                     order_id
                 FROM
@@ -20,4 +21,5 @@ WHERE
                     oe.event_type = 'Delivered'
             )
     )
-ORDER BY c.customer_id;
+ORDER BY
+    c.customer_id;

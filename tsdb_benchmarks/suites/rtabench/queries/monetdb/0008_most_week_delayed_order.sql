@@ -21,4 +21,5 @@ GROUP BY
 ORDER BY
   count ASC,
   order_id DESC
-LIMIT 1;
+LIMIT
+  1;
