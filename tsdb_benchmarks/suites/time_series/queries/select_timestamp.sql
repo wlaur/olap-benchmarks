@@ -1,1 +1,4 @@
-select max(time) from data
+select
+    max(time)
+from
+    data
