@@ -15,8 +15,17 @@ FROM
     INNER JOIN order_items oi USING (order_id)
     INNER JOIN products p USING (product_id)
 WHERE
-    o.created_at > '2024-12-01' AND o.created_at < '2024-12-07' AND
-    oi.order_id NOT IN (SELECT order_id FROM shipped)
+    o.created_at > '2024-12-01'
+    AND o.created_at < '2024-12-07'
+    AND oi.order_id NOT IN (
+        SELECT
+            order_id
+        FROM
+            shipped
+    )
 GROUP BY
-    p.product_id, p.name, p.stock
-HAVING (sum(oi.amount) < p.stock);
+    p.product_id,
+    p.name,
+    p.stock
+HAVING
+    (sum(oi.amount) < p.stock);

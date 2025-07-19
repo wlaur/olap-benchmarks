@@ -1,6 +1,6 @@
 SELECT
-  sum(stock*price),
-  category
+    sum(stock * price),
+    category
 FROM
     products
 WHERE
