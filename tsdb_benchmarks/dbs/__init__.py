@@ -168,7 +168,10 @@ class Database(BaseModel, ABC):
         _LOGGER.info(f"Created time_series tables for {self.name}")
 
         for table_name, fpath in get_time_series_input_files().items():
-            primary_key = "time" if "wide" in table_name else ["time", "id"]
+            # TODO: use primary key here?
+            # e.g. Clickhouse does not support unique pk, so would be better to compare without
+            # primary_key = "time" if "wide" in table_name else ["time", "id"]
+            primary_key = None
             df = pl.read_parquet(fpath)
 
             with self.event_context(f"insert_{table_name}"):
