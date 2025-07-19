@@ -16,6 +16,7 @@ from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
+from ..suites.time_series.config import get_time_series_input_files
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -149,8 +150,35 @@ class Database(BaseModel, ABC):
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
         )
 
-    def populate_time_series(self) -> None:
-        raise NotImplementedError
+    def populate_time_series(self, restart: bool = True) -> None:
+        with (REPO_ROOT / f"tsdb_benchmarks/suites/time_series/schemas/{self.name}.sql").open() as f:
+            sql = f.read()
+
+        con = self.connect()
+
+        with self.event_context("schema"):
+            for stmt in sql.split(";"):
+                if not stmt.strip():
+                    continue
+
+                con.execute(text(stmt))
+
+            con.commit()
+
+        _LOGGER.info(f"Created time_series tables for {self.name}")
+
+        for table_name, fpath in get_time_series_input_files().items():
+            primary_key = "time" if "wide" in table_name else ["time", "id"]
+            df = pl.read_parquet(fpath)
+
+            with self.event_context(f"insert_{table_name}"):
+                self.insert(df, table_name, primary_key=primary_key)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        # restart db to ensure data is not kept in-memory by the db, and also
+        # ensure that WAL is processed etc...
+        if restart:
+            self.restart_event()
 
     def run_time_series(self) -> None:
         raise NotImplementedError
