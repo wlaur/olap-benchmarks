@@ -16,6 +16,7 @@ from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.clickbench.config import ITERATIONS as CLICKBENCH_ITERATIONS
+from ..suites.clickbench.config import load_clickbench_dataset
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
 from ..suites.time_series.config import TIME_SERIES_QUERY_NAMES, get_time_series_input_files
 
@@ -226,7 +227,12 @@ class Database(BaseModel, ABC):
 
         _LOGGER.info(f"Created clickbench table for {self.name}")
 
-        df = pl.read_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
+        # this is an expensive operation, would be better to avoid reading with polars
+        # for the databases that can ingest directly from parquet
+        # on the other hand, the purpose of these benchmarks is to measure in-memory polars df
+        # to and from the database, so maybe this is OK
+        df = load_clickbench_dataset()
+        _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
         with self.event_context("insert_hits"):
             self.insert(df, "hits")
