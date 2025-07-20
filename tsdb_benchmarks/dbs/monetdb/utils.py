@@ -240,7 +240,7 @@ def create_table(
         table=table,
         schema=schema,
         metadata=metadata,
-        primary_key=primary_key if MONETDB_SETTINGS.use_primary_key else None,
+        primary_key=primary_key,
         prefixes=["LOCAL", "TEMPORARY"] if temporary else None,
     )
 

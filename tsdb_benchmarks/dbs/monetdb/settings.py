@@ -6,7 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     default_fetch_method: Literal["binary", "pymonetdb"] = "binary"
     client_file_transfer: bool = True
-    use_primary_key: bool = True
 
     # JSON can also be read as pl.Object and pl.String, but pl.Struct is usually the most useful
     json_polars_dtype: Literal["string", "struct", "object"] = "struct"
