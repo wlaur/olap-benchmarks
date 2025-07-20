@@ -15,6 +15,7 @@ from sqlalchemy import Connection, text
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
+from ..suites.clickbench.config import ITERATIONS as CLICKBENCH_ITERATIONS
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
 from ..suites.time_series.config import TIME_SERIES_QUERY_NAMES, get_time_series_input_files
 
@@ -210,6 +211,61 @@ class Database(BaseModel, ABC):
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
         )
 
+    def populate_clickbench(self, restart: bool = True) -> None:
+        with (REPO_ROOT / f"tsdb_benchmarks/suites/clickbench/schemas/{self.name}.sql").open() as f:
+            sql = f.read()
+
+        con = self.connect()
+
+        with self.event_context("schema"):
+            for stmt in sql.split(";"):
+                if not stmt.strip():
+                    continue
+                con.execute(text(stmt))
+            con.commit()
+
+        _LOGGER.info(f"Created clickbench table for {self.name}")
+
+        df = pl.read_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
+
+        with self.event_context("insert_hits"):
+            self.insert(df, "hits")
+
+        _LOGGER.info(f"Inserted clickbench table for {self.name}")
+
+        # restart db to ensure data is not kept in-memory by the db, and also
+        # ensure that WAL is processed etc...
+        if restart:
+            self.restart_event()
+
+    @property
+    def clickbench_fetch_kwargs(self) -> dict[str, Any]:
+        return {}
+
+    def run_clickbench(self) -> None:
+        t0 = perf_counter()
+        iterations = CLICKBENCH_ITERATIONS
+
+        with (REPO_ROOT / f"tsdb_benchmarks/suites/clickbench/queries/{self.name}.sql").open() as f:
+            queries = f.readlines()
+
+        for idx, query in enumerate(queries):
+            query_name = f"Q{idx}"
+
+            for it in range(1, iterations + 1):
+                with self.event_context(f"query_{query_name}_iteration_{it}"):
+                    t1 = perf_counter()
+                    df = self.fetch(query, **self.clickbench_fetch_kwargs)
+                    t = perf_counter() - t1
+
+                _LOGGER.info(
+                    f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "
+                    f"iteration {it:_}/{iterations:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                )
+
+        _LOGGER.info(f"Executed {len(queries):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds")
+
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
         self._result_storage = self.create_result_storage()
 
@@ -221,6 +277,10 @@ class Database(BaseModel, ABC):
             "time_series": {
                 "populate": self.populate_time_series,
                 "run": self.run_time_series,
+            },
+            "clickbench": {
+                "populate": self.populate_clickbench,
+                "run": self.run_clickbench,
             },
         }
 

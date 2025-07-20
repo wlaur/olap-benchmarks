@@ -161,6 +161,19 @@ def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
     if dtype == pl.Struct or dtype == pl.Object:
         return "json"
 
+    # map unsigned integer to their signed counterparts
+    if dtype == pl.UInt8:
+        dtype = pl.Int8
+
+    if dtype == pl.UInt16:
+        dtype = pl.Int16
+
+    if dtype == pl.UInt32:
+        dtype = pl.Int32
+
+    if dtype == pl.UInt64:
+        dtype = pl.Int64
+
     for k, v in MONETDB_POLARS_TYPE_MAP.items():
         if dtype == v:
             return k
