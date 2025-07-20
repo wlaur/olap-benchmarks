@@ -252,6 +252,7 @@ class Database(BaseModel, ABC):
         t0 = perf_counter()
         iterations = CLICKBENCH_ITERATIONS
 
+        # NOTE: clickbench query files should not be formatted, need to have one query per line
         with (REPO_ROOT / f"tsdb_benchmarks/suites/clickbench/queries/{self.name}.sql").open() as f:
             queries = f.readlines()
 
