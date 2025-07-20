@@ -77,6 +77,9 @@ def insert(
 ) -> None:
     if create:
         # NOTE: when inserting into an existing table, the column order and types must match exactly
+        # NOTE: using (id, time) primary key or not null for large EAV tables makes insertion orders of magnitude slower
+        # using primary key also increases disk usage by 30%, not null does not increase disk usage
+        # query performance is the same even if no primary key or not null constraints are used
         create_table(table, df.schema, connection, primary_key, not_null)
         _LOGGER.info(f"Created table '{table}' with {len(df.columns):_} columns")
 

@@ -99,9 +99,7 @@ class Database(BaseModel, ABC):
             for stmt in sql.split(";"):
                 if not stmt.strip():
                     continue
-
                 con.execute(text(stmt))
-
             con.commit()
 
         _LOGGER.info(f"Created rtabench tables for {self.name}")
@@ -112,6 +110,8 @@ class Database(BaseModel, ABC):
             with self.event_context(f"insert_{table_name}"):
                 self.insert(df, table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all rtabench tables for {self.name}")
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...
@@ -150,17 +150,25 @@ class Database(BaseModel, ABC):
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
         )
 
+    def get_time_series_primary_key(self, table_name: TableName) -> str | list[str] | None:
+        # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
+        return None
+
+    def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
+        return ["id", "time"] if "_eav" in table_name else "time"
+
     def populate_time_series(self, restart: bool = True) -> None:
         for table_name, fpath in get_time_series_input_files().items():
-            # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
-            primary_key = None
-            not_null = "time" if "_wide" in table_name else ["time", "id"]
+            primary_key = self.get_time_series_primary_key(table_name)
+            not_null = self.get_time_series_not_null(table_name)
 
             df = pl.read_parquet(fpath)
 
             with self.event_context(f"insert_{table_name}"):
                 self.insert(df, table_name, primary_key=primary_key, not_null=not_null)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...

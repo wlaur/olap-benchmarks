@@ -12,6 +12,7 @@ from .dbs.monetdb import MonetDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
 from .settings import MAIN_PROCESS_TITLE, DatabaseName, SuiteName, setup_stdout_logging
+from .suites.clickbench.config import download_clickbench
 from .suites.rtabench.config import download_rtabench_data
 from .suites.time_series.config import generate_time_series_datasets
 
@@ -72,5 +73,6 @@ if __name__ == "__main__":
             "run": run,
             "download_rtabench": download_rtabench_data,
             "generate_time_series": generate_time_series_datasets,
+            "download_clickbench": download_clickbench,
         }
     )

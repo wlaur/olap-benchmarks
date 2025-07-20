@@ -41,6 +41,7 @@ POLARS_CLICKHOUSE_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
 
 def get_clickhouse_type(dtype: pl.DataType | type[pl.DataType], nullable: bool = False) -> str:
     if dtype == pl.Datetime:
+        # NOTE: timestamp is never nullable (overrides parameter not_null to the insert method)
         return "DateTime('UTC')"
 
     sql_type = POLARS_CLICKHOUSE_TYPE_MAP.get(dtype)
@@ -150,6 +151,10 @@ class Clickhouse(Database):
                     _LOGGER.warning(f"Could not execute statement: '{e}', retrying {retry + 1:_}/{retries:_}")
                     sleep(0.1)
                     continue
+                # might happen if the parquet file is not fully written when clickhouse tries to read it
+                if "error code 636" in str(e):
+                    raise e
+
                 raise
 
     def _get_order_by_columns(
