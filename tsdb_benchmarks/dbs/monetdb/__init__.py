@@ -99,3 +99,7 @@ class MonetDB(Database):
         MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
 
         return super().run_rtabench()
+
+    def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
+        # terrible insert performance if primary key or not null constraints are used for eav tables
+        return None if "_eav" in table_name else "time"

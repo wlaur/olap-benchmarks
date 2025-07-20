@@ -272,3 +272,15 @@ class TimescaleDB(Database):
 
         if restart:
             self.restart_event()
+
+    def populate_time_series(self, restart: bool = True) -> None:
+        raise NotImplementedError
+        # self.create_time_series_tables()
+
+        # super().populate_time_series(restart=False)
+
+        # with self.event_context("compress"):
+        #     self.compress_time_series_tables()
+
+        # if restart:
+        #     self.restart_event()
