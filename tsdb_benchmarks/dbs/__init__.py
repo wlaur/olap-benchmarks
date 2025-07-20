@@ -154,10 +154,12 @@ class Database(BaseModel, ABC):
         for table_name, fpath in get_time_series_input_files().items():
             # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
             primary_key = None
+            not_null = "time" if "_wide" in table_name else ["time", "id"]
+
             df = pl.read_parquet(fpath)
 
             with self.event_context(f"insert_{table_name}"):
-                self.insert(df, table_name, primary_key=primary_key)
+                self.insert(df, table_name, primary_key=primary_key, not_null=not_null)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         # restart db to ensure data is not kept in-memory by the db, and also
@@ -236,7 +238,13 @@ class Database(BaseModel, ABC):
     ) -> pl.DataFrame: ...
 
     @abstractmethod
-    def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None: ...
+    def insert(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None: ...
 
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...

@@ -115,12 +115,12 @@ def get_container_metrics(db: DatabaseName) -> BenchmarkMetric:
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = container.stats(stream=False)
 
-    if "precpu_stats" not in stats or "system_cpu_usage" not in stats["precpu_stats"]:
-        _LOGGER.warning(f"docker stats output invalid: {stats}, sleeping and retrying...")
+    try:
+        cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])
+    except KeyError as e:
+        _LOGGER.warning(f"docker stats output invalid (KeyError: {e}): {stats}, sleeping and retrying...")
         sleep(1)
         return get_container_metrics(db)
-
-    cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])
 
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))
@@ -133,6 +133,24 @@ def get_container_metrics(db: DatabaseName) -> BenchmarkMetric:
 
 
 def get_directory_size_mb(path: Path) -> int:
-    output = subprocess.check_output(["du", "-sk", path.resolve().as_posix()], text=True)
+    n_retries = 5
+    output: str | None = None
+
+    for _ in range(n_retries):
+        try:
+            output = subprocess.check_output(["du", "-sk", path.resolve().as_posix()], text=True)
+            break
+
+        # can fail if the db is deleting a file a the exact same instant, e.g. with clickhouse
+        # du: /Users/williamlauren/repos/tsdb-benchmarks/data/dbs_time_series\
+        # /clickhouse/store/bb1/bb1e5c5b-913d-4009-85a8-c015e07669a3/tmp_insert_all_304_304_0: No such file or directory
+        except subprocess.CalledProcessError as e:
+            _LOGGER.warning(f"Call to du failed: {e}, retrying in 1 second...")
+            sleep(1)
+            continue
+
+    if output is None:
+        raise RuntimeError(f"Call to du failed after {n_retries:_} retries")
+
     kilobytes = int(output.split()[0])
     return kilobytes // 1_024

@@ -152,7 +152,42 @@ class Clickhouse(Database):
                     continue
                 raise
 
-    def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
+    def _get_order_by_columns(
+        self,
+        df: pl.DataFrame,
+        primary_key: str | list[str] | None,
+        not_null: list[str],
+    ) -> str | None:
+        # special case for time_series benchmark
+        if primary_key is None and len(not_null):
+            if set(not_null) == {"id", "time"}:
+                order_by = "id, time"
+            elif set(not_null) == {"time"}:
+                order_by = "time"
+            else:
+                order_by = None
+        elif primary_key is None:
+            order_by = df.columns[0]
+        elif isinstance(primary_key, str):
+            order_by = primary_key
+        else:
+            order_by = ", ".join(primary_key)
+
+        return order_by
+
+    def insert(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        if not_null is None:
+            not_null = []
+
+        if isinstance(not_null, str):
+            not_null = [not_null]
+
         client = self.get_client()
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
 
@@ -164,19 +199,10 @@ class Clickhouse(Database):
             exists_result = client.query_df(f"EXISTS TABLE {table}")
             table_exists = bool(exists_result["result"][0])
 
-            if primary_key is None and "time" in df.columns:
-                order_by = "time"
-            elif primary_key is None:
-                order_by = df.columns[0]
-            elif isinstance(primary_key, str):
-                order_by = primary_key
-            else:
-                order_by = ", ".join(primary_key)
-
             if not table_exists:
                 columns_def: list[str] = []
                 for name, dtype in df.schema.items():
-                    sql_type = get_clickhouse_type(dtype, nullable=True)
+                    sql_type = get_clickhouse_type(dtype, nullable=name not in not_null)
 
                     columns_def.append(f"`{name}` {sql_type}")
 
@@ -185,21 +211,26 @@ class Clickhouse(Database):
                 # time is read as epoch integer by default
                 time_col_def = "toDateTime(time) AS time," if "time" in df.columns else ""
 
+                order_by = self._get_order_by_columns(df, primary_key, not_null)
+                order_by_clause = f"order by ({order_by})" if order_by is not None else ""
+
                 sql = f"""
-                    CREATE TABLE {table} (
+                    create table {table} (
                         {", ".join(columns_def)}
                     )
-                    ENGINE = MergeTree
-                    ORDER BY ({order_by})
-                    AS SELECT
+                    engine = MergeTree
+                    -- an order by clause is equivalent to a primary key (pk is not unique)
+                    -- the primary key clause can be omitted (can be used to limit indexes to only one of the sort keys)
+                    {order_by_clause}
+                    as select
                         {time_col_def}
                         {column_list}
-                    FROM file('{relative_path}', Parquet)
+                    from file('{relative_path}', Parquet)
                 """
             else:
                 sql = f"""
-                    INSERT INTO {table}
-                    SELECT * FROM file('{relative_path}', Parquet)
+                    insert into {table}
+                    select * from file('{relative_path}', Parquet)
                 """
 
             self.run_sql(sql)

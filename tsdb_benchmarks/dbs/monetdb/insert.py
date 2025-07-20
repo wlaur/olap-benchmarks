@@ -71,12 +71,13 @@ def insert(
     table: TableName,
     connection: Connection,
     primary_key: str | list[str] | None = None,
+    not_null: str | list[str] | None = None,
     create: bool = True,
     commit: bool = True,
 ) -> None:
     if create:
         # NOTE: when inserting into an existing table, the column order and types must match exactly
-        create_table(table, df.schema, connection, primary_key)
+        create_table(table, df.schema, connection, primary_key, not_null)
         _LOGGER.info(f"Created table '{table}' with {len(df.columns):_} columns")
 
     con = get_pymonetdb_connection(connection)

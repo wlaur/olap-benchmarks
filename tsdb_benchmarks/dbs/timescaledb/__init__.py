@@ -20,6 +20,8 @@ TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/p
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
     if dtype == pl.Int64:
         return "BIGINT"
+    elif dtype == pl.Int16:
+        return "SMALLINT"
     elif dtype == pl.Int32:
         return "INTEGER"
     elif dtype == pl.Float64:
@@ -35,14 +37,23 @@ def polars_to_postgres_type(dtype: pl.DataType) -> str:
     elif isinstance(dtype, pl.Datetime):
         return "TIMESTAMPTZ"
     else:
-        return "JSONB"  # fallback for List, Struct, Duration etc.
+        _LOGGER.warning(f"Falling back to type JSONB for Polars dtype {dtype}")
+        return "JSONB"
 
 
-def generate_create_table_sql(table: str, df: pl.DataFrame, primary_key: str | list[str] | None = None) -> str:
-    columns = []
+def generate_create_table_sql(
+    table: str, df: pl.DataFrame, primary_key: str | list[str] | None = None, not_null: str | list[str] | None = None
+) -> str:
+    if not_null is None:
+        not_null = []
+
+    if isinstance(not_null, str):
+        not_null = [not_null]
+
+    columns: list[str] = []
     for name, dtype in zip(df.columns, df.dtypes, strict=True):
         pg_type = polars_to_postgres_type(dtype)
-        columns.append(f'"{name}" {pg_type}')
+        columns.append(f'"{name}" {pg_type} {"not null" if name in not_null else ""}')
 
     if primary_key:
         if isinstance(primary_key, str):
@@ -172,11 +183,17 @@ class TimescaleDB(Database):
 
         return df
 
-    def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
+    def insert(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
         con = self.connect()
 
         if not table_exists(con, table):
-            create_sql = generate_create_table_sql(table, df, primary_key)
+            create_sql = generate_create_table_sql(table, df, primary_key, not_null)
             con.execute(text(create_sql))
             con.commit()
             _LOGGER.info(f"Created table {table} with {len(df.columns):_} columns")

@@ -76,13 +76,19 @@ class MonetDB(Database):
         else:
             raise ValueError(f"Invalid method: '{method}'")
 
-    def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
+    def insert(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
         result = self.connect().execute(
             text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
         )
         exists = bool(result.scalar())
 
-        return insert(df, table, self.connect(), primary_key, create=not exists)
+        return insert(df, table, self.connect(), primary_key, not_null, create=not exists)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)
