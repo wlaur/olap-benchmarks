@@ -151,26 +151,8 @@ class Database(BaseModel, ABC):
         )
 
     def populate_time_series(self, restart: bool = True) -> None:
-        with (REPO_ROOT / f"tsdb_benchmarks/suites/time_series/schemas/{self.name}.sql").open() as f:
-            sql = f.read()
-
-        con = self.connect()
-
-        with self.event_context("schema"):
-            for stmt in sql.split(";"):
-                if not stmt.strip():
-                    continue
-
-                con.execute(text(stmt))
-
-            con.commit()
-
-        _LOGGER.info(f"Created time_series tables for {self.name}")
-
         for table_name, fpath in get_time_series_input_files().items():
-            # TODO: use primary key here?
-            # e.g. Clickhouse does not support unique pk, so would be better to compare without
-            # primary_key = "time" if "wide" in table_name else ["time", "id"]
+            # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
             primary_key = None
             df = pl.read_parquet(fpath)
 

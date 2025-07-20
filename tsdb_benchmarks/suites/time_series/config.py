@@ -2,7 +2,7 @@ import logging
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import numpy as np
 import polars as pl
@@ -18,7 +18,7 @@ METHOD: Literal["process"] = "process"
 DatasetSize = Literal[
     "small",
     "medium",
-    # "large",
+    "large",
     # "huge",
 ]
 
@@ -26,10 +26,12 @@ DatasetSize = Literal[
 TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "small": (200_000, 100),
     "medium": (2_000_000, 100),
-    # "large": (2_000_000, 500),
+    "large": (2_000_000, 500),
     # "huge": (2_000_000, 1_000),
 }
 
+
+assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
 TIME_SERIES_QUERY_NAMES = {
     "0001_select_timestamp": 10,
