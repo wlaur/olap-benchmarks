@@ -1,4 +1,4 @@
 select
     max(time)
 from
-    data
+    process_large_eav

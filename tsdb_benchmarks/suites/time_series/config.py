@@ -12,6 +12,13 @@ from ...settings import REPO_ROOT
 _LOGGER = logging.getLogger(__name__)
 
 
+TIME_SERIES_QUERY_NAMES = {
+    "0001_select_timestamp": 10,
+    "0002_select_timestamps": 10,
+    "0003_average_and_count": 5,
+    "0004_hourly_averages": 5,
+}
+
 METHOD: Literal["process"] = "process"
 
 # TODO: EAV tables take too long and use too much disk space
@@ -33,10 +40,6 @@ TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
 
 assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
-TIME_SERIES_QUERY_NAMES = {
-    "0001_select_timestamp": 10,
-    "0002_select_timestamps": 10,
-}
 
 EAV_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "time": pl.Datetime("ms"),
