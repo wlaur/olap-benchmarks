@@ -1,6 +1,8 @@
 select
     time
 from
-    data
+    process_large_wide
 order by
     time desc
+limit
+    50

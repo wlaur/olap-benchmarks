@@ -16,12 +16,13 @@ from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
-from ..suites.time_series.config import get_time_series_input_files
+from ..suites.time_series.config import TIME_SERIES_QUERY_NAMES, get_time_series_input_files
 
 _LOGGER = logging.getLogger(__name__)
 
 
 RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/rtabench/queries"
+TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/time_series/queries"
 
 
 class Database(BaseModel, ABC):
@@ -175,8 +176,39 @@ class Database(BaseModel, ABC):
         if restart:
             self.restart_event()
 
+    def load_time_series_query(self, query_name: str) -> str:
+        db_specific = TIME_SERIES_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql"
+        common = TIME_SERIES_QUERIES_DIRECTORY / f"{query_name}.sql"
+
+        sql_source = db_specific if db_specific.is_file() else common
+
+        with (sql_source).open() as f:
+            return f.read()
+
+    @property
+    def time_series_fetch_kwargs(self) -> dict[str, Any]:
+        return {}
+
     def run_time_series(self) -> None:
-        raise NotImplementedError
+        t0 = perf_counter()
+        for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
+            query = self.load_time_series_query(query_name)
+
+            for it in range(1, iterations + 1):
+                with self.event_context(f"query_{query_name}_iteration_{it}"):
+                    t1 = perf_counter()
+                    df = self.fetch(query, **self.time_series_fetch_kwargs)
+                    t = perf_counter() - t1
+
+                _LOGGER.info(
+                    f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "
+                    f"iteration {it:_}/{iterations:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf (head 100)={df.head(100)}"
+                )
+
+        _LOGGER.info(
+            f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
+        )
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
         self._result_storage = self.create_result_storage()
