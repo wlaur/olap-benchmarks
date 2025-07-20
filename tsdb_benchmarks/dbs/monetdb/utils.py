@@ -198,8 +198,15 @@ def get_table(
     schema: Mapping[str, pl.DataType | type[pl.DataType]],
     metadata: MetaData | None = None,
     primary_key: str | list[str] | None = None,
+    not_null: str | list[str] | None = None,
     prefixes: list[str] | None = None,
 ) -> Table:
+    if not_null is None:
+        not_null = []
+
+    if isinstance(not_null, str):
+        not_null = [not_null]
+
     if primary_key is None:
         primary_key = []
 
@@ -221,6 +228,7 @@ def get_table(
                 name=name,
                 type_=MonetDBType(col_type_name),
                 primary_key=name in primary_key,
+                nullable=name not in not_null,
             )
         )
 
@@ -232,6 +240,7 @@ def create_table(
     schema: Mapping[str, pl.DataType | type[pl.DataType]],
     connection: Connection,
     primary_key: str | list[str] | None = None,
+    not_null: str | list[str] | None = None,
     temporary: bool = False,
     commit: bool = False,
 ) -> Table:
@@ -241,7 +250,8 @@ def create_table(
         schema=schema,
         metadata=metadata,
         primary_key=primary_key,
-        prefixes=["LOCAL", "TEMPORARY"] if temporary else None,
+        not_null=not_null,
+        prefixes=["local", "temporary"] if temporary else None,
     )
 
     metadata.create_all(connection, tables=[tbl], checkfirst=False)

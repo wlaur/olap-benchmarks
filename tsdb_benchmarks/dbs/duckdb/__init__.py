@@ -12,8 +12,37 @@ from .. import Database
 DUCKDB_CONNECTION_STRING = f"duckdb:///{SETTINGS.database_directory.as_posix()}/duckdb/duck.db"
 
 
+POLARS_DUCKDB_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
+    pl.Int8: "TINYINT",
+    pl.Int16: "SMALLINT",
+    pl.Int32: "INTEGER",
+    pl.Int64: "BIGINT",
+    pl.UInt8: "UTINYINT",
+    pl.UInt16: "USMALLINT",
+    pl.UInt32: "UINTEGER",
+    pl.UInt64: "UBIGINT",
+    pl.Float32: "FLOAT",
+    pl.Float64: "DOUBLE",
+    pl.Boolean: "BOOLEAN",
+    pl.String: "TEXT",
+    pl.Date: "DATE",
+    pl.Datetime: "TIMESTAMP",
+    pl.Time: "TIME",
+    pl.Duration: "BIGINT",
+    pl.Object: "BLOB",
+    pl.Struct: "JSON",
+}
+
+
 def get_duckdb_connection(connection: Connection) -> DuckDBPyConnection:
     return cast(DuckDBPyConnection, connection._dbapi_connection)
+
+
+def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
+    for pl_type, duck_type in POLARS_DUCKDB_TYPE_MAP.items():
+        if dtype == pl_type:
+            return duck_type
+    raise ValueError(f"Unsupported Polars dtype: {dtype}")
 
 
 class DuckDB(Database):
@@ -52,39 +81,46 @@ class DuckDB(Database):
 
         return df
 
-    def insert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str] | None = None) -> None:
+    def insert(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
         con = get_duckdb_connection(self.connect())
 
         result = con.execute(
-            f"select count(*) from information_schema.tables where table_name = '{table.lower()}'"
+            f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table.lower()}'"
         ).fetchone()
 
         assert result is not None
-        count = cast(int, result[0])
+        table_exists = cast(int, result[0]) > 0
 
         con.register("source", df)
 
-        if count > 0:
+        if table_exists:
             con.execute(f'insert into "{table}" select * from source')
             con.commit()
-
-            # assume the primary key is correctly set if the table already exists
             return
 
-        con.execute(f'create table "{table}" as select * from source')
-        con.commit()
+        not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
+        primary_keys = [primary_key] if isinstance(primary_key, str) else (primary_key or [])
 
-        if primary_key is None:
-            return
+        col_defs: list[str] = []
+        for name, dtype in df.schema.items():
+            duck_type = polars_dtype_to_duckdb(dtype)
+            constraints = []
+            if name in not_null_cols:
+                constraints.append("not null")
 
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+            col_def = f'"{name}" {duck_type} {" ".join(constraints)}'
+            col_defs.append(col_def)
 
-        for pk in primary_keys:
-            if pk not in df.columns:
-                raise ValueError(f"Primary key column '{pk}' not found in dataset")
-
-        pk_clause = ", ".join(f'"{pk}"' for pk in primary_keys)
-        con.execute(f'alter table "{table}" add primary key ({pk_clause})')
+        pk_clause = f", primary key ({', '.join(f'"{pk}"' for pk in primary_keys)})" if primary_keys else ""
+        ddl = f'create table "{table}" (\n  ' + ",\n  ".join(col_defs) + pk_clause + "\n)"
+        con.execute(ddl)
+        con.execute(f'insert into "{table}" select * from source')
         con.commit()
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
