@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 TableName = Annotated[str, "Table name"]
 
 DatabaseName = Literal["monetdb", "clickhouse", "timescaledb", "duckdb"]
-SuiteName = Literal["rtabench", "time_series"]
+SuiteName = Literal["rtabench", "time_series", "clickbench"]
 Operation = Literal["populate", "run"]
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()

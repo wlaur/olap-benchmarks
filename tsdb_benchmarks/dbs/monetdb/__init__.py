@@ -100,11 +100,16 @@ class MonetDB(Database):
 
         return super().run_rtabench()
 
+    def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
+        # terrible insert performance if primary key or not null constraints are used for eav tables
+        return None if "_eav" in table_name else "time"
+
     def run_time_series(self) -> None:
         MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
 
         return super().run_time_series()
 
-    def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
-        # terrible insert performance if primary key or not null constraints are used for eav tables
-        return None if "_eav" in table_name else "time"
+    def run_clickbench(self) -> None:
+        MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
+
+        return super().run_clickbench()
