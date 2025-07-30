@@ -72,9 +72,6 @@ class Database(BaseModel, ABC):
     def restart(self) -> str:
         return f"docker restart {self.name}-benchmark"
 
-    def setup(self) -> None:
-        pass
-
     def event(self, name: str, type: EventType) -> None:
         self.result_storage.insert_event(self.benchmark_id, datetime.now(UTC).replace(tzinfo=None), name, type)
         _LOGGER.info(f"Registered event {name}:{type}")
@@ -92,26 +89,44 @@ class Database(BaseModel, ABC):
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
-    def populate_rtabench(self, restart: bool = True) -> None:
-        with (REPO_ROOT / f"tsdb_benchmarks/suites/rtabench/schemas/{self.name}.sql").open() as f:
-            sql = f.read()
+    def initialize_schema(self, suite: SuiteName) -> None:
+        fpath = REPO_ROOT / f"tsdb_benchmarks/suites/{suite}/schemas/{self.name}.sql"
 
-        con = self.connect()
+        if not fpath.is_file():
+            _LOGGER.info(f"Schema definition for {self.name}:{suite} does not exist, skipping...")
+            return
+
+        with (fpath).open() as f:
+            statements = f.read()
 
         with self.event_context("schema"):
-            for stmt in sql.split(";"):
-                if not stmt.strip():
-                    continue
-                con.execute(text(stmt))
-            con.commit()
+            for stmt in statements.split(";"):
+                stmt = stmt.strip()
 
-        _LOGGER.info(f"Created rtabench tables for {self.name}")
+                if not stmt or all(line.strip().startswith("--") for line in stmt.splitlines()):
+                    continue
+
+                # ensure the connection used when initializing the schema is not reused
+                # if we use e.g. ALTER DATABASE, it's important that subsequent queries use a new connection
+                con = self.connect(reconnect=True)
+                con.execute(text(stmt))
+                con.commit()
+
+        self.connect(reconnect=True)
+        _LOGGER.info(f"Initialized schema for {self.name}:{suite}")
+
+    @property
+    def rtabench_populate_kwargs(self) -> dict[str, Any]:
+        return {}
+
+    def populate_rtabench(self, restart: bool = True) -> None:
+        self.initialize_schema("rtabench")
 
         for table_name in RTABENCH_SCHEMAS:
             df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
             with self.event_context(f"insert_{table_name}"):
-                self.insert(df, table_name)
+                self.insert(df, table_name, **self.rtabench_populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all rtabench tables for {self.name}")
@@ -160,7 +175,13 @@ class Database(BaseModel, ABC):
     def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
         return ["id", "time"] if "_eav" in table_name else "time"
 
+    @property
+    def time_series_populate_kwargs(self) -> dict[str, Any]:
+        return {}
+
     def populate_time_series(self, restart: bool = True) -> None:
+        self.initialize_schema("time_series")
+
         for table_name, fpath in get_time_series_input_files().items():
             primary_key = self.get_time_series_primary_key(table_name)
             not_null = self.get_time_series_not_null(table_name)
@@ -168,7 +189,9 @@ class Database(BaseModel, ABC):
             df = pl.read_parquet(fpath)
 
             with self.event_context(f"insert_{table_name}"):
-                self.insert(df, table_name, primary_key=primary_key, not_null=not_null)
+                self.insert(
+                    df, table_name, primary_key=primary_key, not_null=not_null, **self.time_series_populate_kwargs
+                )
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
@@ -212,30 +235,23 @@ class Database(BaseModel, ABC):
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
         )
 
+    @property
+    def clickbench_populate_kwargs(self) -> dict[str, Any]:
+        return {}
+
     def populate_clickbench(self, restart: bool = True) -> None:
-        with (REPO_ROOT / f"tsdb_benchmarks/suites/clickbench/schemas/{self.name}.sql").open() as f:
-            sql = f.read()
-
-        con = self.connect()
-
-        with self.event_context("schema"):
-            for stmt in sql.split(";"):
-                if not stmt.strip():
-                    continue
-                con.execute(text(stmt))
-            con.commit()
-
-        _LOGGER.info(f"Created clickbench table for {self.name}")
+        self.initialize_schema("clickbench")
 
         # this is an expensive operation, would be better to avoid reading with polars
         # for the databases that can ingest directly from parquet
         # on the other hand, the purpose of these benchmarks is to measure in-memory polars df
-        # to and from the database, so maybe this is OK
+        # to and from the database, so this is appropriate,
+        # although not directly comparable with the insert times from the official clickbench resultsg
         df = load_clickbench_dataset()
         _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
         with self.event_context("insert_hits"):
-            self.insert(df, "hits")
+            self.insert(df, "hits", **self.clickbench_populate_kwargs)
 
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
 

@@ -1,6 +1,8 @@
 import logging
 import uuid
 from collections.abc import Mapping
+from pathlib import Path
+from shutil import rmtree
 from time import sleep
 from typing import Any, Literal, cast
 from urllib.parse import urlparse
@@ -180,12 +182,60 @@ class Clickhouse(Database):
 
         return order_by
 
+    def _write_single_parquet(self, parent: Path, df: pl.DataFrame) -> Path:
+        temp_file = parent / f"{uuid.uuid4().hex}.parquet"
+        df.write_parquet(temp_file)
+
+        _LOGGER.info(f"Wrote single Parquet file with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+        return temp_file
+
+    def _write_partitioned_parquet(self, parent: Path, df: pl.DataFrame, partitions: int) -> Path:
+        subdir = parent / uuid.uuid4().hex
+        subdir.mkdir(parents=True, exist_ok=False)
+
+        chunk_size = len(df) // partitions
+
+        for idx in range(partitions):
+            start = idx * chunk_size
+            end = (idx + 1) * chunk_size if idx < partitions - 1 else len(df)
+            df_partition = df.slice(start, end - start)
+            df_partition.write_parquet(subdir / f"partition_{idx}.parquet")
+
+            _LOGGER.info(
+                f"Wrote Parquet file for partition {idx + 1:_}/{partitions:_} "
+                f"with shape ({df_partition.shape[0]:_}, {df_partition.shape[1]:_})"
+            )
+
+        return subdir
+
+    def _cleanup_temporary_parquet(self, p: Path) -> None:
+        if p.is_dir():
+            rmtree(p)
+        elif p.is_file():
+            p.unlink()
+        else:
+            raise RuntimeError(f"Invalid value for {p = }")
+
+    def _write_temporary_parquet(self, df: pl.DataFrame, temp_dir: Path, partitions: int | None) -> tuple[Path, str]:
+        # inserting very large Parquet files in a single chunk causes OOM-related issues,
+        # e.g. for Clickbench (7.4 GB Parquet)
+        # better to insert as partitioned files instead (using wildcard file('*.parquet'))
+        if partitions is None:
+            temp_parquet_path = self._write_single_parquet(temp_dir, df)
+            input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix()
+        else:
+            temp_parquet_path = self._write_partitioned_parquet(temp_dir, df, partitions)
+            input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix() + "/*.parquet"
+
+        return temp_parquet_path, input_file_string
+
     def insert(
         self,
         df: pl.DataFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        partitions: int | None = None,
     ) -> None:
         if not_null is None:
             not_null = []
@@ -195,10 +245,7 @@ class Clickhouse(Database):
 
         client = self.get_client()
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
-
-        temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.parquet"
-        relative_path = temp_file.relative_to(temp_dir).as_posix()
-        df.write_parquet(temp_file)
+        temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
         try:
             exists_result = client.query_df(f"EXISTS TABLE {table}")
@@ -230,31 +277,36 @@ class Clickhouse(Database):
                     as select
                         {time_col_def}
                         {column_list}
-                    from file('{relative_path}', Parquet)
+                    from file('{input_file_string}', Parquet)
                 """
             else:
                 sql = f"""
                     insert into {table}
-                    select * from file('{relative_path}', Parquet)
+                    select * from file('{input_file_string}', Parquet)
                 """
 
+            _LOGGER.info("Running insert query...")
             self.run_sql(sql)
+            _LOGGER.info("Finished insert query")
 
         finally:
-            temp_file.unlink()
+            self._cleanup_temporary_parquet(temp_parquet_path)
 
-    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+    def upsert(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str],
+        partitions: int | None = None,
+    ) -> None:
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
-
-        temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.parquet"
-        relative_path = temp_file.relative_to(temp_dir).as_posix()
-        df.write_parquet(temp_file)
+        temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
         try:
             pk_list = [primary_key] if isinstance(primary_key, str) else primary_key
 
             where_clause = " and ".join(
-                f"{col} in (select distinct {col} from file('{relative_path}', parquet))" for col in pk_list
+                f"{col} in (select distinct {col} from file('{input_file_string}', parquet))" for col in pk_list
             )
 
             delete_sql = f"delete from {table} where {where_clause}"
@@ -262,13 +314,13 @@ class Clickhouse(Database):
 
             sql = f"""
                 insert into {table}
-                select * from file('{relative_path}', parquet)
+                select * from file('{input_file_string}', parquet)
             """
 
             self.run_sql(sql)
 
         finally:
-            temp_file.unlink()
+            self._cleanup_temporary_parquet(temp_parquet_path)
 
     @property
     def rtabench_fetch_kwargs(self) -> dict[str, Any]:
@@ -277,3 +329,21 @@ class Clickhouse(Database):
     @property
     def time_series_fetch_kwargs(self) -> dict[str, Any]:
         return {"time_columns": ["time"]}
+
+    @property
+    def clickbench_populate_kwargs(self) -> dict[str, Any]:
+        # same number of partitions as the official clickbench insert
+        return {"partitions": 100}
+
+    def optimize_clickbench_table(self) -> None:
+        # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
+        self.run_sql("optimize table hits")
+
+    def populate_clickbench(self, restart: bool = True) -> None:
+        super().populate_clickbench(restart=False)
+
+        with self.event_context("optimize"):
+            self.optimize_clickbench_table()
+
+        if restart:
+            self.restart_event()

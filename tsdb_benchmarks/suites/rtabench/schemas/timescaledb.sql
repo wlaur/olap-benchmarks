@@ -1,3 +1,7 @@
+ALTER DATABASE postgres SET work_mem TO '50MB';
+
+ALTER DATABASE postgres SET timescaledb.enable_chunk_skipping to true;
+
 CREATE TABLE customers (
     customer_id integer not null,
     name text,
