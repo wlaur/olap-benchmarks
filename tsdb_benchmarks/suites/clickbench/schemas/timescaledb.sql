@@ -1,4 +1,4 @@
-CREATE OR REPLACE TABLE hits
+CREATE TABLE hits
 (
     WatchID BIGINT NOT NULL,
     JavaEnable SMALLINT NOT NULL,
@@ -104,8 +104,21 @@ CREATE OR REPLACE TABLE hits
     HasGCLID SMALLINT NOT NULL,
     RefererHash BIGINT NOT NULL,
     URLHash BIGINT NOT NULL,
-    CLID INTEGER NOT NULL,
-    PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)
-)
-ENGINE = MergeTree
-SETTINGS old_parts_lifetime = 5;  -- ensure files are cleaned up
+    CLID INTEGER NOT NULL
+);
+
+-- create and configure hypertable immediately (before inserting data)
+-- based on https://github.com/ClickHouse/ClickBench/blob/main/timescaledb/benchmark.sh
+SELECT create_hypertable('hits', 'eventtime', chunk_time_interval => interval '3 day', create_default_indexes => false);
+
+ALTER TABLE hits SET (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'counterid, userid, eventtime');
+
+ALTER DATABASE postgres SET timescaledb.enable_chunk_skipping to ON;
+
+ALTER DATABASE postgres SET work_mem TO '1GB';
+
+ALTER DATABASE postgres SET min_parallel_table_scan_size TO '0';
+
+SELECT enable_chunk_skipping('hits', 'counterid');
+
+-- official clickbench uses "\copy hits from hits.tsv", but we'll use df.write_csv -> timescaledb-parallel-copy

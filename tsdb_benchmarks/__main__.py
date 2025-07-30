@@ -43,24 +43,17 @@ def benchmark(db: DatabaseName, suite: SuiteName, operation: Literal["run", "pop
         db_instance.benchmark(suite, operation)
 
 
-def run(db: DatabaseName, command: Literal["start", "stop", "restart", "setup", "create"]) -> None:
+def run(db: DatabaseName, command: Literal["start", "stop", "restart", "create"]) -> None:
     db_instance = DBS[db]
 
     match command:
-        case "create":
-            run(db, "start")
-            run(db, "setup")
-
         case "start" | "stop" | "restart":
             cmd: str = getattr(db_instance, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
             os.system(cmd)
 
-            if command == "start" or command == "restart":
+            if command in ("start", "restart"):
                 db_instance.wait_until_accessible()
-
-        case "setup":
-            db_instance.setup()
 
         case _:
             raise ValueError(f"Unknown command: '{command}'")

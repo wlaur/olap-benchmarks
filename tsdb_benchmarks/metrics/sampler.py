@@ -65,7 +65,7 @@ def start_metric_sampler(
     process = Process(
         target=sampling_loop,
         args=(db, benchmark_id, stop_event, storage.queue, storage.result_queue, interval_seconds),
-        daemon=True,
+        daemon=False,
     )
 
     process.start()

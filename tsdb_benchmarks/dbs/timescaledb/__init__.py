@@ -13,7 +13,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-DOCKER_IMAGE = "timescale/timescaledb:2.21.0-pg16"
+DOCKER_IMAGE = "timescale/timescaledb:2.21.1-pg16"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
 
 
@@ -108,18 +108,6 @@ class TimescaleDB(Database):
 
         return self._connection
 
-    def setup(self) -> None:
-        con = self.connect()
-
-        # only applies to new connections created after this is executed
-        con.execute(text("ALTER DATABASE postgres SET work_mem TO '50MB';"))
-        con.execute(text("ALTER DATABASE postgres SET timescaledb.enable_chunk_skipping to true;"))
-
-        _LOGGER.info("Executed setup commands")
-
-        # maybe not necessary
-        con.commit()
-
     def fetch(
         self,
         query: str,
@@ -138,7 +126,9 @@ class TimescaleDB(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        result = self.connect().execute(text(query.strip().removesuffix(";")))
+        # escape literal ":" to avoid SQLAlchemy interpreting bind params
+        # bind params are not supported in this method
+        result = self.connect().execute(text(query.strip().removesuffix(";").replace(":", r"\:")))
 
         columns = result.keys()
         rows = result.fetchall()
@@ -273,14 +263,24 @@ class TimescaleDB(Database):
         if restart:
             self.restart_event()
 
+    def compress_clickbench_table(self) -> None:
+        conn = self.connect()
+
+        conn.execute(text("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"))
+
+        conn.commit()
+
+        con = self.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze hits"))
+
+    def populate_clickbench(self, restart: bool = True) -> None:
+        super().populate_clickbench(restart=False)
+
+        with self.event_context("compress"):
+            self.compress_clickbench_table()
+
+        if restart:
+            self.restart_event()
+
     def populate_time_series(self, restart: bool = True) -> None:
         raise NotImplementedError
-        # self.create_time_series_tables()
-
-        # super().populate_time_series(restart=False)
-
-        # with self.event_context("compress"):
-        #     self.compress_time_series_tables()
-
-        # if restart:
-        #     self.restart_event()
