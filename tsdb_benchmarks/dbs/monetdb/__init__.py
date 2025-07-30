@@ -29,7 +29,7 @@ class MonetDB(Database):
     @property
     def start(self) -> str:
         (SETTINGS.database_directory / "monetdb").mkdir(exist_ok=True)
-        (SETTINGS.database_directory / "monetdb/data").mkdir(exist_ok=True)
+        (SETTINGS.temporary_directory / "monetdb/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 50000:50000",

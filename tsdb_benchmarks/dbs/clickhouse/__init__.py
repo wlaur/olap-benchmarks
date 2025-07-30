@@ -78,7 +78,7 @@ class Clickhouse(Database):
     @property
     def start(self) -> str:
         (SETTINGS.database_directory / "clickhouse").mkdir(exist_ok=True)
-        (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True)
+        (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 18123:8123 -p 19000:9000",

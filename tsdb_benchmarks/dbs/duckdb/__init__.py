@@ -1,14 +1,25 @@
+import logging
+import uuid
 from collections.abc import Mapping
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import polars as pl
 from duckdb import DuckDBPyConnection
+from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, TableName
 from .. import Database
 
+_LOGGER = logging.getLogger(__name__)
+
+DUCKDB_VERSION = "1.3.2"
+
+assert duckdb_version_runtime == DUCKDB_VERSION
+
 (SETTINGS.database_directory / "duckdb").mkdir(exist_ok=True)
+(SETTINGS.temporary_directory / "duckdb/data").mkdir(exist_ok=True, parents=True)
+
 DUCKDB_CONNECTION_STRING = f"duckdb:///{SETTINGS.database_directory.as_posix()}/duckdb/duck.db"
 
 
@@ -87,6 +98,7 @@ class DuckDB(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        in_memory: bool = True,
     ) -> None:
         con = get_duckdb_connection(self.connect())
 
@@ -97,30 +109,39 @@ class DuckDB(Database):
         assert result is not None
         table_exists = cast(int, result[0]) > 0
 
-        con.register("source", df)
+        if not table_exists:
+            not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
+            primary_keys = [primary_key] if isinstance(primary_key, str) else (primary_key or [])
 
-        if table_exists:
-            con.execute(f'insert into "{table}" select * from source')
-            con.commit()
-            return
+            col_defs: list[str] = []
+            for name, dtype in df.schema.items():
+                duck_type = polars_dtype_to_duckdb(dtype)
+                constraints = []
+                if name in not_null_cols:
+                    constraints.append("not null")
 
-        not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
-        primary_keys = [primary_key] if isinstance(primary_key, str) else (primary_key or [])
+                col_def = f'"{name}" {duck_type} {" ".join(constraints)}'
+                col_defs.append(col_def)
 
-        col_defs: list[str] = []
-        for name, dtype in df.schema.items():
-            duck_type = polars_dtype_to_duckdb(dtype)
-            constraints = []
-            if name in not_null_cols:
-                constraints.append("not null")
+            pk_clause = f", primary key ({', '.join(f'"{pk}"' for pk in primary_keys)})" if primary_keys else ""
+            ddl = f"create table {table} (\n  " + ",\n  ".join(col_defs) + pk_clause + "\n)"
+            con.execute(ddl)
 
-            col_def = f'"{name}" {duck_type} {" ".join(constraints)}'
-            col_defs.append(col_def)
+        if in_memory:
+            con.register("source", df)
+            _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-        pk_clause = f", primary key ({', '.join(f'"{pk}"' for pk in primary_keys)})" if primary_keys else ""
-        ddl = f'create table "{table}" (\n  ' + ",\n  ".join(col_defs) + pk_clause + "\n)"
-        con.execute(ddl)
-        con.execute(f'insert into "{table}" select * from source')
+            con.execute(f"insert into {table} select * from source")
+        else:
+            fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
+            df.write_parquet(fpath)
+            _LOGGER.info(f"Inserting from Parquet dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+
+            try:
+                con.execute(f"insert into {table} select * from '{fpath.as_posix()}'")
+            finally:
+                fpath.unlink()
+
         con.commit()
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
@@ -142,7 +163,7 @@ class DuckDB(Database):
         if not non_key_columns:
             conflict_target = ", ".join(f'"{col}"' for col in primary_keys)
             sql = f"""
-                insert into "{table}"
+                insert into {table}
                 select * from source
                 on conflict ({conflict_target}) do nothing
             """
@@ -155,10 +176,15 @@ class DuckDB(Database):
         conflict_target = ", ".join(f'"{col}"' for col in primary_keys)
 
         sql = f"""
-            insert into "{table}"
+            insert into {table}
             select * from source
             on conflict ({conflict_target}) do update set {set_clause}
         """
 
         con.execute(sql)
         con.commit()
+
+    @property
+    def clickbench_populate_kwargs(self) -> dict[str, Any]:
+        # uses > 40g memory otherwise
+        return {"in_memory": False}
