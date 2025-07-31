@@ -9,8 +9,8 @@ ALTER TABLE
     data_small_wide
 SET
     (
-        timescaledb.compress,
-        timescaledb.compress_orderby = 'time'
+        timescaledb.enable_columnstore = true,
+        timescaledb.orderby = 'time'
     );
 
 SELECT
@@ -24,6 +24,6 @@ ALTER TABLE
     data_large_wide
 SET
     (
-        timescaledb.compress,
-        timescaledb.compress_orderby = 'time'
+        timescaledb.enable_columnstore = true,
+        timescaledb.orderby = 'time'
     );

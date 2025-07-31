@@ -41,14 +41,16 @@ ALTER TABLE
     data_small_eav
 SET
     (
-        timescaledb.compress,
-        timescaledb.compress_segmentby = 'id'
+        timescaledb.enable_columnstore = true,
+        timescaledb.orderby = 'time',
+        timescaledb.segmentby = 'id'
     );
 
 ALTER TABLE
     data_large_eav
 SET
     (
-        timescaledb.compress,
-        timescaledb.compress_segmentby = 'id'
+        timescaledb.enable_columnstore = true,
+        timescaledb.orderby = 'time',
+        timescaledb.segmentby = 'id'
     );
