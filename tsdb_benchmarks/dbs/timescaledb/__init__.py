@@ -2,13 +2,13 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, cast
 
 import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, TableName
+from ...settings import REPO_ROOT, SETTINGS, TableName
 from ...suites.time_series.config import get_time_series_input_files
 from .. import Database
 
@@ -36,14 +36,14 @@ def polars_to_postgres_type(dtype: pl.DataType) -> str:
     elif dtype == pl.Date:
         return "DATE"
     elif isinstance(dtype, pl.Datetime):
-        return "TIMESTAMPTZ"
+        return "TIMESTAMP WITHOUT TIME ZONE"
     else:
         _LOGGER.warning(f"Falling back to type JSONB for Polars dtype {dtype}")
         return "JSONB"
 
 
 def generate_create_table_sql(
-    table: str, df: pl.DataFrame, primary_key: str | list[str] | None = None, not_null: str | list[str] | None = None
+    table: str, schema: pl.Schema, primary_key: str | list[str] | None = None, not_null: str | list[str] | None = None
 ) -> str:
     if not_null is None:
         not_null = []
@@ -52,7 +52,7 @@ def generate_create_table_sql(
         not_null = [not_null]
 
     columns: list[str] = []
-    for name, dtype in zip(df.columns, df.dtypes, strict=True):
+    for name, dtype in schema.items():
         pg_type = polars_to_postgres_type(dtype)
         columns.append(f'"{name}" {pg_type} {"not null" if name in not_null else ""}')
 
@@ -176,17 +176,17 @@ class TimescaleDB(Database):
 
     def create_table(
         self,
-        df: pl.DataFrame,
+        schema: pl.Schema,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
         con = self.connect()
 
-        create_sql = generate_create_table_sql(table, df, primary_key, not_null)
+        create_sql = generate_create_table_sql(table, schema, primary_key, not_null)
         con.execute(text(create_sql))
         con.commit()
-        _LOGGER.info(f"Created table {table} with {len(df.columns):_} columns")
+        _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
     def insert(
         self,
@@ -198,7 +198,7 @@ class TimescaleDB(Database):
         con = self.connect()
 
         if not table_exists(con, table):
-            self.create_table(df, table, primary_key, not_null)
+            self.create_table(df.schema, table, primary_key, not_null)
 
         temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
 
@@ -295,32 +295,28 @@ class TimescaleDB(Database):
             self.restart_event()
 
     def populate_time_series(self, restart: bool = True) -> None:
-        # creates and configures eav tables
-        self.initialize_schema("time_series")
+        # need to define parts of the schema and insert data in a specific order
 
-        con = self.connect()
+        self.execute_schema_file(REPO_ROOT / "tsdb_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
 
-        for table_name, fpath in get_time_series_input_files().items():
+        input_files = get_time_series_input_files()
+
+        # wide tables are created dynamically, eav tables already exist at this point
+        for table_name, fpath in input_files.items():
+            if "eav" in table_name:
+                continue
+
             primary_key = self.get_time_series_primary_key(table_name)
             not_null = self.get_time_series_not_null(table_name)
 
+            schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
+
+            self.create_table(schema, table_name, primary_key, not_null)
+
+        self.execute_schema_file(REPO_ROOT / "tsdb_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
+
+        for table_name, fpath in input_files.items():
             df = pl.read_parquet(fpath)
-
-            # wide tables are created dynamically, eav tables already exist at this point
-            if not table_exists(con, table_name):
-                self.create_table(df, table_name, primary_key, not_null)
-
-            # eav tables are configured in suites/time_series/schemas/timescaledb.sql, wide tables are configured here
-            # TODO: this is a bit confusing
-            if "eav" not in table_name:
-                con.execute(
-                    text(f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '7 days');")
-                )
-                con.execute(
-                    text(f"ALTER TABLE {table_name} SET (timescaledb.compress, timescaledb.compress_orderby = 'time');")
-                )
-
-                con.commit()
 
             with self.event_context(f"insert_{table_name}"):
                 self.insert(

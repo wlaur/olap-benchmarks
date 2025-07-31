@@ -1,5 +1,16 @@
--- wide tables are created dynamically and configured after creation
--- indexes are also created on (id, time) for the eav tables
+-- adapted from settings for clickbench, not sure if these are optimal for this workload
+ALTER DATABASE postgres
+SET
+    timescaledb.enable_chunk_skipping to ON;
+
+ALTER DATABASE postgres
+SET
+    work_mem TO '1GB';
+
+ALTER DATABASE postgres
+SET
+    min_parallel_table_scan_size TO '0';
+
 CREATE TABLE data_small_eav (
     time TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     id INTEGER NOT NULL,
