@@ -9,6 +9,7 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
+from ...suites.time_series.config import get_time_series_input_files
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
@@ -173,6 +174,20 @@ class TimescaleDB(Database):
 
         return df
 
+    def create_table(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        con = self.connect()
+
+        create_sql = generate_create_table_sql(table, df, primary_key, not_null)
+        con.execute(text(create_sql))
+        con.commit()
+        _LOGGER.info(f"Created table {table} with {len(df.columns):_} columns")
+
     def insert(
         self,
         df: pl.DataFrame,
@@ -183,10 +198,7 @@ class TimescaleDB(Database):
         con = self.connect()
 
         if not table_exists(con, table):
-            create_sql = generate_create_table_sql(table, df, primary_key, not_null)
-            con.execute(text(create_sql))
-            con.commit()
-            _LOGGER.info(f"Created table {table} with {len(df.columns):_} columns")
+            self.create_table(df, table, primary_key, not_null)
 
         temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
 
@@ -264,11 +276,11 @@ class TimescaleDB(Database):
             self.restart_event()
 
     def compress_clickbench_table(self) -> None:
-        conn = self.connect()
+        con = self.connect()
 
-        conn.execute(text("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"))
+        con.execute(text("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"))
 
-        conn.commit()
+        con.commit()
 
         con = self.connect(reconnect=True)
         con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze hits"))
@@ -283,4 +295,40 @@ class TimescaleDB(Database):
             self.restart_event()
 
     def populate_time_series(self, restart: bool = True) -> None:
-        raise NotImplementedError
+        # creates and configures eav tables
+        self.initialize_schema("time_series")
+
+        con = self.connect()
+
+        for table_name, fpath in get_time_series_input_files().items():
+            primary_key = self.get_time_series_primary_key(table_name)
+            not_null = self.get_time_series_not_null(table_name)
+
+            df = pl.read_parquet(fpath)
+
+            # wide tables are created dynamically, eav tables already exist at this point
+            if not table_exists(con, table_name):
+                self.create_table(df, table_name, primary_key, not_null)
+
+            # eav tables are configured in suites/time_series/schemas/timescaledb.sql, wide tables are configured here
+            # TODO: this is a bit confusing
+            if "eav" not in table_name:
+                con.execute(
+                    text(f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '7 days');")
+                )
+                con.execute(
+                    text(f"ALTER TABLE {table_name} SET (timescaledb.compress, timescaledb.compress_orderby = 'time');")
+                )
+
+                con.commit()
+
+            with self.event_context(f"insert_{table_name}"):
+                self.insert(
+                    df, table_name, primary_key=primary_key, not_null=not_null, **self.time_series_populate_kwargs
+                )
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+
+        if restart:
+            self.restart_event()
