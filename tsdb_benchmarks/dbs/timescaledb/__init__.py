@@ -294,6 +294,19 @@ class TimescaleDB(Database):
         if restart:
             self.restart_event()
 
+    def compress_time_series_tables(self) -> None:
+        for table_name in get_time_series_input_files():
+            con = self.connect()
+
+            con.execute(text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"))
+
+            con.commit()
+
+            con = self.connect(reconnect=True)
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
+
+            _LOGGER.info(f"Compressed and vacuumed table {table_name}")
+
     def populate_time_series(self, restart: bool = True) -> None:
         # need to define parts of the schema and insert data in a specific order
 
@@ -325,6 +338,9 @@ class TimescaleDB(Database):
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+
+        with self.event_context("compress"):
+            self.compress_time_series_tables()
 
         if restart:
             self.restart_event()

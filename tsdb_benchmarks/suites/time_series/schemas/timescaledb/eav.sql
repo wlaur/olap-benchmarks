@@ -7,10 +7,6 @@ ALTER DATABASE postgres
 SET
     work_mem TO '1GB';
 
-ALTER DATABASE postgres
-SET
-    min_parallel_table_scan_size TO '0';
-
 CREATE TABLE data_small_eav (
     time TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     id INTEGER NOT NULL,
@@ -27,7 +23,7 @@ SELECT
     create_hypertable(
         'data_small_eav',
         'time',
-        chunk_time_interval => INTERVAL '7 days'
+        chunk_time_interval => INTERVAL '1 days'
     );
 
 SELECT
