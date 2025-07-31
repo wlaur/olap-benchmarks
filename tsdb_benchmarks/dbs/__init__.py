@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from queue import Queue
 from time import perf_counter, sleep
 from typing import Any
@@ -89,6 +90,22 @@ class Database(BaseModel, ABC):
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
+    def execute_schema_file(self, fpath: Path) -> None:
+        with (fpath).open() as f:
+            statements = f.read()
+
+        for stmt in statements.split(";"):
+            stmt = stmt.strip()
+
+            if not stmt or all(line.strip().startswith("--") for line in stmt.splitlines()):
+                continue
+
+            # ensure the connection used when initializing the schema is not reused
+            # if we use e.g. ALTER DATABASE, it's important that subsequent queries use a new connection
+            con = self.connect(reconnect=True)
+            con.execute(text(stmt))
+            con.commit()
+
     def initialize_schema(self, suite: SuiteName) -> None:
         fpath = REPO_ROOT / f"tsdb_benchmarks/suites/{suite}/schemas/{self.name}.sql"
 
@@ -96,21 +113,8 @@ class Database(BaseModel, ABC):
             _LOGGER.info(f"Schema definition for {self.name}:{suite} does not exist, skipping...")
             return
 
-        with (fpath).open() as f:
-            statements = f.read()
-
         with self.event_context("schema"):
-            for stmt in statements.split(";"):
-                stmt = stmt.strip()
-
-                if not stmt or all(line.strip().startswith("--") for line in stmt.splitlines()):
-                    continue
-
-                # ensure the connection used when initializing the schema is not reused
-                # if we use e.g. ALTER DATABASE, it's important that subsequent queries use a new connection
-                con = self.connect(reconnect=True)
-                con.execute(text(stmt))
-                con.commit()
+            self.execute_schema_file(fpath)
 
         self.connect(reconnect=True)
         _LOGGER.info(f"Initialized schema for {self.name}:{suite}")
