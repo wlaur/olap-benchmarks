@@ -173,7 +173,7 @@ class Database(BaseModel, ABC):
         return None
 
     def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
-        return ["id", "time"] if "_eav" in table_name else "time"
+        return ["time", "id"] if "_eav" in table_name else "time"
 
     @property
     def time_series_populate_kwargs(self) -> dict[str, Any]:
