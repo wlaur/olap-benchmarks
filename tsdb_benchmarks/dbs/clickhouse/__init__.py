@@ -274,6 +274,8 @@ class Clickhouse(Database):
                     -- an order by clause is equivalent to a primary key (pk is not unique)
                     -- the primary key clause can be omitted (can be used to limit indexes to only one of the sort keys)
                     {order_by_clause}
+                    -- ensure temporary data is cleaned up almost immediately
+                    settings old_parts_lifetime = 5
                     as select
                         {time_col_def}
                         {column_list}

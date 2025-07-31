@@ -28,8 +28,8 @@ DatasetSize = Literal[
 
 
 TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
-    "small": (200_000, 100),
-    "large": (2_000_000, 100),
+    "small": (500_000, 100),
+    "large": (2_000_000, 1_000),
 }
 
 
