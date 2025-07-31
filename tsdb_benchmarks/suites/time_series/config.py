@@ -19,22 +19,17 @@ TIME_SERIES_QUERY_NAMES = {
     "0004_hourly_averages": 5,
 }
 
-METHOD: Literal["process"] = "process"
+""
 
-# TODO: EAV tables take too long and use too much disk space
 DatasetSize = Literal[
     "small",
-    "medium",
     "large",
-    # "huge",
 ]
 
 
 TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "small": (200_000, 100),
-    "medium": (2_000_000, 100),
-    "large": (2_000_000, 500),
-    # "huge": (2_000_000, 1_000),
+    "large": (2_000_000, 100),
 }
 
 
@@ -49,9 +44,9 @@ EAV_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
 
 
 def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl.DataType]]]:
-    return {f"process_{size}_eav": EAV_SCHEMA for size in TIME_SERIES_DATASET_SIZES} | {
-        f"process_{size}_wide": pl.read_parquet_schema(
-            REPO_ROOT / "data/input/time_series" / get_dataset_name("process", "wide", rows, cols)
+    return {f"data_{size}_eav": EAV_SCHEMA for size in TIME_SERIES_DATASET_SIZES} | {
+        f"data_{size}_wide": pl.read_parquet_schema(
+            REPO_ROOT / "data/input/time_series" / get_dataset_name("wide", rows, cols)
         )
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     }
@@ -59,30 +54,12 @@ def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl
 
 def get_time_series_input_files() -> dict[str, Path]:
     return {
-        f"process_{size}_wide": REPO_ROOT / "data/input/time_series" / get_dataset_name("process", "wide", rows, cols)
+        f"data_{size}_wide": REPO_ROOT / "data/input/time_series" / get_dataset_name("wide", rows, cols)
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     } | {
-        f"process_{size}_eav": REPO_ROOT / "data/input/time_series" / get_dataset_name("process", "eav", rows, cols)
+        f"data_{size}_eav": REPO_ROOT / "data/input/time_series" / get_dataset_name("eav", rows, cols)
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     }
-
-
-def generate_random_time_series_data(n_rows: int, n_cols: int) -> pl.DataFrame:
-    end = datetime(2025, 1, 1)
-    start = end - timedelta(minutes=n_rows - 1)
-
-    time = pl.datetime_range(start, end, interval="1m", eager=True, time_unit="ms")
-
-    df = pl.DataFrame({"time": time})
-
-    data = np.random.rand(n_rows, n_cols)
-
-    df = pl.concat(
-        [df, pl.from_numpy(data, schema={f"col_{n}": pl.Float32 for n in range(1, n_cols + 1)}, orient="row")],
-        how="horizontal",
-    )
-
-    return df
 
 
 def generate_time_series_data(n_rows: int, n_cols: int, seed: int = 1) -> pl.DataFrame:
@@ -243,34 +220,29 @@ def write_eav_dataset(fpath: Path, overwrite: bool = False) -> None:
     _LOGGER.info(f"Wrote EAV dataset {eav_fpath.name}")
 
 
-def get_dataset_name(
-    method: Literal["process", "random"], orientation: Literal["wide", "eav"], rows: int, cols: int
-) -> str:
-    return f"{method}_{orientation}_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
+def get_dataset_name(orientation: Literal["wide", "eav"], rows: int, cols: int) -> str:
+    return f"data_{orientation}_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
 
 
 def generate_time_series_datasets(overwrite: bool = False) -> None:
     output_directory = REPO_ROOT / "data/input/time_series"
 
-    fpaths: list[Path] = []
+    file_paths: list[Path] = []
 
     # don't exceed 1_600 columns (max for postgres/timescaledb)
     # TODO: make a separate benchmark for very wide data (only use EAV for timescaledb)
     for rows, cols in TIME_SERIES_DATASET_SIZES.values():
-        fpath = output_directory / get_dataset_name(METHOD, "wide", rows, cols)
-        fpaths.append(fpath)
+        fpath = output_directory / get_dataset_name("wide", rows, cols)
+        file_paths.append(fpath)
 
         if fpath.is_file() and not overwrite:
             continue
 
-        if METHOD == "random":
-            df = generate_random_time_series_data(rows, cols)
-        else:
-            df = generate_time_series_data(rows, cols)
+        df = generate_time_series_data(rows, cols)
 
         df.write_parquet(fpath)
 
         _LOGGER.info(f"Wrote dataset {fpath.name}")
 
-    for fpath in fpaths:
+    for fpath in file_paths:
         write_eav_dataset(fpath, overwrite)

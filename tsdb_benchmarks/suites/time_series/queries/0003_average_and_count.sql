@@ -2,7 +2,7 @@ select
     avg(value),
     count(value)
 from
-    process_large_eav
+    data_large_eav
 where
     id = 235
     and time > '2024-02-02'
