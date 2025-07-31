@@ -3,6 +3,7 @@ import shutil
 import uuid
 from pathlib import Path
 from textwrap import dedent
+from time import perf_counter
 
 import polars as pl
 from sqlalchemy import Connection, text
@@ -75,6 +76,8 @@ def insert(
     create: bool = True,
     commit: bool = True,
 ) -> None:
+    t0 = perf_counter()
+
     if create:
         # NOTE: when inserting into an existing table, the column order and types must match exactly
         # NOTE: using (id, time) primary key or not null for large EAV tables makes insertion orders of magnitude slower
@@ -114,8 +117,14 @@ def insert(
     finally:
         shutil.rmtree(temp_dir)
 
+    _LOGGER.info(
+        f"Inserted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) "
+        f"into table {table} in {perf_counter() - t0:_.2f} seconds"
+    )
+
 
 def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str]) -> None:
+    t0 = perf_counter()
     dest = get_table(table, df.schema)
 
     temp_table_name = f"_temporary_{str(uuid.uuid4())[:4]}"
@@ -152,3 +161,8 @@ def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_k
 
     connection.execute(text(merge_statement))
     connection.commit()
+
+    _LOGGER.info(
+        f"Upserted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) "
+        f"into table {table} in {perf_counter() - t0:_.2f} seconds"
+    )

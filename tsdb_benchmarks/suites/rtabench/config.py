@@ -129,6 +129,7 @@ def convert_rtabench_data_to_parquet(data_dir: Path) -> None:
 
 def download_rtabench_data() -> None:
     output_directory = REPO_ROOT / "data/input/rtabench"
+    output_directory.mkdir(exist_ok=True, parents=True)
 
     asyncio.run(download_rtabench_data_async(output_directory))
 

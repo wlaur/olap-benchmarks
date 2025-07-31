@@ -226,6 +226,7 @@ def get_dataset_name(orientation: Literal["wide", "eav"], rows: int, cols: int) 
 
 def generate_time_series_datasets(overwrite: bool = False) -> None:
     output_directory = REPO_ROOT / "data/input/time_series"
+    output_directory.mkdir(exist_ok=True, parents=True)
 
     file_paths: list[Path] = []
 
@@ -239,7 +240,6 @@ def generate_time_series_datasets(overwrite: bool = False) -> None:
             continue
 
         df = generate_time_series_data(rows, cols)
-
         df.write_parquet(fpath)
 
         _LOGGER.info(f"Wrote dataset {fpath.name}")

@@ -6,6 +6,8 @@ ITERATIONS = 3
 
 
 def download_clickbench() -> None:
+    (SETTINGS.input_data_directory / "clickbench").mkdir(exist_ok=True, parents=True)
+
     # TODO: download https://datasets.clickhouse.com/hits_compatible/hits.parquet and move to data/input/clickbench
     raise NotImplementedError
 
