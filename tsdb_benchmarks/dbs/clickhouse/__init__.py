@@ -330,7 +330,7 @@ class Clickhouse(Database):
 
     @property
     def time_series_fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["time"]}
+        return {"time_columns": ["time", "max(time)"]}
 
     @property
     def clickbench_populate_kwargs(self) -> dict[str, Any]:
