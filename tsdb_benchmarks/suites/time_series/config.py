@@ -13,13 +13,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 TIME_SERIES_QUERY_NAMES = {
-    "0001_select_timestamp": 10,
-    "0002_select_timestamps": 10,
-    "0003_average_and_count": 5,
-    "0004_hourly_averages": 5,
+    n.stem: 5 for n in sorted((REPO_ROOT / "tsdb_benchmarks/suites/time_series/queries").glob("*.sql"))
 }
 
-""
 
 DatasetSize = Literal[
     "small",
@@ -231,7 +227,6 @@ def generate_time_series_datasets(overwrite: bool = False) -> None:
 
     file_paths: list[Path] = []
 
-    # don't exceed 1_600 columns (max for postgres/timescaledb)
     # TODO: make a separate benchmark for very wide data (only use EAV for timescaledb)
     for rows, cols in TIME_SERIES_DATASET_SIZES.values():
         fpath = output_directory / get_dataset_name("wide", rows, cols)

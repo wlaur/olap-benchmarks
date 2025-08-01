@@ -1,12 +1,10 @@
 select
     date_trunc('hour', time) as time,
-    avg(value)
+    avg(process_21) as value
 from
-    data_large_eav
-where
-    id = 221
+    data_small_wide
 group by
-    time
+    date_trunc('hour', time)
 order by
     time
 limit
