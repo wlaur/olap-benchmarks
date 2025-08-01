@@ -213,6 +213,7 @@ def write_eav_dataset(fpath: Path, overwrite: bool = False) -> None:
     df = df.rename(col_id_map)
 
     # boolean is converted to float32 (0.0 and 1.0)
+    # sorted by id, time (this is not optimal for all databases when inserting, can be sorted again if necessary)
     df.unpivot(index="time", variable_name="id", value_name="value").sort("id", "time").with_columns(
         pl.col.id.cast(pl.Int16), pl.col.value.cast(pl.Float32)
     ).sink_parquet(eav_fpath)

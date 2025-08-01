@@ -295,21 +295,25 @@ class TimescaleDB(Database):
             self.restart_event()
 
     def compress_time_series_tables(self) -> None:
+        skip = ["data_large_wide"]
         for table_name in get_time_series_input_files():
-            con = self.connect()
-
-            con.execute(text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"))
-
-            con.commit()
+            if table_name in skip:
+                _LOGGER.warning(f"Skipping compression for {table_name}")
+            else:
+                con = self.connect(reconnect=True)
+                con.execute(
+                    text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i")
+                )
+                con.commit()
+                _LOGGER.info(f"Compressed table {table_name}")
 
             con = self.connect(reconnect=True)
             con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
 
-            _LOGGER.info(f"Compressed and vacuumed table {table_name}")
+            _LOGGER.info(f"Vacuumed table {table_name}")
 
     def populate_time_series(self, restart: bool = True) -> None:
         # need to define parts of the schema and insert data in a specific order
-
         self.execute_schema_file(REPO_ROOT / "tsdb_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
 
         input_files = get_time_series_input_files()
@@ -329,7 +333,12 @@ class TimescaleDB(Database):
         self.execute_schema_file(REPO_ROOT / "tsdb_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
 
         for table_name, fpath in input_files.items():
-            df = pl.read_parquet(fpath)
+            # timescaledb needs input data to be sorted by (time, id), the eav parquet files are sorted by (id, time)
+            sort = ["time", "id"] if "eav" in table_name else ["time"]
+
+            df = pl.scan_parquet(fpath).sort(*sort).collect()
+
+            _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
             with self.event_context(f"insert_{table_name}"):
                 self.insert(
