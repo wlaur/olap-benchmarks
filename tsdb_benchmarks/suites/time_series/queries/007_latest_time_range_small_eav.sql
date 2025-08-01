@@ -1,7 +1,7 @@
 select
-    time
+    distinct time
 from
-    data_large_eav
+    data_small_eav
 order by
     time desc
 limit
