@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Mapping
 from typing import Any, Literal
 
@@ -9,6 +10,8 @@ from .. import Database
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
 from .settings import SETTINGS as MONETDB_SETTINGS
+
+_LOGGER = logging.getLogger(__name__)
 
 # does not seem to be SP1 (is actually Mar2025)
 # MONETDB_IMAGE = "monetdb/monetdb:Mar2025-SP1"
@@ -68,6 +71,8 @@ class MonetDB(Database):
         method: Literal["binary", "pymonetdb"] | None = None,
     ) -> pl.DataFrame:
         method = method or MONETDB_SETTINGS.default_fetch_method
+
+        _LOGGER.info(f"Fetching with {method=}")
 
         if method == "binary":
             return fetch_binary(query, self.connect(), schema)
