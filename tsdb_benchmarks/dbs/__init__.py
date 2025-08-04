@@ -254,7 +254,8 @@ class Database(BaseModel, ABC):
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "
                         f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf (head 100)={df.head(100)}"
+                        f"in {1_000 * (t):_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})\n"
+                        f"df (head 100)={df.head(100)}"
                     )
 
         _LOGGER.info(
