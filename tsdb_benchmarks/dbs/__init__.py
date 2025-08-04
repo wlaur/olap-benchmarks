@@ -28,9 +28,18 @@ RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/rtabench/querie
 TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/time_series/queries"
 
 
+class QueryContext(BaseModel):
+    suite: SuiteName
+    query_name: str
+
+
 class Database(BaseModel, ABC):
     name: DatabaseName
     connection_string: str
+
+    context: QueryContext | None = None
+
+    current_query: str | None = None
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
@@ -82,6 +91,15 @@ class Database(BaseModel, ABC):
         self.event(name, "start")
         yield
         self.event(name, "end")
+
+    @contextmanager
+    def query_context(self, suite: SuiteName, query_name: str) -> Iterator[None]:
+        self.context = QueryContext(suite=suite, query_name=query_name)
+
+        try:
+            yield
+        finally:
+            self.context = None
 
     def restart_event(self) -> None:
         with self.event_context("restart"):
@@ -151,22 +169,24 @@ class Database(BaseModel, ABC):
     def run_rtabench(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
-            query = self.load_rtabench_query(query_name)
+            with self.query_context("rtabench", query_name):
+                query = self.load_rtabench_query(query_name)
 
-            for it in range(1, iterations + 1):
-                with self.event_context(f"query_{query_name}_iteration_{it}"):
-                    t1 = perf_counter()
-                    df = self.fetch(query, **self.rtabench_fetch_kwargs)
-                    t = perf_counter() - t1
+                for it in range(1, iterations + 1):
+                    with self.event_context(f"query_{query_name}_iteration_{it}"):
+                        t1 = perf_counter()
+                        df = self.fetch(query, **self.rtabench_fetch_kwargs)
+                        t = perf_counter() - t1
 
-                # time delta t will not match time at end - time at start exactly, but within a couple of milliseconds
-                # there is a small overhead when the event is sent to the queue
-                # (the actual write to result db happens later)
-                _LOGGER.info(
-                    f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                )
+                    # time delta t will not match time at end - time at start exactly,
+                    # but within a couple of milliseconds
+                    # there is a small overhead when the event is sent to the queue
+                    # (the actual write to result db happens later)
+                    _LOGGER.info(
+                        f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
+                        f"iteration {it:_}/{iterations:_} "
+                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                    )
 
         _LOGGER.info(
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
@@ -221,19 +241,21 @@ class Database(BaseModel, ABC):
     def run_time_series(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
-            query = self.load_time_series_query(query_name)
+            with self.query_context("time_series", query_name):
+                query = self.load_time_series_query(query_name)
+                self.current_query = query_name
 
-            for it in range(1, iterations + 1):
-                with self.event_context(f"query_{query_name}_iteration_{it}"):
-                    t1 = perf_counter()
-                    df = self.fetch(query, **self.time_series_fetch_kwargs)
-                    t = perf_counter() - t1
+                for it in range(1, iterations + 1):
+                    with self.event_context(f"query_{query_name}_iteration_{it}"):
+                        t1 = perf_counter()
+                        df = self.fetch(query, **self.time_series_fetch_kwargs)
+                        t = perf_counter() - t1
 
-                _LOGGER.info(
-                    f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf (head 100)={df.head(100)}"
-                )
+                    _LOGGER.info(
+                        f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "
+                        f"iteration {it:_}/{iterations:_} "
+                        f"in {1_000 * (t):_.2f} ms\ndf (head 100)={df.head(100)}"
+                    )
 
         _LOGGER.info(
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
@@ -279,17 +301,18 @@ class Database(BaseModel, ABC):
         for idx, query in enumerate(queries):
             query_name = f"Q{idx}"
 
-            for it in range(1, iterations + 1):
-                with self.event_context(f"query_{query_name}_iteration_{it}"):
-                    t1 = perf_counter()
-                    df = self.fetch(query, **self.clickbench_fetch_kwargs)
-                    t = perf_counter() - t1
+            with self.query_context("clickbench", query_name):
+                for it in range(1, iterations + 1):
+                    with self.event_context(f"query_{query_name}_iteration_{it}"):
+                        t1 = perf_counter()
+                        df = self.fetch(query, **self.clickbench_fetch_kwargs)
+                        t = perf_counter() - t1
 
-                _LOGGER.info(
-                    f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                )
+                    _LOGGER.info(
+                        f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "
+                        f"iteration {it:_}/{iterations:_} "
+                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                    )
 
         _LOGGER.info(f"Executed {len(queries):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds")
 

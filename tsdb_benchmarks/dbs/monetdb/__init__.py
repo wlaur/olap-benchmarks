@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import Literal
+from typing import Any, Literal
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -103,6 +103,15 @@ class MonetDB(Database):
     def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
         # terrible insert performance if primary key or not null constraints are used for eav tables
         return None if "_eav" in table_name else "time"
+
+    @property
+    def time_series_fetch_kwargs(self) -> dict[str, Any]:
+        assert self.context is not None
+
+        if self.context.suite == "time_series" and self.context.query_name == "023_batch_export_wide":
+            return {"method": "binary"}
+
+        return {}
 
     def run_time_series(self) -> None:
         MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
