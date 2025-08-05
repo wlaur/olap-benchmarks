@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TableName = Annotated[str, "Table name"]
 
-DatabaseName = Literal["monetdb", "clickhouse", "timescaledb", "duckdb"]
+DatabaseName = Literal["monetdb", "clickhouse", "timescaledb", "duckdb", "questdb"]
 SuiteName = Literal["rtabench", "time_series", "clickbench"]
 Operation = Literal["populate", "run"]
 
