@@ -377,6 +377,8 @@ class Database(BaseModel, ABC):
                 self.fetch("select 1")
                 _LOGGER.info(f"Database {self.name} is ready to accept connections")
                 return
+            except NotImplementedError:
+                raise
             except Exception as e:
                 _LOGGER.debug(f"Database not ready yet: {e}")
                 sleep(interval_seconds)

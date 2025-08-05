@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Literal
+from typing import Literal, get_args
 
 from fire import Fire  # type: ignore[import-untyped]
 from setproctitle import setproctitle
@@ -9,6 +9,7 @@ from .dbs import Database
 from .dbs.clickhouse import Clickhouse
 from .dbs.duckdb import DuckDB
 from .dbs.monetdb import MonetDB
+from .dbs.questdb import QuestDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
 from .settings import MAIN_PROCESS_TITLE, DatabaseName, SuiteName, setup_stdout_logging
@@ -23,7 +24,10 @@ DBS: dict[DatabaseName, Database] = {
     "clickhouse": Clickhouse(),
     "timescaledb": TimescaleDB(),
     "duckdb": DuckDB(),
+    "questdb": QuestDB(),
 }
+
+assert set(DBS) == set(get_args(DatabaseName))
 
 setup_stdout_logging()
 

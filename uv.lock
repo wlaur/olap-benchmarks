@@ -1570,6 +1570,15 @@ wheels = [
 ]
 
 [[package]]
+name = "questdb-connect"
+version = "1.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/97/829463e0031797b1de5e7170da28b014f2b2c9fbc225883530efa0dd86f4/questdb_connect-1.1.4.tar.gz", hash = "sha256:0095a745c7a126bb3d38045f0b9f379e265ece7f558846b8a0f802a0405ecc3e", size = 32702, upload-time = "2025-03-10T12:49:51.662Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/0a/fdee4bb27594559449246036ef828d3a3302d92e584c21c26b7e4cce1981/questdb_connect-1.1.4-py3-none-any.whl", hash = "sha256:ccb9cda9c5a5477cdcea719c9c25fa4e7a61d552490ba328dcd439b0cc2b6423", size = 28877, upload-time = "2025-03-10T12:49:50.332Z" },
+]
+
+[[package]]
 name = "referencing"
 version = "0.36.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1901,6 +1910,7 @@ dependencies = [
     { name = "pymonetdb" },
     { name = "pyparsing" },
     { name = "python-dotenv" },
+    { name = "questdb-connect" },
     { name = "setproctitle" },
     { name = "setuptools" },
     { name = "sqlalchemy" },
@@ -1944,6 +1954,7 @@ requires-dist = [
     { name = "pymonetdb", specifier = "==1.8.4" },
     { name = "pyparsing", specifier = ">=3.2.3" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
+    { name = "questdb-connect", specifier = ">=1.1.4" },
     { name = "setproctitle", specifier = ">=1.3.6" },
     { name = "setuptools", specifier = ">=80.9.0" },
     { name = "sqlalchemy", specifier = ">=2.0.41" },
