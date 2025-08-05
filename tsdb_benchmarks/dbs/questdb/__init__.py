@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Literal
 
 import polars as pl
+from questdb.ingress import Protocol, Sender  # type: ignore[import-untyped]
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
@@ -74,15 +75,66 @@ class QuestDB(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        batch_size: int | None = None,
+        method: Literal["sender", "parquet"] = "parquet",
+    ) -> None:
+        if method == "sender":
+            # much slower than read_parquet (serializes of http or similar)
+            self.insert_sender(df, table, primary_key, not_null, batch_size)
+        elif method == "parquet":
+            self.insert_parquet(df, table, primary_key, not_null)
+        else:
+            raise ValueError(f"Unknown method: '{method}'")
+
+    def insert_sender(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+        batch_size: int | None = None,
+    ) -> None:
+        # QuestDB does not support primary keys
+        # TODO: look into DEDUP KEYS
+        # TODO: support not_null
+
+        if batch_size is None:
+            batch_size = 1_000_000 // len(df.columns)
+
+        df_pd = df.with_columns(pl.selectors.datetime().cast(pl.Datetime("ns"))).to_pandas(
+            use_pyarrow_extension_array=False
+        )
+        num_rows = len(df_pd)
+        num_batches = (num_rows + batch_size - 1) // batch_size
+        _LOGGER.info(
+            f"Inserting {num_rows:_} rows into '{table}' in {num_batches:_} batches (batch size: {batch_size:_})"
+        )
+
+        with Sender(Protocol.Http, "localhost", 9000) as sender:
+            for i, start in enumerate(range(0, num_rows, batch_size)):
+                end = min(start + batch_size, num_rows)
+                batch_df = df_pd.iloc[start:end]
+
+                sender.dataframe(batch_df, table_name=table, at="time")
+
+                if i % 10 == 0 or i == num_batches - 1:
+                    _LOGGER.info(f"Batch {i + 1:_}/{num_batches:_}: inserted rows {start:_} to {end - 1:_}")
+
+                sender.flush()
+
+        _LOGGER.info(f"Finished inserting into '{table}' ({num_rows:_} rows total)")
+
+    def insert_parquet(
+        self,
+        df: pl.DataFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
     ) -> None:
         parquet_fname = f"{table}_{uuid.uuid4().hex}.parquet"
 
         parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname
         df.write_parquet(parquet_fpath)
-
-        # QuestDB does not support primary keys
-        # TODO: look into DEDUP KEYS
-        # TODO: support not_null
 
         try:
             con = self.connect()
