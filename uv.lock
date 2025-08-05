@@ -1570,6 +1570,33 @@ wheels = [
 ]
 
 [[package]]
+name = "questdb"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ae/cc/b9a0a93ffc513c078f4dc93be835f09d87a140f1e8f3594e6bad757bef96/questdb-3.0.0.tar.gz", hash = "sha256:162413c36284a1c5b3805640b042babaa8590ba503976f81927efa2f8befb9dd", size = 30518964, upload-time = "2025-07-07T17:27:05.72Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/31/030f330e2e4cfd48b0c1c35f96f942bd8d989564bdef85b6e40414c8ff11/questdb-3.0.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:9f59ec6c8fac6d3cb343dc9edcd09e67c1bc79971cbc0ba5eced667acd6fb335", size = 3045459, upload-time = "2025-07-07T17:26:14.068Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/7e/62f85bfbd2953c51e35829e0852413ea3ca406d66605d6dd7834f1426288/questdb-3.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:2f7009fe441917cbd4cee1d1a488f40d8a528552dce387f4f43108d69ccfb48e", size = 3130293, upload-time = "2025-07-07T17:26:15.792Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/1b/ded58965b4e207f2a79ea53708551995de0768e4c23bae1ee343ce9bb9ce/questdb-3.0.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e1e7baf6f2dd96f43e08c335cc343ed5ae11c5ff8e90d3f33da1a531eab61a20", size = 5440156, upload-time = "2025-07-07T17:26:17.83Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/70/d392dba1f2634d9b9d6e53ff987dd1cce615204fec55705bdb43bd28be21/questdb-3.0.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:7bbf02a6be42743f98d8093fe3f9bdc8036a9bf24d50d8d2a0005b4989b55e9d", size = 5822885, upload-time = "2025-07-07T17:26:20.179Z" },
+    { url = "https://files.pythonhosted.org/packages/37/2e/2381c8c7d3da49789474d303438dc79cb657b85025131cc58111098f626f/questdb-3.0.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:92112b9dd0748f5e542b0f23842829b822a800fd50c4c263990156017f23edd1", size = 5458813, upload-time = "2025-07-07T17:26:22.045Z" },
+    { url = "https://files.pythonhosted.org/packages/92/9a/13792d95eb131edd086929e69070b630a8ee3fb3fd301c6e69d67db2140d/questdb-3.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:263dea4245cd72b1d0192bfeb54b384ee3a6b2627ef0bbf739e933f8550548e7", size = 5849751, upload-time = "2025-07-07T17:26:23.575Z" },
+    { url = "https://files.pythonhosted.org/packages/37/fd/a4a79043841340a387408d2c0fc2528f4952b1311f37881f96d451bb6fbb/questdb-3.0.0-cp312-cp312-win32.whl", hash = "sha256:de062bd8c7a3d58426666711948b818e944fda317deb1f8a1a2b7245573a745f", size = 1646021, upload-time = "2025-07-07T17:26:25.048Z" },
+    { url = "https://files.pythonhosted.org/packages/38/a7/622043056afa59972653fba488e2546a341d16a57ed45ce0e9654f77158e/questdb-3.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:77dfa9fb077bfe0638791aff8439ad812b0fc014b342f21013ef8baf40fe48a3", size = 1926763, upload-time = "2025-07-07T17:26:27.002Z" },
+    { url = "https://files.pythonhosted.org/packages/81/22/6e50c3a0edae9cf0eb6214bb225ab96ea87045ae6581d64370c1df32cb0a/questdb-3.0.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:8607de9d4d2dad266419840750e61e39c5ef9ae23a5fe7c50872274b77948bd1", size = 3044271, upload-time = "2025-07-07T17:26:30.301Z" },
+    { url = "https://files.pythonhosted.org/packages/95/7a/1b180e57b99cfe274bcc081cfadcdc3ae69feffdc26bbfa053af47074044/questdb-3.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:24103d0b45f9ee24b29ee8fe8c59861370a41f4f96c729d9c35fb98ce2532398", size = 3130319, upload-time = "2025-07-07T17:26:31.716Z" },
+    { url = "https://files.pythonhosted.org/packages/74/d7/6d6bcec19bcb1dbc0a900a66a330f4c1dc43028cb74795f9b697e5e5e379/questdb-3.0.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:18e96d6680f76e3cb6bfbff14716d93312107e21327e958a16ab25901b7a8cfc", size = 5430948, upload-time = "2025-07-07T17:26:33.173Z" },
+    { url = "https://files.pythonhosted.org/packages/24/13/5623766b3e3a13de168a3639aa63e1c7740fd92c9f29df6cf7a8b032a216/questdb-3.0.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:390e8ea76becb175785de005d69bcec2922a77bdc69314fc0737197106979e6f", size = 5819218, upload-time = "2025-07-07T17:26:34.731Z" },
+    { url = "https://files.pythonhosted.org/packages/59/34/509dfe55bfbe73f8ae1d16e8d8aa739708f3d03f44eb73c7fdf744279388/questdb-3.0.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:6c89248b5b958f916b929be058f3fd6e5b2d0b8ce97e1d3cf176cd16b1b209ec", size = 5456633, upload-time = "2025-07-07T17:26:37.056Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/ce/386a46dc36d50af9c34ec770237aaf36c667a5c0d49224362fe7ba3693b8/questdb-3.0.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:953bad826cdf440278cc7949e148f1a8716b642dfbdd07e699c6d135afac2059", size = 5848176, upload-time = "2025-07-07T17:26:38.617Z" },
+    { url = "https://files.pythonhosted.org/packages/79/08/45f03c81a0f69c94212ff80c1b215ccf7744666790d382d51e124337c061/questdb-3.0.0-cp313-cp313-win32.whl", hash = "sha256:3cc9dee77eaaaed319e2352811f6bd3523fe588724ed3be0153ef42ba877cfe5", size = 1645537, upload-time = "2025-07-07T17:26:40.022Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/f1/8026540bd772b70d4286d05b0c5705c102e1c7926a377a7b7186253a4584/questdb-3.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:b01ee4e872eb70f627f48d444d6e7277e10a55d3c54565012ed4aec9fe173962", size = 1927577, upload-time = "2025-07-07T17:26:41.246Z" },
+]
+
+[[package]]
 name = "questdb-connect"
 version = "1.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1910,6 +1937,7 @@ dependencies = [
     { name = "pymonetdb" },
     { name = "pyparsing" },
     { name = "python-dotenv" },
+    { name = "questdb" },
     { name = "questdb-connect" },
     { name = "setproctitle" },
     { name = "setuptools" },
@@ -1954,6 +1982,7 @@ requires-dist = [
     { name = "pymonetdb", specifier = "==1.8.4" },
     { name = "pyparsing", specifier = ">=3.2.3" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
+    { name = "questdb", specifier = ">=3.0.0" },
     { name = "questdb-connect", specifier = ">=1.1.4" },
     { name = "setproctitle", specifier = ">=1.3.6" },
     { name = "setuptools", specifier = ">=80.9.0" },
