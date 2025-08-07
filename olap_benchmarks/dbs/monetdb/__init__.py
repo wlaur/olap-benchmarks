@@ -113,7 +113,7 @@ class MonetDB(Database):
     def time_series_fetch_kwargs(self) -> dict[str, Any]:
         assert self.context is not None
 
-        if self.context.suite == "time_series" and self.context.query_name == "023_batch_export_wide":
+        if self.context.suite == "time_series" and "batch_export" in self.context.query_name:
             return {"method": "binary"}
 
         return {}
