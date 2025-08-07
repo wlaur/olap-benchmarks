@@ -1,15 +1,12 @@
--- each case only contains a single value, so sum/sum/any_value are equivalent
--- which is fastest depends on the db
--- this is only true when fetching raw data, when downsampling we must use avg
 select
     time,
-    avg(
+    any_value(
         case
             when id = 371 then value
         end
     ) as value_1,
     cast(
-        avg(
+        any_value(
             cast(
                 case
                     when id = 364 then value
@@ -17,22 +14,22 @@ select
             )
         ) as int
     ) as value_2,
-    avg(
+    any_value(
         case
             when id = 407 then value
         end
     ) as value_3,
-    avg(
+    any_value(
         case
             when id = 861 then value
         end
     ) as value_4,
-    avg(
+    any_value(
         case
             when id = 984 then value
         end
     ) as value_5,
-    avg(
+    any_value(
         case
             when id = 830 then value
         end
