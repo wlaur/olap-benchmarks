@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 TIME_SERIES_QUERY_NAMES = {
-    n.stem: 5 for n in sorted((REPO_ROOT / "tsdb_benchmarks/suites/time_series/queries").glob("*.sql"))
+    n.stem: 5 for n in sorted((REPO_ROOT / "olap_benchmarks/suites/time_series/queries").glob("*.sql"))
 }
 
 

@@ -314,7 +314,7 @@ class TimescaleDB(Database):
 
     def populate_time_series(self, restart: bool = True) -> None:
         # need to define parts of the schema and insert data in a specific order
-        self.execute_schema_file(REPO_ROOT / "tsdb_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
+        self.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
 
         input_files = get_time_series_input_files()
 
@@ -330,7 +330,7 @@ class TimescaleDB(Database):
 
             self.create_table(schema, table_name, primary_key, not_null)
 
-        self.execute_schema_file(REPO_ROOT / "tsdb_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
+        self.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
 
         for table_name, fpath in input_files.items():
             # timescaledb needs input data to be sorted by (time, id), the eav parquet files are sorted by (id, time)
