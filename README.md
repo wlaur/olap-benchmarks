@@ -1,3 +1,3 @@
-# tsdb-benchmarks
+# olap-benchmarks
 
-> Time series database benchmarks
+> OLAP database benchmarks
