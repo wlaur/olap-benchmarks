@@ -142,7 +142,7 @@ def get_directory_size_mb(path: Path) -> int:
             break
 
         # can fail if the db is deleting a file a the exact same instant, e.g. with clickhouse
-        # du: /Users/williamlauren/repos/tsdb-benchmarks/data/dbs_time_series\
+        # du: /Users/williamlauren/repos/olap-benchmarks/data/dbs_time_series\
         # /clickhouse/store/bb1/bb1e5c5b-913d-4009-85a8-c015e07669a3/tmp_insert_all_304_304_0: No such file or directory
         except subprocess.CalledProcessError as e:
             _LOGGER.warning(f"Call to du failed: {e}, retrying in 1 second...")

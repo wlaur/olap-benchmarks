@@ -24,8 +24,8 @@ from ..suites.time_series.config import TIME_SERIES_QUERY_NAMES, get_time_series
 _LOGGER = logging.getLogger(__name__)
 
 
-RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/rtabench/queries"
-TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "tsdb_benchmarks/suites/time_series/queries"
+RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
+TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series/queries"
 
 
 class QueryContext(BaseModel):
@@ -125,7 +125,7 @@ class Database(BaseModel, ABC):
             con.commit()
 
     def initialize_schema(self, suite: SuiteName) -> None:
-        fpath = REPO_ROOT / f"tsdb_benchmarks/suites/{suite}/schemas/{self.name}.sql"
+        fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite}/schemas/{self.name}.sql"
 
         if not fpath.is_file():
             _LOGGER.info(f"Schema definition for {self.name}:{suite} does not exist, skipping...")
@@ -296,7 +296,7 @@ class Database(BaseModel, ABC):
         iterations = CLICKBENCH_ITERATIONS
 
         # NOTE: clickbench query files should not be formatted, need to have one query per line
-        with (REPO_ROOT / f"tsdb_benchmarks/suites/clickbench/queries/{self.name}.sql").open() as f:
+        with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.name}.sql").open() as f:
             queries = f.readlines()
 
         for idx, query in enumerate(queries):

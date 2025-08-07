@@ -30,7 +30,7 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
     conn = duckdb.connect(db_path)
     _LOGGER.info(f"Connected to results database at {db_path}")
 
-    with (REPO_ROOT / "tsdb_benchmarks/metrics/schema.sql").open() as f:
+    with (REPO_ROOT / "olap_benchmarks/metrics/schema.sql").open() as f:
         conn.execute(f.read())
 
     while True:

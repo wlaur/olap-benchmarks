@@ -16,7 +16,7 @@ Operation = Literal["populate", "run"]
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 
-MAIN_PROCESS_TITLE = "tsdb-benchmark-main"
+MAIN_PROCESS_TITLE = "olap-benchmarks-main"
 
 
 class Settings(BaseSettings):
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_prefix="TSDB_BENCHMARKS_",
+        env_prefix="OLAP_BENCHMARKS_",
         extra="ignore",
     )
 
