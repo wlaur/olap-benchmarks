@@ -101,6 +101,9 @@ class Database(BaseModel, ABC):
         finally:
             self.context = None
 
+    def include_query(self, suite: SuiteName, query_name: str) -> bool:
+        return True
+
     def restart_event(self) -> None:
         with self.event_context("restart"):
             _LOGGER.info(f"Restarting service {self.name}")
@@ -169,6 +172,9 @@ class Database(BaseModel, ABC):
     def run_rtabench(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
+            if not self.include_query("rtabench", query_name):
+                continue
+
             with self.query_context("rtabench", query_name):
                 query = self.load_rtabench_query(query_name)
 
@@ -241,6 +247,9 @@ class Database(BaseModel, ABC):
     def run_time_series(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
+            if not self.include_query("time_series", query_name):
+                continue
+
             with self.query_context("time_series", query_name):
                 query = self.load_time_series_query(query_name)
                 self.current_query = query_name
@@ -301,6 +310,9 @@ class Database(BaseModel, ABC):
 
         for idx, query in enumerate(queries):
             query_name = f"Q{idx}"
+
+            if not self.include_query("clickbench", query_name):
+                continue
 
             with self.query_context("clickbench", query_name):
                 for it in range(1, iterations + 1):
