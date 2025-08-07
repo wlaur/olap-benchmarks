@@ -9,6 +9,7 @@ from .dbs import Database
 from .dbs.clickhouse import Clickhouse
 from .dbs.duckdb import DuckDB
 from .dbs.monetdb import MonetDB
+from .dbs.postgres import Postgres
 from .dbs.questdb import QuestDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
@@ -25,6 +26,7 @@ DBS: dict[DatabaseName, Database] = {
     "timescaledb": TimescaleDB(),
     "duckdb": DuckDB(),
     "questdb": QuestDB(),
+    "postgres": Postgres(),
 }
 
 assert set(DBS) == set(get_args(DatabaseName))
