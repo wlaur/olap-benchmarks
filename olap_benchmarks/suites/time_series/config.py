@@ -306,7 +306,6 @@ class TimeSeries(BenchmarkSuite):
 
             with self.db.query_context("time_series", query_name):
                 query = self.load_time_series_query(query_name)
-                self.current_query = query_name
 
                 for it in range(1, iterations + 1):
                     with self.db.event_context(f"query_{query_name}_iteration_{it}"):
