@@ -172,7 +172,7 @@ class RTABench(BenchmarkSuite):
         return {}
 
     def load_rtabench_query(self, query_name: str) -> str:
-        with (RTABENCH_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql").open() as f:
+        with (RTABENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql").open() as f:
             return f.read()
 
     def include_query(self, query_name: str) -> bool:

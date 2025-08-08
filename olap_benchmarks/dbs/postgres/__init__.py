@@ -9,6 +9,7 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
+from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from .. import Database
 
@@ -78,6 +79,26 @@ def table_exists(connection: Connection, table: str) -> bool:
     cursor.execute("SELECT to_regclass(%s);", (f'public."{table}"',))
     result = cursor.fetchone()
     return result[0] is not None  # type: ignore[index]
+
+
+class PostgresRTABench(RTABench):
+    def index_tables(self) -> None:
+        con = self.db.connect()
+
+        con.execute(text("CREATE INDEX orders_customer_id_index ON orders (customer_id);"))
+        con.execute(text("CREATE INDEX order_events_order_id_index ON order_events (order_id);"))
+        con.execute(text("CREATE INDEX order_events_event_type_index ON order_events (event_type);"))
+
+        con.commit()
+
+    def populate(self, restart: bool = True) -> None:
+        super().populate(restart=False)
+
+        with self.db.event_context("index"):
+            self.index_tables()
+
+        if restart:
+            self.db.restart_event()
 
 
 class PostgresTimeSeries(TimeSeries):
@@ -284,6 +305,10 @@ class Postgres(Database):
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
+
+    @property
+    def rtabench(self) -> PostgresRTABench:
+        return PostgresRTABench(db=self)
 
     @property
     def time_series(self) -> PostgresTimeSeries:
