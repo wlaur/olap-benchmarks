@@ -82,6 +82,8 @@ class QuestDB(Database):
         batch_size: int | None = None,
         method: Literal["sender", "parquet"] = "parquet",
     ) -> None:
+        df = df.with_columns(pl.selectors.decimal().cast(pl.Float64))
+
         if method == "sender":
             # much slower than read_parquet (serializes of http or similar)
             self.insert_sender(df, table, primary_key, not_null, batch_size)
