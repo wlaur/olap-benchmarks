@@ -2,14 +2,18 @@ import logging
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal, get_args
+from time import perf_counter
+from typing import Any, Literal, get_args
 
 import numpy as np
 import polars as pl
 
-from ...settings import REPO_ROOT
+from ...settings import REPO_ROOT, TableName
+from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
+
+TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series/queries"
 
 
 TIME_SERIES_QUERY_NAMES = {
@@ -242,3 +246,82 @@ def generate_time_series_datasets(overwrite: bool = False) -> None:
 
     for fpath in file_paths:
         write_eav_dataset(fpath, overwrite)
+
+
+class TimeSeries(BenchmarkSuite):
+    name: Literal["time_series"] = "time_series"
+
+    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
+        # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
+        return None
+
+    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
+        return ["time", "id"] if "_eav" in table_name else "time"
+
+    @property
+    def populate_kwargs(self) -> dict[str, Any]:
+        return {}
+
+    def populate(self, restart: bool = True) -> None:
+        self.db.initialize_schema("time_series")
+
+        for table_name, fpath in get_time_series_input_files().items():
+            primary_key = self.get_primary_key(table_name)
+            not_null = self.get_not_null(table_name)
+
+            df = pl.read_parquet(fpath)
+
+            with self.db.event_context(f"insert_{table_name}"):
+                self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+
+        # restart db to ensure data is not kept in-memory by the db, and also
+        # ensure that WAL is processed etc...
+        if restart:
+            self.db.restart_event()
+
+    def load_time_series_query(self, query_name: str) -> str:
+        db_specific = TIME_SERIES_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql"
+        common = TIME_SERIES_QUERIES_DIRECTORY / f"{query_name}.sql"
+
+        sql_source = db_specific if db_specific.is_file() else common
+
+        with (sql_source).open() as f:
+            return f.read()
+
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {}
+
+    def include_query(self, query_name: str) -> bool:
+        return True
+
+    def run(self) -> None:
+        t0 = perf_counter()
+        for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
+            if not self.include_query(query_name):
+                continue
+
+            with self.db.query_context("time_series", query_name):
+                query = self.load_time_series_query(query_name)
+                self.current_query = query_name
+
+                for it in range(1, iterations + 1):
+                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
+                        t1 = perf_counter()
+                        df = self.db.fetch(query, **self.fetch_kwargs)
+                        t = perf_counter() - t1
+
+                    _LOGGER.info(
+                        f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "
+                        f"iteration {it:_}/{iterations:_} "
+                        f"in {1_000 * (t):_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})\n"
+                        f"df (head 100)={df.head(100)}"
+                    )
+
+        _LOGGER.info(
+            f"Executed {len(TIME_SERIES_QUERY_NAMES):_} queries "
+            f"(with repetitions) in {perf_counter() - t0:_.2f} seconds"
+        )

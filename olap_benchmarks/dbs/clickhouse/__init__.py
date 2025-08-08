@@ -15,11 +15,16 @@ from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, TableName
+from ...suites.clickbench.config import Clickbench
+from ...suites.rtabench.config import RTABench
+from ...suites.time_series.config import TimeSeries
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-DOCKER_IMAGE = "clickhouse:25.6.3.116-jammy"
+VERSION = "25.6.3.116"
+
+DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
 CLICKHOUSE_CONNECTION_STRING = "clickhouse://user:password@localhost:18123/default"
 
@@ -69,8 +74,44 @@ def get_clickhouse_client() -> ClickhouseClient:
     )
 
 
+class ClickHouseRTABench(RTABench):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["hour", "day"]}
+
+
+class ClickhouseClickbench(Clickbench):
+    db: "Clickhouse"
+
+    @property
+    def populate_kwargs(self) -> dict[str, Any]:
+        # same number of partitions as the official clickbench insert
+        return {"partitions": 100}
+
+    def optimize_clickbench_table(self) -> None:
+        # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
+        self.db.run_sql("optimize table hits")
+
+    def populate_clickbench(self, restart: bool = True) -> None:
+        super().populate(restart=False)
+
+        with self.db.event_context("optimize"):
+            self.optimize_clickbench_table()
+
+        if restart:
+            self.db.restart_event()
+
+
+class ClickhouseTimeseries(TimeSeries):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["time", "max(time)"]}
+
+
 class Clickhouse(Database):
     name: Literal["clickhouse"] = "clickhouse"
+    version: str = VERSION
+
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
 
     _clickhouse_client: clickhouse_connect.driver.client.Client | None = None
@@ -325,27 +366,13 @@ class Clickhouse(Database):
             self._cleanup_temporary_parquet(temp_parquet_path)
 
     @property
-    def rtabench_fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["hour", "day"]}
+    def rtabench(self) -> ClickHouseRTABench:
+        return ClickHouseRTABench(db=self)
 
     @property
-    def time_series_fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["time", "max(time)"]}
+    def clickbench(self) -> ClickhouseClickbench:
+        return ClickhouseClickbench(db=self)
 
     @property
-    def clickbench_populate_kwargs(self) -> dict[str, Any]:
-        # same number of partitions as the official clickbench insert
-        return {"partitions": 100}
-
-    def optimize_clickbench_table(self) -> None:
-        # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
-        self.run_sql("optimize table hits")
-
-    def populate_clickbench(self, restart: bool = True) -> None:
-        super().populate_clickbench(restart=False)
-
-        with self.event_context("optimize"):
-            self.optimize_clickbench_table()
-
-        if restart:
-            self.restart_event()
+    def time_series(self) -> ClickhouseTimeseries:
+        return ClickhouseTimeseries(db=self)

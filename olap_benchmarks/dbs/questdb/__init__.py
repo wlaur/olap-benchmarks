@@ -12,11 +12,15 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-DOCKER_IMAGE = "questdb/questdb:9.0.1-rhel"
+VERSION = "9.0.1"
+
+DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 
 
 class QuestDB(Database):
     name: Literal["questdb"] = "questdb"
+    version: str = VERSION
+
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 
     @property

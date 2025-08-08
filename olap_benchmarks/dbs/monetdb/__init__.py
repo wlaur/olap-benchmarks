@@ -6,12 +6,15 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
+from ...suites.time_series.config import TimeSeries
 from .. import Database
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
 from .settings import SETTINGS as MONETDB_SETTINGS
 
 _LOGGER = logging.getLogger(__name__)
+
+VERSION = "Mar2025-SP1"
 
 # does not seem to be SP1 (is actually Mar2025)
 # MONETDB_IMAGE = "monetdb/monetdb:Mar2025-SP1"
@@ -20,13 +23,30 @@ _LOGGER = logging.getLogger(__name__)
 # with
 # docker build -t monetdb-local:Mar2025-SP1 -f ubuntu.dockerfile \
 # --platform linux/amd64 --build-arg BRANCH=Mar2025_SP1_release .
-DOCKER_IMAGE = "monetdb-local:Mar2025-SP1"
+DOCKER_IMAGE = f"monetdb-local:{VERSION}"
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
 
+class MonetDBTimeSeries(TimeSeries):
+    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
+        # terrible insert performance if primary key or not null constraints are used for eav tables
+        return None if "_eav" in table_name else "time"
+
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        assert self.db.context is not None
+
+        if "batch_export" in self.db.context.query_name:
+            return {"method": "binary"}
+
+        return {}
+
+
 class MonetDB(Database):
     name: Literal["monetdb"] = "monetdb"
+    version: str = VERSION
+
     connection_string: str = MONETDB_CONNECTION_STRING
 
     @property
@@ -98,32 +118,6 @@ class MonetDB(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
-    def run_rtabench(self) -> None:
-        # RTA bench has heavy queries that do not return much data, avoid using binary
-        # fetch since this emits a "... limit 1" query to determine the result schema
-        MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
-
-        return super().run_rtabench()
-
-    def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
-        # terrible insert performance if primary key or not null constraints are used for eav tables
-        return None if "_eav" in table_name else "time"
-
     @property
-    def time_series_fetch_kwargs(self) -> dict[str, Any]:
-        assert self.context is not None
-
-        if self.context.suite == "time_series" and "batch_export" in self.context.query_name:
-            return {"method": "binary"}
-
-        return {}
-
-    def run_time_series(self) -> None:
-        MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
-
-        return super().run_time_series()
-
-    def run_clickbench(self) -> None:
-        MONETDB_SETTINGS.default_fetch_method = "pymonetdb"
-
-        return super().run_clickbench()
+    def time_series(self) -> MonetDBTimeSeries:
+        return MonetDBTimeSeries(db=self)

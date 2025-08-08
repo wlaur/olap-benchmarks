@@ -9,13 +9,14 @@ from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, TableName
+from ...suites.clickbench.config import Clickbench
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-DUCKDB_VERSION = "1.3.2"
+VERSION = "1.3.2"
 
-assert duckdb_version_runtime == DUCKDB_VERSION
+assert duckdb_version_runtime == VERSION
 
 (SETTINGS.database_directory / "duckdb").mkdir(exist_ok=True)
 (SETTINGS.temporary_directory / "duckdb/data").mkdir(exist_ok=True, parents=True)
@@ -56,8 +57,17 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
 
 
+class DuckDBClickbench(Clickbench):
+    @property
+    def populate_kwargs(self) -> dict[str, Any]:
+        # uses > 40g memory otherwise
+        return {"in_memory": False}
+
+
 class DuckDB(Database):
     name: Literal["duckdb"] = "duckdb"
+    version: str = VERSION
+
     connection_string: str = DUCKDB_CONNECTION_STRING
 
     # in-process, no docker commands necessary
@@ -185,6 +195,5 @@ class DuckDB(Database):
         con.commit()
 
     @property
-    def clickbench_populate_kwargs(self) -> dict[str, Any]:
-        # uses > 40g memory otherwise
-        return {"in_memory": False}
+    def clickbench(self) -> DuckDBClickbench:
+        return DuckDBClickbench(db=self)

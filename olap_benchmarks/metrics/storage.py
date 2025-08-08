@@ -17,7 +17,7 @@ EventType = Literal["start", "end"]
 MessageType = Literal["insert_benchmark", "finish_benchmark", "insert_metric", "insert_event", "debug"]
 
 
-class WriterMessage(TypedDict, total=False):
+class WriterMessage(TypedDict):
     type: MessageType
     args: list[Any]
 
