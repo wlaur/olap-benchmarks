@@ -2,11 +2,16 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+from time import perf_counter
+from typing import Any, Literal
 
 import httpx
 import polars as pl
 
-from ...settings import REPO_ROOT
+from ...settings import REPO_ROOT, SETTINGS
+from .. import BenchmarkSuite
+
+RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -136,3 +141,68 @@ def download_rtabench_data() -> None:
     # convert to Parquet, size goes from 22 GB to 3.8 GB
     # benchmark assumes Parquet inputs for all batch data
     convert_rtabench_data_to_parquet(output_directory)
+
+
+class RTABench(BenchmarkSuite):
+    name: Literal["rtabench"] = "rtabench"
+
+    @property
+    def populate_kwargs(self) -> dict[str, Any]:
+        return {}
+
+    def populate(self, restart: bool = True) -> None:
+        self.db.initialize_schema("rtabench")
+
+        for table_name in RTABENCH_SCHEMAS:
+            df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+
+            with self.db.event_context(f"insert_{table_name}"):
+                self.db.insert(df, table_name, **self.populate_kwargs)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all rtabench tables for {self.name}")
+
+        # restart db to ensure data is not kept in-memory by the db, and also
+        # ensure that WAL is processed etc...
+        if restart:
+            self.db.restart_event()
+
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {}
+
+    def load_rtabench_query(self, query_name: str) -> str:
+        with (RTABENCH_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql").open() as f:
+            return f.read()
+
+    def include_query(self, query_name: str) -> bool:
+        return True
+
+    def run(self) -> None:
+        t0 = perf_counter()
+        for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
+            if not self.include_query(query_name):
+                continue
+
+            with self.db.query_context(self.name, query_name):
+                query = self.load_rtabench_query(query_name)
+
+                for it in range(1, iterations + 1):
+                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
+                        t1 = perf_counter()
+                        df = self.db.fetch(query, **self.fetch_kwargs)
+                        t = perf_counter() - t1
+
+                    # time delta t will not match time at end - time at start exactly,
+                    # but within a couple of milliseconds
+                    # there is a small overhead when the event is sent to the queue
+                    # (the actual write to result db happens later)
+                    _LOGGER.info(
+                        f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
+                        f"iteration {it:_}/{iterations:_} "
+                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                    )
+
+        _LOGGER.info(
+            f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
+        )

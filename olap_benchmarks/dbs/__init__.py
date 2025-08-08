@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from queue import Queue
 from time import perf_counter, sleep
-from typing import Any
+from typing import TYPE_CHECKING
 
 import polars as pl
 from pydantic import BaseModel
@@ -16,16 +18,11 @@ from sqlalchemy import Connection, text
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import EventType, Storage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
-from ..suites.clickbench.config import ITERATIONS as CLICKBENCH_ITERATIONS
-from ..suites.clickbench.config import load_clickbench_dataset
-from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABENCH_SCHEMAS
-from ..suites.time_series.config import TIME_SERIES_QUERY_NAMES, get_time_series_input_files
+
+if TYPE_CHECKING:
+    from ..suites import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
-
-
-RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
-TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series/queries"
 
 
 class QueryContext(BaseModel):
@@ -35,11 +32,11 @@ class QueryContext(BaseModel):
 
 class Database(BaseModel, ABC):
     name: DatabaseName
+    version: str
+
     connection_string: str
 
     context: QueryContext | None = None
-
-    current_query: str | None = None
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
@@ -96,13 +93,9 @@ class Database(BaseModel, ABC):
     def query_context(self, suite: SuiteName, query_name: str) -> Iterator[None]:
         self.context = QueryContext(suite=suite, query_name=query_name)
 
-        try:
-            yield
-        finally:
-            self.context = None
+        yield
 
-    def include_query(self, suite: SuiteName, query_name: str) -> bool:
-        return True
+        self.context = None
 
     def restart_event(self) -> None:
         with self.event_context("restart"):
@@ -139,236 +132,6 @@ class Database(BaseModel, ABC):
 
         self.connect(reconnect=True)
         _LOGGER.info(f"Initialized schema for {self.name}:{suite}")
-
-    @property
-    def rtabench_populate_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def populate_rtabench(self, restart: bool = True) -> None:
-        self.initialize_schema("rtabench")
-
-        for table_name in RTABENCH_SCHEMAS:
-            df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
-
-            with self.event_context(f"insert_{table_name}"):
-                self.insert(df, table_name, **self.rtabench_populate_kwargs)
-                _LOGGER.info(f"Inserted {table_name} for {self.name}")
-
-        _LOGGER.info(f"Inserted all rtabench tables for {self.name}")
-
-        # restart db to ensure data is not kept in-memory by the db, and also
-        # ensure that WAL is processed etc...
-        if restart:
-            self.restart_event()
-
-    @property
-    def rtabench_fetch_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def load_rtabench_query(self, query_name: str) -> str:
-        with (RTABENCH_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql").open() as f:
-            return f.read()
-
-    def run_rtabench(self) -> None:
-        t0 = perf_counter()
-        for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
-            if not self.include_query("rtabench", query_name):
-                continue
-
-            with self.query_context("rtabench", query_name):
-                query = self.load_rtabench_query(query_name)
-
-                for it in range(1, iterations + 1):
-                    with self.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.fetch(query, **self.rtabench_fetch_kwargs)
-                        t = perf_counter() - t1
-
-                    # time delta t will not match time at end - time at start exactly,
-                    # but within a couple of milliseconds
-                    # there is a small overhead when the event is sent to the queue
-                    # (the actual write to result db happens later)
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
-
-        _LOGGER.info(
-            f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
-
-    def get_time_series_primary_key(self, table_name: TableName) -> str | list[str] | None:
-        # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
-        return None
-
-    def get_time_series_not_null(self, table_name: TableName) -> str | list[str] | None:
-        return ["time", "id"] if "_eav" in table_name else "time"
-
-    @property
-    def time_series_populate_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def populate_time_series(self, restart: bool = True) -> None:
-        self.initialize_schema("time_series")
-
-        for table_name, fpath in get_time_series_input_files().items():
-            primary_key = self.get_time_series_primary_key(table_name)
-            not_null = self.get_time_series_not_null(table_name)
-
-            df = pl.read_parquet(fpath)
-
-            with self.event_context(f"insert_{table_name}"):
-                self.insert(
-                    df, table_name, primary_key=primary_key, not_null=not_null, **self.time_series_populate_kwargs
-                )
-                _LOGGER.info(f"Inserted {table_name} for {self.name}")
-
-        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
-
-        # restart db to ensure data is not kept in-memory by the db, and also
-        # ensure that WAL is processed etc...
-        if restart:
-            self.restart_event()
-
-    def load_time_series_query(self, query_name: str) -> str:
-        db_specific = TIME_SERIES_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql"
-        common = TIME_SERIES_QUERIES_DIRECTORY / f"{query_name}.sql"
-
-        sql_source = db_specific if db_specific.is_file() else common
-
-        with (sql_source).open() as f:
-            return f.read()
-
-    @property
-    def time_series_fetch_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def run_time_series(self) -> None:
-        t0 = perf_counter()
-        for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
-            if not self.include_query("time_series", query_name):
-                continue
-
-            with self.query_context("time_series", query_name):
-                query = self.load_time_series_query(query_name)
-                self.current_query = query_name
-
-                for it in range(1, iterations + 1):
-                    with self.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.fetch(query, **self.time_series_fetch_kwargs)
-                        t = perf_counter() - t1
-
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})\n"
-                        f"df (head 100)={df.head(100)}"
-                    )
-
-        _LOGGER.info(
-            f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
-
-    @property
-    def clickbench_populate_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def populate_clickbench(self, restart: bool = True) -> None:
-        self.initialize_schema("clickbench")
-
-        # this is an expensive operation, would be better to avoid reading with polars
-        # for the databases that can ingest directly from parquet
-        # on the other hand, the purpose of these benchmarks is to measure in-memory polars df
-        # to and from the database, so this is appropriate,
-        # although not directly comparable with the insert times from the official clickbench resultsg
-        df = load_clickbench_dataset()
-        _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
-
-        with self.event_context("insert_hits"):
-            self.insert(df, "hits", **self.clickbench_populate_kwargs)
-
-        _LOGGER.info(f"Inserted clickbench table for {self.name}")
-
-        # restart db to ensure data is not kept in-memory by the db, and also
-        # ensure that WAL is processed etc...
-        if restart:
-            self.restart_event()
-
-    @property
-    def clickbench_fetch_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def run_clickbench(self) -> None:
-        t0 = perf_counter()
-        iterations = CLICKBENCH_ITERATIONS
-
-        # NOTE: clickbench query files should not be formatted, need to have one query per line
-        with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.name}.sql").open() as f:
-            queries = f.readlines()
-
-        for idx, query in enumerate(queries):
-            query_name = f"Q{idx}"
-
-            if not self.include_query("clickbench", query_name):
-                continue
-
-            with self.query_context("clickbench", query_name):
-                for it in range(1, iterations + 1):
-                    with self.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.fetch(query, **self.clickbench_fetch_kwargs)
-                        t = perf_counter() - t1
-
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
-
-        _LOGGER.info(f"Executed {len(queries):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds")
-
-    def benchmark(self, suite: SuiteName, operation: Operation) -> None:
-        self._result_storage = self.create_result_storage()
-
-        operations: dict[SuiteName, dict[Operation, Callable[[], None]]] = {
-            "rtabench": {
-                "populate": self.populate_rtabench,
-                "run": self.run_rtabench,
-            },
-            "time_series": {
-                "populate": self.populate_time_series,
-                "run": self.run_time_series,
-            },
-            "clickbench": {
-                "populate": self.populate_clickbench,
-                "run": self.run_clickbench,
-            },
-        }
-
-        self._benchmark_id, process, stop_event = start_metric_sampler(
-            suite,
-            self.name,
-            operation,
-            self._result_storage,
-            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
-        )
-
-        t0 = perf_counter()
-        _LOGGER.info(
-            f"Starting benchmark with ID {self._benchmark_id} (database: {self.name}, suite: {suite}, "
-            f"operation: {operation})"
-        )
-
-        try:
-            with self.event_context(operation):
-                operations[suite][operation]()
-        finally:
-            stop_event.set()
-            process.join()
-
-        _LOGGER.info(f"Finished benchmark with ID {self._benchmark_id} in {perf_counter() - t0:_.2f} seconds")
 
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...
@@ -413,3 +176,70 @@ class Database(BaseModel, ABC):
 
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
+
+    @property
+    def rtabench(self) -> BenchmarkSuite:
+        from ..suites.rtabench.config import RTABench
+
+        return RTABench(db=self)
+
+    @property
+    def clickbench(self) -> BenchmarkSuite:
+        from ..suites.clickbench.config import Clickbench
+
+        return Clickbench(db=self)
+
+    @property
+    def time_series(self) -> BenchmarkSuite:
+        from ..suites.time_series.config import TimeSeries
+
+        return TimeSeries(db=self)
+
+    @property
+    def benchmarks(self) -> dict[SuiteName, BenchmarkSuite]:
+        return {
+            "rtabench": self.rtabench,
+            "time_series": self.time_series,
+            "clickbench": self.clickbench,
+        }
+
+    def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+        benchmark = self.benchmarks.get(suite)
+
+        if benchmark is None:
+            raise ValueError(f"Invalid benchmark suite: '{suite}'")
+
+        match operation:
+            case "populate":
+                benchmark_func = benchmark.populate
+            case "run":
+                benchmark_func = benchmark.run
+            case _:
+                raise ValueError(f"Invalid operation '{operation}'")
+
+        self._result_storage = self.create_result_storage()
+
+        self._benchmark_id, process, stop_event = start_metric_sampler(
+            suite,
+            self.name,
+            operation,
+            self._result_storage,
+            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
+            notes=f"{self.version} | {SETTINGS.system}",
+        )
+
+        t0 = perf_counter()
+
+        _LOGGER.info(
+            f"Starting benchmark with ID {self._benchmark_id} (database: {self.name}, suite: {suite}, "
+            f"operation: {operation})"
+        )
+
+        try:
+            with self.event_context(operation):
+                benchmark_func()
+        finally:
+            stop_event.set()
+            process.join()
+
+        _LOGGER.info(f"Finished benchmark with ID {self._benchmark_id} in {perf_counter() - t0:_.2f} seconds")

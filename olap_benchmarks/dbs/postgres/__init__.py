@@ -8,18 +8,119 @@ import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, SuiteName, TableName
+from ...settings import SETTINGS, TableName
+from ...suites.time_series.config import TimeSeries
 from .. import Database
-from ..timescaledb import generate_create_table_sql, table_exists
 
 _LOGGER = logging.getLogger(__name__)
 
-DOCKER_IMAGE = "postgres:16.9"
+VERSION = "16.9"
+
+DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
+
+
+def polars_to_postgres_type(dtype: pl.DataType) -> str:
+    if dtype == pl.Int64:
+        return "BIGINT"
+    elif dtype == pl.Int16:
+        return "SMALLINT"
+    elif dtype == pl.Int32:
+        return "INTEGER"
+    elif dtype == pl.Float64:
+        return "DOUBLE PRECISION"
+    elif dtype == pl.Float32:
+        return "REAL"
+    elif dtype == pl.Boolean:
+        return "BOOLEAN"
+    elif dtype == pl.Utf8:
+        return "TEXT"
+    elif dtype == pl.Date:
+        return "DATE"
+    elif isinstance(dtype, pl.Datetime):
+        return "TIMESTAMP WITHOUT TIME ZONE"
+    else:
+        _LOGGER.warning(f"Falling back to type JSONB for Polars dtype {dtype}")
+        return "JSONB"
+
+
+def generate_create_table_sql(
+    table: str, schema: pl.Schema, primary_key: str | list[str] | None = None, not_null: str | list[str] | None = None
+) -> str:
+    if not_null is None:
+        not_null = []
+
+    if isinstance(not_null, str):
+        not_null = [not_null]
+
+    columns: list[str] = []
+    for name, dtype in schema.items():
+        pg_type = polars_to_postgres_type(dtype)
+        columns.append(f'"{name}" {pg_type} {"not null" if name in not_null else ""}')
+
+    if primary_key:
+        if isinstance(primary_key, str):
+            pk = f'primary key ("{primary_key}")'
+        else:
+            pk_cols = ", ".join(f'"{col}"' for col in primary_key)
+            pk = f"primary key ({pk_cols})"
+
+        columns.append(pk)
+
+    columns_sql = ",\n  ".join(columns)
+    return f'create table "{table}" (\n  {columns_sql}\n);'
+
+
+def table_exists(connection: Connection, table: str) -> bool:
+    dbapi_con = connection._dbapi_connection
+    assert dbapi_con is not None
+    cursor = dbapi_con.cursor()
+    cursor.execute("SELECT to_regclass(%s);", (f'public."{table}"',))
+    result = cursor.fetchone()
+    return result[0] is not None  # type: ignore[index]
+
+
+class PostgresTimeSeries(TimeSeries):
+    def index_tables(self) -> None:
+        con = self.db.connect()
+
+        # too expensive to create normal b-tree index on (id, time) or (time, id), use brin (block range index) instead
+        con.execute(text("CREATE INDEX data_small_eav_index ON data_small_eav using brin(id)"))
+        _LOGGER.info("Indexed data_small_eav")
+
+        con.execute(text("CREATE INDEX data_large_eav_index ON data_large_eav using brin(id)"))
+        _LOGGER.info("Indexed data_large_eav")
+
+        con.execute(text("CREATE INDEX data_small_wide_index ON data_small_wide (time)"))
+        _LOGGER.info("Indexed data_small_wide")
+
+        con.execute(text("CREATE INDEX data_large_wide_index ON data_large_wide (time)"))
+        _LOGGER.info("Indexed data_large_wide")
+
+        con.commit()
+
+    def populate_time_series(self, restart: bool = True) -> None:
+        super().populate(restart=False)
+
+        with self.db.event_context("index"):
+            self.index_tables()
+
+        if restart:
+            self.db.restart_event()
+
+    def include_query(self, query_name: str) -> bool:
+        # too slow
+        if "latest_time_range" in query_name and "eav" in query_name:
+            _LOGGER.warning(f"Skipping query '{query_name}'")
+            return False
+
+        return True
 
 
 class Postgres(Database):
     name: Literal["postgres"] = "postgres"
+    version: str = VERSION
+
     connection_string: str = POSTGRES_CONNECTION_STRING
 
     @property
@@ -184,37 +285,6 @@ class Postgres(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
 
-    def index_time_series_tables(self) -> None:
-        con = self.connect()
-
-        # too expensive to create normal b-tree index on (id, time) or (time, id), use brin (block range index) instead
-        con.execute(text("CREATE INDEX data_small_eav_index ON data_small_eav using brin(id)"))
-        _LOGGER.info("Indexed data_small_eav")
-
-        con.execute(text("CREATE INDEX data_large_eav_index ON data_large_eav using brin(id)"))
-        _LOGGER.info("Indexed data_large_eav")
-
-        con.execute(text("CREATE INDEX data_small_wide_index ON data_small_wide (time)"))
-        _LOGGER.info("Indexed data_small_wide")
-
-        con.execute(text("CREATE INDEX data_large_wide_index ON data_large_wide (time)"))
-        _LOGGER.info("Indexed data_large_wide")
-
-        con.commit()
-
-    def populate_time_series(self, restart: bool = True) -> None:
-        super().populate_time_series(restart=False)
-
-        with self.event_context("index"):
-            self.index_time_series_tables()
-
-        if restart:
-            self.restart_event()
-
-    def include_query(self, suite: SuiteName, query_name: str) -> bool:
-        # too slow
-        if suite == "time_series" and "latest_time_range" in query_name and "eav" in query_name:
-            _LOGGER.warning(f"Skipping query '{query_name}'")
-            return False
-
-        return True
+    @property
+    def time_series(self) -> PostgresTimeSeries:
+        return PostgresTimeSeries(db=self)

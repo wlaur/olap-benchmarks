@@ -9,77 +9,142 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import REPO_ROOT, SETTINGS, TableName
-from ...suites.time_series.config import get_time_series_input_files
+from ...suites.clickbench.config import Clickbench
+from ...suites.rtabench.config import RTABench
+from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
+from ..postgres import generate_create_table_sql, table_exists
 
 _LOGGER = logging.getLogger(__name__)
 
-DOCKER_IMAGE = "timescale/timescaledb:2.21.1-pg16"
+VERSION = "2.21.1"
+
+DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg16"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
 
 
-def polars_to_postgres_type(dtype: pl.DataType) -> str:
-    if dtype == pl.Int64:
-        return "BIGINT"
-    elif dtype == pl.Int16:
-        return "SMALLINT"
-    elif dtype == pl.Int32:
-        return "INTEGER"
-    elif dtype == pl.Float64:
-        return "DOUBLE PRECISION"
-    elif dtype == pl.Float32:
-        return "REAL"
-    elif dtype == pl.Boolean:
-        return "BOOLEAN"
-    elif dtype == pl.Utf8:
-        return "TEXT"
-    elif dtype == pl.Date:
-        return "DATE"
-    elif isinstance(dtype, pl.Datetime):
-        return "TIMESTAMP WITHOUT TIME ZONE"
-    else:
-        _LOGGER.warning(f"Falling back to type JSONB for Polars dtype {dtype}")
-        return "JSONB"
+class TimescaleRTABench(RTABench):
+    def compress_tables(self) -> None:
+        conn = self.db.connect()
+
+        result = conn.execute(text("SELECT show_chunks('order_events')"))
+        chunks = [row[0] for row in result.fetchall()]
+
+        if not chunks:
+            raise RuntimeError
+
+        _LOGGER.info(f"Found {len(chunks)} chunks to compress.")
+
+        for idx, chunk in enumerate(chunks):
+            _LOGGER.info(f"Compressing chunk {idx + 1:_}/{len(chunks):_}: {chunk}")
+            conn.execute(text(f"select compress_chunk('{chunk}'::regclass)"))
+
+        conn.commit()
+
+        con = self.db.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze orders"))
+
+        con = self.db.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
+
+    def populate(self, restart: bool = True) -> None:
+        super().populate(restart=False)
+
+        with self.db.event_context("compress"):
+            self.compress_tables()
+
+        if restart:
+            self.db.restart_event()
 
 
-def generate_create_table_sql(
-    table: str, schema: pl.Schema, primary_key: str | list[str] | None = None, not_null: str | list[str] | None = None
-) -> str:
-    if not_null is None:
-        not_null = []
+class TimescaleClickbench(Clickbench):
+    def compress_table(self) -> None:
+        con = self.db.connect()
 
-    if isinstance(not_null, str):
-        not_null = [not_null]
+        con.execute(text("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"))
 
-    columns: list[str] = []
-    for name, dtype in schema.items():
-        pg_type = polars_to_postgres_type(dtype)
-        columns.append(f'"{name}" {pg_type} {"not null" if name in not_null else ""}')
+        con.commit()
 
-    if primary_key:
-        if isinstance(primary_key, str):
-            pk = f'primary key ("{primary_key}")'
-        else:
-            pk_cols = ", ".join(f'"{col}"' for col in primary_key)
-            pk = f"primary key ({pk_cols})"
+        con = self.db.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze hits"))
 
-        columns.append(pk)
+    def populate(self, restart: bool = True) -> None:
+        super().populate(restart=False)
 
-    columns_sql = ",\n  ".join(columns)
-    return f'create table "{table}" (\n  {columns_sql}\n);'
+        with self.db.event_context("compress"):
+            self.compress_table()
+
+        if restart:
+            self.db.restart_event()
 
 
-def table_exists(connection: Connection, table: str) -> bool:
-    dbapi_con = connection._dbapi_connection
-    assert dbapi_con is not None
-    cursor = dbapi_con.cursor()
-    cursor.execute("SELECT to_regclass(%s);", (f'public."{table}"',))
-    result = cursor.fetchone()
-    return result[0] is not None  # type: ignore[index]
+class TimescaleTimeSeries(TimeSeries):
+    db: "TimescaleDB"
+
+    def compress_tables(self) -> None:
+        skip = ["data_large_wide"]
+
+        for table_name in get_time_series_input_files():
+            if table_name in skip:
+                _LOGGER.warning(f"Skipping compression for {table_name}")
+            else:
+                con = self.db.connect(reconnect=True)
+                con.execute(
+                    text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i")
+                )
+                con.commit()
+                _LOGGER.info(f"Compressed table {table_name}")
+
+            con = self.db.connect(reconnect=True)
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
+
+            _LOGGER.info(f"Vacuumed table {table_name}")
+
+    def populate_time_series(self, restart: bool = True) -> None:
+        # need to define parts of the schema and insert data in a specific order
+        self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
+
+        input_files = get_time_series_input_files()
+
+        # wide tables are created dynamically, eav tables already exist at this point
+        for table_name, fpath in input_files.items():
+            if "eav" in table_name:
+                continue
+
+            primary_key = self.get_primary_key(table_name)
+            not_null = self.get_not_null(table_name)
+
+            schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
+
+            self.db.create_table(schema, table_name, primary_key, not_null)
+
+        self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
+
+        for table_name, fpath in input_files.items():
+            # timescaledb needs input data to be sorted by (time, id), the eav parquet files are sorted by (id, time)
+            sort = ["time", "id"] if "eav" in table_name else ["time"]
+
+            df = pl.scan_parquet(fpath).sort(*sort).collect()
+
+            _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+
+            with self.db.event_context(f"insert_{table_name}"):
+                self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+
+        with self.db.event_context("compress"):
+            self.compress_tables()
+
+        if restart:
+            self.db.restart_event()
 
 
 class TimescaleDB(Database):
     name: Literal["timescaledb"] = "timescaledb"
+    version: str = VERSION
+
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
 
     @property
@@ -243,113 +308,14 @@ class TimescaleDB(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
 
-    def compress_rtabench_tables(self) -> None:
-        conn = self.connect()
+    @property
+    def rtabench(self) -> TimescaleRTABench:
+        return TimescaleRTABench(db=self)
 
-        result = conn.execute(text("SELECT show_chunks('order_events')"))
-        chunks = [row[0] for row in result.fetchall()]
+    @property
+    def clickbench(self) -> TimescaleClickbench:
+        return TimescaleClickbench(db=self)
 
-        if not chunks:
-            raise RuntimeError
-
-        _LOGGER.info(f"Found {len(chunks)} chunks to compress.")
-
-        for idx, chunk in enumerate(chunks):
-            _LOGGER.info(f"Compressing chunk {idx + 1:_}/{len(chunks):_}: {chunk}")
-            conn.execute(text(f"select compress_chunk('{chunk}'::regclass)"))
-
-        conn.commit()
-
-        con = self.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze orders"))
-
-        con = self.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
-
-    def populate_rtabench(self, restart: bool = True) -> None:
-        super().populate_rtabench(restart=False)
-
-        with self.event_context("compress"):
-            self.compress_rtabench_tables()
-
-        if restart:
-            self.restart_event()
-
-    def compress_clickbench_table(self) -> None:
-        con = self.connect()
-
-        con.execute(text("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"))
-
-        con.commit()
-
-        con = self.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze hits"))
-
-    def populate_clickbench(self, restart: bool = True) -> None:
-        super().populate_clickbench(restart=False)
-
-        with self.event_context("compress"):
-            self.compress_clickbench_table()
-
-        if restart:
-            self.restart_event()
-
-    def compress_time_series_tables(self) -> None:
-        skip = ["data_large_wide"]
-        for table_name in get_time_series_input_files():
-            if table_name in skip:
-                _LOGGER.warning(f"Skipping compression for {table_name}")
-            else:
-                con = self.connect(reconnect=True)
-                con.execute(
-                    text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i")
-                )
-                con.commit()
-                _LOGGER.info(f"Compressed table {table_name}")
-
-            con = self.connect(reconnect=True)
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
-
-            _LOGGER.info(f"Vacuumed table {table_name}")
-
-    def populate_time_series(self, restart: bool = True) -> None:
-        # need to define parts of the schema and insert data in a specific order
-        self.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
-
-        input_files = get_time_series_input_files()
-
-        # wide tables are created dynamically, eav tables already exist at this point
-        for table_name, fpath in input_files.items():
-            if "eav" in table_name:
-                continue
-
-            primary_key = self.get_time_series_primary_key(table_name)
-            not_null = self.get_time_series_not_null(table_name)
-
-            schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
-
-            self.create_table(schema, table_name, primary_key, not_null)
-
-        self.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
-
-        for table_name, fpath in input_files.items():
-            # timescaledb needs input data to be sorted by (time, id), the eav parquet files are sorted by (id, time)
-            sort = ["time", "id"] if "eav" in table_name else ["time"]
-
-            df = pl.scan_parquet(fpath).sort(*sort).collect()
-
-            _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
-
-            with self.event_context(f"insert_{table_name}"):
-                self.insert(
-                    df, table_name, primary_key=primary_key, not_null=not_null, **self.time_series_populate_kwargs
-                )
-                _LOGGER.info(f"Inserted {table_name} for {self.name}")
-
-        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
-
-        with self.event_context("compress"):
-            self.compress_time_series_tables()
-
-        if restart:
-            self.restart_event()
+    @property
+    def time_series(self) -> TimescaleTimeSeries:
+        return TimescaleTimeSeries(db=self)

@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     database_directory: DirectoryPath
     temporary_directory: DirectoryPath
 
+    system: str
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="OLAP_BENCHMARKS_",
