@@ -1,21 +1,16 @@
--- each case only contains a single value, so sum/sum/any_value are equivalent
--- which is fastest depends on the db
--- this is only true when fetching raw data, when downsampling we must use avg
 select
-    time,
+    min(time) as time,
     avg(
         case
             when id = 371 then value
         end
     ) as value_1,
-    cast(
-        avg(
-            cast(
-                case
-                    when id = 364 then value
-                end as int
-            )
-        ) as int
+    avg(
+        cast(
+            case
+                when id = 364 then value
+            end as int
+        )
     ) as value_2,
     avg(
         case
@@ -40,10 +35,5 @@ select
 from
     data_large_eav
 where
-    id in (371, 364, 407, 861, 984, 830)
-group by
-    time
-order by
-    time
-limit
-    10000
+    time = '2023-11-24 06:23'
+    and id in (371, 364, 407, 861, 984, 830)

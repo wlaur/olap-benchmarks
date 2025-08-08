@@ -41,4 +41,4 @@ group by
 order by
     time
 limit
-    100;
+    100
