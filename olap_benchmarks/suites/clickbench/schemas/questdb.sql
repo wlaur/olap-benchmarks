@@ -1,11 +1,12 @@
-CREATE TABLE hits
-(
+-- questdb uses "date" to mean ms epoch and "timestamp" to mean us
+-- using date here is also OK (includes time also)
+CREATE TABLE IF NOT EXISTS hits (
     WatchID long,
     JavaEnable byte,
     Title varchar,
     GoodEvent byte,
     EventTime timestamp,
-    Eventdate date,
+    Eventdate timestamp,
     CounterID int,
     ClientIP int,
     RegionID int,
@@ -48,7 +49,7 @@ CREATE TABLE hits
     ClientEventTime timestamp,
     SilverlightVersion1 byte,
     SilverlightVersion2 byte,
-    SilverlightVersion3 short,
+    SilverlightVersion3 int,
     SilverlightVersion4 byte,
     PageCharset symbol,
     CodeVersion short,
