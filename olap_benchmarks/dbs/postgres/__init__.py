@@ -122,18 +122,30 @@ class PostgresClickbench(Clickbench):
                 CREATE INDEX regionuser on hits (RegionID,UserID);
                 CREATE INDEX mobile2 on hits (mobilephonemodel) WHERE mobilephonemodel <> ''::text;
                 CREATE INDEX search2 on hits (searchphrase) WHERE searchphrase <> ''::text;
-                CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);
-                CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);
+
         """)
 
         con = self.db.connect()
 
         for n in statements.strip().split(";"):
-            if not n.strip():
+            n = n.strip()
+
+            if not n:
                 continue
 
             con.execute(text(n))
 
+            _LOGGER.info(f"Executed {n}")
+            con.commit()
+
+        # not sure if this requires autocommit but just to be sure
+        con = self.db.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+
+        con.execute(text("CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"))
+        con.commit()
+
+        con.execute(text("CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"))
         con.commit()
 
         _LOGGER.info("Generated indexes for table hits")
