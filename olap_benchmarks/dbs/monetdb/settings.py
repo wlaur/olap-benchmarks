@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     # file transfer over http is not comparable with insert methods for other databases
     client_file_transfer: bool = False
 
-    # JSON can also be read as pl.Object and pl.String, but pl.Struct is usually the most useful
-    json_polars_dtype: Literal["string", "struct", "object"] = "struct"
+    # JSON can also be read as pl.Object and pl.Struct, but pl.String is maybe the least unexpected option
+    json_polars_dtype: Literal["string", "struct", "object"] = "string"
 
     model_config = SettingsConfigDict(
         env_file=".env",
