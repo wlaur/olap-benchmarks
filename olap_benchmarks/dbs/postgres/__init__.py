@@ -144,9 +144,11 @@ class PostgresClickbench(Clickbench):
 
         con.execute(text("CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"))
         con.commit()
+        _LOGGER.info("Created index trgm_idx_title")
 
         con.execute(text("CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"))
         con.commit()
+        _LOGGER.info("Created index trgm_idx_url")
 
         _LOGGER.info("Generated indexes for table hits")
 
