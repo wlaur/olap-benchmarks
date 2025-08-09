@@ -1,7 +1,7 @@
 CREATE TABLE customers (
     customer_id integer not null,
     name varchar,
-    birthday date,
+    birthday timestamp,
     email varchar,
     address varchar,
     city varchar,

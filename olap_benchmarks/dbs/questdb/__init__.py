@@ -1,6 +1,7 @@
 import logging
 import uuid
 from collections.abc import Mapping
+from time import sleep
 from typing import Literal
 
 import polars as pl
@@ -82,7 +83,11 @@ class QuestDB(Database):
         batch_size: int | None = None,
         method: Literal["sender", "parquet"] = "parquet",
     ) -> None:
-        df = df.with_columns(pl.selectors.decimal().cast(pl.Float64))
+        df = (
+            df.with_columns(pl.selectors.decimal().cast(pl.Float64))
+            .with_columns(pl.selectors.date().cast(pl.Datetime("us")))
+            .with_columns(pl.selectors.datetime().cast(pl.Datetime("us")))
+        )
 
         if method == "sender":
             # much slower than read_parquet (serializes of http or similar)
@@ -141,6 +146,10 @@ class QuestDB(Database):
 
         parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname
         df.write_parquet(parquet_fpath)
+
+        # TODO: issue with parquet file not being accessible by questdb even if it is completely written
+        # intermittent issue, sleeping for 100 ms seems to fix it
+        sleep(0.1)
 
         try:
             con = self.connect()
