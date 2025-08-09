@@ -69,7 +69,7 @@ class Clickbench(BenchmarkSuite):
         t0 = perf_counter()
 
         # NOTE: clickbench query files should not be formatted, need to have one query per line
-        with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.name}.sql").open() as f:
+        with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.db.name}.sql").open() as f:
             queries = f.readlines()
 
         for idx, query in enumerate(queries):
