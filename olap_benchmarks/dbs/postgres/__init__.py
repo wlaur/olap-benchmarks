@@ -2,6 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from textwrap import dedent
 from typing import Literal
 
 import connectorx
@@ -9,6 +10,7 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
+from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from .. import Database
@@ -97,6 +99,178 @@ class PostgresRTABench(RTABench):
         with self.db.event_context("index"):
             self.index_tables()
 
+        if restart:
+            self.db.restart_event()
+
+
+class PostgresClickbench(Clickbench):
+    def index_table(self) -> None:
+        statements = dedent("""
+                CREATE INDEX adveng on hits (advengineid);
+                CREATE INDEX regid  on hits (RegionID);
+                CREATE INDEX cid on hits (counterid);
+                CREATE INDEX eventtime on hits (eventtime);
+                CREATE INDEX eventdate on hits (eventdate);
+                CREATE INDEX mobile on hits (mobilephonemodel);
+                CREATE INDEX refresh on hits (isrefresh, dontcounthits);
+                CREATE INDEX resolutionwidth on hits (resolutionwidth);
+                CREATE INDEX search on hits (searchphrase);
+                CREATE INDEX userid on hits (userid);
+                CREATE INDEX useridsearch on hits (userid, searchphrase);
+                CREATE INDEX widcip on hits (watchid, clientip);
+                CREATE INDEX mobileuser on hits (MobilePhoneModel,UserID);
+                CREATE INDEX regionuser on hits (RegionID,UserID);
+                CREATE INDEX mobile2 on hits (mobilephonemodel) WHERE mobilephonemodel <> ''::text;
+                CREATE INDEX search2 on hits (searchphrase) WHERE searchphrase <> ''::text;
+                CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);
+                CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);
+        """)
+
+        con = self.db.connect()
+
+        for n in statements.strip().split(";"):
+            if not n.strip():
+                continue
+
+            con.execute(text(n))
+
+        con.commit()
+
+        _LOGGER.info("Generated indexes for table hits")
+
+        con = self.db.connect(reconnect=True)
+        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("VACUUM ANALYZE hits"))
+
+        _LOGGER.info("Ran vacuum analyze for table hits")
+
+    def populate(self, restart: bool = True) -> None:
+        self.db.initialize_schema("clickbench")
+
+        # need to reorder columns
+        df = self.load_dataset()
+
+        columns_ordered = [
+            "WatchID",
+            "UserID",
+            "FUniqID",
+            "ParamPrice",
+            "RefererHash",
+            "URLHash",
+            "EventTime",
+            "ClientEventTime",
+            "LocalEventTime",
+            "EventDate",
+            "CounterID",
+            "ClientIP",
+            "RegionID",
+            "RefererRegionID",
+            "URLRegionID",
+            "IPNetworkID",
+            "SilverlightVersion3",
+            "CodeVersion",
+            "HID",
+            "RemoteIP",
+            "WindowName",
+            "OpenerName",
+            "SendTiming",
+            "DNSTiming",
+            "ConnectTiming",
+            "ResponseStartTiming",
+            "ResponseEndTiming",
+            "FetchTiming",
+            "CLID",
+            "JavaEnable",
+            "GoodEvent",
+            "CounterClass",
+            "OS",
+            "UserAgent",
+            "IsRefresh",
+            "RefererCategoryID",
+            "URLCategoryID",
+            "ResolutionWidth",
+            "ResolutionHeight",
+            "ResolutionDepth",
+            "FlashMajor",
+            "FlashMinor",
+            "TraficSourceID",
+            "SearchEngineID",
+            "NetMajor",
+            "NetMinor",
+            "UserAgentMajor",
+            "CookieEnable",
+            "JavascriptEnable",
+            "IsMobile",
+            "MobilePhone",
+            "AdvEngineID",
+            "IsArtifical",
+            "WindowClientWidth",
+            "WindowClientHeight",
+            "ClientTimeZone",
+            "SilverlightVersion1",
+            "SilverlightVersion2",
+            "SilverlightVersion4",
+            "IsLink",
+            "IsDownload",
+            "IsNotBounce",
+            "IsOldCounter",
+            "IsEvent",
+            "IsParameter",
+            "DontCountHits",
+            "WithHash",
+            "Age",
+            "Sex",
+            "Income",
+            "Interests",
+            "Robotness",
+            "HistoryLength",
+            "HTTPError",
+            "SocialSourceNetworkID",
+            "HasGCLID",
+            "ParamCurrencyID",
+            "Title",
+            "URL",
+            "Referer",
+            "FlashMinor2",
+            "BrowserLanguage",
+            "BrowserCountry",
+            "SocialNetwork",
+            "SocialAction",
+            "MobilePhoneModel",
+            "Params",
+            "SearchPhrase",
+            "PageCharset",
+            "OriginalURL",
+            "SocialSourcePage",
+            "ParamOrderID",
+            "ParamCurrency",
+            "OpenstatServiceName",
+            "OpenstatCampaignID",
+            "OpenstatAdID",
+            "OpenstatSourceID",
+            "UTMSource",
+            "UTMMedium",
+            "UTMCampaign",
+            "UTMContent",
+            "UTMTerm",
+            "FromTag",
+            "UserAgentMinor",
+            "HitColor",
+        ]
+
+        df = df.select(columns_ordered)
+
+        _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+
+        with self.db.event_context("insert_hits"):
+            self.db.insert(df, "hits", **self.populate_kwargs)
+
+        _LOGGER.info(f"Inserted clickbench table for {self.name}")
+
+        with self.db.event_context("index"):
+            self.index_table()
+
+        # restart db to ensure data is not kept in-memory by the db, and also
+        # ensure that WAL is processed etc...
         if restart:
             self.db.restart_event()
 
@@ -309,6 +483,10 @@ class Postgres(Database):
     @property
     def rtabench(self) -> PostgresRTABench:
         return PostgresRTABench(db=self)
+
+    @property
+    def clickbench(self) -> PostgresClickbench:
+        return PostgresClickbench(db=self)
 
     @property
     def time_series(self) -> PostgresTimeSeries:
