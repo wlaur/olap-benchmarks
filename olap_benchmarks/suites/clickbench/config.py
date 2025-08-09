@@ -19,20 +19,19 @@ def download_clickbench() -> None:
     raise NotImplementedError
 
 
-def load_clickbench_dataset() -> pl.DataFrame:
-    # parquet file stores these as integers, the schema expects correct dtypes
-    timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
-    date_columns = ["EventDate"]
-
-    return (
-        pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
-        .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
-        .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
-    ).collect()
-
-
 class Clickbench(BenchmarkSuite):
     name: Literal["clickbench"] = "clickbench"
+
+    def load_dataset(self) -> pl.DataFrame:
+        # parquet file stores these as integers, the schema expects correct dtypes
+        timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
+        date_columns = ["EventDate"]
+
+        return (
+            pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
+            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
+            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
+        ).collect()
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:
@@ -45,8 +44,8 @@ class Clickbench(BenchmarkSuite):
         # for the databases that can ingest directly from parquet
         # on the other hand, the purpose of these benchmarks is to measure in-memory polars df
         # to and from the database, so this is appropriate,
-        # although not directly comparable with the insert times from the official clickbench resultsg
-        df = load_clickbench_dataset()
+        # although not directly comparable with the insert times from the official clickbench results
+        df = self.load_dataset()
         _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
         with self.db.event_context("insert_hits"):
