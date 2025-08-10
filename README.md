@@ -2,7 +2,7 @@
 
 > OLAP database benchmarks
 
-![Results](wlaur.github.io/olap-benchmarks)
+![Results](https://wlaur.github.io/olap-benchmarks)
 
 ## Structure
 
