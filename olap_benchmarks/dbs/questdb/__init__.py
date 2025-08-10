@@ -30,12 +30,13 @@ class QuestDBClickbench(Clickbench):
         self.db.initialize_schema("clickbench")
 
         fpath = SETTINGS.temporary_directory / "questdb/data/hits.parquet"
+        input_fpath = SETTINGS.input_data_directory / "clickbench/hits.parquet"
 
         timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
         date_columns = ["EventDate"]
 
         (
-            pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
+            pl.scan_parquet(input_fpath)
             .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
             .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
             .with_columns(pl.selectors.decimal().cast(pl.Float64))
@@ -44,7 +45,10 @@ class QuestDBClickbench(Clickbench):
             .sink_parquet(fpath)
         )
 
-        _LOGGER.info(f"Wrote temporary hits.parquet to {fpath}")
+        # 99997497 rows
+        count: int = pl.scan_parquet(input_fpath).select(pl.len()).collect().item(0, 0)
+
+        _LOGGER.info(f"Wrote temporary hits.parquet with {count:_} rows to {fpath}")
 
         with self.db.event_context("insert_hits"):
             con = self.db.connect()
@@ -58,7 +62,7 @@ class QuestDBClickbench(Clickbench):
             con.commit()
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
-            self.db.wait_until_count("hits", 99997497)
+            self.db.wait_until_count("hits", count)
 
         fpath.unlink()
 
