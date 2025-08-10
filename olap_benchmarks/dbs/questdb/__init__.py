@@ -9,6 +9,7 @@ from questdb.ingress import Protocol, Sender  # type: ignore[import-untyped]
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
+from ...suites.clickbench.config import Clickbench
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,6 +17,47 @@ _LOGGER = logging.getLogger(__name__)
 VERSION = "9.0.1"
 
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
+
+
+class QuestDBClickbench(Clickbench):
+    def populate(self, restart: bool = True) -> None:
+        # NOTE: inserts directly from source Parquet file to avoid OOM issues
+        # insert time is not comparable with other databases that insert from an in memory dataframe
+        # on the other hand, this is more in line with how inserts would actually be done with QuestDB
+
+        self.db.initialize_schema("clickbench")
+
+        fpath = SETTINGS.temporary_directory / "questdb/data/hits.parquet"
+
+        timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
+        date_columns = ["EventDate"]
+
+        (
+            pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
+            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
+            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
+            .with_columns(pl.selectors.decimal().cast(pl.Float64))
+            .with_columns(pl.selectors.date().cast(pl.Datetime("us")))
+            .with_columns(pl.selectors.datetime().cast(pl.Datetime("us")))
+            .sink_parquet(fpath)
+        )
+
+        _LOGGER.info(f"Wrote temporary hits.parquet to {fpath}")
+
+        with self.db.event_context("insert_hits"):
+            con = self.db.connect()
+
+            con.execute(
+                text(f"""
+                    insert into hits
+                    select * from read_parquet('{fpath.name}')
+                """)
+            )
+            con.commit()
+            _LOGGER.info(f"Inserted clickbench table for {self.name}")
+
+        if restart:
+            self.db.restart_event()
 
 
 class QuestDB(Database):
@@ -178,3 +220,7 @@ class QuestDB(Database):
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
+
+    @property
+    def clickbench(self) -> QuestDBClickbench:
+        return QuestDBClickbench(db=self)
