@@ -122,15 +122,19 @@ class QuestDB(Database):
 
         return df
 
+    def get_count(self, table: TableName) -> int:
+        ret = self.connect().execute(text(f"select count(*) from {table}")).fetchone()
+        assert ret is not None
+        c: int = ret[0]
+        assert isinstance(c, int)
+
+        return c
+
     def wait_until_count(self, table: TableName, count: int, interval_seconds: float = 10.0) -> None:
         _LOGGER.info(f"Waiting until table '{table}' contains {count:_} rows...")
 
         while True:
-            ret = self.connect().execute(text(f"select count(*) from {table}")).fetchone()
-
-            assert ret is not None
-
-            c: int = ret[0]
+            c = self.get_count(table)
 
             if c == count:
                 _LOGGER.info(f"Table {table} contains all {count:_} rows")
@@ -187,6 +191,11 @@ class QuestDB(Database):
             f"Inserting {num_rows:_} rows into '{table}' in {num_batches:_} batches (batch size: {batch_size:_})"
         )
 
+        try:
+            initial_count = self.get_count(table)
+        except Exception:
+            initial_count = 0
+
         with Sender(Protocol.Http, "localhost", 9000) as sender:
             for i, start in enumerate(range(0, num_rows, batch_size)):
                 end = min(start + batch_size, num_rows)
@@ -199,7 +208,7 @@ class QuestDB(Database):
 
                 sender.flush()
 
-        self.wait_until_count(table, len(df))
+        self.wait_until_count(table, initial_count + len(df))
 
         _LOGGER.info(f"Finished inserting into '{table}' ({num_rows:_} rows total)")
 
@@ -225,11 +234,13 @@ class QuestDB(Database):
             tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
 
             if table in tables:
+                initial_count = self.get_count(table)
                 statement = f"""
                     insert into {table}
                     select * from read_parquet('{parquet_fname}')
                     """
             else:
+                initial_count = 0
                 statement = f"""
                     create table {table} as (
                         select * from read_parquet('{parquet_fname}')
@@ -238,7 +249,7 @@ class QuestDB(Database):
 
             con.execute(text(statement))
             con.commit()
-            self.wait_until_count(table, len(df))
+            self.wait_until_count(table, initial_count + len(df))
 
         finally:
             parquet_fpath.unlink()
