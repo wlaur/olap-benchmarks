@@ -98,7 +98,7 @@ class QuestDB(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine(self.connection_string)
+        engine = create_engine(self.connection_string, pool_reset_on_return=None)
         self._connection = engine.connect()
 
         return self._connection
