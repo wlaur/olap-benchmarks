@@ -20,6 +20,8 @@ DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 
 
 class QuestDBClickbench(Clickbench):
+    db: "QuestDB"
+
     def populate(self, restart: bool = True) -> None:
         # NOTE: inserts directly from source Parquet file to avoid OOM issues
         # insert time is not comparable with other databases that insert from an in memory dataframe
@@ -55,6 +57,10 @@ class QuestDBClickbench(Clickbench):
             )
             con.commit()
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
+
+            self.db.wait_until_count("hits", 99997497)
+
+        fpath.unlink()
 
         if restart:
             self.db.restart_event()
@@ -116,6 +122,24 @@ class QuestDB(Database):
 
         return df
 
+    def wait_until_count(self, table: TableName, count: int, interval_seconds: float = 10.0) -> None:
+        _LOGGER.info(f"Waiting until table '{table}' contains {count:_} rows...")
+
+        while True:
+            ret = self.connect().execute(text(f"select count(*) from {table}")).fetchone()
+
+            assert ret is not None
+
+            c: int = ret[0]
+
+            if c == count:
+                _LOGGER.info(f"Table {table} contains all {count:_} rows")
+                return
+
+            _LOGGER.info(f"Table {table} contains {c:_}/{count:_} rows, waiting...")
+
+            sleep(interval_seconds)
+
     def insert(
         self,
         df: pl.DataFrame,
@@ -175,6 +199,8 @@ class QuestDB(Database):
 
                 sender.flush()
 
+        self.wait_until_count(table, len(df))
+
         _LOGGER.info(f"Finished inserting into '{table}' ({num_rows:_} rows total)")
 
     def insert_parquet(
@@ -212,6 +238,7 @@ class QuestDB(Database):
 
             con.execute(text(statement))
             con.commit()
+            self.wait_until_count(table, len(df))
 
         finally:
             parquet_fpath.unlink()
