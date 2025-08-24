@@ -14,16 +14,25 @@ from .settings import SETTINGS as MONETDB_SETTINGS
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "Mar2025-SP1"
+LOCAL_IMAGE = False
 
-# does not seem to be SP1 (is actually Mar2025)
-# MONETDB_IMAGE = "monetdb/monetdb:Mar2025-SP1"
+if LOCAL_IMAGE:
+    # built from https://github.com/MonetDBSolutions/monetdb-docker
+    # docker build -t monetdb-local:Mar2025-11 -f ubuntu.dockerfile --platform linux/amd64 --build-arg BRANCH=Mar2025_11 . # noqa: E501
+    # NOTE: getting 401 error from https://www.monetdb.org/hg/MonetDB/archive/${BRANCH}.tar.bz2
+    # need to modify Dockerfile to use https://github.com/MonetDB/MonetDB/archive/refs/tags/${BRANCH}.tar.gz instead
+    # change in monetdb-docker/ubuntu.Dockerfile:
+    # RUN curl -L -o MonetDB.tar.gz https://github.com/MonetDB/MonetDB/archive/refs/tags/${BRANCH}.tar.gz
+    # RUN tar zxf MonetDB.tar.gz
 
-# built from https://github.com/MonetDBSolutions/monetdb-docker
-# with
-# docker build -t monetdb-local:Mar2025-SP1 -f ubuntu.dockerfile \
-# --platform linux/amd64 --build-arg BRANCH=Mar2025_SP1_release .
-DOCKER_IMAGE = f"monetdb-local:{VERSION}"
+    # TODO: fails with "#main-thread: log_read_types_file: ERROR: unknown type in log file 'mbr'"
+    # when starting a db created with Mar2025-SP1
+    # (this is an unreleased version, will probably be fixed before SP2 is released)
+    VERSION = "Mar2025-11"
+    DOCKER_IMAGE = f"monetdb-local:{VERSION}"
+else:
+    VERSION = "Mar2025-SP1"
+    DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
