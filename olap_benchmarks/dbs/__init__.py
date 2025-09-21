@@ -196,11 +196,18 @@ class Database(BaseModel, ABC):
         return TimeSeries(db=self)
 
     @property
+    def kaggle_airbnb(self) -> BenchmarkSuite:
+        from ..suites.kaggle_airbnb.config import KaggleAirbnb
+
+        return KaggleAirbnb(db=self)
+
+    @property
     def benchmarks(self) -> dict[SuiteName, BenchmarkSuite]:
         return {
             "rtabench": self.rtabench,
             "time_series": self.time_series,
             "clickbench": self.clickbench,
+            "kaggle_airbnb": self.kaggle_airbnb,
         }
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:

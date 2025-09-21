@@ -283,7 +283,7 @@ class TimeSeries(BenchmarkSuite):
             self.db.restart_event()
 
     def load_time_series_query(self, query_name: str) -> str:
-        db_specific = TIME_SERIES_QUERIES_DIRECTORY / f"{self.name}/{query_name}.sql"
+        db_specific = TIME_SERIES_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
         common = TIME_SERIES_QUERIES_DIRECTORY / f"{query_name}.sql"
 
         sql_source = db_specific if db_specific.is_file() else common
