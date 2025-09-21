@@ -22,10 +22,10 @@ KAGGLE_AIRBNB_TABLES = [
 
 KAGGLE_AIRBNB_QUERY_NAMES = {
     "01_calendar_count": 10,
-    "02_join_one_table": 1,
-    "03_join_two_tables": 1,
-    "04_join_three_tables_array_agg": 1,
-    "05_join_three_tables_row_number": 1,
+    "02_join_one_table": 3,
+    "03_join_two_tables": 3,
+    "04_join_three_tables_array_agg": 3,
+    "05_join_three_tables_row_number": 3,
 }
 
 

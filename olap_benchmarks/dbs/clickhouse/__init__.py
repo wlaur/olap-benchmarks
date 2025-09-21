@@ -22,7 +22,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "25.6.3.116"
+VERSION = "25.8.4.13"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
@@ -277,6 +277,7 @@ class Clickhouse(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
         partitions: int | None = None,
+        wait_ms: float | None = 500,
     ) -> None:
         if not_null is None:
             not_null = []
@@ -288,6 +289,9 @@ class Clickhouse(Database):
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
+        # TODO: unless we wait here, the Parquet file will be read as incomplete by Clickhouse
+        if wait_ms is not None:
+            sleep(wait_ms / 1000)
         try:
             exists_result = client.query_df(f"EXISTS TABLE {table}")
             table_exists = bool(exists_result["result"][0])
@@ -316,7 +320,7 @@ class Clickhouse(Database):
                     -- the primary key clause can be omitted (can be used to limit indexes to only one of the sort keys)
                     {order_by_clause}
                     -- ensure temporary data is cleaned up almost immediately
-                    settings old_parts_lifetime = 5
+                    settings old_parts_lifetime = 5, allow_nullable_key = 1
                     as select
                         {time_col_def}
                         {column_list}
