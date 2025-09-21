@@ -50,7 +50,7 @@ class MonetDBTimeSeries(TimeSeries):
         if "batch_export" in self.db.context.query_name:
             return {"method": "binary"}
 
-        return {}
+        return {"method": "pymonetdb"}
 
 
 class MonetDBKaggleAirbnb(KaggleAirbnb):
@@ -58,16 +58,14 @@ class MonetDBKaggleAirbnb(KaggleAirbnb):
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.context is not None
 
-        # simple queries with large result sets can be fetched using the binary method
-        binary_queries = [
-            "02_join_one_table",
-            "03_join_two_tables",
+        pymonetdb_queries = [
+            "01_calendar_count",
         ]
 
-        if any(n in self.db.context.query_name for n in binary_queries):
-            return {"method": "binary"}
+        if any(n in self.db.context.query_name for n in pymonetdb_queries):
+            return {"method": "pymonetdb"}
 
-        return {"method": "pymonetdb"}
+        return {"method": "binary"}
 
 
 class MonetDB(Database):
@@ -148,7 +146,3 @@ class MonetDB(Database):
     @property
     def time_series(self) -> MonetDBTimeSeries:
         return MonetDBTimeSeries(db=self)
-
-    @property
-    def kaggle_airbnb(self) -> MonetDBKaggleAirbnb:
-        return MonetDBKaggleAirbnb(db=self)

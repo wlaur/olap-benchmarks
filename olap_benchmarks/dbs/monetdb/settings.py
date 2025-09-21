@@ -4,8 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # do not use binary fetch as default, this requires that the schema is supplied beforehand
-    # otherwise it will fetch a single row to determine the schema (this is not suitable for benchmarks)
+    # binary fetch has a slight overhead (needs to infer the schema via PREPARE ... and process temporary files)
     default_fetch_method: Literal["binary", "pymonetdb"] = "pymonetdb"
 
     # set to False to use copy ... on server (for binary export and csv or binary import)
