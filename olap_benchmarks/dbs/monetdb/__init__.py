@@ -6,6 +6,7 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, TableName
+from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
 from .. import Database
 from .fetch import fetch_binary, fetch_pymonetdb
@@ -50,6 +51,23 @@ class MonetDBTimeSeries(TimeSeries):
             return {"method": "binary"}
 
         return {}
+
+
+class MonetDBKaggleAirbnb(KaggleAirbnb):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        assert self.db.context is not None
+
+        # simple queries with large result sets can be fetched using the binary method
+        binary_queries = [
+            "02_join_one_table",
+            "03_join_two_tables",
+        ]
+
+        if any(n in self.db.context.query_name for n in binary_queries):
+            return {"method": "binary"}
+
+        return {"method": "pymonetdb"}
 
 
 class MonetDB(Database):
@@ -130,3 +148,7 @@ class MonetDB(Database):
     @property
     def time_series(self) -> MonetDBTimeSeries:
         return MonetDBTimeSeries(db=self)
+
+    @property
+    def kaggle_airbnb(self) -> MonetDBKaggleAirbnb:
+        return MonetDBKaggleAirbnb(db=self)

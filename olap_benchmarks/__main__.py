@@ -15,6 +15,7 @@ from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
 from .settings import MAIN_PROCESS_TITLE, DatabaseName, SuiteName, setup_stdout_logging
 from .suites.clickbench.config import download_clickbench
+from .suites.kaggle_airbnb.config import convert_kaggle_airbnb_data_to_parquet
 from .suites.rtabench.config import download_rtabench_data
 from .suites.time_series.config import generate_time_series_datasets
 
@@ -73,5 +74,6 @@ if __name__ == "__main__":
             "download_rtabench": download_rtabench_data,
             "generate_time_series": generate_time_series_datasets,
             "download_clickbench": download_clickbench,
+            "convert_kaggle_airbnb": convert_kaggle_airbnb_data_to_parquet,
         }
     )

@@ -19,7 +19,7 @@ DatabaseName = Literal[
     "postgres",
 ]
 
-SuiteName = Literal["rtabench", "time_series", "clickbench"]
+SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb"]
 Operation = Literal["populate", "run"]
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
