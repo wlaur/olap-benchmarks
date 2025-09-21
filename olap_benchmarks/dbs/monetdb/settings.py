@@ -8,11 +8,9 @@ class Settings(BaseSettings):
     # otherwise it will fetch a single row to determine the schema (this is not suitable for benchmarks)
     default_fetch_method: Literal["binary", "pymonetdb"] = "pymonetdb"
 
-    # file transfer over http is not comparable with insert methods for other databases
-    client_file_transfer: bool = False
-
-    # JSON can also be read as pl.Object and pl.Struct, but pl.String is maybe the least unexpected option
-    json_polars_dtype: Literal["string", "struct", "object"] = "string"
+    # set to False to use copy ... on server (for binary export and csv or binary import)
+    # this is faster if the client and server are on the same host
+    client_file_transfer: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

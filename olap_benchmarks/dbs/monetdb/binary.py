@@ -17,6 +17,7 @@ from .utils import (
     MONETDB_MAX_DECIMAL_SCALE,
     MONETDB_TIME_RECORD_TYPE,
     POLARS_NUMPY_TYPE_MAP,
+    SchemaMeta,
 )
 
 BLOB_NULL_MARKER = (0xFFFFFFFFFFFFFFFF).to_bytes(8, byteorder="little")
@@ -80,9 +81,9 @@ def read_date_column(path: Path) -> pl.Series:
 
     df = pl.DataFrame(
         {
-            "year": records["year"],
-            "month": records["month"],
-            "day": records["day"],
+            "year": records["year"],  # type: ignore[dict-item]
+            "month": records["month"],  # type: ignore[dict-item]
+            "day": records["day"],  # type: ignore[dict-item]
         }
     )
 
@@ -135,11 +136,11 @@ def read_time_column(path: Path) -> pl.Series:
     )
 
     nanos = (
-        (records["hours"].astype(np.uint64) * 3600_000)
-        + (records["minutes"].astype(np.uint64) * 60_000)
-        + (records["seconds"].astype(np.uint64) * 1000)
-        + records["ms"].astype(np.uint64)
-    ) * 1_000_000
+        (records["hours"].astype(np.uint64) * 3600_000_000)
+        + (records["minutes"].astype(np.uint64) * 60_000_000)
+        + (records["seconds"].astype(np.uint64) * 1_000_000)
+        + records["ms"].astype(np.uint64)  # NOTE: microsecond, not millisecond
+    ) * 1_000
 
     series = pl.Series(nanos, dtype=pl.UInt64)
 
@@ -165,7 +166,7 @@ def write_time_column(series: pl.Series, path: Path) -> None:
         parts = (
             series.to_frame("dt")
             .with_columns(
-                ms=pl.col("dt").dt.millisecond(),
+                ms=pl.col("dt").dt.microsecond(),  # NOTE: microsecond, not millisecond
                 seconds=pl.col("dt").dt.second(),
                 minutes=pl.col("dt").dt.minute(),
                 hours=pl.col("dt").dt.hour(),
@@ -192,13 +193,13 @@ def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> 
 
     df = pl.DataFrame(
         {
-            "year": records["year"],
-            "month": records["month"],
-            "day": records["day"],
-            "hour": records["hours"],
-            "minute": records["minutes"],
-            "second": records["seconds"],
-            "microsecond": records["ms"] * 1000,
+            "year": records["year"],  # type: ignore[dict-item]
+            "month": records["month"],  # type: ignore[dict-item]
+            "day": records["day"],  # type: ignore[dict-item]
+            "hour": records["hours"],  # type: ignore[dict-item]
+            "minute": records["minutes"],  # type: ignore[dict-item]
+            "second": records["seconds"],  # type: ignore[dict-item]
+            "microsecond": records["ms"],  # type: ignore[dict-item] # NOTE: microsecond, not millisecond
         }
     )
 
@@ -229,7 +230,7 @@ def write_datetime_column(series: pl.Series, path: Path) -> None:
         parts = (
             series.to_frame("dt")
             .with_columns(
-                ms=pl.col("dt").dt.millisecond(),
+                ms=pl.col("dt").dt.microsecond(),  # NOTE: microsecond, not millisecond
                 seconds=pl.col("dt").dt.second(),
                 minutes=pl.col("dt").dt.minute(),
                 hours=pl.col("dt").dt.hour(),
@@ -295,7 +296,7 @@ def write_string_column(series: pl.Series, path: Path) -> None:
 
 def read_json_column_object(path: Path) -> pl.Series:
     s = read_string_column(path).alias("json")
-    # inefficient map with json.loads to match pymonetdb behavior
+    # inefficient map with json.loads, prefer to load as string
     return s.map_elements(json.loads, pl.Object)
 
 
@@ -310,10 +311,7 @@ def write_json_column(series: pl.Series, path: Path) -> None:
     elif series.dtype == pl.Struct:
         series = series.struct.json_encode()
     elif series.dtype == pl.String:
-        raise ValueError(
-            f"Cannot write string column {series.name} ({series.name=}) as JSON, "
-            "convert to pl.Struct or pl.Object first"
-        )
+        pass
     else:
         raise ValueError(f"Invalid dtype for JSON column: {series.dtype} ({series.name=})")
 
@@ -434,7 +432,11 @@ def read_decimal_column(path: Path, dtype: pl.Decimal | type[pl.Decimal]) -> pl.
     values = read_numeric_column(path, numpy_to_polars_int_dtype(np_dtype), np_dtype)
 
     # avoid float conversion issues when dividing by scale
-    return (values.cast(pl.Decimal(MONETDB_MAX_DECIMAL_PRECISION, MONETDB_MAX_DECIMAL_SCALE)) / 10**scale).cast(dtype)
+    ret: pl.Series = (
+        values.cast(pl.Decimal(MONETDB_MAX_DECIMAL_PRECISION, MONETDB_MAX_DECIMAL_SCALE)) / 10**scale
+    ).cast(dtype)
+
+    return ret
 
 
 def write_decimal_column(series: pl.Series, path: Path, dtype: pl.Decimal) -> None:
@@ -445,3 +447,75 @@ def write_decimal_column(series: pl.Series, path: Path, dtype: pl.Decimal) -> No
     scaled_int = (series * 10**scale).cast(pl.Int64)
 
     write_numeric_column(scaled_int, path, np_dtype=np_dtype)
+
+
+def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
+    match dtype:
+        case (
+            pl.Int8
+            | pl.Int16
+            | pl.Int32
+            | pl.Int64
+            | pl.UInt8
+            | pl.UInt16
+            | pl.UInt32
+            | pl.UInt64
+            | pl.Float32
+            | pl.Float64
+            | pl.Boolean
+        ):
+            return read_numeric_column(path, dtype)
+        case pl.Decimal:
+            return read_decimal_column(path, dtype)
+        case pl.Date:
+            return read_date_column(path)
+        case pl.Time:
+            return read_time_column(path)
+        case pl.Datetime:
+            return read_datetime_column(path, dtype)
+        case pl.String:
+            return read_string_column(path)
+        case pl.Struct:
+            return read_json_column_struct(path)
+        case pl.Object:
+            return read_json_column_object(path)
+        case pl.Binary:
+            return read_blob_column(path)
+        case _:
+            raise ValueError(f"Unsupported Polars dtype for binary import: {dtype}, {meta=}")
+
+
+def write_binary_column_data(series: pl.Series, path: Path) -> None:
+    dtype = series.dtype
+
+    match dtype:
+        case (
+            pl.Int8
+            | pl.Int16
+            | pl.Int32
+            | pl.Int64
+            | pl.UInt8
+            | pl.UInt16
+            | pl.UInt32
+            | pl.UInt64
+            | pl.Float32
+            | pl.Float64
+            | pl.Boolean
+        ):
+            write_numeric_column(series, path)
+        case pl.Decimal:
+            write_decimal_column(series, path, dtype)
+        case pl.Date:
+            write_date_column(series, path)
+        case pl.Time:
+            write_time_column(series, path)
+        case pl.Datetime:
+            write_datetime_column(series, path)
+        case pl.String:
+            write_string_column(series, path)
+        case pl.Struct | pl.Object:
+            write_json_column(series, path)
+        case pl.Binary:
+            write_blob_column(series, path)
+        case _:
+            raise ValueError(f"Unsupported Polars dtype for binary export: {dtype}, {series.name=}")

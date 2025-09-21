@@ -216,7 +216,10 @@ class TimescaleDB(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        df = connectorx.read_sql(TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars")
+        df = cast(
+            pl.DataFrame,
+            connectorx.read_sql(TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"),
+        )
 
         if schema is not None:
             df = df.cast(schema)  # type: ignore[arg-type]
