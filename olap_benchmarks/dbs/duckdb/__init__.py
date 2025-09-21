@@ -14,7 +14,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.3.2"
+VERSION = "1.4.0"
 
 assert duckdb_version_runtime == VERSION
 
