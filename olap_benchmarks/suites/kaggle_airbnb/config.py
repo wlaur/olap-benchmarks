@@ -12,12 +12,12 @@ KAGGLE_AIRBNB_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/kaggle_air
 
 
 KAGGLE_AIRBNB_TABLES = [
-    "calendar",
-    "listings_detailed",
-    "listings",
     "neighbourhoods",
-    "reviews_detailed",
+    "listings",
+    "listings_detailed",
+    "calendar",
     "reviews",
+    "reviews_detailed",
 ]
 
 KAGGLE_AIRBNB_QUERY_NAMES = {

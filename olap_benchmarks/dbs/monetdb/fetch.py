@@ -1,6 +1,7 @@
 import shutil
 import uuid
 from collections.abc import Mapping
+from typing import Literal
 
 import polars as pl
 from sqlalchemy import Connection
@@ -16,6 +17,9 @@ from .utils import (
     get_pymonetdb_connection,
     get_schema_meta,
 )
+
+SchemaMethod = Literal["infer", "fetch"]
+DEFAULT_SCHEMA_METHOD: SchemaMethod = "infer"
 
 
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
@@ -48,22 +52,34 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     return {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
 
 
+def infer_schema(query: str) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
+    pass
+
+
 def fetch_binary(
     query: str,
     connection: Connection,
     schema: Mapping[str, pl.DataType | type[pl.DataType] | tuple[pl.DataType | type[pl.DataType], SchemaMeta]]
+    | SchemaMethod
     | None = None,
 ) -> pl.DataFrame:
+    if schema is None:
+        schema = DEFAULT_SCHEMA_METHOD
+
     con = get_pymonetdb_connection(connection)
     ensure_downloader_uploader(con)
 
-    if schema is None:
-        expanded_schema = fetch_schema(query, connection)
-    else:
+    if isinstance(schema, dict):
         expanded_schema = {
             k: (v if not isinstance(v, tuple) else v[0], v[1] if isinstance(v, tuple) else SchemaMeta())
             for k, v in schema.items()
         }
+    elif schema == "fetch":
+        expanded_schema = fetch_schema(query, connection)
+    elif schema == "infer":
+        expanded_schema = infer_schema(query)
+    else:
+        raise ValueError(f"Invalid value for schema: {schema}")
 
     temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
