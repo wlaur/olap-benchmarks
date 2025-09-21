@@ -1,6 +1,8 @@
+import logging
 import shutil
 import uuid
 from collections.abc import Mapping
+from time import perf_counter
 from typing import Literal
 
 import polars as pl
@@ -18,6 +20,8 @@ from .utils import (
     get_schema_meta,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 SchemaMethod = Literal["infer", "fetch"]
 DEFAULT_SCHEMA_METHOD: SchemaMethod = "infer"
 
@@ -33,7 +37,7 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
 
     description = c.description
     assert description is not None
-    schema = schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
+    schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
 
     df = pl.DataFrame(ret, schema, orient="row")
 
@@ -41,6 +45,8 @@ def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
 
 
 def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
+    t0 = perf_counter()
+
     query = get_limit_query(query)
 
     con = get_pymonetdb_connection(connection)
@@ -49,11 +55,34 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     description = c.description
     assert description is not None
-    return {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
+    ret = {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
+
+    _LOGGER.info(f"Fetched schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} sec")
+
+    return ret
 
 
-def infer_schema(query: str) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
-    pass
+def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
+    t0 = perf_counter()
+    con = get_pymonetdb_connection(connection)
+    c = con.cursor()
+    c.execute(f"PREPARE {query}")
+
+    description = c.description
+    assert description is not None
+    ret = c.fetchall()
+
+    c.execute("DEALLOCATE ALL")
+
+    schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
+
+    df = pl.DataFrame(ret, schema, orient="row")
+
+    ret = {n["column"]: (get_polars_type(n["type"]), SchemaMeta()) for n in df.to_dicts()}
+
+    _LOGGER.info(f"Inferred schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} sec")
+
+    return ret
 
 
 def fetch_binary(
@@ -77,7 +106,7 @@ def fetch_binary(
     elif schema == "fetch":
         expanded_schema = fetch_schema(query, connection)
     elif schema == "infer":
-        expanded_schema = infer_schema(query)
+        expanded_schema = infer_schema(query, connection)
     else:
         raise ValueError(f"Invalid value for schema: {schema}")
 
