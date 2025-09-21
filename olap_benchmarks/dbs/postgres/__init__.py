@@ -3,7 +3,7 @@ import subprocess
 import uuid
 from collections.abc import Mapping
 from textwrap import dedent
-from typing import Literal
+from typing import Literal, cast
 
 import connectorx
 import polars as pl
@@ -401,7 +401,10 @@ class Postgres(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        df = connectorx.read_sql(POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars")
+        df = cast(
+            pl.DataFrame,
+            connectorx.read_sql(POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"),
+        )
 
         if schema is not None:
             df = df.cast(schema)  # type: ignore[arg-type]

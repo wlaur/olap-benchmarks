@@ -9,16 +9,7 @@ import polars as pl
 from sqlalchemy import Connection, text
 
 from ...settings import TableName
-from .binary import (
-    write_blob_column,
-    write_date_column,
-    write_datetime_column,
-    write_decimal_column,
-    write_json_column,
-    write_numeric_column,
-    write_string_column,
-    write_time_column,
-)
+from .binary import write_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
     MONETDB_TEMPORARY_DIRECTORY,
@@ -29,42 +20,6 @@ from .utils import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def write_binary_column_data(series: pl.Series, path: Path) -> None:
-    dtype = series.dtype
-
-    match dtype:
-        case (
-            pl.Int8
-            | pl.Int16
-            | pl.Int32
-            | pl.Int64
-            | pl.UInt8
-            | pl.UInt16
-            | pl.UInt32
-            | pl.UInt64
-            | pl.Float32
-            | pl.Float64
-            | pl.Boolean
-        ):
-            write_numeric_column(series, path)
-        case pl.Decimal:
-            write_decimal_column(series, path, dtype)
-        case pl.Date:
-            write_date_column(series, path)
-        case pl.Time:
-            write_time_column(series, path)
-        case pl.Datetime:
-            write_datetime_column(series, path)
-        case pl.String:
-            write_string_column(series, path)
-        case pl.Struct | pl.Object:
-            write_json_column(series, path)
-        case pl.Binary:
-            write_blob_column(series, path)
-        case _:
-            raise ValueError(f"Unsupported Polars dtype for binary export: {dtype}, {series.name=}")
 
 
 def insert(

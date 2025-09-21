@@ -19,6 +19,9 @@ from sqlalchemy.types import UserDefinedType
 from ...settings import SETTINGS, TableName
 from .settings import SETTINGS as MONETDB_SETTINGS
 
+# NOTE: don't change this, possible that MonetDB assumed ms in some places
+PL_DEFAULT_DATETIME = pl.Datetime("ms")
+
 # MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
 BOOLEAN_NULL = 128
 
@@ -30,7 +33,7 @@ MONETDB_MAX_DECIMAL_SCALE = 3
 
 MONETDB_DATETIME_RECORD_TYPE = np.dtype(
     [
-        ("ms", "<u4"),
+        ("ms", "<u4"),  # NOTE: holds microseconds, not milliseconds
         ("seconds", "u1"),
         ("minutes", "u1"),
         ("hours", "u1"),
@@ -43,7 +46,7 @@ MONETDB_DATETIME_RECORD_TYPE = np.dtype(
 
 MONETDB_TIME_RECORD_TYPE = np.dtype(
     [
-        ("ms", "<u4"),
+        ("ms", "<u4"),  # NOTE: holds microseconds, not milliseconds
         ("seconds", "u1"),
         ("minutes", "u1"),
         ("hours", "u1"),
@@ -60,18 +63,8 @@ MONETDB_DATE_RECORD_TYPE = np.dtype(
     ]
 )
 
-
-JSON_POLARS_DTYPE: type[pl.Object] | type[pl.String] | type[pl.Struct]
-
-match MONETDB_SETTINGS.json_polars_dtype:
-    case "object":
-        JSON_POLARS_DTYPE = pl.Object
-    case "string":
-        JSON_POLARS_DTYPE = pl.String
-    case "struct":
-        JSON_POLARS_DTYPE = pl.Struct
-    case _:
-        raise ValueError(f"Invalid value for setting 'json_polars_dtype': {MONETDB_SETTINGS.json_polars_dtype}")
+# convert to pl.Struct or dict as necessary, don't let the db engine handle this
+JSON_POLARS_DTYPE = pl.String
 
 # NOTE: the order matters, see get_monetdb_type
 MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
@@ -82,14 +75,17 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "hugeint": pl.Int128,
     "blob": pl.Binary,
     "real": pl.Float32,
+    "float": pl.Float64,
     "double": pl.Float64,
     "boolean": pl.Boolean,
-    "timestamp": pl.Datetime("ms"),
-    "timestamptz": pl.Datetime("ms"),  # tz info is not stored in binary data, this will be dumped as UTC
+    "timestamp": PL_DEFAULT_DATETIME,
+    "timestamptz": PL_DEFAULT_DATETIME,  # tz info is not stored in binary data, this will be dumped as UTC
     "time": pl.Time,
     "date": pl.Date,
     "timetz": pl.Time,
     "varchar": pl.String,
+    "clob": pl.String,
+    "text": pl.String,
     "char": pl.String,
     "json": JSON_POLARS_DTYPE,
     "sec_interval": pl.Int64,  # int64 ms
@@ -141,7 +137,9 @@ def get_schema_meta(description: Description) -> SchemaMeta:
     return meta
 
 
-def get_polars_type(type_code: str, precision: int | None, scale: int | None) -> pl.DataType | type[pl.DataType]:
+def get_polars_type(
+    type_code: str, precision: int | None = None, scale: int | None = None
+) -> pl.DataType | type[pl.DataType]:
     if type_code == "decimal":
         return pl.Decimal(precision or MONETDB_DEFAULT_DECIMAL_PRECISION, scale=scale or MONETDB_DEFAULT_DECIMAL_SCALE)
 
@@ -162,6 +160,7 @@ def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
         return "json"
 
     # map unsigned integer to their signed counterparts
+    # an unsigned int will always fit in the signed counterpart
     if dtype == pl.UInt8:
         dtype = pl.Int8
 
@@ -191,6 +190,8 @@ def get_limit_query(query: str) -> str:
 def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
     if not MONETDB_SETTINGS.client_file_transfer:
         return
+
+    assert connection.mapi is not None
 
     if connection.mapi.downloader is not None and connection.mapi.uploader is not None:
         return

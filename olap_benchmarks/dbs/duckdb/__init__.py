@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, cast
 
 import polars as pl
-from duckdb import DuckDBPyConnection
+from duckdb import DuckDBPyConnection  # type: ignore[import-untyped]
 from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 

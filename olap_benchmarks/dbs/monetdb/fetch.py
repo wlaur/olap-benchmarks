@@ -1,22 +1,11 @@
 import shutil
 import uuid
 from collections.abc import Mapping
-from pathlib import Path
 
 import polars as pl
 from sqlalchemy import Connection
 
-from .binary import (
-    read_blob_column,
-    read_date_column,
-    read_datetime_column,
-    read_decimal_column,
-    read_json_column_object,
-    read_json_column_struct,
-    read_numeric_column,
-    read_string_column,
-    read_time_column,
-)
+from .binary import read_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
     MONETDB_TEMPORARY_DIRECTORY,
@@ -57,42 +46,6 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     description = c.description
     assert description is not None
     return {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
-
-
-def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
-    match dtype:
-        case (
-            pl.Int8
-            | pl.Int16
-            | pl.Int32
-            | pl.Int64
-            | pl.UInt8
-            | pl.UInt16
-            | pl.UInt32
-            | pl.UInt64
-            | pl.Float32
-            | pl.Float64
-            | pl.Boolean
-        ):
-            return read_numeric_column(path, dtype)
-        case pl.Decimal:
-            return read_decimal_column(path, dtype)
-        case pl.Date:
-            return read_date_column(path)
-        case pl.Time:
-            return read_time_column(path)
-        case pl.Datetime:
-            return read_datetime_column(path, dtype)
-        case pl.String:
-            return read_string_column(path)
-        case pl.Struct:
-            return read_json_column_struct(path)
-        case pl.Object:
-            return read_json_column_object(path)
-        case pl.Binary:
-            return read_blob_column(path)
-        case _:
-            raise ValueError(f"Unsupported Polars dtype for binary import: {dtype}")
 
 
 def fetch_binary(
