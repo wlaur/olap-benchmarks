@@ -57,7 +57,7 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     assert description is not None
     ret = {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
 
-    _LOGGER.info(f"Fetched schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} sec")
+    _LOGGER.info(f"Fetched schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} ms")
 
     return ret
 
@@ -72,6 +72,8 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     assert description is not None
     ret = c.fetchall()
 
+    # could also keep the prepared statement since we'll execute it shortly,
+    # probably not worth the extra complexity though
     c.execute("DEALLOCATE ALL")
 
     schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
@@ -80,7 +82,7 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     ret = {n["column"]: (get_polars_type(n["type"]), SchemaMeta()) for n in df.to_dicts()}
 
-    _LOGGER.info(f"Inferred schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} sec")
+    _LOGGER.info(f"Inferred schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} ms")
 
     return ret
 
