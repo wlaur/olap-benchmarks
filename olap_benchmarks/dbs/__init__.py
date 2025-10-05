@@ -21,6 +21,10 @@ from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, 
 
 if TYPE_CHECKING:
     from ..suites import BenchmarkSuite
+    from ..suites.clickbench.config import Clickbench
+    from ..suites.kaggle_airbnb.config import KaggleAirbnb
+    from ..suites.rtabench.config import RTABench
+    from ..suites.time_series.config import TimeSeries
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -178,25 +182,25 @@ class Database(BaseModel, ABC):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
 
     @property
-    def rtabench(self) -> BenchmarkSuite:
+    def rtabench(self) -> RTABench:
         from ..suites.rtabench.config import RTABench
 
         return RTABench(db=self)
 
     @property
-    def clickbench(self) -> BenchmarkSuite:
+    def clickbench(self) -> Clickbench:
         from ..suites.clickbench.config import Clickbench
 
         return Clickbench(db=self)
 
     @property
-    def time_series(self) -> BenchmarkSuite:
+    def time_series(self) -> TimeSeries:
         from ..suites.time_series.config import TimeSeries
 
         return TimeSeries(db=self)
 
     @property
-    def kaggle_airbnb(self) -> BenchmarkSuite:
+    def kaggle_airbnb(self) -> KaggleAirbnb:
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
 
         return KaggleAirbnb(db=self)
