@@ -17,7 +17,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "16.9"
+VERSION = "18.0"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
@@ -334,17 +334,20 @@ class Postgres(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "postgres").mkdir(exist_ok=True)
-        (SETTINGS.temporary_directory / "postgres/data").mkdir(exist_ok=True, parents=True)
+        host_pgdata = SETTINGS.database_directory / "postgres" / "pgdata"
+        host_pgdata.mkdir(parents=True, exist_ok=True)
+        host_pgdata.chmod(0o777)  # macOS bind-friendly
 
         parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 5433:5432",
-            f"-v {SETTINGS.database_directory.as_posix()}/postgres:/var/lib/postgresql/data/",
+            "docker run --platform linux/amd64",
+            f"--name {self.name}-benchmark",
+            "--rm -d -p 5433:5432",
+            "--user 0:0",
+            f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
+            "-e PGDATA=/var/lib/postgresql/pgdata",
             "-e POSTGRES_PASSWORD=password",
-            "-e PGDATA=/var/lib/postgresql/data/",
-            DOCKER_IMAGE,
+            DOCKER_IMAGE,  # e.g. postgres:18
         ]
-
         return " ".join(parts)
 
     def connect(self, reconnect: bool = False) -> Connection:
