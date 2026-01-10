@@ -3,7 +3,7 @@ name = "olap-benchmarks"
 version = "0.1.0"
 description = "OLAP database benchmarks"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "altair>=5.5.0",
     "clickhouse-connect>=0.8.18",
@@ -39,6 +39,7 @@ dev = [
     "hvplot>=0.11.3",
     "ipykernel>=6.29.5",
     "mypy>=1.16.1",
+    "pyright",
     "pandas-stubs>=2.2.3.250527",
     "pyarrow-stubs>=20.0.0.20250627",
     "pyinstrument>=5.0.2",

@@ -32,7 +32,7 @@ if LOCAL_IMAGE:
     VERSION = "Mar2025-11"
     DOCKER_IMAGE = f"monetdb-local:{VERSION}"
 else:
-    VERSION = "Mar2025-SP2"
+    VERSION = "Dec2025"
     DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
