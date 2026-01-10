@@ -13,6 +13,7 @@ from .dbs.postgres import Postgres
 from .dbs.questdb import QuestDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
+from .results import ResultsCLI, config
 from .settings import MAIN_PROCESS_TITLE, DatabaseName, SuiteName, setup_stdout_logging
 from .suites.clickbench.config import download_clickbench
 from .suites.kaggle_airbnb.config import convert_kaggle_airbnb_data_to_parquet
@@ -71,6 +72,8 @@ if __name__ == "__main__":
         {
             "benchmark": benchmark,
             "run": run,
+            "results": ResultsCLI(),
+            "config": config,
             "download_rtabench": download_rtabench_data,
             "generate_time_series": generate_time_series_datasets,
             "download_clickbench": download_clickbench,
