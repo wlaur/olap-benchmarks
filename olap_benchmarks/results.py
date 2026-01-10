@@ -172,7 +172,7 @@ class ResultsCLI:
 
         # Table header
         print(
-            f"{'ID':>5} {'DB':<12} {'SUITE':<14} {'OP':<8} {'STATUS':<13} {'DURATION':<12} "
+            f"{'ID':>5} {'DB':<20} {'SUITE':<14} {'OP':<8} {'STATUS':<13} {'DURATION':<12} "
             f"{'VERSION':<16} {'SYSTEM':<20} {'STARTED':<20}"
         )
         print("-" * 130)
@@ -180,7 +180,7 @@ class ResultsCLI:
         for b in benchmarks:
             started = b.started_at.strftime("%Y-%m-%d %H:%M:%S") if b.started_at else "-"
             print(
-                f"{b.id:>5} {b.db:<12} {b.suite:<14} {b.operation:<8} {b.status:<13} {b.duration:<12} "
+                f"{b.id:>5} {b.db:<20} {b.suite:<14} {b.operation:<8} {b.status:<13} {b.duration:<12} "
                 f"{(b.version or '-'):<16} {(b.system or '-'):<20} {started:<20}"
             )
 
@@ -325,11 +325,11 @@ class ResultsCLI:
             sys.exit(1)
 
         print(f"\nBenchmarks to delete ({len(benchmarks)}):")
-        print(f"{'ID':>5} {'DB':<12} {'SUITE':<14} {'OP':<8} {'STARTED':<20}")
+        print(f"{'ID':>5} {'DB':<20} {'SUITE':<14} {'OP':<8} {'STARTED':<20}")
         print("-" * 65)
         for b in benchmarks:
             started = b[4].strftime("%Y-%m-%d %H:%M:%S") if b[4] else "-"
-            print(f"{b[0]:>5} {b[2]:<12} {b[1]:<14} {b[3]:<8} {started:<20}")
+            print(f"{b[0]:>5} {b[2]:<20} {b[1]:<14} {b[3]:<8} {started:<20}")
 
         # Count related records
         metric_count = conn.execute(
