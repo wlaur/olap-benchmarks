@@ -93,13 +93,14 @@ class Benchmark:
 class ResultsCLI:
     """Manage benchmark results.
 
-    Commands for listing, viewing, and deleting benchmark results
+    Commands for listing, viewing, renaming, and deleting benchmark results
     stored in the results database.
 
     Examples:
         python -m olap_benchmarks results list
         python -m olap_benchmarks results list --db postgres
         python -m olap_benchmarks results show 42
+        python -m olap_benchmarks results rename 42 postgres-new
         python -m olap_benchmarks results delete 42 43 --force
     """
 
@@ -281,6 +282,70 @@ class ResultsCLI:
             print(f"  Disk (MB):  min={metrics[7]}  max={metrics[8]}")
 
         print()
+
+    def rename(
+        self,
+        benchmark_id: int,
+        new_db: str,
+        dry_run: bool = False,
+        force: bool = False,
+    ) -> None:
+        """Rename the database field for a benchmark result.
+
+        Args:
+            benchmark_id: The benchmark ID to rename
+            new_db: The new database name
+            dry_run: Preview the change without actually renaming (--dry-run)
+            force: Skip confirmation prompt (--force)
+        """
+        conn = _get_connection()
+
+        # Get the benchmark
+        row = conn.execute(
+            """
+            SELECT id, suite, db, operation, started_at, finished_at, deleted_at, notes
+            FROM benchmark WHERE id = ?
+            """,
+            [benchmark_id],
+        ).fetchone()
+
+        if not row:
+            print(f"Benchmark {benchmark_id} not found.", file=sys.stderr)
+            sys.exit(1)
+
+        b = Benchmark(*row)
+
+        if b.deleted_at:
+            print(f"Cannot rename deleted benchmark {benchmark_id}.", file=sys.stderr)
+            sys.exit(1)
+
+        # Show what will be changed
+        print("\nBenchmark to rename:")
+        print(f"{'ID':>5} {'DB':<20} {'SUITE':<14} {'OP':<8} {'STATUS':<13} {'STARTED':<20}")
+        print("-" * 80)
+        started = b.started_at.strftime("%Y-%m-%d %H:%M:%S") if b.started_at else "-"
+        print(f"{b.id:>5} {b.db:<20} {b.suite:<14} {b.operation:<8} {b.status:<13} {started:<20}")
+
+        print("\nChange:")
+        print(f"  Database: {b.db} -> {new_db}")
+
+        if dry_run:
+            print("\n[DRY RUN] No changes made.")
+            return
+
+        if not force:
+            confirm = input("\nProceed with rename? [y/N]: ").strip().lower()
+            if confirm != "y":
+                print("Aborted.")
+                return
+
+        # Perform the update
+        conn.execute(
+            "UPDATE benchmark SET db = ? WHERE id = ?",
+            [new_db, benchmark_id],
+        )
+
+        print(f"\nRenamed benchmark {benchmark_id}: {b.db} -> {new_db}")
 
     def delete(
         self,
