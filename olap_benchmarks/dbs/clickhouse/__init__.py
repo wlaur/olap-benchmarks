@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from shutil import rmtree
 from time import sleep
-from typing import Any, Literal, cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import clickhouse_connect
@@ -14,7 +14,8 @@ import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
@@ -80,9 +81,7 @@ class ClickHouseRTABench(RTABench):
         return {"time_columns": ["hour", "day"]}
 
 
-class ClickhouseClickbench(Clickbench):
-    db: "Clickhouse"
-
+class ClickhouseClickbench(Clickbench, BenchmarkSuite["Clickhouse"]):
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # same number of partitions as the official clickbench insert
@@ -109,7 +108,7 @@ class ClickhouseTimeseries(TimeSeries):
 
 
 class Clickhouse(Database):
-    name: Literal["clickhouse"] = "clickhouse"
+    name: DatabaseName = "clickhouse"
     version: str = VERSION
 
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
@@ -166,7 +165,7 @@ class Clickhouse(Database):
         df = cast(pl.DataFrame, pl.from_arrow(self.get_client().query_arrow(query)))
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         if time_columns is None:
             time_columns = []

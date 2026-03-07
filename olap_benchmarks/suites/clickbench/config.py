@@ -1,10 +1,10 @@
 import logging
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
 import polars as pl
 
-from ...settings import REPO_ROOT, SETTINGS
+from ...settings import REPO_ROOT, SETTINGS, SuiteName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def download_clickbench() -> None:
 
 
 class Clickbench(BenchmarkSuite):
-    name: Literal["clickbench"] = "clickbench"
+    name: SuiteName = "clickbench"
 
     def load_dataset(self) -> pl.DataFrame:
         # parquet file stores these as integers, the schema expects correct dtypes

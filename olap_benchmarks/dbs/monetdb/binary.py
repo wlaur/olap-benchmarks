@@ -6,6 +6,7 @@ from typing import cast
 import numpy as np
 import polars as pl
 import pyarrow as pa
+from pyarrow import compute as pa_compute
 
 from .utils import (
     BOOLEAN_NULL,
@@ -51,13 +52,13 @@ TIME_NULL_RECORD = {
 
 def decimal_numpy_dtype(precision: int) -> np.dtype:
     if 1 <= precision <= 2:
-        return np.int8  # type: ignore[return-value]
+        return np.int8
     if 3 <= precision <= 4:
-        return np.int16  # type: ignore[return-value]
+        return np.int16
     if 5 <= precision <= 9:
-        return np.int32  # type: ignore[return-value]
+        return np.int32
     if 10 <= precision <= 18:
-        return np.int64  # type: ignore[return-value]
+        return np.int64
     raise ValueError(f"Decimal precision {precision} too large for integer-based encoding (needs 16 bytes)")
 
 
@@ -81,9 +82,9 @@ def read_date_column(path: Path) -> pl.Series:
 
     df = pl.DataFrame(
         {
-            "year": records["year"],  # type: ignore[dict-item]
-            "month": records["month"],  # type: ignore[dict-item]
-            "day": records["day"],  # type: ignore[dict-item]
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
         }
     )
 
@@ -193,13 +194,13 @@ def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> 
 
     df = pl.DataFrame(
         {
-            "year": records["year"],  # type: ignore[dict-item]
-            "month": records["month"],  # type: ignore[dict-item]
-            "day": records["day"],  # type: ignore[dict-item]
-            "hour": records["hours"],  # type: ignore[dict-item]
-            "minute": records["minutes"],  # type: ignore[dict-item]
-            "second": records["seconds"],  # type: ignore[dict-item]
-            "microsecond": records["ms"],  # type: ignore[dict-item] # NOTE: microsecond, not millisecond
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
+            "hour": records["hours"],
+            "minute": records["minutes"],
+            "second": records["seconds"],
+            "microsecond": records["ms"],  # NOTE: microsecond, not millisecond
         }
     )
 
@@ -277,7 +278,7 @@ def read_string_column(path: Path) -> pl.Series:
         start = end + 1
 
     decoded_array = pa.array(result, type=pa.binary())
-    string_array = pa.compute.cast(decoded_array, pa.string())
+    string_array = pa_compute.cast(decoded_array, pa.string())
     return cast(pl.Series, pl.from_arrow(string_array))
 
 
@@ -503,7 +504,7 @@ def write_binary_column_data(series: pl.Series, path: Path) -> None:
             | pl.Boolean
         ):
             write_numeric_column(series, path)
-        case pl.Decimal:
+        case pl.Decimal():
             write_decimal_column(series, path, dtype)
         case pl.Date:
             write_date_column(series, path)

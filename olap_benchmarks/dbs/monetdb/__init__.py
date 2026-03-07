@@ -5,7 +5,7 @@ from typing import Any, Literal
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
 from .. import Database
@@ -69,7 +69,7 @@ class MonetDBKaggleAirbnb(KaggleAirbnb):
 
 
 class MonetDB(Database):
-    name: Literal["monetdb"] = "monetdb"
+    name: DatabaseName = "monetdb"
     version: str = VERSION
 
     connection_string: str = MONETDB_CONNECTION_STRING

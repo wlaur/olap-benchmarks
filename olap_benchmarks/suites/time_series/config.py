@@ -8,7 +8,7 @@ from typing import Any, Literal, get_args
 import numpy as np
 import polars as pl
 
-from ...settings import REPO_ROOT, TableName
+from ...settings import REPO_ROOT, SuiteName, TableName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -249,7 +249,7 @@ def generate_time_series_datasets(overwrite: bool = False) -> None:
 
 
 class TimeSeries(BenchmarkSuite):
-    name: Literal["time_series"] = "time_series"
+    name: SuiteName = "time_series"
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)

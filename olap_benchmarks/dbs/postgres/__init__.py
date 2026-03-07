@@ -3,13 +3,13 @@ import subprocess
 import uuid
 from collections.abc import Mapping
 from textwrap import dedent
-from typing import Literal, cast
+from typing import cast
 
 import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
@@ -80,7 +80,7 @@ def table_exists(connection: Connection, table: str) -> bool:
     cursor = dbapi_con.cursor()
     cursor.execute("SELECT to_regclass(%s);", (f'public."{table}"',))
     result = cursor.fetchone()
-    return result[0] is not None  # type: ignore[index]
+    return result[0] is not None
 
 
 class PostgresRTABench(RTABench):
@@ -327,7 +327,7 @@ class PostgresTimeSeries(TimeSeries):
 
 
 class Postgres(Database):
-    name: Literal["postgres"] = "postgres"
+    name: DatabaseName = "postgres"
     version: str = VERSION
 
     connection_string: str = POSTGRES_CONNECTION_STRING
@@ -395,7 +395,7 @@ class Postgres(Database):
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 
@@ -410,7 +410,7 @@ class Postgres(Database):
         )
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 
@@ -426,7 +426,7 @@ class Postgres(Database):
         df = pl.read_database_uri(query.strip().removesuffix(";"), POSTGRES_CONNECTION_STRING, engine="connectorx")
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 
