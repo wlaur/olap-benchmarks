@@ -17,3 +17,29 @@ Install the necessary Python dependencies
 ```bash
 uv sync
 ```
+
+## Results schema migrations
+
+Install dev dependencies (includes Alembic):
+
+```bash
+uv sync --group dev
+```
+
+Create a new migration from SQLAlchemy models:
+
+```bash
+uv run --group dev alembic revision --autogenerate -m "describe_change"
+```
+
+Apply migrations to the default results database from `.env`:
+
+```bash
+uv run --group dev alembic upgrade head
+```
+
+Apply migrations to an explicit database path:
+
+```bash
+uv run --group dev alembic -x db=/absolute/path/to/results.db upgrade head
+```
