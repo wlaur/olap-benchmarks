@@ -50,7 +50,7 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("compress"):
+        with self.db.phase_context("compress"):
             self.compress_tables()
 
         if restart:
@@ -71,7 +71,7 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("compress"):
+        with self.db.phase_context("compress"):
             self.compress_table()
 
         if restart:
@@ -98,7 +98,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
 
             _LOGGER.info(f"Vacuumed table {table_name}")
 
-    def populate_time_series(self, restart: bool = True) -> None:
+    def populate(self, restart: bool = True) -> None:
         # need to define parts of the schema and insert data in a specific order
         self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
 
@@ -129,13 +129,13 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
 
             _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-            with self.db.event_context(f"insert_{table_name}"):
+            with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
 
-        with self.db.event_context("compress"):
+        with self.db.phase_context("compress"):
             self.compress_tables()
 
         if restart:

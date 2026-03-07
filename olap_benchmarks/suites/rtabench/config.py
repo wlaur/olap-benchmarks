@@ -157,7 +157,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
         for table_name in RTABENCH_SCHEMAS:
             df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
-            with self.db.event_context(f"insert_{table_name}"):
+            with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
@@ -189,15 +189,17 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
                 query = self.load_rtabench_query(query_name)
 
                 for it in range(1, iterations + 1):
-                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.db.fetch(query, **self.fetch_kwargs)
-                        t = perf_counter() - t1
+                    df, t = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=it,
+                        query=query,
+                        fetch_kwargs=self.fetch_kwargs,
+                    )
 
                     # time delta t will not match time at end - time at start exactly,
                     # but within a couple of milliseconds
-                    # there is a small overhead when the event is sent to the queue
-                    # (the actual write to result db happens later)
+                    # there is a small overhead when the step result is sent to the queue
+                    # (the actual write to the results db happens later)
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
                         f"iteration {it:_}/{iterations:_} "

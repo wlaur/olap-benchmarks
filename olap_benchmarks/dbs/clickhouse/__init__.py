@@ -93,10 +93,10 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
         # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
         self.db.run_sql("optimize table hits")
 
-    def populate_clickbench(self, restart: bool = True) -> None:
+    def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("optimize"):
+        with self.db.phase_context("optimize"):
             self.optimize_clickbench_table()
 
         if restart:

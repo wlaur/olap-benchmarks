@@ -13,7 +13,7 @@ from .dbs.postgres import Postgres
 from .dbs.questdb import QuestDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
-from .results import ResultsCLI, config
+from .results import config, export_site_data
 from .settings import MAIN_PROCESS_TITLE, DatabaseName, SuiteName, setup_stdout_logging
 from .suites.clickbench.config import download_clickbench
 from .suites.kaggle_airbnb.config import convert_kaggle_airbnb_data_to_parquet
@@ -39,26 +39,31 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def benchmark(db: DatabaseName, suite: SuiteName, operation: Literal["run", "populate", "both"]) -> None:
-    _, queue, result_queue = start_writer_process()
-    db_instance = DBS[db]
+    writer = start_writer_process()
 
-    db_instance.set_queues(queue, result_queue)
+    try:
+        db_instance = DBS[db]
+        db_instance.set_queues(writer.queue, writer.result_queue)
 
-    if operation == "both":
-        db_instance.benchmark(suite, "populate")
-        db_instance.benchmark(suite, "run")
-    else:
-        db_instance.benchmark(suite, operation)
+        if operation == "both":
+            db_instance.benchmark(suite, "populate")
+            db_instance.benchmark(suite, "run")
+        else:
+            db_instance.benchmark(suite, operation)
+    finally:
+        writer.close()
 
 
-def run(db: DatabaseName, command: Literal["start", "stop", "restart", "create"]) -> None:
+def run(db: DatabaseName, command: Literal["start", "stop", "restart"]) -> None:
     db_instance = DBS[db]
 
     match command:
         case "start" | "stop" | "restart":
             cmd: str = getattr(db_instance, command)
             _LOGGER.info(f"Running command {command}: {cmd}")
-            os.system(cmd)
+
+            if cmd:
+                os.system(cmd)
 
             if command in ("start", "restart"):
                 db_instance.wait_until_accessible()
@@ -72,8 +77,8 @@ if __name__ == "__main__":
         {
             "benchmark": benchmark,
             "run": run,
-            "results": ResultsCLI(),
             "config": config,
+            "export_site_data": export_site_data,
             "download_rtabench": download_rtabench_data,
             "generate_time_series": generate_time_series_datasets,
             "download_clickbench": download_clickbench,

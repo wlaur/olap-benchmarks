@@ -49,7 +49,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
         df = self.load_dataset()
         _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-        with self.db.event_context("insert_hits"):
+        with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
 
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
@@ -81,10 +81,12 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
 
             with self.db.query_context("clickbench", query_name):
                 for it in range(1, ITERATIONS + 1):
-                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.db.fetch(query, **self.fetch_kwargs)
-                        t = perf_counter() - t1
+                    df, t = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=it,
+                        query=query,
+                        fetch_kwargs=self.fetch_kwargs,
+                    )
 
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "

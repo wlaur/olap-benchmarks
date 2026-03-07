@@ -48,7 +48,7 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 
         _LOGGER.info(f"Wrote temporary hits.parquet with {count:_} rows to {fpath}")
 
-        with self.db.event_context("insert_hits"):
+        with self.db.phase_context("insert", table_name="hits"):
             con = self.db.connect()
 
             con.execute(
