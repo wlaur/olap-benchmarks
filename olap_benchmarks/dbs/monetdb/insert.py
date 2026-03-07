@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 from textwrap import dedent
 from time import perf_counter
+from typing import Any, cast
 
 import polars as pl
 from sqlalchemy import Connection, text
@@ -58,7 +59,7 @@ def insert(
             column_files.append(path)
 
         files_clause = ", ".join(f"'{path_prefix}{subdir}/{path.name}'" for path in column_files)
-        con.execute(
+        cast(Any, con).execute(
             f"copy little endian binary into {table} from {files_clause} "
             f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
         )

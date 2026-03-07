@@ -66,7 +66,7 @@ def get_database_directory(db: DatabaseName) -> Path:
     return SETTINGS.database_directory / db
 
 
-def calculate_cpu_percent(cpu_stats: dict, precpu_stats: dict) -> float:
+def calculate_cpu_percent(cpu_stats: dict[str, Any], precpu_stats: dict[str, Any]) -> float:
     cpu_delta = cpu_stats["cpu_usage"]["total_usage"] - precpu_stats["cpu_usage"]["total_usage"]
     system_delta = cpu_stats["system_cpu_usage"] - precpu_stats["system_cpu_usage"]
     online_cpus = cpu_stats["online_cpus"]
@@ -111,7 +111,7 @@ def get_container_metrics(db: DatabaseName) -> BenchmarkMetric:
         # reads and processes input Parquet files
         return get_main_process_metrics(db)
 
-    container = DOCKER_CLIENT.containers.get(get_container_name(db))
+    container = cast(Any, DOCKER_CLIENT.containers).get(get_container_name(db))
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = cast(dict[str, Any], container.stats(stream=False))

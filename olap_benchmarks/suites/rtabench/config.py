@@ -113,11 +113,11 @@ async def download_rtabench_data_async(output_directory: Path) -> None:
     urls = [f"https://rtadatasets.timescale.com/{name}.csv.gz" for name in RTABENCH_SCHEMAS]
 
     async with httpx.AsyncClient() as client:
-        tasks = []
+        tasks: list[asyncio.Task[None]] = []
         for url in urls:
             filename = url.split("/")[-1]
             dest_path = output_directory / filename
-            tasks.append(download_file(client, url, dest_path))
+            tasks.append(asyncio.create_task(download_file(client, url, dest_path)))
 
         await asyncio.gather(*tasks)
 

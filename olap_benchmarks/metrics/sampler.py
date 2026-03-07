@@ -5,10 +5,11 @@ from multiprocessing import Event as create_event
 from multiprocessing import Process
 from multiprocessing.synchronize import Event
 from queue import Queue
+from typing import Any
 
 from ..settings import DatabaseName, Operation, SuiteName, setup_stdout_logging
 from .measure import get_container_metrics
-from .storage import Storage
+from .storage import Storage, WriterMessage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,8 +18,8 @@ def sampling_loop(
     db: DatabaseName,
     benchmark_id: int,
     stop_event: Event,
-    queue: Queue,
-    result_queue: Queue,
+    queue: Queue[WriterMessage],
+    result_queue: Queue[Any],
     interval_seconds: float | None = 1.0,
 ) -> None:
     setup_stdout_logging()

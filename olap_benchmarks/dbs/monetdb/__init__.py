@@ -29,11 +29,14 @@ if LOCAL_IMAGE:
     # TODO: fails with "#main-thread: log_read_types_file: ERROR: unknown type in log file 'mbr'"
     # when starting a db created with Mar2025-SP1
     # (this is an unreleased version, will probably be fixed before SP2 is released)
-    VERSION = "Mar2025-11"
-    DOCKER_IMAGE = f"monetdb-local:{VERSION}"
+    _version = "Mar2025-11"
+    _docker_image = f"monetdb-local:{_version}"
 else:
-    VERSION = "Dec2025"
-    DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
+    _version = "Dec2025"
+    _docker_image = f"monetdb/monetdb:{_version}"
+
+VERSION = _version
+DOCKER_IMAGE = _docker_image
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 

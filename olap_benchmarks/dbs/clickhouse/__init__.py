@@ -15,7 +15,6 @@ from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, DatabaseName, TableName
-from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
@@ -66,12 +65,15 @@ def get_clickhouse_type(dtype: pl.DataType | type[pl.DataType], nullable: bool =
 def get_clickhouse_client() -> ClickhouseClient:
     parsed_sqlalchemy_connection_string = urlparse(CLICKHOUSE_CONNECTION_STRING)
 
-    return clickhouse_connect.get_client(
-        host=parsed_sqlalchemy_connection_string.hostname,
-        port=parsed_sqlalchemy_connection_string.port or 18123,
-        username=parsed_sqlalchemy_connection_string.username,
-        password=parsed_sqlalchemy_connection_string.password or "no-password",
-        database="default",
+    return cast(
+        ClickhouseClient,
+        cast(Any, clickhouse_connect).get_client(
+            host=parsed_sqlalchemy_connection_string.hostname,
+            port=parsed_sqlalchemy_connection_string.port or 18123,
+            username=parsed_sqlalchemy_connection_string.username,
+            password=parsed_sqlalchemy_connection_string.password or "no-password",
+            database="default",
+        ),
     )
 
 
@@ -81,7 +83,7 @@ class ClickHouseRTABench(RTABench):
         return {"time_columns": ["hour", "day"]}
 
 
-class ClickhouseClickbench(Clickbench, BenchmarkSuite["Clickhouse"]):
+class ClickhouseClickbench(Clickbench):
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # same number of partitions as the official clickbench insert
@@ -89,6 +91,7 @@ class ClickhouseClickbench(Clickbench, BenchmarkSuite["Clickhouse"]):
 
     def optimize_clickbench_table(self) -> None:
         # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
+        assert isinstance(self.db, Clickhouse)
         self.db.run_sql("optimize table hits")
 
     def populate_clickbench(self, restart: bool = True) -> None:
@@ -162,10 +165,10 @@ class Clickhouse(Database):
         query = query.strip().removesuffix(";")
 
         # query_arrow converts datetime to epoch second
-        df = cast(pl.DataFrame, pl.from_arrow(self.get_client().query_arrow(query)))
+        df = cast(pl.DataFrame, cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query)))
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         if time_columns is None:
             time_columns = []
@@ -186,7 +189,7 @@ class Clickhouse(Database):
         retries = 10
         for retry in range(retries):
             try:
-                self.get_client().command(statement)
+                cast(Any, self.get_client()).command(statement)
                 return
             except Exception as e:
                 if "error code 1001" in str(e):
@@ -292,7 +295,7 @@ class Clickhouse(Database):
         if wait_ms is not None:
             sleep(wait_ms / 1000)
         try:
-            exists_result = client.query_df(f"EXISTS TABLE {table}")
+            exists_result = cast(Any, client).query_df(f"EXISTS TABLE {table}")
             table_exists = bool(exists_result["result"][0])
 
             if not table_exists:

@@ -22,12 +22,12 @@ class WriterMessage(TypedDict):
     args: list[Any]
 
 
-def writer_loop(queue: Queue, result_queue: Queue) -> None:
+def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[Any]) -> None:
     setup_stdout_logging()
     db_path = SETTINGS.results_directory / "results.db"
 
     _LOGGER.info(f"Trying to connect to results database at {db_path}")
-    conn = duckdb.connect(db_path)
+    conn = cast(duckdb.DuckDBPyConnection, cast(Any, duckdb).connect(db_path))
     _LOGGER.info(f"Connected to results database at {db_path}")
 
     with (REPO_ROOT / "olap_benchmarks/metrics/schema.sql").open() as f:
@@ -35,32 +35,42 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
 
     while True:
         try:
-            msg = cast(WriterMessage, queue.get())
+            msg = queue.get()
         except EOFError:
             return
 
         match msg["type"]:
             case "debug":
-                result = conn.execute(
-                    """
+                result = cast(
+                    tuple[int] | None,
+                    cast(Any, conn)
+                    .execute(
+                        """
                     insert into debug (content)
                     values (?)
                     returning id
                     """,
-                    msg["args"],
-                ).fetchone()
+                        msg["args"],
+                    )
+                    .fetchone(),
+                )
 
                 result_queue.put(result[0] if result else None)
 
             case "insert_benchmark":
-                result = conn.execute(
-                    """
+                result = cast(
+                    tuple[int] | None,
+                    cast(Any, conn)
+                    .execute(
+                        """
                     insert into benchmark (suite, db, operation, started_at, notes)
                     values (?, ?, ?, ?, ?)
                     returning id
                     """,
-                    msg["args"],
-                ).fetchone()
+                        msg["args"],
+                    )
+                    .fetchone(),
+                )
 
                 result_queue.put(result[0] if result else None)
 
@@ -95,10 +105,10 @@ def writer_loop(queue: Queue, result_queue: Queue) -> None:
         _LOGGER.debug(f"Wrote message with type {msg['type']}")
 
 
-def start_writer_process() -> tuple[SyncManager, Queue, Queue]:
+def start_writer_process() -> tuple[SyncManager, Queue[WriterMessage], Queue[Any]]:
     manager = Manager()
-    queue = manager.Queue()
-    result_queue = manager.Queue()
+    queue: Queue[WriterMessage] = manager.Queue()
+    result_queue: Queue[Any] = manager.Queue()
 
     writer_process: Process = Process(target=writer_loop, args=(queue, result_queue))
     writer_process.start()
@@ -108,7 +118,7 @@ def start_writer_process() -> tuple[SyncManager, Queue, Queue]:
 
 
 class Storage:
-    def __init__(self, queue: Queue, result_queue: Queue) -> None:
+    def __init__(self, queue: Queue[WriterMessage], result_queue: Queue[Any]) -> None:
         self.queue = queue
         self.result_queue = result_queue
 
@@ -119,7 +129,7 @@ class Storage:
         self, suite: SuiteName, db: DatabaseName, operation: Operation, started_at: datetime, notes: str | None = None
     ) -> int:
         self.put("insert_benchmark", [suite, db, operation, started_at, notes])
-        return self.result_queue.get()
+        return cast(int, self.result_queue.get())
 
     def finish_benchmark(self, benchmark_id: int, finished_at: datetime) -> None:
         self.put("finish_benchmark", [finished_at, benchmark_id])
@@ -135,4 +145,4 @@ class Storage:
             content = uuid.uuid4().hex
 
         self.put("debug", [content])
-        return self.result_queue.get()
+        return cast(int, self.result_queue.get())

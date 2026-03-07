@@ -3,7 +3,7 @@ import subprocess
 import uuid
 from collections.abc import Mapping
 from textwrap import dedent
-from typing import cast
+from typing import Any, cast
 
 import connectorx
 import polars as pl
@@ -80,7 +80,7 @@ def table_exists(connection: Connection, table: str) -> bool:
     cursor = dbapi_con.cursor()
     cursor.execute("SELECT to_regclass(%s);", (f'public."{table}"',))
     result = cursor.fetchone()
-    return result[0] is not None
+    return result is not None and result[0] is not None
 
 
 class PostgresRTABench(RTABench):
@@ -389,13 +389,13 @@ class Postgres(Database):
 
         if not rows:
             if schema:
-                return pl.DataFrame(schema=schema)
+                return pl.DataFrame(schema=cast(pl.Schema, schema))
             return pl.DataFrame({col: [] for col in columns})
 
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -406,11 +406,13 @@ class Postgres(Database):
     ) -> pl.DataFrame:
         df = cast(
             pl.DataFrame,
-            connectorx.read_sql(POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"),
+            cast(Any, connectorx).read_sql(
+                POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
+            ),
         )
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -426,7 +428,7 @@ class Postgres(Database):
         df = pl.read_database_uri(query.strip().removesuffix(";"), POSTGRES_CONNECTION_STRING, engine="connectorx")
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
