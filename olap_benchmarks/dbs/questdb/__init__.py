@@ -2,14 +2,13 @@ import logging
 import uuid
 from collections.abc import Mapping
 from time import sleep
-from typing import Literal
+from typing import Any, Literal, cast
 
 import polars as pl
 from questdb.ingress import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, TableName
-from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from .. import Database
 
@@ -20,7 +19,7 @@ VERSION = "9.0.1"
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 
 
-class QuestDBClickbench(Clickbench, BenchmarkSuite["QuestDB"]):
+class QuestDBClickbench(Clickbench):
     def populate(self, restart: bool = True) -> None:
         # NOTE: inserts directly from source Parquet file to avoid OOM issues
         # insert time is not comparable with other databases that insert from an in memory dataframe
@@ -61,6 +60,7 @@ class QuestDBClickbench(Clickbench, BenchmarkSuite["QuestDB"]):
             con.commit()
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
+            assert isinstance(self.db, QuestDB)
             self.db.wait_until_count("hits", count)
 
         fpath.unlink()
@@ -121,7 +121,7 @@ class QuestDB(Database):
             raise ValueError(f"Unknown method:'{method}'")
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -209,7 +209,7 @@ class QuestDB(Database):
                 if i % 10 == 0 or i == num_batches - 1:
                     _LOGGER.info(f"Batch {i + 1:_}/{num_batches:_}: inserted rows {start:_} to {end - 1:_}")
 
-                sender.flush()
+                cast(Any, sender).flush()
 
         self.wait_until_count(table, initial_count + len(df))
 

@@ -1,7 +1,7 @@
 import contextlib
 import json
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -50,19 +50,19 @@ TIME_NULL_RECORD = {
 }
 
 
-def decimal_numpy_dtype(precision: int) -> np.dtype:
+def decimal_numpy_dtype(precision: int) -> np.dtype[Any]:
     if 1 <= precision <= 2:
-        return np.int8
+        return np.dtype(np.int8)
     if 3 <= precision <= 4:
-        return np.int16
+        return np.dtype(np.int16)
     if 5 <= precision <= 9:
-        return np.int32
+        return np.dtype(np.int32)
     if 10 <= precision <= 18:
-        return np.int64
+        return np.dtype(np.int64)
     raise ValueError(f"Decimal precision {precision} too large for integer-based encoding (needs 16 bytes)")
 
 
-def numpy_to_polars_int_dtype(np_dtype: np.dtype) -> type[pl.DataType]:
+def numpy_to_polars_int_dtype(np_dtype: np.dtype[Any]) -> type[pl.DataType]:
     if np_dtype == np.int8:
         return pl.Int8
     if np_dtype == np.int16:
@@ -278,8 +278,8 @@ def read_string_column(path: Path) -> pl.Series:
         start = end + 1
 
     decoded_array = pa.array(result, type=pa.binary())
-    string_array = pa_compute.cast(decoded_array, pa.string())
-    return cast(pl.Series, pl.from_arrow(string_array))
+    string_array = cast(Any, pa_compute).cast(decoded_array, pa.string())
+    return cast(pl.Series, cast(Any, pl).from_arrow(string_array))
 
 
 def write_string_column(series: pl.Series, path: Path) -> None:
@@ -361,13 +361,13 @@ def write_blob_column(series: pl.Series, path: Path) -> None:
 
 
 def read_numeric_column(
-    path: Path, dtype: pl.DataType | type[pl.DataType], np_dtype: np.dtype | None = None
+    path: Path, dtype: pl.DataType | type[pl.DataType], np_dtype: np.dtype[Any] | None = None
 ) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
     if np_dtype is None:
-        np_dtype = cast(np.dtype | None, POLARS_NUMPY_TYPE_MAP.get(dtype))
+        np_dtype = POLARS_NUMPY_TYPE_MAP.get(dtype)
 
         if np_dtype is None:
             raise ValueError(f"Cannot determine corresponding Numpy type for {path}: {dtype}")
@@ -396,7 +396,7 @@ def read_numeric_column(
     return s
 
 
-def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype | None = None) -> None:
+def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype[Any] | None = None) -> None:
     values: np.ndarray
 
     if series.dtype == pl.Boolean:
@@ -409,7 +409,7 @@ def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype | Non
 
     else:
         if np_dtype is None:
-            np_dtype = cast(np.dtype | None, POLARS_NUMPY_TYPE_MAP.get(series.dtype))
+            np_dtype = POLARS_NUMPY_TYPE_MAP.get(series.dtype)
 
             if np_dtype is None:
                 raise ValueError(f"Cannot determine corresponding Numpy type for {series.dtype} ({series.name=})")

@@ -63,3 +63,4 @@ strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
 reportUnusedImport = true
+reportMissingTypeStubs = "none"

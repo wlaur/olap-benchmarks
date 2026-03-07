@@ -98,7 +98,7 @@ class DuckDB(Database):
         df = con.pl()
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -112,12 +112,15 @@ class DuckDB(Database):
     ) -> None:
         con = get_duckdb_connection(self.connect())
 
-        result = con.execute(
-            f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table.lower()}'"
-        ).fetchone()
+        result = cast(
+            tuple[int] | None,
+            cast(Any, con)
+            .execute(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table.lower()}'")
+            .fetchone(),
+        )
 
         assert result is not None
-        table_exists = cast(int, result[0]) > 0
+        table_exists = result[0] > 0
 
         if not table_exists:
             not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
@@ -126,7 +129,7 @@ class DuckDB(Database):
             col_defs: list[str] = []
             for name, dtype in df.schema.items():
                 duck_type = polars_dtype_to_duckdb(dtype)
-                constraints = []
+                constraints: list[str] = []
                 if name in not_null_cols:
                     constraints.append("not null")
 

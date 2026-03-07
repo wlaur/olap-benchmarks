@@ -1,8 +1,8 @@
 import logging
 import os
-from typing import Literal, get_args
+from typing import Any, Literal, cast, get_args
 
-from fire import Fire
+import fire
 from setproctitle import setproctitle
 
 from .dbs import Database
@@ -68,7 +68,7 @@ def run(db: DatabaseName, command: Literal["start", "stop", "restart", "create"]
 
 
 if __name__ == "__main__":
-    Fire(
+    cast(Any, fire).Fire(
         {
             "benchmark": benchmark,
             "run": run,

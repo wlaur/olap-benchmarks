@@ -9,14 +9,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from queue import Queue
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 from pydantic import BaseModel
 from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
-from ..metrics.storage import EventType, Storage
+from ..metrics.storage import EventType, Storage, WriterMessage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 
 if TYPE_CHECKING:
@@ -46,10 +46,10 @@ class Database(BaseModel, ABC):
     _result_storage: Storage | None = None
     _benchmark_id: int | None = None
 
-    _queue: Queue | None = None
-    _result_queue: Queue | None = None
+    _queue: Queue[WriterMessage] | None = None
+    _result_queue: Queue[Any] | None = None
 
-    def set_queues(self, queue: Queue, result_queue: Queue) -> None:
+    def set_queues(self, queue: Queue[WriterMessage], result_queue: Queue[Any]) -> None:
         self._queue = queue
         self._result_queue = result_queue
 

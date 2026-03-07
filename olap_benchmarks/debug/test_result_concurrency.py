@@ -2,10 +2,11 @@ import logging
 import multiprocessing
 import os
 from queue import Queue
+from typing import Any, cast
 
 import fire
 
-from ..metrics.storage import Storage, start_writer_process
+from ..metrics.storage import Storage, WriterMessage, start_writer_process
 from ..settings import setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ setup_stdout_logging()
 _LOGGER.warning("Module loading")
 
 
-def func(q: Queue, rq: Queue) -> None:
+def func(q: Queue[WriterMessage], rq: Queue[Any]) -> None:
     setup_stdout_logging()
 
     id = Storage(q, rq).debug(f"in proc {os.getpid()}")
@@ -52,4 +53,4 @@ def main(nproc: int = 10) -> None:
 
 
 if __name__ == "__main__":
-    fire.Fire(main)
+    cast(Any, fire).Fire(main)

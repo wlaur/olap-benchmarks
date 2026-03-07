@@ -1,6 +1,6 @@
 import re
 from collections.abc import Mapping
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -94,29 +94,29 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
 }
 
 
-POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], type] = {
-    pl.Int8: np.int8,
-    pl.Int16: np.int16,
-    pl.Int32: np.int32,
-    pl.Int64: np.int64,
-    pl.UInt8: np.uint8,
-    pl.UInt16: np.uint16,
-    pl.UInt32: np.uint32,
-    pl.UInt64: np.uint64,
-    pl.Float32: np.float32,
-    pl.Float64: np.float64,
-    pl.Boolean: np.uint8,
+POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], np.dtype[Any]] = {
+    pl.Int8: np.dtype(np.int8),
+    pl.Int16: np.dtype(np.int16),
+    pl.Int32: np.dtype(np.int32),
+    pl.Int64: np.dtype(np.int64),
+    pl.UInt8: np.dtype(np.uint8),
+    pl.UInt16: np.dtype(np.uint16),
+    pl.UInt32: np.dtype(np.uint32),
+    pl.UInt64: np.dtype(np.uint64),
+    pl.Float32: np.dtype(np.float32),
+    pl.Float64: np.dtype(np.float64),
+    pl.Boolean: np.dtype(np.uint8),
 }
 
 
 MONETDB_TEMPORARY_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
 
 
-class MonetDBType(UserDefinedType):
+class MonetDBType(UserDefinedType[Any]):
     def __init__(self, type_name: str) -> None:
         self.type_name = type_name
 
-    def get_col_spec(self, **kwargs) -> str:  # noqa: ANN003
+    def get_col_spec(self, **kwargs: object) -> str:
         return self.type_name
 
 
@@ -129,10 +129,15 @@ class SchemaMeta(BaseModel):
 
 
 def get_schema_meta(description: Description) -> SchemaMeta:
-    meta = SchemaMeta(precision=description.precision, scale=description.scale)
+    desc = cast(Any, description)
+    meta = SchemaMeta(
+        precision=cast(int | None, desc.precision),
+        scale=cast(int | None, desc.scale),
+    )
 
-    if description.type_code == "varchar" and description.internal_size > 0:
-        meta.size = description.internal_size
+    internal_size = cast(int, desc.internal_size)
+    if cast(str, desc.type_code) == "varchar" and internal_size > 0:
+        meta.size = internal_size
 
     return meta
 
@@ -199,8 +204,9 @@ def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
     MONETDB_TEMPORARY_DIRECTORY.mkdir(exist_ok=True, parents=True)
 
     transfer_handler = pymonetdb.SafeDirectoryHandler(MONETDB_TEMPORARY_DIRECTORY)
-    connection.set_downloader(transfer_handler)
-    connection.set_uploader(transfer_handler)
+    connection_any = cast(Any, connection)
+    connection_any.set_downloader(transfer_handler)
+    connection_any.set_uploader(transfer_handler)
 
 
 def get_pymonetdb_connection(connection: Connection) -> MonetDBConnection:
@@ -230,7 +236,7 @@ def get_table(
     if metadata is None:
         metadata = MetaData()
 
-    columns: list[Column] = []
+    columns: list[Column[Any]] = []
 
     for name, dtype in schema.items():
         # SQLAlchemy does not have all types that exist in MonetDB (e.g. tinyint)

@@ -2,14 +2,13 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from typing import cast
+from typing import Any, cast
 
 import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import REPO_ROOT, SETTINGS, DatabaseName, TableName
-from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries, get_time_series_input_files
@@ -79,7 +78,7 @@ class TimescaleClickbench(Clickbench):
             self.db.restart_event()
 
 
-class TimescaleTimeSeries(TimeSeries, BenchmarkSuite["TimescaleDB"]):
+class TimescaleTimeSeries(TimeSeries):
     def compress_tables(self) -> None:
         skip = ["data_large_wide"]
 
@@ -115,6 +114,7 @@ class TimescaleTimeSeries(TimeSeries, BenchmarkSuite["TimescaleDB"]):
 
             schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
 
+            assert isinstance(self.db, TimescaleDB)
             self.db.create_table(schema, table_name, primary_key, not_null)
 
         self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
@@ -203,13 +203,13 @@ class TimescaleDB(Database):
 
         if not rows:
             if schema:
-                return pl.DataFrame(schema=schema)
+                return pl.DataFrame(schema=cast(pl.Schema, schema))
             return pl.DataFrame({col: [] for col in columns})
 
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -220,11 +220,13 @@ class TimescaleDB(Database):
     ) -> pl.DataFrame:
         df = cast(
             pl.DataFrame,
-            connectorx.read_sql(TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"),
+            cast(Any, connectorx).read_sql(
+                TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
+            ),
         )
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -240,7 +242,7 @@ class TimescaleDB(Database):
         df = pl.read_database_uri(query.strip().removesuffix(";"), TIMESCALEDB_CONNECTION_STRING, engine="connectorx")
 
         if schema is not None:
-            df = df.cast(schema)
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 

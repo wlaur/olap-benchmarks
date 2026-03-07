@@ -2,7 +2,7 @@ import json as json_module
 import sys
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import duckdb
 
@@ -11,7 +11,7 @@ from .settings import SETTINGS, DatabaseName, SuiteName
 
 def _get_connection() -> duckdb.DuckDBPyConnection:
     db_path = SETTINGS.results_directory / "results.db"
-    return duckdb.connect(str(db_path), read_only=False)
+    return cast(duckdb.DuckDBPyConnection, cast(Any, duckdb).connect(str(db_path), read_only=False))
 
 
 def _parse_notes(notes: str | None) -> tuple[str | None, str | None]:
@@ -90,6 +90,22 @@ class Benchmark:
         }
 
 
+BenchmarkRow = tuple[int, str, str, str, datetime | None, datetime | None, datetime | None, str | None]
+DeleteBenchmarkRow = tuple[int, str, str, str, datetime | None, datetime | None, str | None]
+EventRow = tuple[datetime, str, str]
+MetricsSummaryRow = tuple[
+    int,
+    float | None,
+    float | None,
+    float | None,
+    int | None,
+    float | None,
+    int | None,
+    int | None,
+    int | None,
+]
+
+
 class ResultsCLI:
     """Manage benchmark results.
 
@@ -160,7 +176,7 @@ class ResultsCLI:
         query += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
 
-        rows = conn.execute(query, params).fetchall()
+        rows = cast(list[BenchmarkRow], conn.execute(query, params).fetchall())
         benchmarks = [Benchmark(*row) for row in rows]
 
         if json:
@@ -197,13 +213,18 @@ class ResultsCLI:
         conn = _get_connection()
 
         # Get benchmark
-        row = conn.execute(
-            """
+        row = cast(
+            BenchmarkRow | None,
+            cast(Any, conn)
+            .execute(
+                """
             SELECT id, suite, db, operation, started_at, finished_at, deleted_at, notes
             FROM benchmark WHERE id = ?
             """,
-            [benchmark_id],
-        ).fetchone()
+                [benchmark_id],
+            )
+            .fetchone(),
+        )
 
         if not row:
             print(f"Benchmark {benchmark_id} not found.", file=sys.stderr)
@@ -212,18 +233,26 @@ class ResultsCLI:
         b = Benchmark(*row)
 
         # Get events
-        events = conn.execute(
-            """
+        events = cast(
+            list[EventRow],
+            cast(Any, conn)
+            .execute(
+                """
             SELECT time, name, type FROM event
             WHERE benchmark_id = ?
             ORDER BY time
             """,
-            [benchmark_id],
-        ).fetchall()
+                [benchmark_id],
+            )
+            .fetchall(),
+        )
 
         # Get metrics summary
-        metrics = conn.execute(
-            """
+        metrics = cast(
+            MetricsSummaryRow | None,
+            cast(Any, conn)
+            .execute(
+                """
             SELECT
                 COUNT(*) as count,
                 MIN(cpu_percent) as min_cpu,
@@ -236,8 +265,10 @@ class ResultsCLI:
                 MAX(disk_mb) as max_disk
             FROM metric WHERE benchmark_id = ?
             """,
-            [benchmark_id],
-        ).fetchone()
+                [benchmark_id],
+            )
+            .fetchone(),
+        )
 
         if json:
             output = b.to_dict()
@@ -301,13 +332,18 @@ class ResultsCLI:
         conn = _get_connection()
 
         # Get the benchmark
-        row = conn.execute(
-            """
+        row = cast(
+            BenchmarkRow | None,
+            cast(Any, conn)
+            .execute(
+                """
             SELECT id, suite, db, operation, started_at, finished_at, deleted_at, notes
             FROM benchmark WHERE id = ?
             """,
-            [benchmark_id],
-        ).fetchone()
+                [benchmark_id],
+            )
+            .fetchone(),
+        )
 
         if not row:
             print(f"Benchmark {benchmark_id} not found.", file=sys.stderr)
@@ -366,7 +402,10 @@ class ResultsCLI:
 
         # Determine which IDs to delete
         if failed:
-            rows = conn.execute("SELECT id FROM benchmark WHERE finished_at IS NULL AND deleted_at IS NULL").fetchall()
+            rows = cast(
+                list[tuple[int]],
+                conn.execute("SELECT id FROM benchmark WHERE finished_at IS NULL AND deleted_at IS NULL").fetchall(),
+            )
             ids_to_delete = [row[0] for row in rows]
         else:
             ids_to_delete = list(ids)
@@ -377,13 +416,18 @@ class ResultsCLI:
 
         # Show what will be deleted
         placeholders = ",".join("?" * len(ids_to_delete))
-        benchmarks = conn.execute(
-            f"""
+        benchmarks = cast(
+            list[DeleteBenchmarkRow],
+            cast(Any, conn)
+            .execute(
+                f"""
             SELECT id, suite, db, operation, started_at, finished_at, notes
             FROM benchmark WHERE id IN ({placeholders})
             """,
-            ids_to_delete,
-        ).fetchall()
+                ids_to_delete,
+            )
+            .fetchall(),
+        )
 
         if not benchmarks:
             print("No matching benchmarks found.", file=sys.stderr)
@@ -397,17 +441,27 @@ class ResultsCLI:
             print(f"{b[0]:>5} {b[2]:<20} {b[1]:<14} {b[3]:<8} {started:<20}")
 
         # Count related records
-        metric_row = conn.execute(
-            f"SELECT COUNT(*) FROM metric WHERE benchmark_id IN ({placeholders})",
-            ids_to_delete,
-        ).fetchone()
+        metric_row = cast(
+            tuple[int] | None,
+            cast(Any, conn)
+            .execute(
+                f"SELECT COUNT(*) FROM metric WHERE benchmark_id IN ({placeholders})",
+                ids_to_delete,
+            )
+            .fetchone(),
+        )
         assert metric_row is not None
         metric_count = metric_row[0]
 
-        event_row = conn.execute(
-            f"SELECT COUNT(*) FROM event WHERE benchmark_id IN ({placeholders})",
-            ids_to_delete,
-        ).fetchone()
+        event_row = cast(
+            tuple[int] | None,
+            cast(Any, conn)
+            .execute(
+                f"SELECT COUNT(*) FROM event WHERE benchmark_id IN ({placeholders})",
+                ids_to_delete,
+            )
+            .fetchone(),
+        )
         assert event_row is not None
         event_count = event_row[0]
 
