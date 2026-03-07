@@ -41,7 +41,7 @@ DOCKER_IMAGE = _docker_image
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
 
-class MonetDBTimeSeries(TimeSeries):
+class MonetDBTimeSeries(TimeSeries["MonetDB"]):
     def get_not_null(self, table_name: TableName) -> str | list[str] | None:
         # terrible insert performance if primary key or not null constraints are used for eav tables
         return None if "_eav" in table_name else "time"
@@ -56,7 +56,7 @@ class MonetDBTimeSeries(TimeSeries):
         return {"method": "pymonetdb"}
 
 
-class MonetDBKaggleAirbnb(KaggleAirbnb):
+class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.context is not None

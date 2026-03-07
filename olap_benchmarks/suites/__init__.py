@@ -6,8 +6,8 @@ from ..dbs import Database
 from ..settings import SuiteName
 
 
-class BenchmarkSuite(BaseModel, ABC):
-    db: Database
+class BenchmarkSuite[DBT: Database](BaseModel, ABC):
+    db: DBT
     name: SuiteName
 
     @abstractmethod

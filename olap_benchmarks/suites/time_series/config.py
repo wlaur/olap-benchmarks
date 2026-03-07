@@ -8,6 +8,7 @@ from typing import Any, Literal, get_args
 import numpy as np
 import polars as pl
 
+from ...dbs import Database
 from ...settings import REPO_ROOT, SuiteName, TableName
 from .. import BenchmarkSuite
 
@@ -248,7 +249,7 @@ def generate_time_series_datasets(overwrite: bool = False) -> None:
         write_eav_dataset(fpath, overwrite)
 
 
-class TimeSeries(BenchmarkSuite):
+class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "time_series"
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:

@@ -23,7 +23,7 @@ DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg16"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
 
 
-class TimescaleRTABench(RTABench):
+class TimescaleRTABench(RTABench["TimescaleDB"]):
     def compress_tables(self) -> None:
         conn = self.db.connect()
 
@@ -57,7 +57,7 @@ class TimescaleRTABench(RTABench):
             self.db.restart_event()
 
 
-class TimescaleClickbench(Clickbench):
+class TimescaleClickbench(Clickbench["TimescaleDB"]):
     def compress_table(self) -> None:
         con = self.db.connect()
 
@@ -78,7 +78,7 @@ class TimescaleClickbench(Clickbench):
             self.db.restart_event()
 
 
-class TimescaleTimeSeries(TimeSeries):
+class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     def compress_tables(self) -> None:
         skip = ["data_large_wide"]
 
@@ -114,7 +114,6 @@ class TimescaleTimeSeries(TimeSeries):
 
             schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
 
-            assert isinstance(self.db, TimescaleDB)
             self.db.create_table(schema, table_name, primary_key, not_null)
 
         self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")

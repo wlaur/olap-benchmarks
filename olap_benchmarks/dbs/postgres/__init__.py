@@ -83,7 +83,7 @@ def table_exists(connection: Connection, table: str) -> bool:
     return result is not None and result[0] is not None
 
 
-class PostgresRTABench(RTABench):
+class PostgresRTABench(RTABench["Postgres"]):
     def index_tables(self) -> None:
         con = self.db.connect()
 
@@ -103,7 +103,7 @@ class PostgresRTABench(RTABench):
             self.db.restart_event()
 
 
-class PostgresClickbench(Clickbench):
+class PostgresClickbench(Clickbench["Postgres"]):
     def index_table(self) -> None:
         statements = dedent("""
                 CREATE INDEX adveng on hits (advengineid);
@@ -289,7 +289,7 @@ class PostgresClickbench(Clickbench):
             self.db.restart_event()
 
 
-class PostgresTimeSeries(TimeSeries):
+class PostgresTimeSeries(TimeSeries["Postgres"]):
     def index_tables(self) -> None:
         con = self.db.connect()
 

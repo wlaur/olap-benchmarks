@@ -19,7 +19,7 @@ VERSION = "9.0.1"
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 
 
-class QuestDBClickbench(Clickbench):
+class QuestDBClickbench(Clickbench["QuestDB"]):
     def populate(self, restart: bool = True) -> None:
         # NOTE: inserts directly from source Parquet file to avoid OOM issues
         # insert time is not comparable with other databases that insert from an in memory dataframe
@@ -60,7 +60,6 @@ class QuestDBClickbench(Clickbench):
             con.commit()
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
-            assert isinstance(self.db, QuestDB)
             self.db.wait_until_count("hits", count)
 
         fpath.unlink()
