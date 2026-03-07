@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 import polars as pl
 
+from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName
 from .. import BenchmarkSuite
 
@@ -143,7 +144,7 @@ def download_rtabench_data() -> None:
     convert_rtabench_data_to_parquet(output_directory)
 
 
-class RTABench(BenchmarkSuite):
+class RTABench[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "rtabench"
 
     @property

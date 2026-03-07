@@ -77,13 +77,13 @@ def get_clickhouse_client() -> ClickhouseClient:
     )
 
 
-class ClickHouseRTABench(RTABench):
+class ClickHouseRTABench(RTABench["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         return {"time_columns": ["hour", "day"]}
 
 
-class ClickhouseClickbench(Clickbench):
+class ClickhouseClickbench(Clickbench["Clickhouse"]):
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # same number of partitions as the official clickbench insert
@@ -91,7 +91,6 @@ class ClickhouseClickbench(Clickbench):
 
     def optimize_clickbench_table(self) -> None:
         # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
-        assert isinstance(self.db, Clickhouse)
         self.db.run_sql("optimize table hits")
 
     def populate_clickbench(self, restart: bool = True) -> None:
@@ -104,7 +103,7 @@ class ClickhouseClickbench(Clickbench):
             self.db.restart_event()
 
 
-class ClickhouseTimeseries(TimeSeries):
+class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         return {"time_columns": ["time", "max(time)"]}

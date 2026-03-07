@@ -4,6 +4,7 @@ from typing import Any
 
 import polars as pl
 
+from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName
 from .. import BenchmarkSuite
 
@@ -19,7 +20,7 @@ def download_clickbench() -> None:
     raise NotImplementedError
 
 
-class Clickbench(BenchmarkSuite):
+class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "clickbench"
 
     def load_dataset(self) -> pl.DataFrame:

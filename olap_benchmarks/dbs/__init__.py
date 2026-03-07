@@ -182,31 +182,31 @@ class Database(BaseModel, ABC):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
 
     @property
-    def rtabench(self) -> RTABench:
+    def rtabench(self) -> RTABench[Any]:
         from ..suites.rtabench.config import RTABench
 
         return RTABench(db=self)
 
     @property
-    def clickbench(self) -> Clickbench:
+    def clickbench(self) -> Clickbench[Any]:
         from ..suites.clickbench.config import Clickbench
 
         return Clickbench(db=self)
 
     @property
-    def time_series(self) -> TimeSeries:
+    def time_series(self) -> TimeSeries[Any]:
         from ..suites.time_series.config import TimeSeries
 
         return TimeSeries(db=self)
 
     @property
-    def kaggle_airbnb(self) -> KaggleAirbnb:
+    def kaggle_airbnb(self) -> KaggleAirbnb[Any]:
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
 
         return KaggleAirbnb(db=self)
 
     @property
-    def benchmarks(self) -> dict[SuiteName, BenchmarkSuite]:
+    def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
         return {
             "rtabench": self.rtabench,
             "time_series": self.time_series,

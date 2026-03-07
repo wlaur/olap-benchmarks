@@ -57,7 +57,7 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
 
 
-class DuckDBClickbench(Clickbench):
+class DuckDBClickbench(Clickbench["DuckDB"]):
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # uses > 40g memory otherwise

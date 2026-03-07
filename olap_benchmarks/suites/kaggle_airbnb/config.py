@@ -4,6 +4,7 @@ from typing import Any
 
 import polars as pl
 
+from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName
 from .. import BenchmarkSuite
 
@@ -92,7 +93,7 @@ def convert_kaggle_airbnb_data_to_parquet() -> None:
     assert all((data_dir / f"{n}.parquet").is_file() for n in KAGGLE_AIRBNB_TABLES)
 
 
-class KaggleAirbnb(BenchmarkSuite):
+class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "kaggle_airbnb"
 
     @property
