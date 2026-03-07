@@ -272,7 +272,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
             df = pl.read_parquet(fpath)
 
-            with self.db.event_context(f"insert_{table_name}"):
+            with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
@@ -309,10 +309,12 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 query = self.load_time_series_query(query_name)
 
                 for it in range(1, iterations + 1):
-                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.db.fetch(query, **self.fetch_kwargs)
-                        t = perf_counter() - t1
+                    df, t = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=it,
+                        query=query,
+                        fetch_kwargs=self.fetch_kwargs,
+                    )
 
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_}) "

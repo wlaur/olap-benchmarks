@@ -106,7 +106,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
         for table_name in KAGGLE_AIRBNB_TABLES:
             df = pl.read_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
 
-            with self.db.event_context(f"insert_{table_name}"):
+            with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
@@ -143,10 +143,12 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
                 query = self.load_kaggle_airbnb_query(query_name)
 
                 for it in range(1, iterations + 1):
-                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.db.fetch(query, **self.fetch_kwargs)
-                        t = perf_counter() - t1
+                    df, t = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=it,
+                        query=query,
+                        fetch_kwargs=self.fetch_kwargs,
+                    )
 
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(KAGGLE_AIRBNB_QUERY_NAMES):_}) "

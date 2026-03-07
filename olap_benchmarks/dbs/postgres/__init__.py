@@ -96,7 +96,7 @@ class PostgresRTABench(RTABench["Postgres"]):
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("index"):
+        with self.db.phase_context("index"):
             self.index_tables()
 
         if restart:
@@ -275,12 +275,12 @@ class PostgresClickbench(Clickbench["Postgres"]):
 
         _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-        with self.db.event_context("insert_hits"):
+        with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
 
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
-        with self.db.event_context("index"):
+        with self.db.phase_context("index"):
             self.index_table()
 
         # restart db to ensure data is not kept in-memory by the db, and also
@@ -308,10 +308,10 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
 
         con.commit()
 
-    def populate_time_series(self, restart: bool = True) -> None:
+    def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("index"):
+        with self.db.phase_context("index"):
             self.index_tables()
 
         if restart:

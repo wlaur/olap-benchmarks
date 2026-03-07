@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import os
-from queue import Queue
+from multiprocessing import Queue
 from typing import Any, cast
 
 import fire
@@ -16,19 +18,18 @@ setup_stdout_logging()
 _LOGGER.warning("Module loading")
 
 
-def func(q: Queue[WriterMessage], rq: Queue[Any]) -> None:
+def func(q: Queue[WriterMessage], rq: Queue[object]) -> None:
     setup_stdout_logging()
 
     id = Storage(q, rq).debug(f"in proc {os.getpid()}")
-
-    _LOGGER.info(f"Inserted id {id} from subprocess {os.getpid()}, {q.qsize()=}, {rq.qsize()=}")
+    _LOGGER.info(f"Inserted id {id} from subprocess {os.getpid()}")
 
 
 def main(nproc: int = 10) -> None:
     _LOGGER.warning(f"Spawning {nproc:_} processes")
 
-    _, q, rq = start_writer_process()
-    s = Storage(q, rq)
+    writer = start_writer_process()
+    s = Storage(writer.queue, writer.result_queue)
 
     first = s.debug("first")
     _LOGGER.warning(f"Inserted first id {first}")
@@ -36,7 +37,7 @@ def main(nproc: int = 10) -> None:
     processes: list[multiprocessing.Process] = []
 
     for idx in range(nproc):
-        p = multiprocessing.Process(target=func, args=(q, rq), daemon=True)
+        p = multiprocessing.Process(target=func, args=(writer.queue, writer.result_queue), daemon=True)
         p.start()
 
         if idx % 10 == 0:
@@ -50,6 +51,8 @@ def main(nproc: int = 10) -> None:
 
     last = s.debug("last")
     _LOGGER.warning(f"Inserted last id {last}")
+
+    writer.close()
 
 
 if __name__ == "__main__":
