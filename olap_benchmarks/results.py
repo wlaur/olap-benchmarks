@@ -397,15 +397,19 @@ class ResultsCLI:
             print(f"{b[0]:>5} {b[2]:<20} {b[1]:<14} {b[3]:<8} {started:<20}")
 
         # Count related records
-        metric_count = conn.execute(
+        metric_row = conn.execute(
             f"SELECT COUNT(*) FROM metric WHERE benchmark_id IN ({placeholders})",
             ids_to_delete,
-        ).fetchone()[0]
+        ).fetchone()
+        assert metric_row is not None
+        metric_count = metric_row[0]
 
-        event_count = conn.execute(
+        event_row = conn.execute(
             f"SELECT COUNT(*) FROM event WHERE benchmark_id IN ({placeholders})",
             ids_to_delete,
-        ).fetchone()[0]
+        ).fetchone()
+        assert event_row is not None
+        event_count = event_row[0]
 
         print("\nThis will also delete:")
         print(f"  - {metric_count} metric records")

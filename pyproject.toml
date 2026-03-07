@@ -51,3 +51,15 @@ dev = [
 [tool.ruff]
 lint.select = ["E", "F", "B", "I", "UP", "C4", "SIM", "ANN"]
 line-length = 120
+
+[tool.pyright]
+include = ["olap_benchmarks"]
+typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportPrivateUsage = "none"
+useLibraryCodeForTypes = true
+enableTypeIgnoreComments = false
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+reportUnusedImport = true

@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     )
 
 
-SETTINGS = Settings()  # type: ignore[call-arg]
+SETTINGS = Settings.model_validate({})
 
 
 def setup_stdout_logging(level: int = logging.INFO) -> None:

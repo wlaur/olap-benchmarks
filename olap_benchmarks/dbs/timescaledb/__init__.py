@@ -2,13 +2,14 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from typing import Literal, cast
+from typing import cast
 
 import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import REPO_ROOT, SETTINGS, TableName
+from ...settings import REPO_ROOT, SETTINGS, DatabaseName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries, get_time_series_input_files
@@ -78,9 +79,7 @@ class TimescaleClickbench(Clickbench):
             self.db.restart_event()
 
 
-class TimescaleTimeSeries(TimeSeries):
-    db: "TimescaleDB"
-
+class TimescaleTimeSeries(TimeSeries, BenchmarkSuite["TimescaleDB"]):
     def compress_tables(self) -> None:
         skip = ["data_large_wide"]
 
@@ -124,6 +123,9 @@ class TimescaleTimeSeries(TimeSeries):
             # timescaledb needs input data to be sorted by (time, id), the eav parquet files are sorted by (id, time)
             sort = ["time", "id"] if "eav" in table_name else ["time"]
 
+            primary_key = self.get_primary_key(table_name)
+            not_null = self.get_not_null(table_name)
+
             df = pl.scan_parquet(fpath).sort(*sort).collect()
 
             _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
@@ -142,7 +144,7 @@ class TimescaleTimeSeries(TimeSeries):
 
 
 class TimescaleDB(Database):
-    name: Literal["timescaledb"] = "timescaledb"
+    name: DatabaseName = "timescaledb"
     version: str = VERSION
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
@@ -207,7 +209,7 @@ class TimescaleDB(Database):
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 
@@ -222,7 +224,7 @@ class TimescaleDB(Database):
         )
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 
@@ -238,7 +240,7 @@ class TimescaleDB(Database):
         df = pl.read_database_uri(query.strip().removesuffix(";"), TIMESCALEDB_CONNECTION_STRING, engine="connectorx")
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 

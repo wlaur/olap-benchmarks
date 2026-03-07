@@ -1,10 +1,10 @@
 import logging
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
 import polars as pl
 
-from ...settings import REPO_ROOT, SETTINGS
+from ...settings import REPO_ROOT, SETTINGS, SuiteName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ def convert_kaggle_airbnb_data_to_parquet() -> None:
 
 
 class KaggleAirbnb(BenchmarkSuite):
-    name: Literal["kaggle_airbnb"] = "kaggle_airbnb"
+    name: SuiteName = "kaggle_airbnb"
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:

@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Literal, get_args
 
-from fire import Fire  # type: ignore[import-untyped]
+from fire import Fire
 from setproctitle import setproctitle
 
 from .dbs import Database

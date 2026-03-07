@@ -4,10 +4,10 @@ from typing import cast
 
 import numpy as np
 import polars as pl
-import pymonetdb  # type: ignore[import-untyped]
+import pymonetdb
 from pydantic import BaseModel
 from pymonetdb import Connection as MonetDBConnection
-from pymonetdb.sql.cursors import Description  # type: ignore[import-untyped]
+from pymonetdb.sql.cursors import Description
 from sqlalchemy import (
     Column,
     Connection,

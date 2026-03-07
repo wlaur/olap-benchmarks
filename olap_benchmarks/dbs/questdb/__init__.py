@@ -5,10 +5,11 @@ from time import sleep
 from typing import Literal
 
 import polars as pl
-from questdb.ingress import Protocol, Sender  # type: ignore[import-untyped]
+from questdb.ingress import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from .. import Database
 
@@ -19,9 +20,7 @@ VERSION = "9.0.1"
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 
 
-class QuestDBClickbench(Clickbench):
-    db: "QuestDB"
-
+class QuestDBClickbench(Clickbench, BenchmarkSuite["QuestDB"]):
     def populate(self, restart: bool = True) -> None:
         # NOTE: inserts directly from source Parquet file to avoid OOM issues
         # insert time is not comparable with other databases that insert from an in memory dataframe
@@ -71,7 +70,7 @@ class QuestDBClickbench(Clickbench):
 
 
 class QuestDB(Database):
-    name: Literal["questdb"] = "questdb"
+    name: DatabaseName = "questdb"
     version: str = VERSION
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
@@ -122,7 +121,7 @@ class QuestDB(Database):
             raise ValueError(f"Unknown method:'{method}'")
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 

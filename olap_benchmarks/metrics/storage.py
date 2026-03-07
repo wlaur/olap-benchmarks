@@ -6,7 +6,7 @@ from multiprocessing.managers import SyncManager
 from queue import Queue
 from typing import Any, Literal, TypedDict, cast
 
-import duckdb  # type: ignore[import-untyped]
+import duckdb
 
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, setup_stdout_logging
 

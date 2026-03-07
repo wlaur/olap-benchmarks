@@ -4,6 +4,7 @@ import platform
 import subprocess
 from pathlib import Path
 from time import sleep
+from typing import Any, cast
 
 import docker
 import psutil
@@ -113,7 +114,7 @@ def get_container_metrics(db: DatabaseName) -> BenchmarkMetric:
     container = DOCKER_CLIENT.containers.get(get_container_name(db))
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
-    stats = container.stats(stream=False)
+    stats = cast(dict[str, Any], container.stats(stream=False))
 
     try:
         cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])

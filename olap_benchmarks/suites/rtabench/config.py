@@ -3,12 +3,12 @@ import logging
 import os
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 import polars as pl
 
-from ...settings import REPO_ROOT, SETTINGS
+from ...settings import REPO_ROOT, SETTINGS, SuiteName
 from .. import BenchmarkSuite
 
 RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
@@ -144,7 +144,7 @@ def download_rtabench_data() -> None:
 
 
 class RTABench(BenchmarkSuite):
-    name: Literal["rtabench"] = "rtabench"
+    name: SuiteName = "rtabench"
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:

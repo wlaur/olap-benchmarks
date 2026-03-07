@@ -1,14 +1,14 @@
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import polars as pl
-from duckdb import DuckDBPyConnection  # type: ignore[import-untyped]
+from duckdb import DuckDBPyConnection
 from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
 
@@ -65,7 +65,7 @@ class DuckDBClickbench(Clickbench):
 
 
 class DuckDB(Database):
-    name: Literal["duckdb"] = "duckdb"
+    name: DatabaseName = "duckdb"
     version: str = VERSION
 
     connection_string: str = DUCKDB_CONNECTION_STRING
@@ -98,7 +98,7 @@ class DuckDB(Database):
         df = con.pl()
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(schema)
 
         return df
 

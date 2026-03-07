@@ -3,7 +3,7 @@ import multiprocessing
 import os
 from queue import Queue
 
-import fire  # type: ignore[import-untyped]
+import fire
 
 from ..metrics.storage import Storage, start_writer_process
 from ..settings import setup_stdout_logging
