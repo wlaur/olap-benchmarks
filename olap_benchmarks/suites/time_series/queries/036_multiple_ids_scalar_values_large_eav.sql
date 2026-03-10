@@ -35,5 +35,5 @@ select
 from
     data_large_eav
 where
-    time = '2023-11-24 06:23'
+    time = '2023-11-24 06:23:00'
     and id in (371, 364, 407, 861, 984, 830)
