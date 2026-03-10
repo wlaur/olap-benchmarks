@@ -106,7 +106,7 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
 class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["time", "max(time)"]}
+        return {"time_columns": ["time", "time_", "max(time)"]}
 
 
 class Clickhouse(Database):
