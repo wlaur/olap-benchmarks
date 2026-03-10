@@ -9,4 +9,4 @@ select
 from
     data_large_wide
 where
-    time = '2023-11-24 06:23'
+    time = '2023-11-24 06:23:00'
