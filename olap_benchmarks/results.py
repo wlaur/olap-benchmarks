@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import duckdb
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -254,6 +254,78 @@ def export_site_data(
     print(f"Exported DuckDB artifact to {output_db_path}")
     print(f"Exported manifest to {manifest_path}")
     print(f"Exported summary to {summary_path}")
+
+
+def list_runs(
+    revision: str = "default",
+    status: str | None = None,
+    suite: str | None = None,
+    db: str | None = None,
+) -> list[dict[str, object]]:
+    engine = get_results_engine(read_only=True, revision=revision)
+
+    try:
+        with Session(engine) as session:
+            stmt = select(Run).order_by(Run.started_at.desc())
+
+            if status is not None:
+                stmt = stmt.where(Run.status == status)
+            if suite is not None:
+                stmt = stmt.where(Run.suite == suite)
+            if db is not None:
+                stmt = stmt.where(Run.db == db)
+
+            runs = session.scalars(stmt).all()
+
+            return [
+                {
+                    "id": run.id,
+                    "suite": run.suite,
+                    "db": run.db,
+                    "operation": run.operation,
+                    "status": run.status,
+                    "started_at": run.started_at.isoformat(),
+                    "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+                    "error_type": run.error_type,
+                }
+                for run in runs
+            ]
+    finally:
+        engine.dispose()
+
+
+def delete_runs(run_ids: list[int], revision: str = "default") -> int:
+    engine = get_results_engine(read_only=False, revision=revision)
+
+    try:
+        with Session(engine) as session:
+            count = len(run_ids)
+            session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
+            session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
+            session.execute(delete(Run).where(Run.id.in_(run_ids)))
+            session.commit()
+            return count
+    finally:
+        engine.dispose()
+
+
+def delete_runs_by_status(status: str, revision: str = "default") -> int:
+    engine = get_results_engine(read_only=False, revision=revision)
+
+    try:
+        with Session(engine) as session:
+            run_ids = list(session.scalars(select(Run.id).where(Run.status == status)).all())
+
+            if not run_ids:
+                return 0
+
+            session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
+            session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
+            session.execute(delete(Run).where(Run.id.in_(run_ids)))
+            session.commit()
+            return len(run_ids)
+    finally:
+        engine.dispose()
 
 
 def config(as_json: bool = False) -> None:
