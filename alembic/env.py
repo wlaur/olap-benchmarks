@@ -11,9 +11,9 @@ from sqlalchemy import String, Text, create_engine, inspect, pool
 from sqlalchemy.engine import Connection
 
 from alembic import context
-from olap_benchmarks.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from olap_benchmarks.results import get_results_db_path
-from olap_benchmarks.results_models import Base
+from olap_benchmarks.results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
+from olap_benchmarks.results.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

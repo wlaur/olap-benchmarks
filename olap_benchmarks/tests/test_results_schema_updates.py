@@ -7,8 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..results import get_results_engine, get_results_head_revision, migrate_results
-from ..results_models import Run, RunMetric, RunStep
-from ..results_schema import ensure_results_schema
+from ..results.models import Run, RunMetric, RunStep
+from ..results.schema import ensure_results_schema
 
 
 def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -> None:

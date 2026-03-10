@@ -9,7 +9,7 @@ from duckdb import DuckDBPyConnection
 from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
-from ...duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
+from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
