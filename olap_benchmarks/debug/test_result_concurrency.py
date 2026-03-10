@@ -4,9 +4,8 @@ import logging
 import multiprocessing
 import os
 from multiprocessing import Queue
-from typing import Any, cast
 
-import fire
+import cyclopts
 
 from ..metrics.storage import Storage, WriterMessage, start_writer_process
 from ..settings import setup_stdout_logging
@@ -56,4 +55,6 @@ def main(nproc: int = 10) -> None:
 
 
 if __name__ == "__main__":
-    cast(Any, fire).Fire(main)
+    app = cyclopts.App()
+    app.default(main)
+    app()
