@@ -15,10 +15,10 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 
+from ..settings import REPO_ROOT, SETTINGS, Revision
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
-from .results_models import Run, RunMetric, RunStep
-from .results_schema import ensure_results_schema
-from .settings import REPO_ROOT, SETTINGS, Revision
+from .models import Run, RunMetric, RunStep
+from .schema import ensure_results_schema
 
 
 def get_results_db_path(revision: Revision = "default") -> Path:

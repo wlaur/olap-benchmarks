@@ -12,8 +12,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ..results import get_results_engine
-from ..results_models import DebugEntry, Run, RunMetric, RunStep
-from ..results_schema import ensure_results_schema
+from ..results.models import DebugEntry, Run, RunMetric, RunStep
+from ..results.schema import ensure_results_schema
 from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
