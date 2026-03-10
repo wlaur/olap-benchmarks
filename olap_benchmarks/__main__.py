@@ -1,7 +1,7 @@
 import logging
 import os
 from collections.abc import Callable
-from typing import Literal, get_args
+from typing import Any, Literal, cast, get_args
 
 import cyclopts
 from setproctitle import setproctitle
@@ -64,7 +64,8 @@ def _get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
     return SUITE_PREPARERS[suite]
 
 
-app = cyclopts.App(name="olap-benchmarks", help="OLAP database benchmarking tool.")
+app = cyclopts.App(name="olap", help="OLAP database benchmarking tool.")
+cast(Any, app).register_install_completion_command()
 
 
 def _start_db(db_instance: Database) -> None:
