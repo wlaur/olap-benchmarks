@@ -1,6 +1,7 @@
 import logging
 import uuid
 from collections.abc import Mapping
+from importlib.metadata import version as package_version
 from typing import Any, cast
 
 import polars as pl
@@ -15,7 +16,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.4.0"
+VERSION = package_version("duckdb")
 
 assert duckdb_version_runtime == VERSION
 
