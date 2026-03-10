@@ -5,7 +5,9 @@ import shutil
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
+import duckdb
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -16,12 +18,12 @@ from .results_schema import SCHEMA_VERSION, ensure_results_schema
 from .settings import REPO_ROOT, SETTINGS
 
 
-def get_results_db_path() -> Path:
-    return SETTINGS.results_directory / "results.db"
+def get_results_db_path(revision: str = "default") -> Path:
+    return SETTINGS.results_directory / f"{revision}.db"
 
 
-def get_results_engine(read_only: bool = True, db_path: Path | None = None) -> Engine:
-    path = db_path or get_results_db_path()
+def get_results_engine(read_only: bool = True, db_path: Path | None = None, revision: str = "default") -> Engine:
+    path = db_path or get_results_db_path(revision)
     patch_duckdb_sqlalchemy_compat()
 
     if read_only:
@@ -163,11 +165,42 @@ def _build_query_summary(session: Session) -> list[dict[str, object]]:
     return result
 
 
+def _require_revision(revision: str) -> Path:
+    db_path = get_results_db_path(revision)
+
+    if not db_path.is_file():
+        available = list_revisions()
+        if available:
+            raise SystemExit(f"Revision '{revision}' not found. Available: {', '.join(available)}")
+        raise SystemExit(f"Revision '{revision}' not found. No result databases exist in {SETTINGS.results_directory}")
+
+    return db_path
+
+
+def list_revisions() -> list[str]:
+    results_dir = SETTINGS.results_directory
+    return sorted(p.stem for p in results_dir.glob("*.db"))
+
+
+def query_results(sql: str, revision: str = "default") -> None:
+    db_path = _require_revision(revision)
+
+    _duckdb = cast(Any, duckdb)
+    con: duckdb.DuckDBPyConnection = _duckdb.connect(str(db_path), read_only=True)
+
+    try:
+        result = con.sql(sql)
+        result.show()
+    finally:
+        con.close()
+
+
 def export_site_data(
     output_directory: str | None = None,
     source_database: str | None = None,
+    revision: str = "default",
 ) -> None:
-    source_db_path = Path(source_database).resolve() if source_database else get_results_db_path()
+    source_db_path = Path(source_database).resolve() if source_database else _require_revision(revision)
 
     if output_directory is None:
         output_dir = REPO_ROOT / "site" / "public" / "data"

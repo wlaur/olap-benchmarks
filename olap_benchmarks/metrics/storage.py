@@ -37,10 +37,10 @@ class WriterMessage(TypedDict):
     args: list[Any]
 
 
-def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
+def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revision: str = "default") -> None:
     setup_stdout_logging()
 
-    engine = get_results_engine(read_only=False)
+    engine = get_results_engine(read_only=False, revision=revision)
     ensure_results_schema(engine)
 
     with Session(engine) as session:
@@ -169,11 +169,11 @@ class WriterProcessHandle:
         self._closed = True
 
 
-def start_writer_process() -> WriterProcessHandle:
+def start_writer_process(revision: str = "default") -> WriterProcessHandle:
     queue: Queue[WriterMessage] = Queue()
     result_queue: Queue[object] = Queue()
 
-    writer_process = Process(target=writer_loop, args=(queue, result_queue), daemon=False)
+    writer_process = Process(target=writer_loop, args=(queue, result_queue, revision), daemon=False)
     writer_process.start()
 
     return WriterProcessHandle(process=writer_process, queue=queue, result_queue=result_queue)
