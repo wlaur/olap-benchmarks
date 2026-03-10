@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -95,14 +96,18 @@ def list_revisions() -> list[str]:
 def query_results(sql: str, revision: Revision = "default") -> None:
     db_path = _require_revision(revision)
 
-    _duckdb = cast(Any, duckdb)
-    con: duckdb.DuckDBPyConnection = _duckdb.connect(str(db_path), read_only=True)
+    with tempfile.TemporaryDirectory(dir=SETTINGS.temporary_directory) as tmpdir:
+        snapshot_path = Path(tmpdir) / db_path.name
+        shutil.copy2(db_path, snapshot_path)
 
-    try:
-        result = con.sql(sql)
-        result.show()
-    finally:
-        con.close()
+        _duckdb = cast(Any, duckdb)
+        con: duckdb.DuckDBPyConnection = _duckdb.connect(str(snapshot_path), read_only=True)
+
+        try:
+            result = con.sql(sql)
+            result.show()
+        finally:
+            con.close()
 
 
 def publish(revision: Revision = "default") -> Path:
