@@ -42,6 +42,7 @@ dev = [
     "pyright",
     "pandas-stubs>=2.2.3.250527",
     "pyarrow-stubs>=20.0.0.20250627",
+    "pytest>=9.0.0",
     "pyinstrument>=5.0.2",
     "ruff>=0.12.0",
     "types-colorama>=0.4.15.20240311",
