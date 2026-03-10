@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..results import get_results_engine
 from ..results_models import DebugEntry, Run, RunMetric, RunStep
 from ..results_schema import ensure_results_schema
-from ..settings import DatabaseName, Operation, SuiteName, setup_stdout_logging
+from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class WriterMessage(TypedDict):
     args: list[Any]
 
 
-def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revision: str = "default") -> None:
+def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revision: Revision = "default") -> None:
     setup_stdout_logging()
 
     engine = get_results_engine(read_only=False, revision=revision)
@@ -169,7 +169,7 @@ class WriterProcessHandle:
         self._closed = True
 
 
-def start_writer_process(revision: str = "default") -> WriterProcessHandle:
+def start_writer_process(revision: Revision = "default") -> WriterProcessHandle:
     queue: Queue[WriterMessage] = Queue()
     result_queue: Queue[object] = Queue()
 
