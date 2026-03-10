@@ -350,7 +350,10 @@ class Database(BaseModel, ABC):
 
     @property
     def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
-        return {suite_name: cast(BenchmarkSuite[Any], getattr(self, suite_name)) for suite_name in get_args(SuiteName)}
+        return cast(
+            "dict[SuiteName, BenchmarkSuite[Any]]",
+            {suite_name: getattr(self, suite_name) for suite_name in get_args(SuiteName)},
+        )
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
         self._current_suite = suite
