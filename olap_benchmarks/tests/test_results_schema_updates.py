@@ -3,15 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..results import get_results_engine
+from ..results import get_results_engine, get_results_head_revision, migrate_results
 from ..results_models import Run, RunMetric, RunStep
-from ..results_schema import SCHEMA_VERSION, ensure_results_schema
+from ..results_schema import ensure_results_schema
 
 
-def test_run_update_succeeds_with_related_rows(tmp_path: Path) -> None:
-    engine = get_results_engine(read_only=False, db_path=tmp_path / "results.db")
+def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
 
     try:
         ensure_results_schema(engine)
@@ -55,9 +58,22 @@ def test_run_update_succeeds_with_related_rows(tmp_path: Path) -> None:
 
             assert session.get(Run, run.id) is not None
             assert session.get(Run, run.id).status == "completed"  # pyright: ignore[reportOptionalMemberAccess]
+
+            with engine.begin() as connection:
+                head_revision = connection.exec_driver_sql("select version_num from alembic_version").scalar_one()
+            assert head_revision == get_results_head_revision()
     finally:
         engine.dispose()
 
 
-def test_results_schema_version_current() -> None:
-    assert SCHEMA_VERSION == 4
+def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Path) -> None:
+    engine = get_results_engine(read_only=False, db_path=tmp_path / "results.db")
+
+    try:
+        ensure_results_schema(engine)
+
+        with Session(engine) as session:
+            head_revision = session.execute(text("select version_num from alembic_version")).scalar_one()
+            assert head_revision == get_results_head_revision()
+    finally:
+        engine.dispose()

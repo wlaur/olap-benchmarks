@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
-from sqlalchemy.schema import DropTable
-
-from .results_models import LEGACY_TABLES, Base, ResultsMeta
-
-SCHEMA_VERSION = 4
 
 RESULT_TABLES = [
     "run",
     "run_step",
     "run_metric",
     "debug",
-    "results_meta",
 ]
+
+
+def _get_db_path(engine: Engine) -> Path:
+    database = engine.url.database
+    if database is None:
+        raise RuntimeError("Results engine does not expose a database path")
+
+    return Path(database).expanduser().resolve()
 
 
 def _existing_tables(engine: Engine) -> set[str]:
@@ -23,83 +26,34 @@ def _existing_tables(engine: Engine) -> set[str]:
     return set(inspector.get_table_names())
 
 
-def _drop_schema_objects(engine: Engine) -> None:
-    with engine.begin() as connection:
-        # drop known v2/v3 tables in FK-safe reverse dependency order
-        for table in reversed(Base.metadata.sorted_tables):
-            connection.execute(DropTable(table, if_exists=True))
-
-        for seq_name in ["seq_run", "seq_run_step", "seq_run_metric", "seq_debug", "seq_benchmark"]:
-            connection.exec_driver_sql(f"drop sequence if exists {seq_name}")
-
-        for table_name in LEGACY_TABLES:
-            connection.exec_driver_sql(f'drop table if exists "{table_name}"')
-
-
-def _create_schema(engine: Engine) -> None:
-    Base.metadata.create_all(engine)
-
-    with Session(engine) as session:
-        session.merge(ResultsMeta(key="schema_version", value=str(SCHEMA_VERSION)))
-        session.commit()
-
-
-def _get_schema_version(engine: Engine) -> int | None:
-    existing_tables = _existing_tables(engine)
-
-    if "results_meta" not in existing_tables:
+def _get_alembic_revision(engine: Engine) -> str | None:
+    if "alembic_version" not in _existing_tables(engine):
         return None
 
-    with Session(engine) as session:
-        value = session.get(ResultsMeta, "schema_version")
+    with engine.begin() as connection:
+        value = connection.exec_driver_sql("select version_num from alembic_version").scalar_one_or_none()
 
-        if value is None:
-            return None
-
-        try:
-            return int(value.value)
-        except ValueError:
-            return None
+    return None if value is None else str(value)
 
 
-def ensure_results_schema(
-    engine: Engine,
-    reset_if_mismatch: bool = True,
-    allow_create: bool = True,
-) -> None:
+def ensure_results_schema(engine: Engine, allow_create: bool = True) -> None:
     existing_tables = _existing_tables(engine)
-    schema_version = _get_schema_version(engine)
+    alembic_revision = _get_alembic_revision(engine)
+    from .results import get_results_head_revision, migrate_results
 
-    has_legacy_tables = bool(existing_tables.intersection(LEGACY_TABLES))
+    head_revision = get_results_head_revision()
 
-    if has_legacy_tables:
-        if reset_if_mismatch and allow_create:
-            _drop_schema_objects(engine)
-            _create_schema(engine)
-            return
+    if allow_create:
+        migrate_results(db_path=_get_db_path(engine))
+        existing_tables = _existing_tables(engine)
+        alembic_revision = _get_alembic_revision(engine)
 
+    if alembic_revision != head_revision:
         raise RuntimeError(
-            "Legacy results schema detected. Re-run benchmarks with the new runner "
-            "or open the database in write mode and run schema initialization."
+            "Results schema is inconsistent with the current Alembic head. "
+            "Run `olap results migrate` or update `alembic_version` manually."
         )
 
-    if schema_version is None:
-        if not allow_create:
-            raise RuntimeError(
-                f"Results schema is not initialized. Run a benchmark first to create schema version {SCHEMA_VERSION}."
-            )
-
-        _create_schema(engine)
-        return
-
-    if schema_version == SCHEMA_VERSION:
-        return
-
-    if not reset_if_mismatch:
-        raise RuntimeError(
-            f"Results schema version mismatch: found {schema_version}, expected {SCHEMA_VERSION}. "
-            "Set reset_if_mismatch=True to recreate the schema."
-        )
-
-    _drop_schema_objects(engine)
-    _create_schema(engine)
+    missing_tables = set(RESULT_TABLES).difference(existing_tables)
+    if missing_tables:
+        raise RuntimeError(f"Results schema is missing expected tables: {', '.join(sorted(missing_tables))}.")
