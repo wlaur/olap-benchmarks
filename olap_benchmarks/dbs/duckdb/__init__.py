@@ -19,10 +19,7 @@ VERSION = "1.4.0"
 
 assert duckdb_version_runtime == VERSION
 
-(SETTINGS.database_directory / "duckdb").mkdir(exist_ok=True)
 (SETTINGS.temporary_directory / "duckdb/data").mkdir(exist_ok=True, parents=True)
-
-DUCKDB_CONNECTION_STRING = f"duckdb:///{SETTINGS.database_directory.as_posix()}/duckdb/duck.db"
 
 
 POLARS_DUCKDB_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
@@ -69,7 +66,7 @@ class DuckDB(Database):
     name: DatabaseName = "duckdb"
     version: str = VERSION
 
-    connection_string: str = DUCKDB_CONNECTION_STRING
+    connection_string: str = ""
 
     # in-process, no docker commands necessary
     @property
@@ -85,11 +82,12 @@ class DuckDB(Database):
         return ""
 
     def connect(self, reconnect: bool = False) -> Connection:
-        if self._connection is not None:
+        if self._connection is not None and not reconnect:
             return self._connection
 
         patch_duckdb_sqlalchemy_compat()
-        engine = create_engine(self.connection_string)
+        connection_string = f"duckdb:///{self.database_directory.as_posix()}/duck.db"
+        engine = create_engine(connection_string)
         self._connection = engine.connect()
 
         return self._connection

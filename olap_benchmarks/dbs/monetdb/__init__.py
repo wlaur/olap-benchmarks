@@ -79,12 +79,11 @@ class MonetDB(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "monetdb").mkdir(exist_ok=True)
         (SETTINGS.temporary_directory / "monetdb/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 50000:50000",
-            f"-v {SETTINGS.database_directory.as_posix()}/monetdb:/var/monetdb5/dbfarm",
+            f"-v {self.database_directory.as_posix()}:/var/monetdb5/dbfarm",
             f"-v {SETTINGS.temporary_directory.as_posix()}/monetdb/data:/data"
             if not MONETDB_SETTINGS.client_file_transfer
             else "",

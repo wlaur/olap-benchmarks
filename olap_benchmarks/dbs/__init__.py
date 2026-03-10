@@ -48,6 +48,7 @@ class Database(BaseModel, ABC):
     connection_string: str
 
     context: QueryContext | None = None
+    _current_suite: SuiteName | None = None
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
@@ -55,6 +56,18 @@ class Database(BaseModel, ABC):
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
+
+    @property
+    def current_suite(self) -> SuiteName:
+        if self._current_suite is None:
+            raise ValueError("current_suite is not set")
+        return self._current_suite
+
+    @property
+    def database_directory(self) -> Path:
+        directory = SETTINGS.database_directory / self.name / self.current_suite
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
 
     def set_queues(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self._queue = queue
@@ -333,6 +346,7 @@ class Database(BaseModel, ABC):
         return {suite_name: cast(BenchmarkSuite[Any], getattr(self, suite_name)) for suite_name in get_args(SuiteName)}
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+        self._current_suite = suite
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:
@@ -360,6 +374,7 @@ class Database(BaseModel, ABC):
 
         metric_process, stop_event = start_metric_sampler(
             db=self.name,
+            suite=suite,
             run_id=self.run_id,
             storage=self.result_storage,
             interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here

@@ -76,12 +76,11 @@ class QuestDB(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "questdb").mkdir(exist_ok=True)
         (SETTINGS.temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 9000:9000 -p 8812:8812",
-            f"-v {SETTINGS.database_directory.as_posix()}/questdb:/var/lib/questdb",
+            f"-v {self.database_directory.as_posix()}:/var/lib/questdb",
             f"-v {SETTINGS.temporary_directory.as_posix()}/questdb/data:/import",
             "-e QDB_CAIRO_SQL_COPY_ROOT=/import",
             DOCKER_IMAGE,

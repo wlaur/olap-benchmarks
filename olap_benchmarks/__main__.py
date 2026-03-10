@@ -98,17 +98,19 @@ def data(suite: SuiteArg) -> None:
 
 
 @app.command
-def docker(db: DatabaseArg, command: Literal["start", "stop", "restart"]) -> None:
+def docker(db: DatabaseArg, suite: SuiteArg, command: Literal["start", "stop", "restart"]) -> None:
     for db_name in resolve_dbs(db):
-        db_instance = DBS[db_name]
-        cmd: str = getattr(db_instance, command)
-        _LOGGER.info(f"Running {command} for {db_name}: {cmd}")
+        for suite_name in resolve_suites(suite):
+            db_instance = DBS[db_name]
+            db_instance._current_suite = suite_name
+            cmd: str = getattr(db_instance, command)
+            _LOGGER.info(f"Running {command} for {db_name}/{suite_name}: {cmd}")
 
-        if cmd:
-            os.system(cmd)
+            if cmd:
+                os.system(cmd)
 
-        if command in ("start", "restart"):
-            db_instance.wait_until_accessible()
+            if command in ("start", "restart"):
+                db_instance.wait_until_accessible()
 
 
 @app.command

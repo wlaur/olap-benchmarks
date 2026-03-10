@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     input_data_directory: DirectoryPath
     results_directory: DirectoryPath
 
-    database_directory: DirectoryPath
+    database_directory: Path
     temporary_directory: DirectoryPath
 
     system: str

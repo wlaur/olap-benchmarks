@@ -150,12 +150,11 @@ class TimescaleDB(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "timescaledb").mkdir(exist_ok=True)
         (SETTINGS.temporary_directory / "timescaledb/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 5432:5432",
-            f"-v {SETTINGS.database_directory.as_posix()}/timescaledb:/var/lib/postgresql/data/",
+            f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
             DOCKER_IMAGE,
