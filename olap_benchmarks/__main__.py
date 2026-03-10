@@ -65,6 +65,21 @@ def _get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
 app = cyclopts.App(name="olap-benchmarks")
 
 
+def _start_db(db_instance: Database) -> None:
+    cmd = db_instance.start
+    if cmd is not None:
+        _LOGGER.info(f"Starting {db_instance.name}: {cmd}")
+        os.system(cmd)
+        db_instance.wait_until_accessible()
+
+
+def _stop_db(db_instance: Database) -> None:
+    cmd = db_instance.stop
+    if cmd is not None:
+        _LOGGER.info(f"Stopping {db_instance.name}: {cmd}")
+        os.system(cmd)
+
+
 @app.command
 def benchmark(
     db: DatabaseArg,
@@ -79,13 +94,19 @@ def benchmark(
             for suite_name in resolve_suites(suite):
                 _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
                 db_instance = DBS[db_name]
+                db_instance._current_suite = suite_name
                 db_instance.set_queues(writer.queue, writer.result_queue)
 
-                if operation == "both":
-                    db_instance.benchmark(suite_name, "populate")
-                    db_instance.benchmark(suite_name, "run")
-                else:
-                    db_instance.benchmark(suite_name, operation)
+                _start_db(db_instance)
+
+                try:
+                    if operation == "both":
+                        db_instance.benchmark(suite_name, "populate")
+                        db_instance.benchmark(suite_name, "run")
+                    else:
+                        db_instance.benchmark(suite_name, operation)
+                finally:
+                    _stop_db(db_instance)
     finally:
         writer.close()
 
@@ -99,18 +120,20 @@ def data(suite: SuiteArg) -> None:
 
 @app.command
 def docker(db: DatabaseArg, suite: SuiteArg, command: Literal["start", "stop", "restart"]) -> None:
+    """Manually manage database containers (for debugging)."""
     for db_name in resolve_dbs(db):
         for suite_name in resolve_suites(suite):
             db_instance = DBS[db_name]
             db_instance._current_suite = suite_name
-            cmd: str = getattr(db_instance, command)
-            _LOGGER.info(f"Running {command} for {db_name}/{suite_name}: {cmd}")
 
-            if cmd:
-                os.system(cmd)
-
-            if command in ("start", "restart"):
-                db_instance.wait_until_accessible()
+            match command:
+                case "start":
+                    _start_db(db_instance)
+                case "stop":
+                    _stop_db(db_instance)
+                case "restart":
+                    _stop_db(db_instance)
+                    _start_db(db_instance)
 
 
 @app.command
