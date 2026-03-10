@@ -95,14 +95,14 @@ class Database(BaseModel, ABC):
 
     @property
     @abstractmethod
-    def start(self) -> str: ...
+    def start(self) -> str | None: ...
 
     @property
-    def stop(self) -> str:
+    def stop(self) -> str | None:
         return f"docker stop {self.name}-benchmark"
 
     @property
-    def restart(self) -> str:
+    def restart(self) -> str | None:
         return f"docker restart {self.name}-benchmark"
 
     def _start_step(
@@ -238,9 +238,13 @@ class Database(BaseModel, ABC):
         return df, duration_seconds
 
     def restart_event(self) -> None:
+        cmd = self.restart
+        if cmd is None:
+            return
+
         with self.phase_context("restart"):
             _LOGGER.info(f"Restarting service {self.name}")
-            os.system(self.restart)
+            os.system(cmd)
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 

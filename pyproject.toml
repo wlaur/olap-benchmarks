@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "olap-benchmarks"
 version = "0.1.0"
@@ -33,6 +37,9 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "sqlalchemy-monetdb==2.0.0",
 ]
+
+[project.scripts]
+olap = "olap_benchmarks.__main__:app"
 
 [dependency-groups]
 dev = [

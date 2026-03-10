@@ -70,16 +70,16 @@ class DuckDB(Database):
 
     # in-process, no docker commands necessary
     @property
-    def start(self) -> str:
-        return ""
+    def start(self) -> None:
+        return None
 
     @property
-    def stop(self) -> str:
-        return ""
+    def stop(self) -> None:
+        return None
 
     @property
-    def restart(self) -> str:
-        return ""
+    def restart(self) -> None:
+        return None
 
     def connect(self, reconnect: bool = False) -> Connection:
         if self._connection is not None and not reconnect:
