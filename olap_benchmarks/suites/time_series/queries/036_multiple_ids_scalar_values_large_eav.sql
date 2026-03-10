@@ -5,12 +5,12 @@ select
             when id = 371 then value
         end
     ) as value_1,
-    avg(
-        cast(
+    cast(
+        avg(
             case
-                when id = 364 then value
-            end as int
-        )
+                when id = 364 then cast(value as int)
+            end
+        ) as int
     ) as value_2,
     avg(
         case
