@@ -22,7 +22,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "25.8.4.13"
+VERSION = "26.1.1.912"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
