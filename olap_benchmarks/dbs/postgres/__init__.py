@@ -334,7 +334,7 @@ class Postgres(Database):
 
     @property
     def start(self) -> str:
-        host_pgdata = SETTINGS.database_directory / "postgres" / "pgdata"
+        host_pgdata = self.database_directory / "pgdata"
         host_pgdata.mkdir(parents=True, exist_ok=True)
         host_pgdata.chmod(0o777)  # macOS bind-friendly
 

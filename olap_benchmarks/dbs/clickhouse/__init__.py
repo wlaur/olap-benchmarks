@@ -119,12 +119,11 @@ class Clickhouse(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "clickhouse").mkdir(exist_ok=True)
         (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 18123:8123 -p 19000:9000",
-            f"-v {SETTINGS.database_directory.as_posix()}/clickhouse:/var/lib/clickhouse",
+            f"-v {self.database_directory.as_posix()}:/var/lib/clickhouse",
             f"-v {SETTINGS.temporary_directory.as_posix()}/clickhouse/data:/var/lib/clickhouse/user_files",
             # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
             "-e CLICKHOUSE_DB=default",
