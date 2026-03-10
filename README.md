@@ -46,6 +46,12 @@ Apply migrations to the default results database from `.env`:
 uv run --group dev alembic upgrade head
 ```
 
+Apply migrations to a named results revision through the app CLI:
+
+```bash
+uv run olap results migrate --revision default
+```
+
 Apply migrations to an explicit database path:
 
 ```bash

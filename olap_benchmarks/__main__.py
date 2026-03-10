@@ -1,21 +1,21 @@
 import logging
 import os
 from collections.abc import Callable
-from typing import Any, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 
 import cyclopts
 from setproctitle import setproctitle
 
-from .dbs import Database
-from .dbs.clickhouse import Clickhouse
-from .dbs.duckdb import DuckDB
-from .dbs.monetdb import MonetDB
-from .dbs.postgres import Postgres
-from .dbs.questdb import QuestDB
-from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
 from .results import config as show_config
-from .results import delete_runs, delete_runs_by_status, list_revisions, list_runs, query_results
+from .results import (
+    delete_runs,
+    delete_runs_by_status,
+    list_revisions,
+    list_runs,
+    migrate_results,
+    query_results,
+)
 from .results import publish as publish_results
 from .settings import (
     MAIN_PROCESS_TITLE,
@@ -30,21 +30,15 @@ from .settings import (
     setup_stdout_logging,
 )
 
+if TYPE_CHECKING:
+    from .dbs import Database
+
 setproctitle(MAIN_PROCESS_TITLE)
 setup_stdout_logging()
 
 _LOGGER = logging.getLogger(__name__)
 
-DBS: dict[DatabaseName, Database] = {
-    "monetdb": MonetDB(),
-    "clickhouse": Clickhouse(),
-    "timescaledb": TimescaleDB(),
-    "duckdb": DuckDB(),
-    "questdb": QuestDB(),
-    "postgres": Postgres(),
-}
-
-assert set(DBS) == set(get_args(DatabaseName))
+_dbs: dict[DatabaseName, "Database"] | None = None
 
 SUITE_PREPARERS: dict[SuiteName, Callable[[], None]] = {}
 
@@ -68,7 +62,32 @@ app = cyclopts.App(name="olap", help="OLAP database benchmarking tool.")
 cast(Any, app).register_install_completion_command()
 
 
-def _start_db(db_instance: Database) -> None:
+def _get_dbs() -> dict[DatabaseName, "Database"]:
+    global _dbs
+
+    if _dbs is None:
+        from .dbs.clickhouse import Clickhouse
+        from .dbs.duckdb import DuckDB
+        from .dbs.monetdb import MonetDB
+        from .dbs.postgres import Postgres
+        from .dbs.questdb import QuestDB
+        from .dbs.timescaledb import TimescaleDB
+
+        _dbs = {
+            "monetdb": MonetDB(),
+            "clickhouse": Clickhouse(),
+            "timescaledb": TimescaleDB(),
+            "duckdb": DuckDB(),
+            "questdb": QuestDB(),
+            "postgres": Postgres(),
+        }
+
+        assert set(_dbs) == set(get_args(DatabaseName))
+
+    return _dbs
+
+
+def _start_db(db_instance: "Database") -> None:
     cmd = db_instance.start
     if cmd is not None:
         _stop_db(db_instance)
@@ -77,7 +96,7 @@ def _start_db(db_instance: Database) -> None:
         db_instance.wait_until_accessible()
 
 
-def _stop_db(db_instance: Database) -> None:
+def _stop_db(db_instance: "Database") -> None:
     cmd = db_instance.stop
     if cmd is not None:
         _LOGGER.info(f"Stopping {db_instance.name}: {cmd}")
@@ -119,7 +138,7 @@ def benchmark(
         for db_name in resolve_dbs(db):
             for suite_name in suite_names:
                 _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
-                db_instance = DBS[db_name]
+                db_instance = _get_dbs()[db_name]
                 db_instance._current_suite = suite_name
                 db_instance.set_queues(writer.queue, writer.result_queue)
 
@@ -142,7 +161,7 @@ def docker(db: DatabaseArg, suite: SuiteArg, command: Literal["start", "stop", "
     """Manually start, stop, or restart a database container."""
     for db_name in resolve_dbs(db):
         for suite_name in resolve_suites(suite):
-            db_instance = DBS[db_name]
+            db_instance = _get_dbs()[db_name]
             db_instance._current_suite = suite_name
 
             match command:
@@ -213,6 +232,13 @@ def revisions() -> None:
         return
     for name in names:
         print(name)
+
+
+@results_app.command
+def migrate(revision: Revision = "default") -> None:
+    """Apply Alembic migrations through head to a results database revision."""
+    db_path = migrate_results(revision=revision)
+    print(f"Migrated revision '{revision}' to Alembic head at {db_path}")
 
 
 @app.command

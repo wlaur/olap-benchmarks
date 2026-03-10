@@ -36,6 +36,11 @@ impl._impls["duckdb"] = PostgresqlImpl
 
 
 def _database_url() -> str:
+    db_path_attr = config.attributes.get("db_path")
+    if db_path_attr is not None:
+        path = Path(str(db_path_attr)).expanduser().resolve()
+        return f"duckdb:///{path}"
+
     x_args = context.get_x_argument(as_dictionary=True)
     db_path = x_args.get("db")
     path = Path(db_path).expanduser().resolve() if db_path else get_results_db_path()
@@ -198,7 +203,7 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
+    with connectable.begin() as connection:
         global _existing_tables_for_autogen
         _existing_tables_for_autogen = set(inspect(connection).get_table_names())
 

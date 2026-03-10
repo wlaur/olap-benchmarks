@@ -7,18 +7,56 @@ from pathlib import Path
 from typing import Any, cast
 
 import duckdb
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from alembic import command
+
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from .results_models import Run, RunMetric, RunStep
-from .results_schema import SCHEMA_VERSION, ensure_results_schema
+from .results_schema import ensure_results_schema
 from .settings import REPO_ROOT, SETTINGS, Revision
 
 
 def get_results_db_path(revision: Revision = "default") -> Path:
     return SETTINGS.results_directory / f"{revision}.db"
+
+
+def get_alembic_config(db_path: Path | None = None) -> Config:
+    config = Config((REPO_ROOT / "alembic.ini").as_posix())
+    config.set_main_option("script_location", (REPO_ROOT / "alembic").as_posix())
+
+    if db_path is not None:
+        config.attributes["db_path"] = db_path.expanduser().resolve()
+
+    return config
+
+
+def get_results_head_revision() -> str:
+    script = ScriptDirectory.from_config(get_alembic_config())
+    head = script.get_current_head()
+
+    if head is None:
+        raise RuntimeError("Alembic has no head revision configured for the results schema")
+
+    return head
+
+
+def stamp_results(revision: Revision = "default", db_path: Path | None = None, target_revision: str = "head") -> Path:
+    path = (db_path or get_results_db_path(revision)).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    command.stamp(get_alembic_config(path), target_revision)
+    return path
+
+
+def migrate_results(revision: Revision = "default", db_path: Path | None = None, target_revision: str = "head") -> Path:
+    path = (db_path or get_results_db_path(revision)).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    command.upgrade(get_alembic_config(path), target_revision)
+    return path
 
 
 def get_results_engine(read_only: bool = True, db_path: Path | None = None, revision: Revision = "default") -> Engine:
@@ -78,7 +116,7 @@ def publish(revision: Revision = "default") -> Path:
     engine = get_results_engine(read_only=True, db_path=source_db_path)
 
     try:
-        ensure_results_schema(engine, reset_if_mismatch=False, allow_create=False)
+        ensure_results_schema(engine, allow_create=False)
 
         with Session(engine) as session:
             table_counts = {
@@ -98,7 +136,7 @@ def publish(revision: Revision = "default") -> Path:
         "published_at": datetime.now(UTC).isoformat(),
         "revision": revision,
         "source": source_db_path.as_posix(),
-        "schema_version": SCHEMA_VERSION,
+        "schema_revision": get_results_head_revision(),
         "table_counts": table_counts,
     }
 

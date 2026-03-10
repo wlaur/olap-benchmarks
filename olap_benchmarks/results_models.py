@@ -104,13 +104,3 @@ class DebugEntry(Base):
         primary_key=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-
-
-class ResultsMeta(Base):
-    __tablename__ = "results_meta"
-
-    key: Mapped[str] = mapped_column(String, primary_key=True)
-    value: Mapped[str] = mapped_column(String, nullable=False)
-
-
-LEGACY_TABLES = ("benchmark", "event", "metric")
