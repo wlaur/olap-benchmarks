@@ -24,7 +24,7 @@ Install zsh completions once:
 uv run olap --install-completion --shell zsh && exec zsh
 ```
 
-You should not need to run that for every new terminal session. Run it again if the CLI structure changes and you want the generated completions refreshed.
+Run it again if the CLI structure changes and you want the generated completions refreshed.
 
 ## Results schema migrations
 
