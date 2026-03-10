@@ -15,12 +15,14 @@ from .dbs.questdb import QuestDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
 from .results import config as show_config
-from .results import delete_runs, delete_runs_by_status, export_site_data, list_revisions, list_runs, query_results
+from .results import delete_runs, delete_runs_by_status, list_revisions, list_runs, query_results
+from .results import publish as publish_results
 from .settings import (
     MAIN_PROCESS_TITLE,
     SETTINGS,
     DatabaseArg,
     DatabaseName,
+    Revision,
     SuiteArg,
     SuiteName,
     resolve_dbs,
@@ -102,7 +104,7 @@ def benchmark(
     db: DatabaseArg,
     suite: SuiteArg,
     operation: Literal["run", "populate", "both"] = "both",
-    revision: str = "default",
+    revision: Revision = "default",
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically."""
     suite_names = resolve_suites(suite)
@@ -160,7 +162,7 @@ def runs(
     status: str | None = None,
     suite: str | None = None,
     db: str | None = None,
-    revision: str = "default",
+    revision: Revision = "default",
 ) -> None:
     """List benchmark runs, optionally filtered by status, suite, or db."""
     import json
@@ -177,7 +179,7 @@ def runs(
 def delete_cmd(
     run_id: list[int] | None = None,
     status: str | None = None,
-    revision: str = "default",
+    revision: Revision = "default",
 ) -> None:
     """Delete runs (and their steps/metrics) by run ID or status (e.g. 'failed', 'aborted')."""
     if run_id and status:
@@ -195,7 +197,7 @@ def delete_cmd(
 
 
 @results_app.command
-def query(sql: str, revision: str = "default") -> None:
+def query(sql: str, revision: Revision = "default") -> None:
     """Run a SQL query against the results database."""
     query_results(sql, revision=revision)
 
@@ -212,19 +214,16 @@ def revisions() -> None:
 
 
 @app.command
-def config(as_json: bool = False) -> None:
-    """Show current configuration from .env."""
-    show_config(as_json)
+def publish(revision: Revision = "default") -> None:
+    """Copy a results database to site/public/data for the webpage, with a manifest."""
+    output_dir = publish_results(revision=revision)
+    print(f"Published revision '{revision}' to {output_dir}")
 
 
 @app.command
-def export(
-    output_directory: str | None = None,
-    source_database: str | None = None,
-    revision: str = "default",
-) -> None:
-    """Export results to JSON for the site."""
-    export_site_data(output_directory, source_database, revision=revision)
+def config(as_json: bool = False) -> None:
+    """Show current configuration from .env."""
+    show_config(as_json)
 
 
 if __name__ == "__main__":
