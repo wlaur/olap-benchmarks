@@ -18,6 +18,7 @@ from .results import config as show_config
 from .results import export_site_data, list_revisions, query_results
 from .settings import (
     MAIN_PROCESS_TITLE,
+    SETTINGS,
     DatabaseArg,
     DatabaseName,
     SuiteArg,
@@ -117,7 +118,11 @@ def config(as_json: bool = False) -> None:
 
 @app.command
 def revisions() -> None:
-    for name in list_revisions():
+    names = list_revisions()
+    if not names:
+        print(f"No result databases in {SETTINGS.results_directory}")
+        return
+    for name in names:
         print(name)
 
 
