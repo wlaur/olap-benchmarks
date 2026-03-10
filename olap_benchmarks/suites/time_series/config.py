@@ -9,7 +9,7 @@ import numpy as np
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SuiteName, TableName
+from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ EAV_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
 def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl.DataType]]]:
     return {f"data_{size}_eav": EAV_SCHEMA for size in TIME_SERIES_DATASET_SIZES} | {
         f"data_{size}_wide": pl.read_parquet_schema(
-            REPO_ROOT / "data/input/time_series" / get_dataset_name("wide", rows, cols)
+            SETTINGS.input_data_directory / "time_series" / get_dataset_name("wide", rows, cols)
         )
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     }
@@ -55,10 +55,10 @@ def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl
 
 def get_time_series_input_files() -> dict[str, Path]:
     return {
-        f"data_{size}_wide": REPO_ROOT / "data/input/time_series" / get_dataset_name("wide", rows, cols)
+        f"data_{size}_wide": SETTINGS.input_data_directory / "time_series" / get_dataset_name("wide", rows, cols)
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     } | {
-        f"data_{size}_eav": REPO_ROOT / "data/input/time_series" / get_dataset_name("eav", rows, cols)
+        f"data_{size}_eav": SETTINGS.input_data_directory / "time_series" / get_dataset_name("eav", rows, cols)
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     }
 
@@ -226,8 +226,8 @@ def get_dataset_name(orientation: Literal["wide", "eav"], rows: int, cols: int) 
     return f"data_{orientation}_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
 
 
-def generate_time_series_datasets(overwrite: bool = False) -> None:
-    output_directory = REPO_ROOT / "data/input/time_series"
+def prepare_data(overwrite: bool = False) -> None:
+    output_directory = SETTINGS.input_data_directory / "time_series"
     output_directory.mkdir(exist_ok=True, parents=True)
 
     file_paths: list[Path] = []

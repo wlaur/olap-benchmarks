@@ -30,7 +30,7 @@ KAGGLE_AIRBNB_QUERY_NAMES = {
 }
 
 
-def convert_kaggle_airbnb_data_to_parquet() -> None:
+def prepare_data() -> None:
     data_dir = SETTINGS.input_data_directory / "kaggle_airbnb"
     # download and unzip *.csv.zip files from
     # https://www.kaggle.com/datasets/konradb/inside-airbnb-usa (subdirectory Austin)
