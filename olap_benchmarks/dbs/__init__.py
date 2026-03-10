@@ -312,6 +312,14 @@ class Database(BaseModel, ABC):
         self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None
     ) -> pl.DataFrame: ...
 
+    def get_row_count(self, table: TableName) -> int:
+        df = self.fetch(f"select count(*) as row_count from {table}", schema={"row_count": pl.Int64})
+
+        if df.shape != (1, 1):
+            raise RuntimeError(f"Expected a single row-count result for {table}, got shape={df.shape}")
+
+        return int(df.item(0, 0))
+
     @abstractmethod
     def insert(
         self,

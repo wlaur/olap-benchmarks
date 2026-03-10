@@ -21,6 +21,10 @@ DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 
 class QuestDBClickbench(Clickbench["QuestDB"]):
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         # NOTE: inserts directly from source Parquet file to avoid OOM issues
         # insert time is not comparable with other databases that insert from an in memory dataframe
         # on the other hand, this is more in line with how inserts would actually be done with QuestDB
@@ -63,6 +67,9 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
             self.db.wait_until_count("hits", count)
 
         fpath.unlink()
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         if restart:
             self.db.restart_event()
@@ -130,6 +137,9 @@ class QuestDB(Database):
         assert isinstance(c, int)
 
         return c
+
+    def get_row_count(self, table: TableName) -> int:
+        return self.get_count(table)
 
     def wait_until_count(self, table: TableName, count: int, interval_seconds: float = 10.0) -> None:
         _LOGGER.info(f"Waiting until table '{table}' contains {count:_} rows...")

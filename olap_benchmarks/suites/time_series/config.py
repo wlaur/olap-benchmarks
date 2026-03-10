@@ -252,6 +252,15 @@ def prepare_data(overwrite: bool = False) -> None:
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "time_series"
 
+    def expected_table_row_counts(self) -> Mapping[TableName, int]:
+        counts: dict[TableName, int] = {}
+
+        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items():
+            counts[f"data_{size}_wide"] = rows
+            counts[f"data_{size}_eav"] = rows * cols
+
+        return counts
+
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
         return None
@@ -264,6 +273,10 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return {}
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         self.db.initialize_schema("time_series")
 
         for table_name, fpath in get_time_series_input_files().items():
@@ -277,6 +290,9 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...

@@ -5,7 +5,7 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName
+from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,6 +23,9 @@ def prepare_data() -> None:
 class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "clickbench"
 
+    def expected_table_row_counts(self) -> dict[TableName, int]:
+        return {"hits": self.parquet_row_count(SETTINGS.input_data_directory / "clickbench/hits.parquet")}
+
     def load_dataset(self) -> pl.DataFrame:
         # parquet file stores these as integers, the schema expects correct dtypes
         timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
@@ -39,6 +42,10 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
         return {}
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         self.db.initialize_schema("clickbench")
 
         # this is an expensive operation, would be better to avoid reading with polars
@@ -53,6 +60,9 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
             self.db.insert(df, "hits", **self.populate_kwargs)
 
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...
