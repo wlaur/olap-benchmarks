@@ -39,7 +39,7 @@ def _get_alembic_revision(engine: Engine) -> str | None:
 def ensure_results_schema(engine: Engine, allow_create: bool = True) -> None:
     existing_tables = _existing_tables(engine)
     alembic_revision = _get_alembic_revision(engine)
-    from .results import get_results_head_revision, migrate_results
+    from . import get_results_head_revision, migrate_results
 
     head_revision = get_results_head_revision()
 
