@@ -99,6 +99,10 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
             _LOGGER.info(f"Vacuumed table {table_name}")
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         # need to define parts of the schema and insert data in a specific order
         self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
 
@@ -137,6 +141,9 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
 
         with self.db.phase_context("compress"):
             self.compress_tables()
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         if restart:
             self.db.restart_event()

@@ -5,7 +5,7 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName
+from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -96,11 +96,21 @@ def prepare_data() -> None:
 class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "kaggle_airbnb"
 
+    def expected_table_row_counts(self) -> dict[TableName, int]:
+        return {
+            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+            for table_name in KAGGLE_AIRBNB_TABLES
+        }
+
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         self.db.initialize_schema("kaggle_airbnb")
 
         for table_name in KAGGLE_AIRBNB_TABLES:
@@ -111,6 +121,9 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all kaggle_airbnb tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...

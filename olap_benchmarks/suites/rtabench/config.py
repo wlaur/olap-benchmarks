@@ -9,7 +9,7 @@ import httpx
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName
+from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 
 RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
@@ -147,11 +147,21 @@ def prepare_data() -> None:
 class RTABench[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "rtabench"
 
+    def expected_table_row_counts(self) -> dict[TableName, int]:
+        return {
+            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+            for table_name in RTABENCH_SCHEMAS
+        }
+
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         self.db.initialize_schema("rtabench")
 
         for table_name in RTABENCH_SCHEMAS:
@@ -162,6 +172,9 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all rtabench tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...
