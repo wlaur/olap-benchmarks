@@ -70,6 +70,7 @@ app = cyclopts.App(name="olap-benchmarks", help="OLAP database benchmarking tool
 def _start_db(db_instance: Database) -> None:
     cmd = db_instance.start
     if cmd is not None:
+        _stop_db(db_instance)
         _LOGGER.info(f"Starting {db_instance.name}: {cmd}")
         os.system(cmd)
         db_instance.wait_until_accessible()

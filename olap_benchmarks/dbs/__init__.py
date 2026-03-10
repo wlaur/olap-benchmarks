@@ -285,24 +285,27 @@ class Database(BaseModel, ABC):
             return
         self._connection.rollback()
 
-    def wait_until_accessible(self, timeout_seconds: float = 900.0, interval_seconds: float = 0.1) -> None:
-        _LOGGER.info(f"Waiting for database {self.name}...")
+    def wait_until_accessible(self, timeout_seconds: float = 120.0, interval_seconds: float = 1.0) -> None:
+        _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
 
         deadline = perf_counter() + timeout_seconds
+        attempts = 0
 
         while perf_counter() < deadline:
+            attempts += 1
             try:
                 self.connect(reconnect=True)
                 self.fetch("select 1")
-                _LOGGER.info(f"Database {self.name} is ready to accept connections")
+                _LOGGER.info(f"Database {self.name} is ready (after {attempts} attempt(s))")
                 return
             except NotImplementedError:
                 raise
             except Exception as e:
-                _LOGGER.debug(f"Database not ready yet: {e}")
+                elapsed = perf_counter() + timeout_seconds - deadline
+                _LOGGER.info(f"Database {self.name} not ready ({elapsed:.0f}s elapsed): {e}")
                 sleep(interval_seconds)
 
-        raise TimeoutError(f"Timed out waiting for database {self.name} to become ready")
+        raise TimeoutError(f"Timed out after {timeout_seconds:.0f}s waiting for database {self.name}")
 
     @abstractmethod
     def fetch(
