@@ -15,7 +15,7 @@ from .dbs.questdb import QuestDB
 from .dbs.timescaledb import TimescaleDB
 from .metrics.storage import start_writer_process
 from .results import config as show_config
-from .results import export_site_data
+from .results import export_site_data, list_revisions, query_results
 from .settings import (
     MAIN_PROCESS_TITLE,
     DatabaseArg,
@@ -69,8 +69,9 @@ def benchmark(
     db: DatabaseArg,
     suite: SuiteArg,
     operation: Literal["run", "populate", "both"] = "both",
+    revision: str = "default",
 ) -> None:
-    writer = start_writer_process()
+    writer = start_writer_process(revision=revision)
 
     try:
         for db_name in resolve_dbs(db):
@@ -115,11 +116,23 @@ def config(as_json: bool = False) -> None:
 
 
 @app.command
+def revisions() -> None:
+    for name in list_revisions():
+        print(name)
+
+
+@app.command
+def query(sql: str, revision: str = "default") -> None:
+    query_results(sql, revision=revision)
+
+
+@app.command
 def export(
     output_directory: str | None = None,
     source_database: str | None = None,
+    revision: str = "default",
 ) -> None:
-    export_site_data(output_directory, source_database)
+    export_site_data(output_directory, source_database, revision=revision)
 
 
 if __name__ == "__main__":
