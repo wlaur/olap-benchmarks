@@ -7,7 +7,7 @@ from sqlalchemy.schema import DropTable
 
 from .results_models import LEGACY_TABLES, Base, ResultsMeta
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 RESULT_TABLES = [
     "run",

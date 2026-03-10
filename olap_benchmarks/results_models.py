@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, Sequence, String, Text
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Index, Integer, Sequence, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -53,7 +53,9 @@ class RunStep(Base):
         server_default=run_step_id_sequence.next_value(),
         primary_key=True,
     )
-    run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
+    # DuckDB currently rejects updates to referenced rows, even when the PK is unchanged.
+    # Keep this as an indexed scalar column and enforce parent/child cleanup in application code.
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     step_type: Mapped[str] = mapped_column(String, nullable=False)
     step_name: Mapped[str] = mapped_column(String, nullable=False)
     query_name: Mapped[str | None] = mapped_column(String, index=True)
@@ -83,7 +85,7 @@ class RunMetric(Base):
         server_default=run_metric_id_sequence.next_value(),
         primary_key=True,
     )
-    run_id: Mapped[int] = mapped_column(ForeignKey("run.id"), nullable=False, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     cpu_percent: Mapped[float] = mapped_column(Float, nullable=False)
     mem_mb: Mapped[int] = mapped_column(Integer, nullable=False)
