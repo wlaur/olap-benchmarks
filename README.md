@@ -18,6 +18,14 @@ Install the necessary Python dependencies
 uv sync
 ```
 
+Install zsh completions once:
+
+```bash
+uv run olap --install-completion --shell zsh && exec zsh
+```
+
+You should not need to run that for every new terminal session. Run it again if the CLI structure changes and you want the generated completions refreshed.
+
 ## Results schema migrations
 
 Install dev dependencies (includes Alembic):
