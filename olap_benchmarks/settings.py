@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
@@ -21,6 +21,22 @@ DatabaseName = Literal[
 
 SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb"]
 Operation = Literal["populate", "run"]
+
+type DatabaseArg = DatabaseName | Literal["all"]
+type SuiteArg = SuiteName | Literal["all"]
+
+
+def resolve_dbs(arg: DatabaseArg) -> list[DatabaseName]:
+    if arg == "all":
+        return list(get_args(DatabaseName))
+    return [arg]
+
+
+def resolve_suites(arg: SuiteArg) -> list[SuiteName]:
+    if arg == "all":
+        return list(get_args(SuiteName))
+    return [arg]
+
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 

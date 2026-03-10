@@ -133,8 +133,8 @@ def convert_rtabench_data_to_parquet(data_dir: Path) -> None:
         _LOGGER.info(f"Converted {fname} to Parquet")
 
 
-def download_rtabench_data() -> None:
-    output_directory = REPO_ROOT / "data/input/rtabench"
+def prepare_data() -> None:
+    output_directory = SETTINGS.input_data_directory / "rtabench"
     output_directory.mkdir(exist_ok=True, parents=True)
 
     asyncio.run(download_rtabench_data_async(output_directory))
