@@ -1,5 +1,5 @@
 select
-    min(time) as time,
+    min(time) as time_,
     avg(
         case
             when id = 371 then value
