@@ -4,4 +4,4 @@ select
 from
     data_large_wide
 where
-    time = '2023-08-04 12:23'
+    time = '2023-08-04 12:23:00'
