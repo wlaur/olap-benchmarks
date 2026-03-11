@@ -1,44 +1,48 @@
 import * as duckdb from "@duckdb/duckdb-wasm"
+import { DuckDbDialect } from "@coji/kysely-duckdb-wasm"
 import duckdbWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url"
 import duckdbWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url"
-
-let dbInstance: duckdb.AsyncDuckDB | null = null
-let connInstance: duckdb.AsyncDuckDBConnection | null = null
+import { Kysely } from "kysely"
+import type { DB } from "./generated/db"
 
 const BASE = import.meta.env.BASE_URL
+const RESULTS_DB_FILE = "results.duckdb"
 
-export async function getDB(): Promise<duckdb.AsyncDuckDB> {
-  if (dbInstance) return dbInstance
+let duckDbInstance: duckdb.AsyncDuckDB | null = null
+let kyselyInstance: Kysely<DB> | null = null
+
+export async function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
+  if (duckDbInstance) return duckDbInstance
 
   const worker = new Worker(duckdbWorker, { type: "module" })
   const logger = new duckdb.VoidLogger()
-  const db = new duckdb.AsyncDuckDB(logger, worker)
-  await db.instantiate(duckdbWasm)
+  const database = new duckdb.AsyncDuckDB(logger, worker)
 
-  await db.registerFileURL(
-    "results.duckdb",
+  await database.instantiate(duckdbWasm)
+  await database.registerFileURL(
+    RESULTS_DB_FILE,
     `${BASE}data/results.duckdb`,
     duckdb.DuckDBDataProtocol.HTTP,
     false,
   )
+  await database.open({
+    path: RESULTS_DB_FILE,
+    accessMode: duckdb.DuckDBAccessMode.READ_ONLY,
+  })
 
-  const conn = await db.connect()
-  await conn.query(`ATTACH 'results.duckdb' AS results (READ_ONLY)`)
-  await conn.close()
-
-  dbInstance = db
-  return db
+  duckDbInstance = database
+  return database
 }
 
-export async function getConnection(): Promise<duckdb.AsyncDuckDBConnection> {
-  if (connInstance) return connInstance
-  const db = await getDB()
-  connInstance = await db.connect()
-  return connInstance
-}
+export async function getKyselyDb(): Promise<Kysely<DB>> {
+  if (kyselyInstance) return kyselyInstance
 
-export async function query<T>(sql: string): Promise<T[]> {
-  const conn = await getConnection()
-  const result = await conn.query(sql)
-  return result.toArray().map((row) => row.toJSON() as T)
+  kyselyInstance = new Kysely<DB>({
+    dialect: new DuckDbDialect({
+      database: getDuckDb,
+      tableMappings: {},
+    }),
+  })
+
+  return kyselyInstance
 }
