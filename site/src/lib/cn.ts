@@ -1,11 +1,6 @@
-export function cn(...classes: Array<string | false | null | undefined>): string {
-  const names: string[] = []
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-  for (const value of classes) {
-    if (value) {
-      names.push(value)
-    }
-  }
-
-  return names.join(" ")
+export function cn(...classes: ClassValue[]): string {
+  return twMerge(clsx(classes))
 }
