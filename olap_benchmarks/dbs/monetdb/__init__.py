@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -12,6 +12,7 @@ from .. import Database
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import insert, upsert
 from .settings import SETTINGS as MONETDB_SETTINGS
+from .utils import get_pymonetdb_connection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,9 +121,24 @@ class MonetDB(Database):
         if method == "binary":
             return fetch_binary(query, self.connect(), schema)
         elif method == "pymonetdb":
-            return fetch_pymonetdb(query, self.connect())
+            df = fetch_pymonetdb(query, self.connect())
         else:
             raise ValueError(f"Invalid method: '{method}'")
+
+        if schema is not None:
+            df = df.cast(cast(pl.Schema, schema))
+
+        return df
+
+    def rollback(self) -> None:
+        if self._connection is None:
+            return
+
+        # MonetDB reads and writes may use the raw DBAPI cursor directly, bypassing
+        # SQLAlchemy's transaction bookkeeping. Clear both SQLAlchemy's view and the
+        # underlying MonetDB transaction state.
+        super().rollback()
+        get_pymonetdb_connection(self._connection).rollback()
 
     def get_table_names(self) -> set[TableName]:
         df = self.fetch(
@@ -139,16 +155,10 @@ class MonetDB(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
-        try:
-            result = self.connect().execute(
-                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
-            )
-        except Exception:
-            self.rollback()
-            result = self.connect(reconnect=True).execute(
-                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
-            )
-
+        result = self.connect().execute(
+            text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
+            {"table_name": table},
+        )
         exists = bool(result.scalar())
 
         try:

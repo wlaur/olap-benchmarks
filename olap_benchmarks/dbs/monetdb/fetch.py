@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol, cast
 
 import polars as pl
 from pymonetdb.sql.cursors import Description
-from sqlalchemy import Connection
+from sqlalchemy import Connection, text
 
 from .binary import read_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
@@ -46,24 +46,14 @@ def _description_values(d: Description) -> tuple[str, str, int | None, int | Non
 
 
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
-    con = get_pymonetdb_connection(connection)
-    c = cast(_MonetCursor, con.cursor())
-    c.execute(query)
+    result = connection.execute(text(query.strip().removesuffix(";")))
+    columns = list(result.keys())
+    rows = result.fetchall()
 
-    # TODO: bug with pymonetdb where the initial 100 rows are fetched using normal and the rest with binary
-    # the behavior is not identical for JSON columns (binary fetch does not call json.loads)
-    ret: list[tuple[Any, ...]] = c.fetchall()
+    if not rows:
+        return pl.DataFrame({col: [] for col in columns})
 
-    description = c.description
-    assert description is not None
-    schema: dict[str, pl.DataType | type[pl.DataType]] = {}
-    for col in description:
-        name, type_code, precision, scale = _description_values(col)
-        schema[name] = get_polars_type(type_code, precision, scale)
-
-    df = pl.DataFrame(ret, schema, orient="row")
-
-    return df
+    return pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
 
 def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
