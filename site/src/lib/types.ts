@@ -68,3 +68,10 @@ export interface TimeSeriesQuerySummary {
   max_duration_s: number
   iterations: number
 }
+
+export interface QuerySqlEntry {
+  sql: string | null
+  db_overrides: Record<string, string>
+}
+
+export type QueriesManifest = Record<string, Record<string, QuerySqlEntry>>

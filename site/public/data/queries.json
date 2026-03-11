@@ -1,0 +1,1004 @@
+{
+  "clickbench": {
+    "Q0": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT COUNT(*) FROM hits;",
+        "duckdb": "SELECT COUNT(*) FROM hits;",
+        "monetdb": "SELECT COUNT(*) FROM hits;",
+        "postgres": "SELECT COUNT(*) FROM hits;",
+        "questdb": "SELECT COUNT(*) FROM hits;",
+        "timescaledb": "SELECT COUNT(*) FROM hits;"
+      }
+    },
+    "Q1": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;",
+        "duckdb": "SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;",
+        "monetdb": "SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;",
+        "postgres": "SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;",
+        "questdb": "SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;",
+        "timescaledb": "SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;"
+      }
+    },
+    "Q2": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;",
+        "duckdb": "SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;",
+        "monetdb": "SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;",
+        "postgres": "SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;",
+        "questdb": "SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;",
+        "timescaledb": "SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;"
+      }
+    },
+    "Q3": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT AVG(UserID) FROM hits;",
+        "duckdb": "SELECT AVG(UserID) FROM hits;",
+        "monetdb": "SELECT AVG(UserID) FROM hits;",
+        "postgres": "SELECT AVG(UserID) FROM hits;",
+        "questdb": "SELECT AVG(UserID) FROM hits;",
+        "timescaledb": "SELECT AVG(UserID) FROM hits;"
+      }
+    },
+    "Q4": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT COUNT(DISTINCT UserID) FROM hits;",
+        "duckdb": "SELECT COUNT(DISTINCT UserID) FROM hits;",
+        "monetdb": "SELECT COUNT(DISTINCT UserID) FROM hits;",
+        "postgres": "SELECT COUNT(DISTINCT UserID) FROM hits;",
+        "questdb": "SELECT count_distinct(UserID) FROM hits;",
+        "timescaledb": "SELECT COUNT(DISTINCT UserID) FROM hits;"
+      }
+    },
+    "Q5": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT COUNT(DISTINCT SearchPhrase) FROM hits;",
+        "duckdb": "SELECT COUNT(DISTINCT SearchPhrase) FROM hits;",
+        "monetdb": "SELECT COUNT(DISTINCT SearchPhrase) FROM hits;",
+        "postgres": "SELECT COUNT(DISTINCT SearchPhrase) FROM hits;",
+        "questdb": "SELECT count_distinct(SearchPhrase) FROM hits;",
+        "timescaledb": "SELECT COUNT(DISTINCT SearchPhrase) FROM hits;"
+      }
+    },
+    "Q6": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT MIN(EventDate), MAX(EventDate) FROM hits;",
+        "duckdb": "SELECT MIN(EventDate), MAX(EventDate) FROM hits;",
+        "monetdb": "SELECT MIN(EventDate), MAX(EventDate) FROM hits;",
+        "postgres": "SELECT MIN(EventDate), MAX(EventDate) FROM hits;",
+        "questdb": "SELECT MIN(EventDate), MAX(EventDate) FROM hits;",
+        "timescaledb": "SELECT MIN(EventDate), MAX(EventDate) FROM hits;"
+      }
+    },
+    "Q7": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC;",
+        "duckdb": "SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC;",
+        "monetdb": "SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC;",
+        "postgres": "SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC;",
+        "questdb": "SELECT AdvEngineID, COUNT(*) AS c FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY c DESC;",
+        "timescaledb": "SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC;"
+      }
+    },
+    "Q8": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;",
+        "duckdb": "SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;",
+        "monetdb": "SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;",
+        "postgres": "SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;",
+        "questdb": "SELECT RegionID, count_distinct(UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;",
+        "timescaledb": "SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;"
+      }
+    },
+    "Q9": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), count_distinct(UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q10": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "duckdb": "SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "monetdb": "SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "postgres": "SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "questdb": "SELECT MobilePhoneModel, count_distinct(UserID) AS u FROM hits WHERE MobilePhoneModel IS NOT NULL GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "timescaledb": "SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;"
+      }
+    },
+    "Q11": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "duckdb": "SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "monetdb": "SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "postgres": "SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "questdb": "SELECT MobilePhone, MobilePhoneModel, count_distinct(UserID) AS u FROM hits WHERE MobilePhoneModel IS NOT NULL GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;",
+        "timescaledb": "SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;"
+      }
+    },
+    "Q12": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase IS NOT NULL GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q13": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;",
+        "postgres": "SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;",
+        "questdb": "SELECT SearchPhrase, count_distinct(UserID) AS u FROM hits WHERE SearchPhrase IS NOT NULL GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;"
+      }
+    },
+    "Q14": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchEngineID, SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT SearchEngineID, SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT SearchEngineID, SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT SearchEngineID, SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT SearchEngineID, SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase IS NOT NULL GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT SearchEngineID, SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q15": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT UserID, COUNT(*) FROM hits GROUP BY UserID ORDER BY COUNT(*) DESC LIMIT 10;",
+        "duckdb": "SELECT UserID, COUNT(*) FROM hits GROUP BY UserID ORDER BY COUNT(*) DESC LIMIT 10;",
+        "monetdb": "SELECT UserID, COUNT(*) FROM hits GROUP BY UserID ORDER BY COUNT(*) DESC LIMIT 10;",
+        "postgres": "SELECT UserID, COUNT(*) FROM hits GROUP BY UserID ORDER BY COUNT(*) DESC LIMIT 10;",
+        "questdb": "SELECT UserID, COUNT(*) AS c FROM hits GROUP BY UserID ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT UserID, COUNT(*) FROM hits GROUP BY UserID ORDER BY COUNT(*) DESC LIMIT 10;"
+      }
+    },
+    "Q16": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "duckdb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "monetdb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "postgres": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "questdb": "SELECT UserID, SearchPhrase, COUNT(*) AS c FROM hits GROUP BY UserID, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;"
+      }
+    },
+    "Q17": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;",
+        "duckdb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;",
+        "monetdb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;",
+        "postgres": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;",
+        "questdb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;",
+        "timescaledb": "SELECT UserID, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;"
+      }
+    },
+    "Q18": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "duckdb": "SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "monetdb": "SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "postgres": "SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;",
+        "questdb": "SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, COUNT(*) AS c FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, COUNT(*) FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;"
+      }
+    },
+    "Q19": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT UserID FROM hits WHERE UserID = 435090932899640449;",
+        "duckdb": "SELECT UserID FROM hits WHERE UserID = 435090932899640449;",
+        "monetdb": "SELECT UserID FROM hits WHERE UserID = 435090932899640449;",
+        "postgres": "SELECT UserID FROM hits WHERE UserID = 435090932899640449;",
+        "questdb": "SELECT UserID FROM hits WHERE UserID = 435090932899640449;",
+        "timescaledb": "SELECT UserID FROM hits WHERE UserID = 435090932899640449;"
+      }
+    },
+    "Q20": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT COUNT(*) FROM hits WHERE URL LIKE '%google%';",
+        "duckdb": "SELECT COUNT(*) FROM hits WHERE URL LIKE '%google%';",
+        "monetdb": "SELECT COUNT(*) FROM hits WHERE URL LIKE '%google%';",
+        "postgres": "SELECT COUNT(*) FROM hits WHERE URL LIKE '%google%';",
+        "questdb": "SELECT COUNT(*) FROM hits WHERE URL LIKE '%google%';",
+        "timescaledb": "SELECT COUNT(*) FROM hits WHERE URL LIKE '%google%';"
+      }
+    },
+    "Q21": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase IS NOT NULL GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q22": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, count_distinct(UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase IS NOT NULL GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q23": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;",
+        "duckdb": "SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;",
+        "monetdb": "SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;",
+        "postgres": "SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;",
+        "questdb": "SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;",
+        "timescaledb": "SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;"
+      }
+    },
+    "Q24": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime LIMIT 10;",
+        "postgres": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime LIMIT 10;",
+        "questdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase IS NOT NULL ORDER BY EventTime LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime LIMIT 10;"
+      }
+    },
+    "Q25": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;",
+        "postgres": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;",
+        "questdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase IS NOT NULL ORDER BY SearchPhrase LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;"
+      }
+    },
+    "Q26": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;",
+        "duckdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;",
+        "monetdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;",
+        "postgres": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;",
+        "questdb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase IS NOT NULL ORDER BY EventTime, SearchPhrase LIMIT 10;",
+        "timescaledb": "SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;"
+      }
+    },
+    "Q27": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT CounterID, AVG(length(URL)) AS l, COUNT(*) AS c FROM hits WHERE URL <> '' GROUP BY CounterID HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "duckdb": "SELECT CounterID, AVG(STRLEN(URL)) AS l, COUNT(*) AS c FROM hits WHERE URL <> '' GROUP BY CounterID HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "monetdb": "SELECT CounterID, AVG(length(URL)) AS l, COUNT(*) AS c FROM hits WHERE URL <> '' GROUP BY CounterID HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "postgres": "SELECT CounterID, AVG(length(URL)) AS l, COUNT(*) AS c FROM hits WHERE URL <> '' GROUP BY CounterID HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "questdb": "SELECT * FROM (SELECT CounterID, AVG(length(URL)) AS l, COUNT(*) AS c FROM hits WHERE URL IS NOT NULL GROUP BY CounterID) WHERE c > 100000 ORDER BY l DESC LIMIT 25;",
+        "timescaledb": "SELECT CounterID, AVG(length(URL)) AS l, COUNT(*) AS c FROM hits WHERE URL <> '' GROUP BY CounterID HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;"
+      }
+    },
+    "Q28": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT REGEXP_REPLACE(Referer, '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS k, AVG(length(Referer)) AS l, COUNT(*) AS c, MIN(Referer) FROM hits WHERE Referer <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "duckdb": "SELECT REGEXP_REPLACE(Referer, '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS k, AVG(STRLEN(Referer)) AS l, COUNT(*) AS c, MIN(Referer) FROM hits WHERE Referer <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "monetdb": "SELECT REGEXP_REPLACE(Referer, '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS k, AVG(length(Referer)) AS l, COUNT(*) AS c, MIN(Referer) FROM hits WHERE Referer <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "postgres": "SELECT REGEXP_REPLACE(Referer, '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS k, AVG(length(Referer)) AS l, COUNT(*) AS c, MIN(Referer) FROM hits WHERE Referer <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;",
+        "questdb": "SELECT * FROM (SELECT REGEXP_REPLACE(Referer, '^https?://(?:www\\.)?([^/]+)/.*$', '$1') AS k, AVG(length(Referer)) AS l, COUNT(*) AS c, MIN(Referer) FROM hits WHERE Referer IS NOT NULL GROUP BY k) WHERE c > 100000 ORDER BY l DESC LIMIT 25;",
+        "timescaledb": "SELECT REGEXP_REPLACE(Referer, '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS k, AVG(length(Referer)) AS l, COUNT(*) AS c, MIN(Referer) FROM hits WHERE Referer <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;"
+      }
+    },
+    "Q29": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SUM(ResolutionWidth), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89) FROM hits;",
+        "duckdb": "SELECT SUM(ResolutionWidth), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89) FROM hits;",
+        "monetdb": "SELECT SUM(ResolutionWidth), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89) FROM hits;",
+        "postgres": "SELECT SUM(ResolutionWidth), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89) FROM hits;",
+        "questdb": "SELECT SUM(ResolutionWidth), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89) FROM hits;",
+        "timescaledb": "SELECT SUM(ResolutionWidth), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89) FROM hits;"
+      }
+    },
+    "Q30": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT SearchEngineID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT SearchEngineID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT SearchEngineID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT SearchEngineID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT SearchEngineID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase IS NOT NULL GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT SearchEngineID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q31": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase IS NOT NULL GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q32": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT WatchID, ClientIP, COUNT(*) AS c, SUM(IsRefresh), AVG(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q33": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT URL, COUNT(*) AS c FROM hits GROUP BY URL ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT URL, COUNT(*) AS c FROM hits GROUP BY URL ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT URL, COUNT(*) AS c FROM hits GROUP BY URL ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT URL, COUNT(*) AS c FROM hits GROUP BY URL ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT URL, COUNT(*) AS c FROM hits ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT URL, COUNT(*) AS c FROM hits GROUP BY URL ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q34": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT 1, URL, COUNT(*) AS c FROM hits GROUP BY 1, URL ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT 1, URL, COUNT(*) AS c FROM hits GROUP BY 1, URL ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT 1, URL, COUNT(*) AS c FROM hits GROUP BY 1, URL ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT 1, URL, COUNT(*) AS c FROM hits GROUP BY 1, URL ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT 1, URL, COUNT(*) AS c FROM hits ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT 1, URL, COUNT(*) AS c FROM hits GROUP BY 1, URL ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q35": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, COUNT(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;",
+        "duckdb": "SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, COUNT(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;",
+        "monetdb": "SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, COUNT(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;",
+        "postgres": "SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, COUNT(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;",
+        "questdb": "SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, COUNT(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;",
+        "timescaledb": "SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, COUNT(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;"
+      }
+    },
+    "Q36": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND URL <> '' GROUP BY URL ORDER BY PageViews DESC LIMIT 10;",
+        "duckdb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND URL <> '' GROUP BY URL ORDER BY PageViews DESC LIMIT 10;",
+        "monetdb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND URL <> '' GROUP BY URL ORDER BY PageViews DESC LIMIT 10;",
+        "postgres": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND URL <> '' GROUP BY URL ORDER BY PageViews DESC LIMIT 10;",
+        "questdb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-01T00:00:00Z' AND EventTime <= '2013-07-31T23:59:59Z' AND DontCountHits = 0 AND IsRefresh = 0 AND URL IS NOT NULL GROUP BY URL ORDER BY PageViews DESC LIMIT 10;",
+        "timescaledb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND URL <> '' GROUP BY URL ORDER BY PageViews DESC LIMIT 10;"
+      }
+    },
+    "Q37": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT Title, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND Title <> '' GROUP BY Title ORDER BY PageViews DESC LIMIT 10;",
+        "duckdb": "SELECT Title, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND Title <> '' GROUP BY Title ORDER BY PageViews DESC LIMIT 10;",
+        "monetdb": "SELECT Title, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND Title <> '' GROUP BY Title ORDER BY PageViews DESC LIMIT 10;",
+        "postgres": "SELECT Title, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND Title <> '' GROUP BY Title ORDER BY PageViews DESC LIMIT 10;",
+        "questdb": "SELECT Title, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-01T00:00:00Z' AND EventTime <= '2013-07-31T23:59:59Z' AND DontCountHits = 0 AND IsRefresh = 0 AND Title IS NOT NULL GROUP BY Title ORDER BY PageViews DESC LIMIT 10;",
+        "timescaledb": "SELECT Title, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND Title <> '' GROUP BY Title ORDER BY PageViews DESC LIMIT 10;"
+      }
+    },
+    "Q38": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "duckdb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "monetdb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "postgres": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "questdb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-01T00:00:00Z' AND EventTime <= '2013-07-31T23:59:59Z' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 1000, 1010;",
+        "timescaledb": "SELECT URL, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;"
+      }
+    },
+    "Q39": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "duckdb": "SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "monetdb": "SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "postgres": "SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;",
+        "questdb": "SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-01T00:00:00Z' AND EventTime <= '2013-07-31T23:59:59Z' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 1000, 1010;",
+        "timescaledb": "SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;"
+      }
+    },
+    "Q40": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 10 OFFSET 100;",
+        "duckdb": "SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 10 OFFSET 100;",
+        "monetdb": "SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 10 OFFSET 100;",
+        "postgres": "SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 10 OFFSET 100;",
+        "questdb": "SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-01T00:00:00Z' AND EventTime <= '2013-07-31T23:59:59Z' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 100, 110;",
+        "timescaledb": "SELECT URLHash, EventDate, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 10 OFFSET 100;"
+      }
+    },
+    "Q41": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10 OFFSET 10000;",
+        "duckdb": "SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10 OFFSET 10000;",
+        "monetdb": "SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10 OFFSET 10000;",
+        "postgres": "SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10 OFFSET 10000;",
+        "questdb": "SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-01T00:00:00Z' AND EventTime <= '2013-07-31T23:59:59Z' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10000, 10010;",
+        "timescaledb": "SELECT WindowClientWidth, WindowClientHeight, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10 OFFSET 10000;"
+      }
+    },
+    "Q42": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT DATE_TRUNC('minute', EventTime) AS M, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-14' AND EventDate <= '2013-07-15' AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DATE_TRUNC('minute', EventTime) ORDER BY DATE_TRUNC('minute', EventTime) LIMIT 10 OFFSET 1000;",
+        "duckdb": "SELECT DATE_TRUNC('minute', EventTime) AS M, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-14' AND EventDate <= '2013-07-15' AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DATE_TRUNC('minute', EventTime) ORDER BY DATE_TRUNC('minute', EventTime) LIMIT 10 OFFSET 1000;",
+        "monetdb": "SELECT DATE_TRUNC('minute', EventTime) AS M, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-14' AND EventDate <= '2013-07-15' AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DATE_TRUNC('minute', EventTime) ORDER BY DATE_TRUNC('minute', EventTime) LIMIT 10 OFFSET 1000;",
+        "postgres": "SELECT DATE_TRUNC('minute', EventTime) AS M, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-14' AND EventDate <= '2013-07-15' AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DATE_TRUNC('minute', EventTime) ORDER BY DATE_TRUNC('minute', EventTime) LIMIT 10 OFFSET 1000;",
+        "questdb": "SELECT EventTime AS M, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventTime >= '2013-07-14T00:00:00Z' AND EventTime <= '2013-07-15T23:59:59Z' AND IsRefresh = 0 AND DontCountHits = 0 SAMPLE BY 1m ALIGN TO CALENDAR ORDER BY M LIMIT 1000, 1010;",
+        "timescaledb": "SELECT DATE_TRUNC('minute', EventTime) AS M, COUNT(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-14' AND EventDate <= '2013-07-15' AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY DATE_TRUNC('minute', EventTime) ORDER BY DATE_TRUNC('minute', EventTime) LIMIT 10 OFFSET 1000;"
+      }
+    }
+  },
+  "kaggle_airbnb": {
+    "01_calendar_count": {
+      "sql": "SELECT\n    count(*)\nFROM\n    calendar;\n",
+      "db_overrides": {}
+    },
+    "02_join_one_table": {
+      "sql": "-- added explicit table prefixes to the cols to disambiguate\nSELECT\n    cl.listing_id,\n    cl.date,\n    cl.price,\n    cl.minimum_nights,\n    l.name,\n    l.host_id,\n    l.host_name\nFROM\n    calendar as cl\n    LEFT JOIN listings l on cl.listing_id = l.id\nORDER BY\n    cl.listing_id ASC;\n",
+      "db_overrides": {}
+    },
+    "03_join_two_tables": {
+      "sql": "-- added explicit table prefixes to the cols to disambiguate\nSELECT\n    listing_id,\n    cl.date,\n    cl.price,\n    cl.minimum_nights,\n    l.name,\n    l.host_id,\n    l.host_name,\n    ld.source,\n    ld.property_type,\n    ld.room_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365\nFROM\n    calendar as cl\n    LEFT JOIN listings l on cl.listing_id = l.id\n    LEFT JOIN listings_detailed ld on cl.listing_id = ld.id;\n",
+      "db_overrides": {}
+    },
+    "04_join_three_tables_array_agg": {
+      "sql": "SELECT\n    cl.listing_id,\n    l.host_name,\n    l.name,\n    ld.source,\n    ld.property_type,\n    ld.room_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365,\n    count(DISTINCT rd.id) as review_count,\n    array_agg(DISTINCT rd.reviewer_id) as reviewer_ids\nFROM\n    calendar as cl\n    LEFT JOIN listings l on cl.listing_id = l.id\n    LEFT JOIN listings_detailed ld on cl.listing_id = ld.id\n    LEFT JOIN reviews_detailed rd on cl.listing_id = rd.listing_id\nGROUP BY\n    cl.listing_id,\n    l.host_name,\n    l.name,\n    ld.source,\n    ld.property_type,\n    ld.room_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365;\n",
+      "db_overrides": {
+        "monetdb": "-- TODO: this query is very expensive also with LIMIT 1, fetching with method binary makes this 2x slower\nSELECT\n    cl.listing_id,\n    l.host_name,\n    l.name,\n    ld.source,\n    ld.property_type,\n    ld.room_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365,\n    count(DISTINCT rd.id) as review_count,\n    -- MonetDB does not have an array type, this is an approximation\n    -- renders JSON floats (with .0000 decimal), this is not strictly correct\n    json.tojsonarray(DISTINCT reviewer_id) AS reviewer_ids\nFROM\n    calendar as cl\n    LEFT JOIN listings l on cl.listing_id = l.id\n    LEFT JOIN listings_detailed ld on cl.listing_id = ld.id\n    LEFT JOIN reviews_detailed rd on cl.listing_id = rd.listing_id\nGROUP BY\n    cl.listing_id,\n    l.host_name,\n    l.name,\n    ld.source,\n    ld.property_type,\n    ld.room_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365;\n"
+      }
+    },
+    "05_join_three_tables_row_number": {
+      "sql": "SELECT\n    cl.listing_id,\n    ROUND(\n        MAX(\n            CASE\n                WHEN cl.price != 'empty' THEN CAST(\n                    REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS DECIMAL\n                )\n                ELSE NULL\n            END\n        ),\n        2\n    ) AS max_price,\n    max(cl.date) as max_date,\n    max(cl.minimum_nights) as min_nights,\n    max(cl.maximum_nights) as max_nights,\n    ls.name,\n    ls.host_name,\n    ls.host_id,\n    ld.property_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365,\n    max(length(rd.comments)) as max_comments,\n    row_number() over (\n        PARTITION BY ls.host_id\n        ORDER BY\n            cl.listing_id ASC\n    ) as row_host\nFROM\n    calendar as cl\n    LEFT JOIN listings_detailed as ld ON cl.listing_id = ld.id\n    LEFT JOIN listings as ls ON cl.listing_id = ls.id\n    LEFT JOIN reviews_detailed rd on cl.listing_id = rd.listing_id\nGROUP BY\n    cl.listing_id,\n    ls.name,\n    ls.host_name,\n    ld.property_type,\n    ls.host_id,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365;\n",
+      "db_overrides": {
+        "clickhouse": "SELECT\n    cl.listing_id,\n    ROUND(\n        MAX(\n            CASE\n                WHEN cl.price != 'empty' THEN CAST(\n                    REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS Nullable(DECIMAL)\n                )\n                ELSE NULL\n            END\n        ),\n        2\n    ) AS max_price,\n    max(cl.date) as max_date,\n    max(cl.minimum_nights) as min_nights,\n    max(cl.maximum_nights) as max_nights,\n    ls.name,\n    ls.host_name,\n    ls.host_id,\n    ld.property_type,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365,\n    max(length(rd.comments)) as max_comments,\n    row_number() over (\n        PARTITION BY ls.host_id\n        ORDER BY\n            cl.listing_id ASC\n    ) as row_host\nFROM\n    calendar as cl\n    LEFT JOIN listings_detailed as ld ON cl.listing_id = ld.id\n    LEFT JOIN listings as ls ON cl.listing_id = ls.id\n    LEFT JOIN reviews_detailed rd on cl.listing_id = rd.listing_id\nGROUP BY\n    cl.listing_id,\n    ls.name,\n    ls.host_name,\n    ld.property_type,\n    ls.host_id,\n    ld.has_availability,\n    ld.availability_30,\n    ld.availability_60,\n    ld.availability_90,\n    ld.availability_365;\n"
+      }
+    }
+  },
+  "rtabench": {
+    "0000_terminal_hourly_stats": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "WITH hourly_stats AS (\n  SELECT\n    toStartOfHour(event_created) as hour,\n    JSONExtractString(event_payload, 'terminal') as terminal,\n    count(*) as event_count\n  FROM\n    order_events\n  WHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-02-01'\n    AND event_type IN ('Created', 'Departed', 'Delivered')\n  GROUP BY\n    hour,\n    terminal\n)\nSELECT\n  hour,\n  terminal,\n  event_count,\n  avg(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY\n      hour ROWS BETWEEN 3 PRECEDING\n      AND CURRENT ROW\n  ) as moving_avg_events\nFROM\n  hourly_stats\nWHERE\n  terminal IN ('Berlin', 'Hamburg', 'Munich')\nORDER BY\n  terminal,\n  hour;\n",
+        "duckdb": "WITH hourly_stats AS (\n  SELECT\n    date_trunc('hour', event_created) as hour,\n    event_payload ->> 'terminal' as terminal,\n    count(*) as event_count\n  FROM\n    order_events\n  WHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-02-01'\n    AND event_type IN ('Created', 'Departed', 'Delivered')\n  GROUP BY\n    hour,\n    terminal\n)\nSELECT\n  hour,\n  terminal,\n  event_count,\n  avg(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY\n      hour ROWS BETWEEN 3 PRECEDING\n      AND CURRENT ROW\n  ) as moving_avg_events\nFROM\n  hourly_stats\nWHERE\n  terminal IN ('Berlin', 'Hamburg', 'Munich')\nORDER BY\n  terminal,\n  hour;\n",
+        "monetdb": "with hourly_stats as (\n\tselect\n\t\tdate_trunc('hour', event_created) as \"hour\",\n\t\tjson.filter(event_payload, '$.terminal') as terminal,\n\t\tcount(*) as event_count\n\tfrom\n\t\torder_events\n\twhere\n\t\tevent_created >= '2024-01-01'\n\t\tand event_created < '2024-02-01'\n\t\tand event_type in ('Created', 'Departed', 'Delivered')\n\tgroup by\n\t\t\"hour\",\n\t\tterminal\n)\nselect\n\t\"hour\",\n\tterminal,\n\tevent_count,\n\tavg(event_count) over (\n\t\tpartition by terminal\n\t\torder by\n\t\t\t\"hour\" rows between 3 preceding\n\t\t\tand current row\n\t) as moving_avg_events\nfrom\n\thourly_stats\nwhere\n\tterminal in ('\"Berlin\"', '\"Hamburg\"', '\"Munich\"')\norder by\n\tterminal,\n\t\"hour\"\n",
+        "postgres": "WITH hourly_stats AS (\n  SELECT\n    date_trunc('hour', event_created) as hour,\n    event_payload->>'terminal' as terminal,\n    count(*) as event_count\n  FROM order_events\n  WHERE\n    event_created >= '2024-01-01' and event_created < '2024-02-01'\n    AND event_type IN ('Created', 'Departed', 'Delivered')\n  GROUP BY hour, terminal\n)\nSELECT\n  hour,\n  terminal,\n  event_count,\n  AVG(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY hour\n    ROWS BETWEEN 3 PRECEDING AND CURRENT ROW\n  ) as moving_avg_events\nFROM hourly_stats\nWHERE terminal IN ('Berlin', 'Hamburg', 'Munich')\nORDER BY terminal, hour;\n",
+        "questdb": "WITH hourly_stats AS (\n  SELECT\n    date_trunc('hour', event_created) :: timestamp AS hour,\n    json_extract(event_payload, '$.terminal') :: varchar AS terminal,\n    count(*) AS event_count\n  FROM\n    order_events\n  WHERE\n    event_created >= '2024-01-01T00:00:00'\n    AND event_created < '2024-02-01T00:00:00'\n    AND event_type IN ('Created', 'Departed', 'Delivered')\n  GROUP BY\n    hour,\n    terminal\n)\nSELECT\n  hour,\n  terminal,\n  event_count,\n  AVG(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY\n      hour ROWS BETWEEN 3 PRECEDING\n      AND CURRENT ROW\n  ) AS moving_avg_events\nFROM\n  hourly_stats\nWHERE\n  terminal IN ('Berlin', 'Hamburg', 'Munich')\nORDER BY\n  terminal,\n  hour;\n",
+        "timescaledb": "WITH hourly_stats AS (\n  SELECT\n    time_bucket('1 hour', event_created) as hour,\n    event_payload ->> 'terminal' as terminal,\n    count(*) as event_count\n  FROM\n    order_events\n  WHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-02-01'\n    AND event_type IN ('Created', 'Departed', 'Delivered')\n  GROUP BY\n    hour,\n    terminal\n)\nSELECT\n  hour,\n  terminal,\n  event_count,\n  avg(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY\n      hour ROWS BETWEEN 3 PRECEDING\n      AND CURRENT ROW\n  ) as moving_avg_events\nFROM\n  hourly_stats\nWHERE\n  terminal IN ('Berlin', 'Hamburg', 'Munich')\nORDER BY\n  terminal,\n  hour;\n"
+      }
+    },
+    "0001_count_orders_from_terminal": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  toStartOfDay(event_created) as day,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-04-01'\n  and event_created < '2024-05-01'\n  AND event_type = 'Departed'\n  AND JSONExtractString(event_payload, 'terminal') = 'Berlin'\nGROUP BY\n  day\nORDER BY\n  count desc,\n  day;\n",
+        "duckdb": "SELECT\n  date_trunc('day', event_created) as day,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-04-01'\n  AND event_created < '2024-05-01'\n  AND event_type = 'Departed'\n  AND (event_payload ->> 'terminal' = 'Berlin')\nGROUP BY\n  day\nORDER BY\n  count desc,\n  day;\n",
+        "monetdb": "select\n\tdate_trunc('day', event_created) as \"day\",\n\tcount(*) as count\nfrom\n\torder_events\nwhere\n\tevent_created >= '2024-04-01'\n\tand event_created < '2024-05-01'\n\tand event_type = 'Departed'\n\tand json.filter(event_payload, '$.terminal') = '\"Berlin\"'\ngroup by\n\t\"day\"\norder by\n\tcount desc,\n\t\"day\";\n",
+        "postgres": "SELECT\n    date_trunc('day', event_created) as day,\n    count(*)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-01' and event_created < '2024-05-01'\n    AND event_type = 'Departed'\n    AND event_payload->>'terminal' = 'Berlin'\nGROUP BY\n    day\nORDER BY count desc, day;\n",
+        "questdb": "SELECT\n    date_trunc('day', event_created) :: timestamp AS day,\n    count(*) AS event_count\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-01T00:00:00'\n    AND event_created < '2024-05-01T00:00:00'\n    AND event_type = 'Departed'\n    AND json_extract(event_payload, '$.terminal') = 'Berlin'\nGROUP BY\n    day\nORDER BY\n    event_count DESC,\n    day;\n",
+        "timescaledb": "SELECT\n    time_bucket('1 day', event_created) as day,\n    count(*)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-01'\n    and event_created < '2024-05-01'\n    AND event_type = 'Departed'\n    AND event_payload ->> 'terminal' = 'Berlin'\nGROUP BY\n    day\nORDER BY\n    count desc,\n    day;\n"
+      }
+    },
+    "0002_global_agg": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    MAX(counter)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-20'\n    and event_created < '2024-05-20';\n",
+        "duckdb": "SELECT\n    max(counter)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-20'\n    and event_created < '2024-05-20';\n",
+        "monetdb": "SELECT\n    max(counter)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-20'\n    and event_created < '2024-05-20';\n",
+        "postgres": "SELECT\n    max(counter)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-20' and event_created < '2024-05-20';\n",
+        "questdb": "SELECT\n    max(counter)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-20' and event_created < '2024-05-20';\n",
+        "timescaledb": "SELECT\n    max(counter)\nFROM\n    order_events\nWHERE\n    event_created >= '2024-04-20'\n    and event_created < '2024-05-20';\n"
+      }
+    },
+    "0003_exists_order_delivered_from_terminal": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  EXISTS (\n    SELECT\n      *\n    FROM\n      order_events\n      JOIN orders USING (order_id)\n    WHERE\n      customer_id = 124\n      AND event_type = 'Delivered'\n      AND event_created >= '2024-03-01'\n      and event_created < '2024-04-01'\n      AND JSONExtractString(event_payload, 'terminal') = 'London'\n  );\n",
+        "duckdb": "SELECT\n    EXISTS (\n        SELECT\n            *\n        FROM\n            order_events\n            JOIN \"orders\" USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n            AND (event_payload ->> 'terminal' = 'London')\n            AND event_created >= '2024-03-01'\n            and event_created < '2024-04-01'\n    );\n",
+        "monetdb": "SELECT\n    EXISTS (\n        SELECT\n            *\n        FROM\n            order_events\n            JOIN \"orders\" USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n            AND event_created >= '2024-03-01'\n            and event_created < '2024-04-01'\n            AND json.filter(event_payload, '$.terminal') = '\"London\"'\n    );\n",
+        "postgres": "SELECT\nEXISTS (\n    SELECT\n    FROM\n        order_events\n    JOIN\n        \"orders\" USING (order_id)\n    WHERE\n        customer_id = 124\n        AND event_type='Delivered'\n        AND event_payload->>'terminal' = 'London'\n        AND event_created >= '2024-03-01' and event_created < '2024-04-01'\n);\n",
+        "questdb": "SELECT\n    count() > 0 as exists_flag\nFROM\n    order_events\n    JOIN \"orders\" ON order_events.order_id = orders.order_id\nWHERE\n    customer_id = 124\n    AND event_type = 'Delivered'\n    AND json_extract(event_payload, '$.terminal') = 'London'\n    AND event_created >= '2024-03-01T00:00:00'\n    AND event_created < '2024-04-01T00:00:00';\n",
+        "timescaledb": "SELECT\n    EXISTS (\n        SELECT\n        FROM\n            order_events\n            JOIN \"orders\" USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n            AND event_payload ->> 'terminal' = 'London'\n            AND event_created >= '2024-03-01'\n            and event_created < '2024-04-01'\n    );\n"
+      }
+    },
+    "0004_count_delayed_orders_per_day": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  toStartOfDay(event_created) as day,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  day >= '2024-05-01'\n  and day < '2024-06-01'\n  AND hasAll(\n    JSONExtract(event_payload, 'status', 'Array(Nullable(TEXT))'),\n    ['Delayed', 'Priority']\n  )\nGROUP BY\n  day\nORDER BY\n  count desc,\n  day\nlimit\n  20;\n",
+        "duckdb": "SELECT\n  date_trunc('day', event_created) as day,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  list_has_all(\n    (event_payload -> 'status') :: varchar [],\n    ['Delayed', 'Priority']\n  )\n  AND event_created >= '2024-05-01'\n  and event_created < '2024-06-01'\nGROUP BY\n  day\nORDER BY\n  count desc,\n  day\nlimit\n  20;\n",
+        "monetdb": "with cte as (\n\tselect\n\t\tdate_trunc('day', event_created) as \"day\",\n\t\tcast(json.filter(event_payload, '$.status') as text) as status\n\tfrom\n\t\torder_events\n\twhere\n\t\tevent_created >= '2024-05-01'\n\t\tand event_created < '2024-06-01'\n)\nselect\n\t\"day\",\n\tcount(*) as count\nfrom\n\tcte\nwhere\n\t-- MonetDB does not have JSON list contains or similar\n\tstatus like '%\"Delayed\"%'\n\tand status like '%\"Priority\"%'\ngroup by\n\t\"day\"\norder by\n\tcount desc,\n\t\"day\"\nlimit\n\t20;\n",
+        "postgres": "SELECT date_trunc('day', event_created) as day,\n       count(*)                            as count\nFROM order_events\nWHERE event_created >= '2024-05-01' and event_created < '2024-06-01'\n  AND event_payload -> 'status' @> '[\"Delayed\", \"Priority\"]'\nGROUP BY day\nORDER BY count desc, day\nlimit 20;\n",
+        "questdb": "SELECT\n  date_trunc('day', event_created) :: timestamp AS day,\n  count() AS count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-05-01T00:00:00'\n  AND event_created < '2024-06-01T00:00:00'\n  AND event_payload LIKE '%\"Delayed\"%'\n  AND event_payload LIKE '%\"Priority\"%'\nGROUP BY\n  day\nORDER BY\n  count DESC,\n  day\nLIMIT\n  20;\n",
+        "timescaledb": "SELECT\n  time_bucket('1 day', event_created) as day,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-05-01'\n  and event_created < '2024-06-01'\n  AND event_payload -> 'status' @ > '[\"Delayed\", \"Priority\"]'\nGROUP BY\n  day\nORDER BY\n  count desc,\n  day\nlimit\n  20;\n"
+      }
+    },
+    "0005_search_events_for_processor": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    *\nFROM\n    order_events\nWHERE\n    event_created >= '2024-03-01'\n    and event_created < '2024-08-01'\n    AND processor LIKE '%ron%'\nORDER BY\n    event_created\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created >= '2024-03-01'\n  and event_created < '2024-08-01'\n  AND processor LIKE '%ron%'\nORDER BY\n  event_created\nLIMIT\n  10;\n",
+        "monetdb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created >= '2024-03-01'\n  and event_created < '2024-08-01'\n  AND processor LIKE '%ron%'\nORDER BY\n  event_created\nLIMIT\n  10;\n",
+        "postgres": "SELECT * FROM order_events\nWHERE event_created >= '2024-03-01' and event_created < '2024-08-01'\n  AND processor LIKE '%ron%' ORDER BY event_created LIMIT 10;\n",
+        "questdb": "SELECT * FROM order_events\nWHERE event_created >= '2024-03-01' and event_created < '2024-08-01'\n  AND processor LIKE '%ron%' ORDER BY event_created LIMIT 10;\n",
+        "timescaledb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created >= '2024-03-01'\n  and event_created < '2024-08-01'\n  AND processor LIKE '%ron%'\nORDER BY\n  event_created\nLIMIT\n  10;\n"
+      }
+    },
+    "0006_order_events_without_backups": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    *\nFROM\n    order_events\nWHERE\n    backup_processor <> ''\nORDER BY\n    event_created\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    *\nFROM\n    order_events\nWHERE\n    backup_processor <> ''\nORDER BY\n    event_created\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    *\nFROM\n    order_events\nWHERE\n    backup_processor <> ''\nORDER BY\n    event_created\nLIMIT\n    10;\n",
+        "postgres": "SELECT * FROM order_events\n         WHERE backup_processor <> '' ORDER BY event_created LIMIT 10;\n",
+        "questdb": "SELECT\n    *\nFROM\n    order_events\nWHERE\n    backup_processor != ''\n    and backup_processor is not null\nORDER BY\n    event_created\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    *\nFROM\n    order_events\nWHERE\n    backup_processor <> ''\nORDER BY\n    event_created\nLIMIT\n    10;\n"
+      }
+    },
+    "0007_last_order_event_for_order": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    DISTINCT ON (oe.order_id) oe.order_id,\n    event_created,\n    event_type\nFROM\n    order_events oe\n    JOIN orders ON orders.order_id = oe.order_id\nWHERE\n    orders.order_id = 2344\nORDER BY\n    order_id ASC,\n    event_created DESC;\n",
+        "duckdb": "SELECT\n    DISTINCT ON (oe.order_id) oe.order_id,\n    event_created,\n    event_type\nFROM\n    order_events oe\n    JOIN orders ON orders.order_id = oe.order_id\nWHERE\n    orders.order_id = 2344\nORDER BY\n    oe.order_id ASC,\n    event_created DESC;\n",
+        "monetdb": "SELECT\n    order_id,\n    event_created,\n    event_type\nFROM\n    (\n        SELECT\n            oe.order_id,\n            event_created,\n            event_type,\n            ROW_NUMBER() OVER (\n                PARTITION BY oe.order_id\n                ORDER BY\n                    event_created DESC\n            ) AS rn\n        FROM\n            order_events oe\n            JOIN orders ON orders.order_id = oe.order_id\n        WHERE\n            orders.order_id = 2344\n    ) AS ranked\nWHERE\n    rn = 1;\n",
+        "postgres": "SELECT DISTINCT ON (oe.order_id) oe.order_id, event_created, event_type\nFROM order_events oe\nJOIN orders ON orders.order_id = oe.order_id\nWHERE orders.order_id = 2344\nORDER BY\n    order_id ASC,\n    event_created DESC;\n",
+        "questdb": "SELECT\n    order_id,\n    event_created,\n    event_type\nFROM\n    (\n        SELECT\n            oe.order_id,\n            event_created,\n            event_type,\n            ROW_NUMBER() OVER (\n                PARTITION BY oe.order_id\n                ORDER BY\n                    event_created DESC\n            ) AS rn\n        FROM\n            order_events oe\n            JOIN orders ON orders.order_id = oe.order_id\n        WHERE\n            orders.order_id = 2344\n    ) AS ranked\nWHERE\n    rn = 1;\n",
+        "timescaledb": "SELECT\n    DISTINCT ON (oe.order_id) oe.order_id,\n    event_created,\n    event_type\nFROM\n    order_events oe\n    JOIN orders ON orders.order_id = oe.order_id\nWHERE\n    orders.order_id = 2344\nORDER BY\n    order_id ASC,\n    event_created DESC;\n"
+      }
+    },
+    "0008_most_week_delayed_order": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  order_id,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-29'\n  and event_created < '2024-02-05'\n  AND has(\n    JSONExtract(event_payload, 'status', 'Array(Nullable(TEXT))'),\n    'Delayed'\n  )\nGROUP BY\n  order_id\nORDER BY\n  count,\n  order_id desc\nlimit\n  1;\n",
+        "duckdb": "SELECT\n  order_id,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-29'\n  and event_created < '2024-02-05'\n  AND list_has_all(\n    (event_payload -> 'status') :: varchar [],\n    ['Delayed']\n  )\nGROUP BY\n  order_id\nORDER BY\n  count,\n  order_id desc\nlimit\n  1;\n",
+        "monetdb": "WITH cte AS (\n  SELECT\n    order_id,\n    event_created,\n    CAST(json.filter(event_payload, '$.status') AS TEXT) AS status\n  FROM\n    order_events\n  WHERE\n    event_created >= '2024-01-29'\n    AND event_created < '2024-02-05'\n)\nSELECT\n  order_id,\n  COUNT(*) AS count\nFROM\n  cte\nWHERE\n  status LIKE '%\"Delayed\"%'\nGROUP BY\n  order_id\nORDER BY\n  count ASC,\n  order_id DESC\nLIMIT\n  1;\n",
+        "postgres": "SELECT order_id, count(*) as count\nFROM order_events\nWHERE event_created >= '2024-01-29' and event_created < '2024-02-05'\n  AND event_payload -> 'status' @> '[\"Delayed\"]'\nGROUP BY order_id\nORDER BY count, order_id desc\nlimit 1;\n",
+        "questdb": "SELECT\n  order_id,\n  count() AS count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-29T00:00:00'\n  AND event_created < '2024-02-05T00:00:00'\n  AND event_payload LIKE '%\"Delayed\"%'\nGROUP BY\n  order_id\nORDER BY\n  count ASC,\n  order_id DESC\nLIMIT\n  1;\n",
+        "timescaledb": "SELECT\n  order_id,\n  count(*) as count\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-29'\n  and event_created < '2024-02-05'\n  AND event_payload -> 'status' @ > '[\"Delayed\"]'\nGROUP BY\n  order_id\nORDER BY\n  count desc\nlimit\n  1;\n"
+      }
+    },
+    "0009_departed_orders_count": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  count(*)\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01'\n  and event_created < '2024-02-01'\n  AND event_type = 'Departed'\n  AND order_id = 27;\n",
+        "duckdb": "SELECT\n  count(*)\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01'\n  and event_created < '2024-02-01'\n  AND event_type = 'Departed'\n  AND order_id = 27;\n",
+        "monetdb": "SELECT\n  count(*)\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01'\n  and event_created < '2024-02-01'\n  AND event_type = 'Departed'\n  AND order_id = 27;\n",
+        "postgres": "SELECT count(*)\nFROM order_events\nWHERE event_created >= '2024-01-01' and event_created < '2024-02-01'\n  AND event_type = 'Departed' AND order_id = 27;\n",
+        "questdb": "SELECT count(*)\nFROM order_events\nWHERE event_created >= '2024-01-01' and event_created < '2024-02-01'\n  AND event_type = 'Departed' AND order_id = 27;\n",
+        "timescaledb": "SELECT\n  count(*)\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01'\n  and event_created < '2024-02-01'\n  AND event_type = 'Departed'\n  AND order_id = 27;\n"
+      }
+    },
+    "0010_last_event_for_an_order": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created < '2024-09-01'\n  AND order_id = '333'\nORDER BY\n  event_created DESC\nLIMIT\n  1;\n",
+        "duckdb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created < '2024-09-01'\n  AND order_id = '333'\nORDER BY\n  event_created DESC\nLIMIT\n  1;\n",
+        "monetdb": "-- pymonetdb does not fetch JSON columns correctly, cast to string to match e.g. duckdb\nSELECT\n  order_id,\n  counter,\n  event_created,\n  event_type,\n  satisfaction,\n  processor,\n  backup_processor,\n  cast(event_payload as text) as event_payload\nFROM\n  order_events\nWHERE\n  event_created < '2024-09-01'\n  AND order_id = 333\nORDER BY\n  event_created DESC\nLIMIT\n  1;\n",
+        "postgres": "SELECT *\nFROM order_events\nWHERE event_created < '2024-09-01'\n  AND order_id = '333'\nORDER BY event_created DESC\nLIMIT 1;\n",
+        "questdb": "SELECT *\nFROM order_events\nWHERE event_created < '2024-09-01'\n  AND order_id = '333'\nORDER BY event_created DESC\nLIMIT 1;\n",
+        "timescaledb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created < '2024-09-01'\n  AND order_id = '333'\nORDER BY\n  event_created DESC\nLIMIT\n  1;\n"
+      }
+    },
+    "0011_events_for_an_order": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01 00:00:00'\n  and event_created < '2024-01-01 23:55:00'\n  AND order_id = '512'\nORDER BY\n  event_created;\n",
+        "duckdb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01 00:00:00'\n  and event_created < '2024-01-01 23:55:00'\n  AND order_id = '512'\nORDER BY\n  event_created;\n",
+        "monetdb": "-- pymonetdb does not fetch JSON columns correctly, cast to string to match e.g. duckdb\nSELECT\n  order_id,\n  counter,\n  event_created,\n  event_type,\n  satisfaction,\n  processor,\n  backup_processor,\n  cast(event_payload as text) as event_payload\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01 00:00:00'\n  and event_created < '2024-01-01 23:55:00'\n  AND order_id = 512\nORDER BY\n  event_created;\n",
+        "postgres": "SELECT *\nFROM order_events\nWHERE event_created >= '2024-01-01 00:00:00' and event_created < '2024-01-01 23:55:00'\n  AND order_id = '512'\nORDER BY event_created;\n",
+        "questdb": "SELECT *\nFROM order_events\nWHERE event_created >= '2024-01-01 00:00:00' and event_created < '2024-01-01 23:55:00'\n  AND order_id = '512'\nORDER BY event_created;\n",
+        "timescaledb": "SELECT\n  *\nFROM\n  order_events\nWHERE\n  event_created >= '2024-01-01 00:00:00'\n  and event_created < '2024-01-01 23:55:00'\n  AND order_id = '512'\nORDER BY\n  event_created;\n"
+      }
+    },
+    "0012_max_satisfaction_for_order_per_day": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    toStartOfDay(event_created) as day,\n    max(satisfaction)\nFROM\n    order_events\nWHERE\n    order_id = 700\nGROUP BY\n    day\nORDER BY\n    day desc\n",
+        "duckdb": "SELECT\n    date_trunc('day', event_created) as day,\n    max(satisfaction)\nFROM\n    order_events\nWHERE\n    order_id = 700\nGROUP BY\n    day\nORDER BY\n    day desc;\n",
+        "monetdb": "SELECT\n    date_trunc('day', event_created) as \"day\",\n    max(satisfaction)\nFROM\n    order_events\nWHERE\n    order_id = 700\nGROUP BY\n    \"day\"\nORDER BY\n    \"day\" desc;\n",
+        "postgres": "SELECT date_trunc('day', event_created) as day,\n       max(satisfaction)\nFROM order_events\nWHERE order_id = 700\nGROUP BY day\nORDER BY day desc;\n",
+        "questdb": "SELECT date_trunc('day', event_created) as day,\n       max(satisfaction)\nFROM order_events\nWHERE order_id = 700\nGROUP BY day\nORDER BY day desc;\n",
+        "timescaledb": "SELECT\n    time_bucket('1 day', event_created) as day,\n    max(satisfaction)\nFROM\n    order_events\nWHERE\n    order_id = 700\nGROUP BY\n    day\nORDER BY\n    day desc;\n"
+      }
+    },
+    "0013_satisfaction_with_without_backup": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    toStartOfMonth(event_created) as month,\n    count(*) FILTER (\n        WHERE\n            backup_processor <> ''\n    ) as count_with_backup,\n    count(*) FILTER (\n        WHERE\n            backup_processor = ''\n    ) as count_without_backup,\n    -- does not read as null\n    avg(satisfaction) FILTER (\n        WHERE\n            backup_processor <> ''\n    ) as avg_satisfaction_with_backup,\n    avg(satisfaction) FILTER (\n        WHERE\n            backup_processor = ''\n    ) as avg_satisfaction_without_backup\nFROM\n    order_events\nWHERE\n    order_id = 112\nGROUP BY\n    month\nORDER BY\n    month desc\n",
+        "duckdb": "SELECT\n    date_trunc('month', event_created) as month,\n    count(*) FILTER (\n        WHERE\n            backup_processor <> ''\n    ) as count_with_backup,\n    count(*) FILTER (\n        WHERE\n            backup_processor is null\n    ) as count_without_backup,\n    avg(satisfaction) FILTER (\n        WHERE\n            backup_processor <> ''\n    ) as avg_satisfaction_with_backup,\n    avg(satisfaction) FILTER (\n        WHERE\n            backup_processor is null\n    ) as avg_satisfaction_without_backup\nFROM\n    order_events\nWHERE\n    order_id = 112\nGROUP BY\n    month\nORDER BY\n    month desc\n",
+        "monetdb": "SELECT\n  date_trunc('month', event_created) AS \"month\",\n  count(\n    CASE\n      WHEN backup_processor <> '' THEN 1\n      ELSE NULL\n    END\n  ) AS count_with_backup,\n  count(\n    CASE\n      WHEN backup_processor IS NULL THEN 1\n      ELSE NULL\n    END\n  ) AS count_without_backup,\n  avg(\n    CASE\n      WHEN backup_processor <> '' THEN satisfaction\n      ELSE NULL\n    END\n  ) AS avg_satisfaction_with_backup,\n  avg(\n    CASE\n      WHEN backup_processor IS NULL THEN satisfaction\n      ELSE NULL\n    END\n  ) AS avg_satisfaction_without_backup\nFROM\n  order_events\nWHERE\n  order_id = 112\nGROUP BY\n  \"month\"\nORDER BY\n  \"month\" DESC;\n",
+        "postgres": "SELECT date_trunc('month', event_created) as month,\n       count(*) FILTER (WHERE backup_processor <> '') as count_with_backup,\n       count(*) FILTER (WHERE backup_processor is null) as count_without_backup,\n       avg(satisfaction) FILTER (WHERE backup_processor <> '') as avg_satisfaction_with_backup,\n       avg(satisfaction) FILTER (WHERE backup_processor is null) as avg_satisfaction_without_backup\nFROM order_events\nWHERE order_id = 112\nGROUP BY month\nORDER BY month desc\n",
+        "questdb": "SELECT\n    date_trunc('month', event_created) AS \"month\",\n    count(\n        CASE\n            WHEN backup_processor <> '' THEN 1\n            ELSE NULL\n        END\n    ) AS count_with_backup,\n    count(\n        CASE\n            WHEN backup_processor IS NULL THEN 1\n            ELSE NULL\n        END\n    ) AS count_without_backup,\n    avg(\n        CASE\n            WHEN backup_processor <> '' THEN satisfaction\n            ELSE NULL\n        END\n    ) AS avg_satisfaction_with_backup,\n    avg(\n        CASE\n            WHEN backup_processor IS NULL THEN satisfaction\n            ELSE NULL\n        END\n    ) AS avg_satisfaction_without_backup\nFROM\n    order_events\nWHERE\n    order_id = 112\nGROUP BY\n    \"month\"\nORDER BY\n    \"month\" DESC;\n",
+        "timescaledb": "SELECT\n    time_bucket('1 month', event_created) as month,\n    count(*) FILTER (\n        WHERE\n            backup_processor <> ''\n    ) as count_with_backup,\n    count(*) FILTER (\n        WHERE\n            backup_processor is null\n    ) as count_without_backup,\n    avg(satisfaction) FILTER (\n        WHERE\n            backup_processor <> ''\n    ) as avg_satisfaction_with_backup,\n    avg(satisfaction) FILTER (\n        WHERE\n            backup_processor is null\n    ) as avg_satisfaction_without_backup\nFROM\n    order_events\nWHERE\n    order_id = 112\nGROUP BY\n    month\nORDER BY\n    month desc\n"
+      }
+    },
+    "0014_sum_prod_stock_price_per_category": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    sum(stock * price),\n    category\nFROM\n    products\nWHERE\n    category = 'Electronics'\nGROUP BY\n    category;\n",
+        "duckdb": "SELECT\n    sum(stock * price),\n    category\nFROM\n    products\nWHERE\n    category = 'Electronics'\nGROUP BY\n    category;\n",
+        "monetdb": "SELECT\n    sum(stock * price),\n    category\nFROM\n    products\nWHERE\n    category = 'Electronics'\nGROUP BY\n    category;\n",
+        "postgres": "SELECT\n  sum(stock*price),\n  category\nFROM\n    products\nWHERE\n    category = 'Electronics'\nGROUP BY\n    category;\n",
+        "questdb": "SELECT\n  sum(stock*price),\n  category\nFROM\n    products\nWHERE\n    category = 'Electronics'\nGROUP BY\n    category;\n",
+        "timescaledb": "SELECT\n    sum(stock * price),\n    category\nFROM\n    products\nWHERE\n    category = 'Electronics'\nGROUP BY\n    category;\n"
+      }
+    },
+    "0015_exists_order_delivered_for_customer": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    EXISTS (\n        SELECT\n            *\n        FROM\n            order_events\n            JOIN orders USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n    );\n",
+        "duckdb": "SELECT\n    EXISTS (\n        SELECT\n            *\n        FROM\n            order_events\n            JOIN orders USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n    );\n",
+        "monetdb": "SELECT\n    EXISTS (\n        SELECT\n            *\n        FROM\n            order_events\n            JOIN orders USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n    );\n",
+        "postgres": "SELECT\nEXISTS (\n    SELECT\n    FROM\n        order_events\n    JOIN\n        orders USING (order_id)\n    WHERE\n        customer_id = 124\n        AND event_type='Delivered'\n);\n",
+        "questdb": "SELECT\n    count() > 0 exists_flag\nFROM\n    order_events\n    JOIN orders ON order_events.order_id = orders.order_id\nWHERE\n    customer_id = 124\n    AND event_type = 'Delivered';\n",
+        "timescaledb": "SELECT\n    EXISTS (\n        SELECT\n        FROM\n            order_events\n            JOIN orders USING (order_id)\n        WHERE\n            customer_id = 124\n            AND event_type = 'Delivered'\n    );\n"
+      }
+    },
+    "0016_customers_with_most_orders": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-07-01'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    count(o.order_id) DESC,\n    c.name\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-07-01'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    count(o.order_id) DESC,\n    c.name\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-07-01'\nGROUP BY\n    customer_id,\n    c.name\nORDER BY\n    count(o.order_id) DESC,\n    c.name\nLIMIT\n    10;\n",
+        "postgres": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\nWHERE\n    o.created_at >= '2024-01-01' and o.created_at < '2024-07-01'\nGROUP BY\n    c.customer_id\nORDER BY\n    count(o.order_id) DESC, c.name\nLIMIT 10;\n",
+        "questdb": "SELECT\n    c.customer_id,\n    c.name,\n    count() AS order_count\nFROM\n    customers c\n    INNER JOIN orders o ON c.customer_id = o.customer_id\nWHERE\n    o.created_at >= '2024-01-01T00:00:00'\n    AND o.created_at < '2024-07-01T00:00:00'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    order_count DESC,\n    c.name\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-07-01'\nGROUP BY\n    c.customer_id\nORDER BY\n    count(o.order_id) DESC,\n    c.name\nLIMIT\n    10;\n"
+      }
+    },
+    "0017_top_selling_month_product": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    p.product_id,\n    p.name,\n    sum(amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING(product_id)\n    INNER JOIN order_events oe USING(order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    AND oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.product_id,\n    p.name\nORDER BY\n    sum(amount),\n    p.name DESC\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    p.product_id,\n    p.name,\n    sum(amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING(product_id)\n    INNER JOIN order_events oe USING(order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    AND oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    sum(amount),\n    p.name DESC\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    product_id,\n    p.name,\n    sum(amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING(product_id)\n    INNER JOIN order_events oe USING(order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    AND oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    sum(amount),\n    p.name DESC\nLIMIT\n    10;\n",
+        "postgres": "SELECT p.product_id, p.name, sum(amount)\nFROM products p\nINNER JOIN order_items oi USING(product_id)\nINNER JOIN order_events oe USING(order_id)\nWHERE oe.event_created >= '2024-01-01' AND oe.event_created < '2024-02-01'\nAND oe.event_type = 'Delivered'\nGROUP BY product_id\nORDER BY sum(amount), p.name DESC LIMIT 10;\n",
+        "questdb": "SELECT\n    p.product_id,\n    p.name,\n    sum(oi.amount) AS total_amount\nFROM\n    products p\n    INNER JOIN order_items oi ON p.product_id = oi.product_id\n    INNER JOIN order_events oe ON oi.order_id = oe.order_id\nWHERE\n    oe.event_created >= '2024-01-01T00:00:00'\n    AND oe.event_created < '2024-02-01T00:00:00'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.product_id,\n    p.name\nORDER BY\n    total_amount,\n    p.name DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    p.product_id,\n    p.name,\n    sum(amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING(product_id)\n    INNER JOIN order_events oe USING(order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    AND oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    product_id\nORDER BY\n    sum(amount),\n    p.name DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "0018_customer_month_value": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c,\n    orders o,\n    order_items oi,\n    products p\nWHERE\n    c.customer_id = o.customer_id\n    AND o.order_id = oi.order_id\n    AND oi.product_id = p.product_id\n    AND o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "postgres": "\nSELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01' and o.created_at < '2024-02-01'\nGROUP BY\n    c.customer_id\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT 10;\n",
+        "questdb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price) AS total_sales\nFROM\n    customers c\n    INNER JOIN orders o ON c.customer_id = o.customer_id\n    INNER JOIN order_items oi ON o.order_id = oi.order_id\n    INNER JOIN products p ON oi.product_id = p.product_id\nWHERE\n    o.created_at >= '2024-01-01T00:00:00'\n    AND o.created_at < '2024-02-01T00:00:00'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    total_sales DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "0019_out_of_stock_products": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "WITH shipped AS (\n    SELECT\n        order_id\n    FROM\n        order_events\n    WHERE\n        event_type = 'Shipped'\n)\nSELECT\n    p.name,\n    p.stock,\n    sum(oi.amount)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    AND oi.order_id NOT IN (\n        SELECT\n            order_id\n        FROM\n            shipped\n    )\nGROUP BY\n    p.product_id,\n    p.name,\n    p.stock\nHAVING\n    (sum(oi.amount) < p.stock);\n",
+        "duckdb": "SELECT\n    p.name,\n    p.stock,\n    sum(oi.amount)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    AND NOT EXISTS (\n        SELECT\n            *\n        FROM\n            order_events oe\n        WHERE\n            oe.event_type = 'Shipped'\n            AND oe.order_id = oi.order_id\n    )\nGROUP BY\n    p.product_id,\n    p.name,\n    p.stock\nHAVING\n    (sum(oi.amount) < p.stock);\n",
+        "monetdb": "SELECT\n    p.name,\n    p.stock,\n    sum(oi.amount)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    AND NOT EXISTS (\n        SELECT\n            *\n        FROM\n            order_events oe\n        WHERE\n            oe.event_type = 'Shipped'\n            AND oe.order_id = order_id\n    )\nGROUP BY\n    product_id,\n    p.name,\n    p.stock\nHAVING\n    (sum(oi.amount) < p.stock);\n",
+        "postgres": "\nSELECT\n    p.name,\n    p.stock,\n    sum(oi.amount)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at > '2024-12-01' AND o.created_at < '2024-12-07' AND\n    NOT EXISTS (\n        SELECT\n        FROM\n            order_events oe\n        WHERE\n            oe.event_type = 'Shipped'\n            AND oe.order_id = oi.order_id)\nGROUP BY\n    p.product_id\nHAVING (sum(oi.amount) < p.stock);\n",
+        "questdb": "SELECT\n    name,\n    stock,\n    total_ordered\nFROM\n    (\n        SELECT\n            p.name,\n            p.stock,\n            sum(oi.amount) AS total_ordered\n        FROM\n            orders o\n            INNER JOIN order_items oi ON o.order_id = oi.order_id\n            INNER JOIN products p ON oi.product_id = p.product_id\n            LEFT JOIN order_events oe ON oe.order_id = o.order_id\n            AND oe.event_type = 'Shipped'\n        WHERE\n            o.created_at >= '2024-12-01T00:00:00'\n            AND o.created_at < '2024-12-07T00:00:00'\n            AND oe.order_id IS NULL\n        GROUP BY\n            p.name,\n            p.stock\n    )\nWHERE\n    total_ordered < stock;\n",
+        "timescaledb": "SELECT\n    p.name,\n    p.stock,\n    sum(oi.amount)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    AND NOT EXISTS (\n        SELECT\n        FROM\n            order_events oe\n        WHERE\n            oe.event_type = 'Shipped'\n            AND oe.order_id = oi.order_id\n    )\nGROUP BY\n    p.product_id\nHAVING\n    (sum(oi.amount) < p.stock);\n"
+      }
+    },
+    "0020_customers_outstanding": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.customer_id,\n    c.name\nFROM\n    customers c\nWHERE\n    c.customer_id IN (\n        SELECT\n            customer_id\n        FROM\n            orders o\n        WHERE\n            o.created_at >= '2024-12-25'\n            AND o.created_at < '2025-01-01'\n            AND o.order_id NOT IN (\n                SELECT\n                    order_id\n                FROM\n                    order_events oe\n                WHERE\n                    oe.event_type = 'Delivered'\n            )\n    )\nORDER BY\n    c.customer_id;\n",
+        "duckdb": "SELECT\n    c.customer_id,\n    c.name\nFROM\n    customers c\nWHERE\n    EXISTS (\n        SELECT\n            *\n        FROM\n            orders o\n        WHERE\n            o.customer_id = c.customer_id\n            AND o.created_at >= '2024-12-25'\n            AND o.created_at < '2025-01-01'\n            AND NOT EXISTS (\n                SELECT\n                    *\n                FROM\n                    order_events oe\n                WHERE\n                    oe.event_type = 'Delivered'\n                    AND oe.order_id = o.order_id\n            )\n    )\nORDER BY\n    c.customer_id;\n",
+        "monetdb": "SELECT\n    c.customer_id,\n    c.name\nFROM\n    customers c\nWHERE\n    EXISTS (\n        SELECT\n            *\n        FROM\n            orders o\n        WHERE\n            o.customer_id = c.customer_id\n            AND o.created_at >= '2024-12-25'\n            AND o.created_at < '2025-01-01'\n            AND NOT EXISTS (\n                SELECT\n                    *\n                FROM\n                    order_events oe\n                WHERE\n                    oe.event_type = 'Delivered'\n                    AND oe.order_id = o.order_id\n            )\n    )\nORDER BY\n    c.customer_id;\n",
+        "postgres": "\nSELECT\n    c.customer_id,\n    c.name\nFROM\n    customers c\nWHERE\n    EXISTS (\n        SELECT\n            *\n        FROM\n            orders o\n        WHERE\n            o.customer_id = c.customer_id AND\n            o.created_at >= '2024-12-25' AND o.created_at < '2025-01-01'\n            AND NOT EXISTS (\n                SELECT\n                FROM\n                    order_events oe\n                WHERE\n                    oe.event_type = 'Delivered'\n                    AND oe.order_id = o.order_id))\nORDER BY c.customer_id;\n",
+        "questdb": "SELECT\n    DISTINCT c.customer_id,\n    c.name\nFROM\n    customers AS c\n    JOIN orders AS o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-25'\n    AND o.created_at < '2025-01-01'\n    LEFT JOIN order_events AS oe ON oe.order_id = o.order_id\n    AND oe.event_type = 'Delivered'\nWHERE\n    oe.order_id IS NULL\nORDER BY\n    c.customer_id;\n",
+        "timescaledb": "SELECT\n    c.customer_id,\n    c.name\nFROM\n    customers c\nWHERE\n    EXISTS (\n        SELECT\n            *\n        FROM\n            orders o\n        WHERE\n            o.customer_id = c.customer_id\n            AND o.created_at >= '2024-12-25'\n            AND o.created_at < '2025-01-01'\n            AND NOT EXISTS (\n                SELECT\n                FROM\n                    order_events oe\n                WHERE\n                    oe.event_type = 'Delivered'\n                    AND oe.order_id = o.order_id\n            )\n    )\nORDER BY\n    c.customer_id;\n"
+      }
+    },
+    "0021_sales_volume_by_country": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.country,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.country\nORDER BY\n    2 DESC;\n",
+        "duckdb": "SELECT\n    c.country,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.country\nORDER BY\n    2 DESC;\n",
+        "monetdb": "SELECT\n    c.country,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.country\nORDER BY\n    2 DESC;\n",
+        "postgres": "\nSELECT\n    c.country,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01' and o.created_at < '2024-02-01'\nGROUP BY\n    c.country\nORDER BY\n    2 DESC;\n",
+        "questdb": "SELECT\n    c.country,\n    sum(oi.amount * p.price) AS total_sales\nFROM\n    customers c\n    INNER JOIN orders o ON c.customer_id = o.customer_id\n    INNER JOIN order_items oi ON o.order_id = oi.order_id\n    INNER JOIN products p ON oi.product_id = p.product_id\nWHERE\n    o.created_at >= '2024-01-01T00:00:00'\n    AND o.created_at < '2024-02-01T00:00:00'\nGROUP BY\n    c.country\nORDER BY\n    total_sales DESC;\n",
+        "timescaledb": "SELECT\n    c.country,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    and o.created_at < '2024-02-01'\nGROUP BY\n    c.country\nORDER BY\n    2 DESC;\n"
+      }
+    },
+    "0022_sales_volume_by_country_state": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.country,\n    c.state,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nGROUP BY\n    GROUPING SETS ((country), (country, state), ())\nORDER BY\n    sum(amount * price),\n    country,\n    (state = '') ASC,\n    state;\n",
+        "duckdb": "SELECT\n    c.country,\n    c.state,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nGROUP BY\n    GROUPING SETS ((country), (country, state), ())\nORDER BY\n    sum(amount * price),\n    country,\n    state;\n",
+        "monetdb": "SELECT\n    c.country,\n    c.state,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nGROUP BY\n    GROUPING SETS ((country), (country, state), ())\nORDER BY\n    sum(amount * price),\n    country,\n    state;\n",
+        "postgres": "\nSELECT\n    c.country,\n    c.state,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id AND o.created_at >= '2024-12-24' AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nGROUP BY GROUPING SETS ((country), (country, state), ())\nORDER BY\n    sum(amount * price), country, state;\n",
+        "questdb": "-- Grand total (equivalent to empty grouping set ())\nSELECT\n    NULL as country,\n    NULL as state,\n    sum(amount * price) as total_amount\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi ON o.order_id = oi.order_id\n    INNER JOIN products p ON oi.product_id = p.product_id\nUNION\nALL -- Country totals (equivalent to grouping set (country))\nSELECT\n    c.country,\n    NULL as state,\n    sum(amount * price) as total_amount\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi ON o.order_id = oi.order_id\n    INNER JOIN products p ON oi.product_id = p.product_id\nGROUP BY\n    c.country\nUNION\nALL -- Country and state totals (equivalent to grouping set (country, state))\nSELECT\n    c.country,\n    c.state,\n    sum(amount * price) as total_amount\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi ON o.order_id = oi.order_id\n    INNER JOIN products p ON oi.product_id = p.product_id\nGROUP BY\n    c.country,\n    c.state\nORDER BY\n    total_amount,\n    country,\n    state;\n",
+        "timescaledb": "SELECT\n    c.country,\n    c.state,\n    sum(amount * price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at >= '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products USING (product_id)\nGROUP BY\n    GROUPING SETS ((country), (country, state), ())\nORDER BY\n    sum,\n    country,\n    state;\n"
+      }
+    },
+    "0023_top_sales_volume_product_from_terminal": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN order_events oe ON oe.order_id = oi.order_id\nWHERE\n    JSONExtractString(oe.event_payload, 'terminal') = 'Berlin'\n    AND oe.event_type = 'Delivered'\n    AND oe.event_created >= '2024-07-01'\n    AND oe.event_created < '2025-01-01'\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN order_events oe ON oe.order_id = oi.order_id\nWHERE\n    oe.event_payload ->> 'terminal' = 'Berlin'\n    AND oe.event_created >= '2024-07-01'\n    and oe.event_created < '2025-01-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.product_id,\n    p.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN order_events oe ON oe.order_id = oi.order_id\nWHERE\n    oe.event_created >= '2024-07-01'\n    and oe.event_created < '2025-01-01'\n    AND oe.event_type = 'Delivered'\n    AND json.filter(oe.event_payload, '$.terminal') = '\"Berlin\"'\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "postgres": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN order_events oe ON oe.order_id = oi.order_id\n    WHERE oe.event_payload->>'terminal' = 'Berlin'\n    AND oe.event_created >= '2024-07-01' and oe.event_created < '2025-01-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.product_id\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT 10;\n",
+        "questdb": "SELECT\n    p.product_id,\n    p.name,\n    sum(oi.amount * p.price) AS total_sales\nFROM\n    products p\n    JOIN order_items oi ON p.product_id = oi.product_id\n    JOIN order_events oe ON oe.order_id = oi.order_id\nWHERE\n    json_extract(oe.event_payload, '$.terminal') = 'Berlin'\n    AND oe.event_created >= '2024-07-01T00:00:00'\n    AND oe.event_created < '2025-01-01T00:00:00'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.product_id,\n    p.name\nORDER BY\n    total_sales DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN order_events oe ON oe.order_id = oi.order_id\nWHERE\n    oe.event_payload ->> 'terminal' = 'Berlin'\n    AND oe.event_created >= '2024-07-01'\n    and oe.event_created < '2025-01-01'\n    AND event_type = 'Delivered'\nGROUP BY\n    p.product_id\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "0024_top_customer_by_revenue": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    INNER JOIN order_items oi USING(order_id)\n    INNER JOIN products p USING(product_id)\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    INNER JOIN order_items oi USING(order_id)\n    INNER JOIN products p USING(product_id)\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    INNER JOIN order_items oi USING(order_id)\n    INNER JOIN products p USING(product_id)\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "postgres": "\nSELECT c.customer_id, c.name, sum(oi.amount*p.price) FROM customers c\nINNER JOIN orders o ON o.customer_id=c.customer_id AND o.created_at > '2024-12-01' AND o.created_at < '2024-12-07'\nINNER JOIN order_items oi USING(order_id)\nINNER JOIN products p USING(product_id)\nGROUP BY c.customer_id\nORDER BY sum(oi.amount*p.price) DESC LIMIT 10;\n",
+        "questdb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price) AS total_sales\nFROM\n    customers c\n    JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at > '2024-12-01T00:00:00'\n    AND o.created_at < '2024-12-07T00:00:00'\n    JOIN order_items oi ON o.order_id = oi.order_id\n    JOIN products p ON oi.product_id = p.product_id\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    total_sales DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    c.customer_id,\n    c.name,\n    sum(oi.amount * p.price)\nFROM\n    customers c\n    INNER JOIN orders o ON o.customer_id = c.customer_id\n    AND o.created_at > '2024-12-01'\n    AND o.created_at < '2024-12-07'\n    INNER JOIN order_items oi USING(order_id)\n    INNER JOIN products p USING(product_id)\nGROUP BY\n    c.customer_id\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "0025_product_category_performance": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-01-07'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.category\nORDER BY\n    category;\n",
+        "duckdb": "SELECT\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-01-07'\n    and oe.event_type = 'Delivered'\nGROUP BY\n    p.category\nORDER BY\n    category;\n",
+        "monetdb": "SELECT\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-01-07'\n    and oe.event_type = 'Delivered'\nGROUP BY\n    p.category\nORDER BY\n    category;\n",
+        "postgres": "\nSELECT\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01' and oe.event_created < '2024-01-07'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.category\nORDER BY category;\n",
+        "questdb": "SELECT\n    p.category,\n    sum(p.price * oi.amount) AS total_sales\nFROM\n    products p\n    JOIN order_items oi ON p.product_id = oi.product_id\n    JOIN orders o ON o.order_id = oi.order_id\n    JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01T00:00:00'\n    AND oe.event_created < '2024-01-07T00:00:00'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.category\nORDER BY\n    p.category;\n",
+        "timescaledb": "SELECT\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-01-07'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    p.category\nORDER BY\n    category;\n"
+      }
+    },
+    "0026_average_order_value": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  sum(oi.amount * p.price) / count(distinct o.order_id)\nFROM\n  orders o,\n  order_items oi,\n  products p\nWHERE\n  o.order_id = oi.order_id\n  AND oi.product_id = p.product_id\n  AND o.created_at >= '2024-01-01'\n  AND o.created_at < '2024-01-07';\n",
+        "duckdb": "SELECT\n    sum(oi.amount * p.price) / count(DISTINCT order_id)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    AND o.created_at < '2024-01-07';\n",
+        "monetdb": "SELECT\n    sum(oi.amount * p.price) / count(DISTINCT order_id)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    AND o.created_at < '2024-01-07';\n",
+        "postgres": "\nSELECT sum(oi.amount*p.price)/count(DISTINCT order_id)\nFROM orders o\nINNER JOIN order_items oi USING (order_id)\nINNER JOIN products p USING (product_id)\nWHERE o.created_at >= '2024-01-01' AND o.created_at < '2024-01-07';\n",
+        "questdb": "SELECT\n    sum(oi.amount * p.price) / count(DISTINCT o.order_id) AS avg_order_value\nFROM\n    orders o\n    JOIN order_items oi ON o.order_id = oi.order_id\n    JOIN products p ON oi.product_id = p.product_id\nWHERE\n    o.created_at >= '2024-01-01T00:00:00'\n    AND o.created_at < '2024-01-07T00:00:00';\n",
+        "timescaledb": "SELECT\n    sum(oi.amount * p.price) / count(DISTINCT order_id)\nFROM\n    orders o\n    INNER JOIN order_items oi USING (order_id)\n    INNER JOIN products p USING (product_id)\nWHERE\n    o.created_at >= '2024-01-01'\n    AND o.created_at < '2024-01-07';\n"
+      }
+    },
+    "0027_country_category_performance": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.country,\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND c.country = 'Switzerland'\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.country,\n    p.category\nORDER BY\n    country,\n    p.category;\n",
+        "duckdb": "SELECT\n    c.country,\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND c.country = 'Switzerland'\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.country,\n    p.category\nORDER BY\n    country,\n    p.category;\n",
+        "monetdb": "SELECT\n    c.country,\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND c.country = 'Switzerland'\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.country,\n    p.category\nORDER BY\n    country,\n    p.category;\n",
+        "postgres": "\nSELECT\n\tc.country,\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN customers c ON c.customer_id = o.customer_id AND c.country = 'Switzerland'\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE oe.event_created >= '2024-01-01' and oe.event_created < '2024-02-01'\nAND oe.event_type = 'Delivered'\nGROUP BY\n    c.country, p.category ORDER BY country, p.category;\n",
+        "questdb": "SELECT\n    c.country,\n    p.category,\n    sum(p.price * oi.amount) AS total_sales\nFROM\n    products p\n    JOIN order_items oi ON p.product_id = oi.product_id\n    JOIN orders o ON o.order_id = oi.order_id\n    JOIN customers c ON c.customer_id = o.customer_id\n    JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    c.country = 'Switzerland'\n    AND oe.event_created >= '2024-01-01T00:00:00'\n    AND oe.event_created < '2024-02-01T00:00:00'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.country,\n    p.category\nORDER BY\n    c.country,\n    p.category;\n",
+        "timescaledb": "SELECT\n    c.country,\n    p.category,\n    sum(p.price * oi.amount)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND c.country = 'Switzerland'\n    INNER JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-02-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.country,\n    p.category\nORDER BY\n    country,\n    p.category;\n"
+      }
+    },
+    "0028_sales_volume_by_age_group": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age('year', c.birthday, now()) >= 18\n            AND age('year', c.birthday, now()) < 26\n    ) AS \"18-25\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age('year', c.birthday, now()) >= 26\n            AND age('year', c.birthday, now()) < 36\n    ) AS \"26-35\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age('year', c.birthday, now()) >= 36\n            AND age('year', c.birthday, now()) < 51\n    ) AS \"36-50\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age('year', c.birthday, now()) >= 51\n            AND age('year', c.birthday, now()) < 66\n    ) AS \"51-65\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age('year', c.birthday, now()) >= 66\n    ) AS \"66+\"\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > '2024-01-01'\n    AND o.created_at < '2024-01-07'\n    INNER JOIN customers c ON c.customer_id = o.customer_id;\n",
+        "duckdb": "WITH customer_ages AS (\n    SELECT\n        c.customer_id,\n        (\n            EXTRACT(\n                YEAR\n                FROM\n                    now()\n            ) - EXTRACT(\n                YEAR\n                FROM\n                    c.birthday\n            )\n        ) + (\n            EXTRACT(\n                MONTH\n                FROM\n                    now()\n            ) - EXTRACT(\n                MONTH\n                FROM\n                    c.birthday\n            )\n        ) / 12.0 AS customer_age_years\n    FROM\n        customers c\n)\nSELECT\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 18\n            AND ca.customer_age_years < 26 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"18-25\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 26\n            AND ca.customer_age_years < 36 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"26-35\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 36\n            AND ca.customer_age_years < 51 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"36-50\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 51\n            AND ca.customer_age_years < 66 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"51-65\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 66 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"66+\"\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > DATE '2024-01-01'\n    AND o.created_at < DATE '2024-01-07'\n    INNER JOIN customer_ages ca ON ca.customer_id = o.customer_id;\n",
+        "monetdb": "WITH customer_ages AS (\n    SELECT\n        c.customer_id,\n        -- this age calculation might be incorrect, query output matches DuckDB at least\n        (\n            (\n                EXTRACT(\n                    YEAR\n                    FROM\n                        now()\n                ) * 12 + EXTRACT(\n                    MONTH\n                    FROM\n                        now()\n                )\n            ) - (\n                EXTRACT(\n                    YEAR\n                    FROM\n                        c.birthday\n                ) * 12 + EXTRACT(\n                    MONTH\n                    FROM\n                        c.birthday\n                )\n            )\n        ) / 12.0 AS customer_age_years\n    FROM\n        customers c\n)\nSELECT\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 18\n            AND ca.customer_age_years < 26 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"18-25\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 26\n            AND ca.customer_age_years < 36 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"26-35\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 36\n            AND ca.customer_age_years < 51 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"36-50\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 51\n            AND ca.customer_age_years < 66 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"51-65\",\n    SUM(\n        CASE\n            WHEN ca.customer_age_years >= 66 THEN p.price * oi.amount\n            ELSE NULL\n        END\n    ) AS \"66+\"\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > DATE '2024-01-01'\n    AND o.created_at < DATE '2024-01-07'\n    INNER JOIN customer_ages ca ON ca.customer_id = o.customer_id;\n",
+        "postgres": "\nSELECT\n    sum(p.price * oi.amount) FILTER (WHERE age(now(), c.birthday) >= '18 year'::interval AND age(now(), c.birthday) < '26 year'::interval) AS \"18-25\",\n    sum(p.price * oi.amount) FILTER (WHERE age(now(), c.birthday) >= '26 year'::interval AND age(now(), c.birthday) < '36 year'::interval) AS \"26-35\",\n    sum(p.price * oi.amount) FILTER (WHERE age(now(), c.birthday) >= '36 year'::interval AND age(now(), c.birthday) < '51 year'::interval) AS \"36-50\",\n    sum(p.price * oi.amount) FILTER (WHERE age(now(), c.birthday) >= '51 year'::interval AND age(now(), c.birthday) < '66 year'::interval) AS \"51-65\",\n    sum(p.price * oi.amount) FILTER (WHERE age(now(), c.birthday) >= '66 year'::interval) AS \"66+\"\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id AND o.created_at > '2024-01-01' AND o.created_at < '2024-01-07'\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n;\n",
+        "questdb": "SELECT\n    sum(\n        CASE\n            WHEN datediff('y', c.birthday, now()) BETWEEN 18\n            AND 25 THEN p.price * oi.amount\n            ELSE 0\n        END\n    ) AS \"18_25\",\n    sum(\n        CASE\n            WHEN datediff('y', c.birthday, now()) BETWEEN 26\n            AND 35 THEN p.price * oi.amount\n            ELSE 0\n        END\n    ) AS \"26_35\",\n    sum(\n        CASE\n            WHEN datediff('y', c.birthday, now()) BETWEEN 36\n            AND 50 THEN p.price * oi.amount\n            ELSE 0\n        END\n    ) AS \"36_50\",\n    sum(\n        CASE\n            WHEN datediff('y', c.birthday, now()) BETWEEN 51\n            AND 65 THEN p.price * oi.amount\n            ELSE 0\n        END\n    ) AS \"51_65\",\n    sum(\n        CASE\n            WHEN datediff('y', c.birthday, now()) > 65 THEN p.price * oi.amount\n            ELSE 0\n        END\n    ) AS \"66_plus\"\nFROM\n    products p\n    JOIN order_items oi ON p.product_id = oi.product_id\n    JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at >= '2024-01-01T00:00:00'\n    AND o.created_at < '2024-01-07T00:00:00'\n    JOIN customers c ON c.customer_id = o.customer_id;\n",
+        "timescaledb": "SELECT\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age(now(), c.birthday) >= '18 year' :: interval\n            AND age(now(), c.birthday) < '26 year' :: interval\n    ) AS \"18-25\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age(now(), c.birthday) >= '26 year' :: interval\n            AND age(now(), c.birthday) < '36 year' :: interval\n    ) AS \"26-35\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age(now(), c.birthday) >= '36 year' :: interval\n            AND age(now(), c.birthday) < '51 year' :: interval\n    ) AS \"36-50\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age(now(), c.birthday) >= '51 year' :: interval\n            AND age(now(), c.birthday) < '66 year' :: interval\n    ) AS \"51-65\",\n    sum(p.price * oi.amount) FILTER (\n        WHERE\n            age(now(), c.birthday) >= '66 year' :: interval\n    ) AS \"66+\"\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > '2024-01-01'\n    AND o.created_at < '2024-01-07'\n    INNER JOIN customers c ON c.customer_id = o.customer_id;\n"
+      }
+    },
+    "0029_top_product_in_age_group": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND age('year', c.birthday, now()) >= 18\n    AND age('year', c.birthday, now()) < 26\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND age(now(), c.birthday) >= '18 years'\n    AND age(now(), c.birthday) < '26 years'\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n",
+        "monetdb": "WITH customer_ages AS (\n    SELECT\n        c.customer_id,\n        -- this age calculation might be incorrect, query output matches DuckDB at least\n        EXTRACT(\n            YEAR\n            FROM\n                now()\n        ) - EXTRACT(\n            YEAR\n            FROM\n                c.birthday\n        ) - CASE\n            WHEN (\n                EXTRACT(\n                    MONTH\n                    FROM\n                        now()\n                ) < EXTRACT(\n                    MONTH\n                    FROM\n                        c.birthday\n                )\n            )\n            OR (\n                EXTRACT(\n                    MONTH\n                    FROM\n                        now()\n                ) = EXTRACT(\n                    MONTH\n                    FROM\n                        c.birthday\n                )\n                AND EXTRACT(\n                    DAY\n                    FROM\n                        now()\n                ) < EXTRACT(\n                    DAY\n                    FROM\n                        c.birthday\n                )\n            ) THEN 1\n            ELSE 0\n        END AS customer_age_years\n    FROM\n        customers c\n)\nSELECT\n    product_id,\n    p.name,\n    SUM(oi.amount * p.price) AS total_sales\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > DATE '2024-12-24'\n    AND o.created_at < DATE '2025-01-01'\n    INNER JOIN customer_ages ca ON ca.customer_id = o.customer_id\n    AND ca.customer_age_years >= 18\n    AND ca.customer_age_years < 26\nGROUP BY\n    product_id,\n    p.name\nORDER BY\n    total_sales DESC\nLIMIT\n    10;\n",
+        "postgres": "\nSELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n        AND o.created_at > '2024-12-24'\n        AND o.created_at < '2025-01-01'\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n        AND age(now(), c.birthday) >= '18 years' AND age(now(), c.birthday) < '26 years'\nGROUP BY\n    product_id\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT 10;\n",
+        "questdb": "SELECT\n    p.product_id,\n    p.name,\n    sum(oi.amount * p.price) AS total_sales\nFROM\n    products p\n    JOIN order_items oi ON p.product_id = oi.product_id\n    JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > '2024-12-24T00:00:00'\n    AND o.created_at < '2025-01-01T00:00:00'\n    JOIN customers c ON c.customer_id = o.customer_id\nWHERE\n    datediff('y', c.birthday, now()) BETWEEN 18\n    AND 25\nGROUP BY\n    p.product_id,\n    p.name\nORDER BY\n    total_sales DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    product_id,\n    p.name,\n    sum(oi.amount * p.price)\nFROM\n    products p\n    INNER JOIN order_items oi USING (product_id)\n    INNER JOIN orders o ON o.order_id = oi.order_id\n    AND o.created_at > '2024-12-24'\n    AND o.created_at < '2025-01-01'\n    INNER JOIN customers c ON c.customer_id = o.customer_id\n    AND age(now(), c.birthday) >= '18 years'\n    AND age(now(), c.birthday) < '26 years'\nGROUP BY\n    product_id\nORDER BY\n    sum(oi.amount * p.price) DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "0030_customers_with_most_orders_delivered": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_events oe USING (order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-07-01'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    count(o.order_id) DESC\nLIMIT\n    10;\n",
+        "duckdb": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_events oe USING (order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-07-01'\n    and oe.event_type = 'Delivered'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    count(o.order_id) DESC\nLIMIT\n    10;\n",
+        "monetdb": "SELECT\n    customer_id,\n    c.name,\n    count(order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_events oe USING (order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-07-01'\n    and oe.event_type = 'Delivered'\nGROUP BY\n    customer_id,\n    c.name\nORDER BY\n    count(order_id) DESC\nLIMIT\n    10;\n",
+        "postgres": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_events oe USING (order_id)\nWHERE\n    oe.event_created >= '2024-01-01' and oe.event_created < '2024-07-01'\n    and oe.event_type = 'Delivered'\nGROUP BY\n    c.customer_id\nORDER BY\n    count(o.order_id) DESC\nLIMIT 10;\n",
+        "questdb": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id) AS delivered_orders\nFROM\n    customers c\n    JOIN orders o ON o.customer_id = c.customer_id\n    JOIN order_events oe ON oe.order_id = o.order_id\nWHERE\n    oe.event_created >= '2024-01-01T00:00:00'\n    AND oe.event_created < '2024-07-01T00:00:00'\n    AND oe.event_type = 'Delivered'\nGROUP BY\n    c.customer_id,\n    c.name\nORDER BY\n    delivered_orders DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    c.customer_id,\n    c.name,\n    count(o.order_id)\nFROM\n    customers c\n    INNER JOIN orders o USING (customer_id)\n    INNER JOIN order_events oe USING (order_id)\nWHERE\n    oe.event_created >= '2024-01-01'\n    and oe.event_created < '2024-07-01'\n    and oe.event_type = 'Delivered'\nGROUP BY\n    c.customer_id\nORDER BY\n    count(o.order_id) DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "1000_terminal_hourly_stats": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n  hour,\n  terminal,\n  event_count,\n  unique_orders,\n  avg(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY\n      hour ROWS BETWEEN 3 PRECEDING\n      AND CURRENT ROW\n  ) as moving_avg_events\nFROM\n  order_events_per_terminal_per_hour\nWHERE\n  terminal IN ('Berlin', 'Hamburg', 'Munich')\n  AND hour >= '2024-01-01'\n  and hour < '2024-02-01'\nORDER BY\n  terminal,\n  hour;\n",
+        "timescaledb": "SELECT\n  hour,\n  terminal,\n  event_count,\n  unique_orders,\n  avg(event_count) OVER (\n    PARTITION BY terminal\n    ORDER BY\n      hour ROWS BETWEEN 3 PRECEDING\n      AND CURRENT ROW\n  ) as moving_avg_events\nFROM\n  cagg_order_events_per_terminal_per_hour\nWHERE\n  terminal IN ('Berlin', 'Hamburg', 'Munich')\n  AND hour >= '2024-01-01'\n  and hour < '2024-02-01'\nORDER BY\n  terminal,\n  hour;\n"
+      }
+    },
+    "1004_count_delayed_orders_per_day": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    day,\n    count(delayed_orders) as delayed_orders\nFROM\n    order_events_q4\nWHERE\n    day >= '2024-05-01'\n    and day < '2024-06-01'\nGROUP BY\n    day\nORDER BY\n    delayed_orders desc\nlimit\n    20;\n",
+        "timescaledb": "SELECT\n    day,\n    count\nFROM\n    cagg_order_events_0004\nWHERE\n    day > '2024-05-01'\n    and day < '2024-06-01'\nORDER BY\n    count desc\nlimit\n    20;\n"
+      }
+    },
+    "1008_most_week_delayed_order": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    day,\n    order_id,\n    sum(delayed_orders) as delayed_orders\nFROM\n    order_events_q8\nWHERE\n    day >= '2024-02-01'\n    and day < '2024-02-07'\nGROUP BY\n    day,\n    order_id\nORDER BY\n    delayed_orders desc\nlimit\n    1;\n",
+        "timescaledb": "SELECT\n    order_id,\n    count\nFROM\n    cagg_order_events_0008\nWHERE\n    week >= '2024-01-29'\n    and week < '2024-02-05'\nORDER BY\n    count desc\nLIMIT\n    1;\n"
+      }
+    },
+    "1012_max_satisfaction_for_order_per_week": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    week,\n    max(satisfaction)\nFROM\n    order_events_q12\nWHERE\n    order_id = 700\nGROUP BY\n    week\nORDER BY\n    week desc\n",
+        "timescaledb": "SELECT\n    week,\n    satisfaction\nFROM\n    cagg_order_events_q12\nWHERE\n    order_id = 700\nORDER BY\n    week desc;\n"
+      }
+    },
+    "1013_satisfaction_with_without_backup": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    month,\n    count(count_with_backup) as count_with_backup,\n    count(count_without_backup) as count_without_backup,\n    avg(avg_satisfaction_with_backup) as avg_satisfaction_with_backup,\n    avg(avg_satisfaction_without_backup) as avg_satisfaction_without_backup\nFROM\n    order_events_q13\nWHERE\n    order_id = 111\nGROUP BY\n    month\nORDER BY\n    month desc\n",
+        "timescaledb": "SELECT\n    month,\n    count_with_backup,\n    count_without_backup,\n    avg_satisfaction_with_backup,\n    avg_satisfaction_without_backup\nFROM\n    cagg_order_events_q13\nWHERE\n    order_id = 111\nORDER BY\n    month desc;\n"
+      }
+    },
+    "1017_top_selling_month_product": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    product_id,\n    product_name,\n    sum(amount)\nFROM\n    top_selling_month_product_q17\nWHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-02-01'\nGROUP BY\n    product_id,\n    product_name\nORDER BY\n    sum(amount) DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    product_id,\n    product_name,\n    sum(amount)\nFROM\n    cagg_top_selling_month_product_q17\nWHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-02-01'\nGROUP BY\n    product_id,\n    product_name\nORDER BY\n    sum(amount) DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "1023_top_sales_volume_product_from_terminal": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    product_id,\n    product_name,\n    sum(volume)\nFROM\n    top_sales_volume_product\nWHERE\n    event_created >= '2024-07-01'\n    AND event_created < '2024-12-25'\n    and terminal = 'Berlin'\nGROUP BY\n    product_id,\n    product_name\nORDER BY\n    sum(volume) DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    product_id,\n    product_name,\n    volume\nFROM\n    cagg_top_selling_product_semester\nWHERE\n    event_created = '2024-07-01'\n    and terminal = 'Berlin'\nORDER BY\n    volume DESC\nLIMIT\n    10;\n"
+      }
+    },
+    "1025_product_category_performance": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    category,\n    sum(volume)\nFROM\n    top_sales_volume_product\nWHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-01-07'\nGROUP BY\n    category\nORDER BY\n    sum(volume) DESC;\n",
+        "timescaledb": "SELECT\n    category,\n    volume\nFROM\n    cagg_top_sales_volume_category_weekly\nWHERE\n    event_created = '2024-01-01'\nORDER BY\n    volume DESC;\n"
+      }
+    },
+    "1027_country_category_performance": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    country,\n    product_category,\n    sum(revenue)\nFROM\n    country_category_monthly_performance\nWHERE\n    country = 'Switzerland'\n    AND event_created >= '2024-01-01'\n    AND event_created < '2024-02-01'\nGROUP BY\n    country,\n    product_category\nORDER BY\n    sum(revenue) DESC;\n",
+        "timescaledb": "SELECT\n    country,\n    product_category,\n    sum(revenue)\nFROM\n    cagg_country_category_monthly_performance\nWHERE\n    country = 'Switzerland'\n    AND event_created >= '2024-01-01'\n    AND event_created < '2024-02-01'\nGROUP BY\n    country,\n    product_category\nORDER BY\n    sum(revenue) DESC;\n"
+      }
+    },
+    "1030_customers_with_most_orders_delivered": {
+      "sql": null,
+      "db_overrides": {
+        "clickhouse": "SELECT\n    customer_id,\n    customer_name,\n    count(customer_orders)\nFROM\n    customers_with_most_orders_delivered\nWHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-07-01'\nGROUP BY\n    customer_id,\n    customer_name\nORDER BY\n    count(customer_orders) DESC\nLIMIT\n    10;\n",
+        "timescaledb": "SELECT\n    customer_id,\n    customer_name,\n    sum(customer_orders)\nFROM\n    cagg_customers_with_most_orders_delivered\nWHERE\n    event_created >= '2024-01-01'\n    and event_created < '2024-07-01'\nGROUP BY\n    customer_id,\n    customer_name\nORDER BY\n    sum(customer_orders) DESC\nLIMIT\n    10;\n"
+      }
+    }
+  },
+  "time_series": {
+    "001_max_time_small_wide": {
+      "sql": "select\n    max(time)\nfrom\n    data_small_wide\n",
+      "db_overrides": {}
+    },
+    "002_max_time_large_wide": {
+      "sql": "select\n    max(time)\nfrom\n    data_large_wide\n",
+      "db_overrides": {}
+    },
+    "003_latest_time_range_small_wide": {
+      "sql": "select\n    time\nfrom\n    data_small_wide\norder by\n    time desc\nlimit\n    50\n",
+      "db_overrides": {}
+    },
+    "004_latest_time_range_large_wide": {
+      "sql": "select\n    time\nfrom\n    data_large_wide\norder by\n    time desc\nlimit\n    50\n",
+      "db_overrides": {}
+    },
+    "005_single_id_aggregate_small_wide": {
+      "sql": "select\n    avg(process_64) as val,\n    count(process_64) as cnt\nfrom\n    data_small_wide\nwhere\n    time > '2024-02-02'\n    and time < '2024-12-16 12:00:00'\n",
+      "db_overrides": {
+        "questdb": "select\n    avg(process_64) as val,\n    count(process_64) as cnt\nfrom\n    data_small_wide\nwhere\n    time > '2024-02-02'\n    and time < '2024-12-16 12:00:00'\n"
+      }
+    },
+    "006_single_id_aggregate_large_wide": {
+      "sql": "select\n    avg(process_545) as val,\n    count(process_545) as cnt\nfrom\n    data_large_wide\nwhere\n    time > '2023-02-02'\n    and time < '2024-06-01'\n",
+      "db_overrides": {}
+    },
+    "007_single_id_hourly_resample_small_wide": {
+      "sql": "select\n    date_trunc('hour', time) as time,\n    avg(process_21) as value\nfrom\n    data_small_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    time\nlimit\n    100\n",
+      "db_overrides": {
+        "clickhouse": "select\n    date_trunc('hour', time) as time,\n    avg(process_21) as value\nfrom\n    data_small_wide\ngroup by\n    time\norder by\n    time\nlimit\n    100\n"
+      }
+    },
+    "008_single_id_hourly_resample_large_wide": {
+      "sql": "select\n    date_trunc('hour', time) as time,\n    avg(process_364) as value\nfrom\n    data_large_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    time\nlimit\n    100\n",
+      "db_overrides": {
+        "clickhouse": "select\n    date_trunc('hour', time) as time,\n    avg(process_364) as value\nfrom\n    data_large_wide\ngroup by\n    time\norder by\n    time\nlimit\n    100\n"
+      }
+    },
+    "009_multiple_ids_hourly_resample_small_wide": {
+      "sql": "select\n    date_trunc('hour', time) as time,\n    avg(process_21) as value_1,\n    avg(cast(binary_1 as int)) as value_2,\n    avg(ratio_2) as value_3,\n    avg(process_37) as value_4,\n    avg(process_24) as value_5,\n    avg(deviation_4) as value_6\nfrom\n    data_small_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    time\nlimit\n    100\n",
+      "db_overrides": {
+        "clickhouse": "select\n    date_trunc('hour', time) as time,\n    avg(process_21) as value_1,\n    avg(cast(binary_1 as Nullable(int))) as value_2,\n    avg(ratio_2) as value_3,\n    avg(process_37) as value_4,\n    avg(process_24) as value_5,\n    avg(deviation_4) as value_6\nfrom\n    data_small_wide\ngroup by\n    time\norder by\n    time\nlimit\n    100\n"
+      }
+    },
+    "010_multiple_ids_hourly_resample_large_wide": {
+      "sql": "select\n    date_trunc('hour', time) as time,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as int)) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_large_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    time\nlimit\n    100\n",
+      "db_overrides": {
+        "clickhouse": "select\n    date_trunc('hour', time) as time,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as Nullable(int))) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_large_wide\ngroup by\n    time\norder by\n    time\nlimit\n    100\n"
+      }
+    },
+    "011_multiple_ids_raw_large_wide": {
+      "sql": "select\n    time,\n    process_667 as value_1,\n    binary_22 as value_2,\n    ratio_12 as value_3,\n    process_259 as value_4,\n    process_242 as value_5,\n    deviation_39 as value_6\nfrom\n    data_large_wide\norder by\n    time\nlimit\n    10000\n",
+      "db_overrides": {}
+    },
+    "012_batch_export_large_wide": {
+      "sql": "select\n    *\nfrom\n    data_large_wide\nwhere\n    time >= '2023-01-01'\n    and time < '2023-06-01'\norder by\n    time\n",
+      "db_overrides": {}
+    },
+    "013_single_id_raw_large_wide": {
+      "sql": "select\n    time,\n    process_259 as value\nfrom\n    data_large_wide\norder by\n    time\nlimit\n    10000\n",
+      "db_overrides": {}
+    },
+    "014_single_id_raw_desc_large_wide": {
+      "sql": "select\n    time,\n    process_259 as value\nfrom\n    data_large_wide\norder by\n    time desc\nlimit\n    10000\n",
+      "db_overrides": {}
+    },
+    "015_single_id_raw_filtered_large_wide": {
+      "sql": "select\n    time,\n    process_259 as value\nfrom\n    data_large_wide\nwhere\n    time > '2024-07-01'\n    and time < '2024-07-15'\norder by\n    time\n",
+      "db_overrides": {}
+    },
+    "016_single_id_raw_filtered_desc_large_wide": {
+      "sql": "select\n    time,\n    process_259 as value\nfrom\n    data_large_wide\nwhere\n    time > '2024-07-01'\n    and time < '2024-07-15'\norder by\n    time desc\n",
+      "db_overrides": {}
+    },
+    "017_single_id_scalar_value_large_wide": {
+      "sql": "select\n    time,\n    process_259 as value\nfrom\n    data_large_wide\nwhere\n    time = '2023-08-04 12:23:00'\n",
+      "db_overrides": {}
+    },
+    "018_multiple_ids_scalar_values_large_wide": {
+      "sql": "select\n    time,\n    process_667 as value_1,\n    cast(binary_22 as int) as value_2,\n    ratio_12 as value_3,\n    process_259 as value_4,\n    process_242 as value_5,\n    deviation_39 as value_6\nfrom\n    data_large_wide\nwhere\n    time = '2023-11-24 06:23:00'\n",
+      "db_overrides": {}
+    },
+    "019_conditional_average_large_wide": {
+      "sql": "select\n    avg(process_667) as value\nfrom\n    data_large_wide\nwhere\n    abs(deviation_39) < 10\n",
+      "db_overrides": {}
+    }
+  }
+}

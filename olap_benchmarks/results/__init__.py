@@ -147,7 +147,59 @@ def publish(revision: Revision = "default") -> Path:
 
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
+    queries_manifest = _build_queries_manifest()
+    queries_path = output_dir / "queries.json"
+    queries_path.write_text(json.dumps(queries_manifest, indent=2))
+
     return output_dir
+
+
+def _build_queries_manifest() -> dict[str, dict[str, dict[str, str | None | dict[str, str]]]]:
+    suites_root = REPO_ROOT / "olap_benchmarks" / "suites"
+    manifest: dict[str, dict[str, dict[str, str | None | dict[str, str]]]] = {}
+
+    for suite_dir in sorted(suites_root.iterdir()):
+        queries_dir = suite_dir / "queries"
+        if not queries_dir.is_dir():
+            continue
+
+        suite_queries: dict[str, dict[str, str | None | dict[str, str]]] = {}
+
+        if suite_dir.name == "clickbench":
+            # Clickbench: each {db}.sql file contains one query per line
+            for db_file in sorted(queries_dir.glob("*.sql")):
+                db_name = db_file.stem
+                for idx, line in enumerate(db_file.read_text().splitlines()):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    qname = f"Q{idx}"
+                    if qname not in suite_queries:
+                        suite_queries[qname] = {"sql": None, "db_overrides": {}}
+                    overrides = suite_queries[qname]["db_overrides"]
+                    assert isinstance(overrides, dict)
+                    overrides[db_name] = line
+        else:
+            # Generic: common queries in queries/*.sql, db overrides in queries/{db}/*.sql
+            for sql_file in sorted(queries_dir.glob("*.sql")):
+                qname = sql_file.stem
+                suite_queries[qname] = {"sql": sql_file.read_text(), "db_overrides": {}}
+
+            for db_dir in sorted(queries_dir.iterdir()):
+                if not db_dir.is_dir():
+                    continue
+                db_name = db_dir.name
+                for sql_file in sorted(db_dir.glob("*.sql")):
+                    qname = sql_file.stem
+                    if qname not in suite_queries:
+                        suite_queries[qname] = {"sql": None, "db_overrides": {}}
+                    overrides = suite_queries[qname]["db_overrides"]
+                    assert isinstance(overrides, dict)
+                    overrides[db_name] = sql_file.read_text()
+
+        manifest[suite_dir.name] = suite_queries
+
+    return manifest
 
 
 def list_runs(
