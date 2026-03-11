@@ -7,7 +7,7 @@ import {
 
 interface QueryTableProps<T> {
   data: T[]
-  columns: ColumnDef<T, never>[]
+  columns: ColumnDef<T, any>[]
 }
 
 export function QueryTable<T>({ data, columns }: QueryTableProps<T>) {
