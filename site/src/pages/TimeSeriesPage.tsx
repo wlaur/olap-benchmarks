@@ -1,5 +1,5 @@
 import { createColumnHelper } from "@tanstack/react-table"
-import { startTransition, useEffect, useState } from "react"
+import { startTransition, useEffect, useMemo, useState } from "react"
 import {
   Bar,
   BarChart,
@@ -12,6 +12,7 @@ import {
 } from "recharts"
 
 import { DatabaseLegend } from "../components/DatabaseLegend"
+import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { QueryTable } from "../components/QueryTable"
@@ -70,6 +71,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     querySummaries: [],
     queriesManifest: null,
   })
+  const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
   const selection = useSelectionState()
 
   useEffect(() => {
@@ -120,13 +122,41 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     }
   }, [system])
 
-  const databases = Array.from(new Set(state.runSummaries.map((run) => run.db))).sort()
+  const databases = useMemo(
+    () => Array.from(new Set(state.runSummaries.map((run) => run.db))).sort(),
+    [state.runSummaries],
+  )
+
+  useEffect(() => {
+    setSelectedDatabases((currentSelection) => {
+      if (databases.length === 0) return []
+
+      const nextSelection = databases.filter((database) => currentSelection.includes(database))
+      const resolvedSelection = nextSelection.length > 0 ? nextSelection : databases
+
+      if (
+        resolvedSelection.length === currentSelection.length &&
+        resolvedSelection.every((database, index) => database === currentSelection[index])
+      ) {
+        return currentSelection
+      }
+
+      return resolvedSelection
+    })
+  }, [databases])
+
+  const includedDatabases = selectedDatabases.length > 0 ? selectedDatabases : databases
+  const includedDatabaseSet = new Set(includedDatabases)
+  const filteredRunSummaries = state.runSummaries.filter((run) => includedDatabaseSet.has(run.db))
+  const filteredQuerySummaries = state.querySummaries.filter((row) =>
+    includedDatabaseSet.has(row.db),
+  )
 
   const databaseColors = Object.fromEntries(
     databases.map((db, idx) => [db, DATABASE_COLORS[idx % DATABASE_COLORS.length]!]),
   )
 
-  const queryRows = buildQueryComparisonRows(state.querySummaries, databases)
+  const queryRows = buildQueryComparisonRows(filteredQuerySummaries, includedDatabases)
 
   const globalMaxDuration = queryRows.reduce((max, row) => {
     for (const val of Object.values(row.by_database)) {
@@ -137,8 +167,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     return max
   }, LOG_FLOOR)
 
-  const fastestRun = state.runSummaries[0] ?? null
-  const slowestQuery = state.querySummaries.reduce<TimeSeriesQuerySummary | null>(
+  const fastestRun = filteredRunSummaries[0] ?? null
+  const slowestQuery = filteredQuerySummaries.reduce<TimeSeriesQuerySummary | null>(
     (currentSlowest, qs) => {
       if (!currentSlowest || qs.median_duration_s > currentSlowest.median_duration_s) {
         return qs
@@ -147,9 +177,9 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     },
     null,
   )
-  const queryCount = new Set(state.querySummaries.map((row) => row.query_name)).size
+  const queryCount = new Set(filteredQuerySummaries.map((row) => row.query_name)).size
 
-  const runChartData = state.runSummaries.map((run) => ({
+  const runChartData = filteredRunSummaries.map((run) => ({
     db: run.db,
     duration_s: Math.max(run.run_duration_s, LOG_FLOOR),
     fill: databaseColors[run.db] ?? "#94a3b8",
@@ -160,6 +190,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     : null
 
   const selectedSql = state.queriesManifest?.time_series?.[selection.selectedQuery ?? ""] ?? null
+
+  function toggleDatabase(database: string) {
+    setSelectedDatabases((currentSelection) => {
+      const nextSelection = currentSelection.includes(database)
+        ? currentSelection.filter((value) => value !== database)
+        : [...currentSelection, database].sort()
+
+      return nextSelection.length > 0 ? nextSelection : currentSelection
+    })
+  }
 
   return (
     <section className="space-y-10">
@@ -190,6 +230,13 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
       {!state.loading && !state.error && state.runSummaries.length > 0 ? (
         <>
+          <DatabaseMultiSelect
+            databases={databases}
+            selectedDatabases={includedDatabases}
+            onSelectAll={() => setSelectedDatabases(databases)}
+            onToggleDatabase={toggleDatabase}
+          />
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="System"
@@ -198,8 +245,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             />
             <StatCard
               label="Completed Runs"
-              value={String(state.runSummaries.length)}
-              detail={`${databases.length} databases across ${queryCount} benchmark queries.`}
+              value={String(filteredRunSummaries.length)}
+              detail={`${includedDatabases.length} databases across ${queryCount} benchmark queries.`}
             />
             <StatCard
               label="Fastest Full Run"
@@ -284,11 +331,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               </p>
             </div>
 
-            <DatabaseLegend databases={databases} databaseColors={databaseColors} />
+            <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
 
             <QueryComparisonTable
               rows={queryRows}
-              databases={databases}
+              databases={includedDatabases}
               databaseColors={databaseColors}
               selection={selection}
               maxDuration={globalMaxDuration}
@@ -297,7 +344,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             {selectedRow ? (
               <QueryDetailPanel
                 row={selectedRow}
-                databases={databases}
+                databases={includedDatabases}
                 databaseColors={databaseColors}
                 sql={selectedSql}
                 onClose={() => selection.setSelectedQuery(null)}
@@ -308,9 +355,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           <section className="space-y-4">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold text-slate-50">Completed run details</h3>
-              <p className="text-sm text-slate-400">Full run metadata for completed runs.</p>
+              <p className="text-sm text-slate-400">
+                Full run metadata for the currently included databases.
+              </p>
             </div>
-            <QueryTable data={state.runSummaries} columns={RUN_COLUMNS} />
+            <QueryTable data={filteredRunSummaries} columns={RUN_COLUMNS} />
           </section>
         </>
       ) : null}

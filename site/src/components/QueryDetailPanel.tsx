@@ -13,6 +13,7 @@ import {
 import { formatDurationSeconds, formatMultiplier } from "../lib/format"
 import type { QuerySqlEntry } from "../lib/types"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
+import { SqlCodeView } from "./SqlCodeView"
 
 const LOG_FLOOR = 1e-6
 
@@ -31,7 +32,9 @@ export function QueryDetailPanel({
   sql,
   onClose,
 }: QueryDetailPanelProps) {
-  const overrideKeys = sql ? Object.keys(sql.db_overrides) : []
+  const overrideKeys = sql
+    ? databases.filter((database) => Object.hasOwn(sql.db_overrides, database))
+    : []
   const hasTabs = sql !== null && (sql.sql !== null || overrideKeys.length > 0)
   const defaultTab = sql?.sql !== null ? "common" : (overrideKeys[0] ?? "common")
   const [activeTab, setActiveTab] = useState(defaultTab)
@@ -142,9 +145,7 @@ export function QueryDetailPanel({
               </button>
             ))}
           </div>
-          <pre className="overflow-x-auto p-4 font-mono text-sm leading-relaxed text-slate-300">
-            {activeSql ?? "No SQL available"}
-          </pre>
+          <SqlCodeView code={activeSql ?? "No SQL available"} />
         </div>
       ) : null}
     </div>
