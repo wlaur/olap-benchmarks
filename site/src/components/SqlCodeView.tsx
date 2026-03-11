@@ -18,9 +18,13 @@ const sqlViewerTheme = EditorView.theme(
     },
     ".cm-editor": {
       backgroundColor: "transparent",
+      minHeight: "100%",
+      minWidth: "100%",
+      width: "100%",
     },
     ".cm-content": {
       padding: "1rem",
+      minWidth: "100%",
       fontFamily:
         "ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace",
       lineHeight: "1.65",
@@ -44,8 +48,7 @@ const sqlViewerTheme = EditorView.theme(
       padding: "0 0.75rem 0 1rem",
     },
     ".cm-scroller": {
-      height: "100%",
-      overflow: "auto",
+      overflow: "visible",
     },
   },
   { dark: true },
@@ -61,7 +64,6 @@ function createSqlViewerState(code: string): EditorState {
       syntaxHighlighting(oneDarkHighlightStyle),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
-      EditorView.lineWrapping,
     ],
   })
 }
@@ -83,5 +85,7 @@ export function SqlCodeView({ code }: SqlCodeViewProps) {
     }
   }, [code])
 
-  return <div ref={hostRef} aria-label="SQL query viewer" className="h-full min-h-0" />
+  return (
+    <div ref={hostRef} aria-label="SQL query viewer" className="sql-code-view h-full min-h-0" />
+  )
 }

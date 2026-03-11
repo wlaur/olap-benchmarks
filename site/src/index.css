@@ -41,3 +41,45 @@
 .animate-panel-enter {
   animation: panel-enter 200ms ease-out;
 }
+
+.panel-scrollbar,
+.panel-scrollbar .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.9) transparent;
+}
+
+.panel-scrollbar,
+.panel-scrollbar .cm-scroller {
+  scrollbar-gutter: stable;
+}
+
+.panel-scrollbar::-webkit-scrollbar,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.panel-scrollbar::-webkit-scrollbar-track,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-scrollbar::-webkit-scrollbar-thumb,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.72);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.panel-scrollbar::-webkit-scrollbar-thumb:hover,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.82);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.panel-scrollbar::-webkit-scrollbar-corner,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}

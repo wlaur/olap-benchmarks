@@ -50,7 +50,7 @@ export function MetricsTimeSeriesPanel({
   databases,
   databaseColors,
 }: MetricsTimeSeriesPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(false)
   const includedDatabaseSet = useMemo(() => new Set(databases), [databases])
 
   const filteredSamples = useMemo(
@@ -80,9 +80,9 @@ export function MetricsTimeSeriesPanel({
           ) : null}
           <button
             onClick={() => setIsExpanded((current) => !current)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100"
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-800 bg-slate-950/80 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100"
           >
-            {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             {isExpanded ? "Hide" : "Show"}
           </button>
         </div>

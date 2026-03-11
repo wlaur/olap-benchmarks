@@ -487,7 +487,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Query latency comparison</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Click a row to inspect its latency spread and SQL. Scrolling stays inside the table.
+                Click a row to inspect its latency spread and SQL.
               </p>
             </div>
             <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
