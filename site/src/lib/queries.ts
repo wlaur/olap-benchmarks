@@ -1,8 +1,25 @@
 import { sql } from "kysely"
 import { getKyselyDb } from "./duckdb"
-import type { TimeSeriesQuerySummary, TimeSeriesRunSummary } from "./types"
+import type {
+  QueriesManifest,
+  TimeSeriesQuerySummary,
+  TimeSeriesRunSummary,
+} from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+let queriesCache: QueriesManifest | null = null
+
+export async function fetchQueriesManifest(): Promise<QueriesManifest> {
+  if (queriesCache) return queriesCache
+
+  const response = await fetch(`${import.meta.env.BASE_URL}data/queries.json`)
+  if (!response.ok) {
+    throw new Error(`Failed to load queries.json: ${response.status}`)
+  }
+  queriesCache = ((await response.json()) as QueriesManifest)
+  return queriesCache
+}
 
 export async function fetchSystems(): Promise<string[]> {
   const db = await getKyselyDb()
