@@ -163,12 +163,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
   const fastestRun = filteredRunSummaries[0] ?? null
   const queryCount = new Set(filteredQuerySummaries.map((row) => row.query_name)).size
+  const versionByDatabase = Object.fromEntries(
+    filteredRunSummaries.map((run) => [run.db, run.db_version]),
+  )
 
   const runChartData = filteredRunSummaries.map((run) => ({
     db: run.db,
     duration_s: run.run_duration_s,
     fill: databaseColors[run.db] ?? "#94a3b8",
   }))
+  const overviewChartHeight = Math.max(120, Math.min(170, runChartData.length * 28 + 28))
 
   const selectedRow = selection.selectedQuery
     ? (queryRows.find((r) => r.query_name === selection.selectedQuery) ?? null)
@@ -258,8 +262,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem]">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
-              <ResponsiveContainer width="100%" height={190}>
+            <div
+              className="h-full rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
+              style={{ minHeight: overviewChartHeight }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
                   <CartesianGrid stroke="#1e293b" vertical={false} />
                   <XAxis
@@ -303,7 +310,12 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                     Rank {index + 1}
                   </p>
                   <div className="mt-2 flex items-center justify-between gap-3">
-                    <p className="text-lg font-semibold text-slate-100">{entry.db}</p>
+                    <div>
+                      <p className="text-lg font-semibold text-slate-100">{entry.db}</p>
+                      <p className="text-xs text-slate-500">
+                        {versionByDatabase[entry.db] ?? "Version unavailable"}
+                      </p>
+                    </div>
                     <p className="text-sm font-medium text-cyan-300">
                       {entry.score === null ? "—" : `${entry.score.toFixed(1)} score`}
                     </p>
@@ -322,12 +334,20 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
         <StatCard
           label="Score Leader"
           value={scoreLeader ? `${scoreLeader.db} · ${scoreLeader.score?.toFixed(1)}` : "—"}
-          detail="Geometric score vs fastest query result. 100 means fastest on every query."
+          detail={
+            scoreLeader
+              ? `${versionByDatabase[scoreLeader.db] ?? "Version unavailable"} · 100 means fastest on every query.`
+              : "Geometric score vs fastest query result."
+          }
         />
         <StatCard
           label="Query Wins Leader"
           value={winsLeader ? `${winsLeader.db} · ${winsLeader.wins}` : "—"}
-          detail={`${queryCount} queries across ${includedDatabases.length} included databases.`}
+          detail={
+            winsLeader
+              ? `${versionByDatabase[winsLeader.db] ?? "Version unavailable"} · ${queryCount} queries across ${includedDatabases.length} included databases.`
+              : `${queryCount} queries across ${includedDatabases.length} included databases.`
+          }
         />
         <StatCard
           label="Fastest Full Run"
@@ -339,9 +359,9 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           detail={
             fastestRun?.median_query_duration_s !== null &&
             fastestRun?.median_query_duration_s !== undefined
-              ? `Median query ${formatDurationSeconds(fastestRun.median_query_duration_s)}`
+              ? `${fastestRun.db_version} · Median query ${formatDurationSeconds(fastestRun.median_query_duration_s)}`
               : fastestRun
-                ? "Median query unavailable"
+                ? `${fastestRun.db_version} · Median query unavailable`
                 : undefined
           }
         />

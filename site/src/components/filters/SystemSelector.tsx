@@ -22,7 +22,7 @@ export function SystemSelector({
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
         aria-label="System"
-        className="inline-flex max-w-[22rem] min-w-[16rem] items-center justify-between gap-3 rounded-full border border-slate-700/80 bg-slate-900/80 py-2 pr-2.5 pl-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition outline-none hover:border-slate-500 focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500"
+        className="inline-flex max-w-[22rem] min-w-[16rem] items-center justify-between gap-3 rounded-full bg-slate-900/80 py-2 pr-2.5 pl-2.5 text-left shadow-[inset_0_0_0_1px_rgba(51,65,85,0.8),inset_0_1px_0_rgba(255,255,255,0.04)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(100,116,139,0.95),inset_0_1px_0_rgba(255,255,255,0.04)] focus:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.9),inset_0_1px_0_rgba(255,255,255,0.04)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500"
       >
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300">
