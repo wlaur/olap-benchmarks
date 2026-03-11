@@ -228,6 +228,15 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
+    def insert_table(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        table_name: TableName,
+        primary_key: str | list[str] | None,
+        not_null: str | list[str] | None,
+    ) -> None:
+        self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -242,7 +251,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             df = pl.scan_parquet(fpath)
 
             with self.db.phase_context("insert", table_name=table_name):
-                self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
+                self.insert_table(df, table_name, primary_key, not_null)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
