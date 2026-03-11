@@ -69,7 +69,13 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div
+      className={
+        currentBenchmark === "time_series"
+          ? "flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100"
+          : "flex min-h-screen flex-col bg-slate-950 text-slate-100"
+      }
+    >
       <Navbar
         benchmarks={benchmarkDefinitions}
         currentBenchmark={currentBenchmark}
@@ -77,7 +83,13 @@ export function App() {
         selectedSystem={selectedSystem}
         onSelectSystem={setSelectedSystem}
       />
-      <main className="mx-auto max-w-7xl px-4 py-10">
+      <main
+        className={
+          currentBenchmark === "time_series"
+            ? "flex min-h-0 w-full flex-1 overflow-hidden px-3 py-4 sm:px-4 lg:px-5"
+            : "mx-auto w-full max-w-7xl flex-1 px-4 py-10"
+        }
+      >
         {currentBenchmark === "time_series" ? (
           <Suspense
             fallback={

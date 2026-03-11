@@ -44,6 +44,7 @@ const sqlViewerTheme = EditorView.theme(
       padding: "0 0.75rem 0 1rem",
     },
     ".cm-scroller": {
+      height: "100%",
       overflow: "auto",
     },
   },
@@ -82,5 +83,5 @@ export function SqlCodeView({ code }: SqlCodeViewProps) {
     }
   }, [code])
 
-  return <div ref={hostRef} aria-label="SQL query viewer" />
+  return <div ref={hostRef} aria-label="SQL query viewer" className="h-full min-h-0" />
 }
