@@ -42,10 +42,6 @@ MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark
 
 
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
-    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
-        # terrible insert performance if primary key or not null constraints are used for eav tables
-        return None if "_eav" in table_name else "time"
-
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.context is not None
