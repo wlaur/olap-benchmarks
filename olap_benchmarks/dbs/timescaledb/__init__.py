@@ -103,16 +103,9 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
             if not self.should_populate():
                 return
 
-        # need to define parts of the schema and insert data in a specific order
-        self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/eav.sql")
-
         input_files = get_time_series_input_files()
 
-        # wide tables are created dynamically, eav tables already exist at this point
         for table_name, fpath in input_files.items():
-            if "eav" in table_name:
-                continue
-
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
@@ -123,13 +116,10 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
 
         for table_name, fpath in input_files.items():
-            # timescaledb needs input data to be sorted by (time, id), the eav parquet files are sorted by (id, time)
-            sort = ["time", "id"] if "eav" in table_name else ["time"]
-
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
-            df = pl.scan_parquet(fpath).sort(*sort).collect()
+            df = pl.scan_parquet(fpath).sort("time").collect()
 
             _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
