@@ -12,7 +12,7 @@ function SkeletonCard() {
 
 export function TimeSeriesPageSkeleton() {
   return (
-    <section className="flex h-full min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
+    <section className="flex min-h-full w-full flex-col gap-4 pb-4">
       <div className="grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]">
         <div className="rounded-3xl border border-slate-800/45 bg-slate-900/55 p-5">
           <Skeleton className="h-3 w-24 rounded-full" />
@@ -66,7 +66,7 @@ export function TimeSeriesPageSkeleton() {
         <SkeletonCard />
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
+      <div className="grid min-h-[44rem] flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
         <section className="flex min-h-0 flex-col rounded-3xl border border-slate-800/45 bg-slate-900/55">
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
             <div>
@@ -100,7 +100,7 @@ export function TimeSeriesPageSkeleton() {
           </div>
         </section>
 
-        <section className="min-h-0">
+        <section className="min-h-[28rem] xl:min-h-0">
           <div className="flex h-full min-h-0 flex-col gap-4 rounded-3xl border border-slate-800/45 bg-slate-900/55 p-5">
             <div className="flex items-start justify-between">
               <div>

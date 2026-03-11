@@ -38,7 +38,7 @@ export function App() {
         <main
           className={
             currentBenchmark === "time_series"
-              ? "flex min-h-0 w-full flex-1 overflow-hidden px-3 py-4 sm:px-4 lg:px-5"
+              ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
               : "mx-auto w-full max-w-7xl flex-1 px-4 py-10"
           }
         >
@@ -115,7 +115,7 @@ export function App() {
       <main
         className={
           currentBenchmark === "time_series"
-            ? "flex min-h-0 w-full flex-1 overflow-hidden px-3 py-4 sm:px-4 lg:px-5"
+            ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
             : "mx-auto w-full max-w-7xl flex-1 px-4 py-10"
         }
       >

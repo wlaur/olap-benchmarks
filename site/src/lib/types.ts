@@ -59,6 +59,16 @@ export interface TimeSeriesRunSummary {
   query_count: number
 }
 
+export interface TimeSeriesOperationSummary {
+  run_id: number
+  db: string
+  db_version: string
+  operation: TimeSeriesOperation
+  started_at: string
+  finished_at: string
+  run_duration_s: number
+}
+
 export interface TimeSeriesQuerySummary {
   query_name: string
   db: string
@@ -67,6 +77,23 @@ export interface TimeSeriesQuerySummary {
   min_duration_s: number
   max_duration_s: number
   iterations: number
+}
+
+export type TimeSeriesOperation = "populate" | "run"
+
+export interface TimeSeriesMetricSample {
+  run_id: number
+  db: string
+  db_version: string
+  operation: TimeSeriesOperation
+  started_at: string
+  finished_at: string
+  sample_time: string
+  elapsed_s: number
+  run_duration_s: number
+  cpu_percent: number
+  mem_mb: number
+  disk_mb: number
 }
 
 export interface QuerySqlEntry {

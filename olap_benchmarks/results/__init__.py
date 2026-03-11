@@ -115,7 +115,7 @@ def publish(revision: Revision = "default") -> Path:
     output_dir = REPO_ROOT / "site" / "public" / "data"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_db_path = output_dir / "results.duckdb"
+    output_db_path = output_dir / "results.db"
     manifest_path = output_dir / "manifest.json"
 
     engine = get_results_engine(read_only=True, db_path=source_db_path)
