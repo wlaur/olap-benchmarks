@@ -10,7 +10,7 @@ import polars as pl
 from sqlalchemy import Connection, text
 
 from ...settings import TableName
-from .binary import write_binary_column_data
+from .binary import serialize_binary_column_data, write_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
     MONETDB_TEMPORARY_DIRECTORY,
@@ -22,23 +22,21 @@ from .utils import (
 
 _LOGGER = logging.getLogger(__name__)
 
+DEFAULT_BATCH_SIZE = 500_000
 
-def insert(
+
+def _insert_eager(
     df: pl.DataFrame,
     table: TableName,
     connection: Connection,
-    primary_key: str | list[str] | None = None,
-    not_null: str | list[str] | None = None,
-    create: bool = True,
-    commit: bool = True,
+    create: bool,
+    commit: bool,
+    primary_key: str | list[str] | None,
+    not_null: str | list[str] | None,
 ) -> None:
     t0 = perf_counter()
 
     if create:
-        # NOTE: when inserting into an existing table, the column order and types must match exactly
-        # NOTE: using (id, time) primary key or not null for large EAV tables makes insertion orders of magnitude slower
-        # using primary key also increases disk usage by 30%, not null does not increase disk usage
-        # query performance is the same even if no primary key or not null constraints are used
         create_table(table, df.schema, connection, primary_key, not_null)
         _LOGGER.info(f"Created table '{table}' with {len(df.columns):_} columns")
 
@@ -77,6 +75,94 @@ def insert(
         f"Inserted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) "
         f"into table {table} in {perf_counter() - t0:_.2f} seconds"
     )
+
+
+def _insert_lazy(
+    df: pl.LazyFrame,
+    table: TableName,
+    connection: Connection,
+    create: bool,
+    commit: bool,
+    primary_key: str | list[str] | None,
+    not_null: str | list[str] | None,
+    batch_size: int,
+) -> None:
+    t0 = perf_counter()
+    schema = df.collect_schema()
+
+    if create:
+        create_table(table, schema, connection, primary_key, not_null)
+        _LOGGER.info(f"Created table '{table}' with {len(schema):_} columns")
+
+    con = get_pymonetdb_connection(connection)
+    ensure_downloader_uploader(con)
+
+    temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
+    temp_dir.mkdir()
+
+    subdir = temp_dir.relative_to(MONETDB_TEMPORARY_DIRECTORY).as_posix()
+    columns = list(schema.names())
+    path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
+
+    column_files: list[Path] = []
+    for idx in range(len(columns)):
+        path = temp_dir / f"{idx}.bin"
+        column_files.append(path)
+
+    total_rows = 0
+
+    try:
+        file_handles = [path.open("wb") for path in column_files]
+
+        try:
+            for batch_idx, batch in enumerate(df.collect_batches(chunk_size=batch_size)):
+                batch_rows = batch.shape[0]
+                total_rows += batch_rows
+
+                for col_idx, col_name in enumerate(columns):
+                    data = serialize_binary_column_data(batch[col_name])
+                    file_handles[col_idx].write(data)
+
+                _LOGGER.info(f"Wrote batch {batch_idx + 1:_} ({batch_rows:_} rows, {total_rows:_} total)")
+        finally:
+            for fh in file_handles:
+                fh.close()
+
+        files_clause = ", ".join(f"'{path_prefix}{subdir}/{path.name}'" for path in column_files)
+        cast(Any, con).execute(
+            f"copy little endian binary into {table} from {files_clause} "
+            f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
+        )
+
+        if commit:
+            con.commit()
+
+    except Exception as e:
+        col_indexes = dict(enumerate(columns))
+        raise ValueError(f"Could not insert binary data for '{table}', columns:\n{col_indexes}\n") from e
+    finally:
+        shutil.rmtree(temp_dir)
+
+    _LOGGER.info(
+        f"Inserted {total_rows:_} rows ({len(columns):_} columns) "
+        f"into table {table} in {perf_counter() - t0:_.2f} seconds"
+    )
+
+
+def insert(
+    df: pl.DataFrame | pl.LazyFrame,
+    table: TableName,
+    connection: Connection,
+    primary_key: str | list[str] | None = None,
+    not_null: str | list[str] | None = None,
+    create: bool = True,
+    commit: bool = True,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+) -> None:
+    if isinstance(df, pl.DataFrame):
+        _insert_eager(df, table, connection, create, commit, primary_key, not_null)
+    else:
+        _insert_lazy(df, table, connection, create, commit, primary_key, not_null, batch_size)
 
 
 def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str]) -> None:

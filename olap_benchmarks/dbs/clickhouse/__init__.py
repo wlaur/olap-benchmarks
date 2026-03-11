@@ -202,7 +202,7 @@ class Clickhouse(Database):
 
     def _get_order_by_columns(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         primary_key: str | list[str] | None,
         not_null: list[str],
     ) -> str | None:
@@ -215,7 +215,8 @@ class Clickhouse(Database):
             else:
                 order_by = None
         elif primary_key is None:
-            order_by = df.columns[0]
+            columns = df.columns if isinstance(df, pl.DataFrame) else list(df.collect_schema().names())
+            order_by = columns[0]
         elif isinstance(primary_key, str):
             order_by = primary_key
         else:
@@ -223,11 +224,16 @@ class Clickhouse(Database):
 
         return order_by
 
-    def _write_single_parquet(self, parent: Path, df: pl.DataFrame) -> Path:
+    def _write_single_parquet(self, parent: Path, df: pl.DataFrame | pl.LazyFrame) -> Path:
         temp_file = parent / f"{uuid.uuid4().hex}.parquet"
-        df.write_parquet(temp_file)
 
-        _LOGGER.info(f"Wrote single Parquet file with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+        if isinstance(df, pl.LazyFrame):
+            df.sink_parquet(temp_file)
+            _LOGGER.info("Wrote single Parquet file via sink_parquet")
+        else:
+            df.write_parquet(temp_file)
+            _LOGGER.info(f"Wrote single Parquet file with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+
         return temp_file
 
     def _write_partitioned_parquet(self, parent: Path, df: pl.DataFrame, partitions: int) -> Path:
@@ -257,14 +263,21 @@ class Clickhouse(Database):
         else:
             raise RuntimeError(f"Invalid value for {p = }")
 
-    def _write_temporary_parquet(self, df: pl.DataFrame, temp_dir: Path, partitions: int | None) -> tuple[Path, str]:
+    def _write_temporary_parquet(
+        self, df: pl.DataFrame | pl.LazyFrame, temp_dir: Path, partitions: int | None
+    ) -> tuple[Path, str]:
         # inserting very large Parquet files in a single chunk causes OOM-related issues,
         # e.g. for Clickbench (7.4 GB Parquet)
         # better to insert as partitioned files instead (using wildcard file('*.parquet'))
+        if partitions is not None and isinstance(df, pl.LazyFrame):
+            _LOGGER.warning("Partitioned insert not supported for LazyFrame, collecting first")
+            df = df.collect()
+
         if partitions is None:
             temp_parquet_path = self._write_single_parquet(temp_dir, df)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix()
         else:
+            assert isinstance(df, pl.DataFrame)
             temp_parquet_path = self._write_partitioned_parquet(temp_dir, df, partitions)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix() + "/*.parquet"
 
@@ -272,7 +285,7 @@ class Clickhouse(Database):
 
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
@@ -284,6 +297,9 @@ class Clickhouse(Database):
 
         if isinstance(not_null, str):
             not_null = [not_null]
+
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
+        columns = list(schema.names())
 
         client = self.get_client()
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
@@ -298,15 +314,15 @@ class Clickhouse(Database):
 
             if not table_exists:
                 columns_def: list[str] = []
-                for name, dtype in df.schema.items():
+                for name, dtype in schema.items():
                     sql_type = get_clickhouse_type(dtype, nullable=name not in not_null)
 
                     columns_def.append(f"`{name}` {sql_type}")
 
-                column_list = ", ".join(f"`{col}`" for col in df.columns if col != "time")
+                column_list = ", ".join(f"`{col}`" for col in columns if col != "time")
 
                 # time is read as epoch integer by default
-                time_col_def = "toDateTime(time) AS time," if "time" in df.columns else ""
+                time_col_def = "toDateTime(time) AS time," if "time" in columns else ""
 
                 order_by = self._get_order_by_columns(df, primary_key, not_null)
                 order_by_clause = f"order by ({order_by})" if order_by is not None else ""

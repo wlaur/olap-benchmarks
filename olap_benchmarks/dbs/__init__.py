@@ -323,7 +323,7 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,

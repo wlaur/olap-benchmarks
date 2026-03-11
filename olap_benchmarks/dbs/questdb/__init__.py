@@ -157,18 +157,29 @@ class QuestDB(Database):
 
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
         batch_size: int | None = None,
         method: Literal["sender", "parquet"] = "parquet",
     ) -> None:
-        df = (
-            df.with_columns(pl.selectors.decimal().cast(pl.Float64))
-            .with_columns(pl.selectors.date().cast(pl.Datetime("us")))
-            .with_columns(pl.selectors.datetime().cast(pl.Datetime("us")))
+        cast_expr = (
+            pl.selectors.decimal().cast(pl.Float64),
+            pl.selectors.date().cast(pl.Datetime("us")),
+            pl.selectors.datetime().cast(pl.Datetime("us")),
         )
+
+        if isinstance(df, pl.LazyFrame):
+            if method == "parquet":
+                df = df.with_columns(*cast_expr)
+                self.insert_parquet_lazy(df, table, primary_key, not_null)
+                return
+
+            _LOGGER.warning("QuestDB LazyFrame insert with sender method requires collecting to DataFrame")
+            df = df.collect().with_columns(*cast_expr)
+        else:
+            df = df.with_columns(*cast_expr)
 
         if method == "sender":
             # much slower than read_parquet (serializes of http or similar)
@@ -266,6 +277,48 @@ class QuestDB(Database):
             parquet_fpath.unlink()
 
         _LOGGER.info(f"Inserted table {table}")
+
+    def insert_parquet_lazy(
+        self,
+        df: pl.LazyFrame,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        parquet_fname = f"{table}_{uuid.uuid4().hex}.parquet"
+        parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname
+
+        df.sink_parquet(parquet_fpath)
+        row_count: int = pl.scan_parquet(parquet_fpath).select(pl.len()).collect().item(0, 0)
+
+        sleep(0.1)
+
+        try:
+            con = self.connect()
+            tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
+
+            if table in tables:
+                initial_count = self.get_count(table)
+                statement = f"""
+                    insert into {table}
+                    select * from read_parquet('{parquet_fname}')
+                    """
+            else:
+                initial_count = 0
+                statement = f"""
+                    create table {table} as (
+                        select * from read_parquet('{parquet_fname}')
+                    )
+                    """
+
+            con.execute(text(statement))
+            con.commit()
+            self.wait_until_count(table, initial_count + row_count)
+
+        finally:
+            parquet_fpath.unlink()
+
+        _LOGGER.info(f"Inserted table {table} ({row_count:_} rows via sink_parquet)")
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
