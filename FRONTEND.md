@@ -13,6 +13,8 @@ Static web app for exploring OLAP benchmark results. Hosted on GitHub Pages, que
 | Data layer         | @duckdb/duckdb-wasm       | `ATTACH` the .duckdb file over HTTP                |
 | Charts             | Recharts                  | D3-based, native React components, ~180KB          |
 | Tables             | TanStack Table v8         | Headless, styled with Tailwind, ~30KB              |
+| Linter / formatter | OxLint + Oxfmt (Oxc)      | Strict config, no semicolons                       |
+| TS compiler        | tsgo                      | Go-based TypeScript compiler                       |
 
 ## Data Flow
 
