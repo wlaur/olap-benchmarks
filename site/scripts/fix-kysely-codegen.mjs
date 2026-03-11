@@ -1,9 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises"
 
-const GENERATED_TYPES_PATH = new URL(
-  "../src/lib/generated/db.ts",
-  import.meta.url,
-)
+const GENERATED_TYPES_PATH = new URL("../src/lib/generated/db.ts", import.meta.url)
 
 const content = await readFile(GENERATED_TYPES_PATH, "utf8")
 const exportedTypeNames = Array.from(

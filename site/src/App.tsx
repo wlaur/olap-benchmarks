@@ -1,8 +1,9 @@
 import { lazy, Suspense } from "react"
+
 import { Navbar } from "./components/layout/Navbar"
+import { useSystem } from "./features/system/SystemContext"
 import { useBenchmarkRoute } from "./hooks/useBenchmarkRoute"
 import { benchmarkDefinitions, getBenchmarkDefinition } from "./lib/benchmarks"
-import { useSystem } from "./features/system/SystemContext"
 import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
 
 const TimeSeriesPage = lazy(async () => {
@@ -13,8 +14,7 @@ const TimeSeriesPage = lazy(async () => {
 export function App() {
   const currentBenchmark = useBenchmarkRoute()
   const benchmark = getBenchmarkDefinition(currentBenchmark)
-  const { systems, selectedSystem, setSelectedSystem, loading, error } =
-    useSystem()
+  const { systems, selectedSystem, setSelectedSystem, loading, error } = useSystem()
 
   if (loading) {
     return (
@@ -28,9 +28,7 @@ export function App() {
           isSystemLoading
         />
         <div className="mx-auto flex max-w-7xl items-center px-4 py-24">
-          <p className="text-sm text-slate-400">
-            Loading completed benchmark data...
-          </p>
+          <p className="text-sm text-slate-400">Loading completed benchmark data...</p>
         </div>
       </div>
     )
@@ -47,9 +45,7 @@ export function App() {
           onSelectSystem={setSelectedSystem}
         />
         <div className="mx-auto max-w-7xl px-4 py-24">
-          <p className="text-sm text-red-300">
-            Failed to load systems: {error}
-          </p>
+          <p className="text-sm text-red-300">Failed to load systems: {error}</p>
         </div>
       </div>
     )
@@ -66,9 +62,7 @@ export function App() {
           onSelectSystem={setSelectedSystem}
         />
         <div className="mx-auto max-w-7xl px-4 py-24">
-          <p className="text-sm text-slate-400">
-            No completed benchmark runs are available yet.
-          </p>
+          <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
         </div>
       </div>
     )
@@ -87,18 +81,13 @@ export function App() {
         {currentBenchmark === "time_series" ? (
           <Suspense
             fallback={
-              <p className="text-sm text-slate-400">
-                Loading time-series visualization...
-              </p>
+              <p className="text-sm text-slate-400">Loading time-series visualization...</p>
             }
           >
             <TimeSeriesPage system={selectedSystem} />
           </Suspense>
         ) : (
-          <BenchmarkPlaceholderPage
-            benchmark={benchmark}
-            system={selectedSystem}
-          />
+          <BenchmarkPlaceholderPage benchmark={benchmark} system={selectedSystem} />
         )}
       </main>
     </div>

@@ -1,6 +1,4 @@
-export function cn(
-  ...classes: Array<string | false | null | undefined>
-): string {
+export function cn(...classes: Array<string | false | null | undefined>): string {
   const names: string[] = []
 
   for (const value of classes) {

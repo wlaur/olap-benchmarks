@@ -22,18 +22,18 @@ export function SystemSelector({
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
         aria-label="System"
-        className="inline-flex min-w-[16rem] max-w-[22rem] items-center justify-between gap-3 rounded-full border border-slate-700/80 bg-slate-900/80 py-2 pr-2.5 pl-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition hover:border-slate-500 focus:border-cyan-400 data-[placeholder]:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex max-w-[22rem] min-w-[16rem] items-center justify-between gap-3 rounded-full border border-slate-700/80 bg-slate-900/80 py-2 pr-2.5 pl-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition outline-none hover:border-slate-500 focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500"
       >
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300">
             <Server className="h-4 w-4" strokeWidth={1.8} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap">
-            <span className="shrink-0 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            <span className="shrink-0 text-[0.7rem] font-semibold tracking-[0.22em] text-slate-500 uppercase">
               System
             </span>
             <span className="h-4 w-px shrink-0 bg-slate-700" />
-            <Select.Value className="block min-w-0 flex-1 truncate whitespace-nowrap text-[1.05rem] font-medium text-slate-100" />
+            <Select.Value className="block min-w-0 flex-1 truncate text-[1.05rem] font-medium whitespace-nowrap text-slate-100" />
           </span>
         </span>
         <Select.Icon className="shrink-0 text-slate-500">
@@ -55,7 +55,7 @@ export function SystemSelector({
               <Select.Item
                 key={system}
                 value={system}
-                className="relative flex cursor-default items-center rounded-2xl py-3 pr-9 pl-3 text-sm font-medium text-slate-200 outline-none transition data-[highlighted]:bg-cyan-400/12 data-[highlighted]:text-cyan-100 data-[state=checked]:bg-slate-900 data-[state=checked]:text-slate-50"
+                className="relative flex cursor-default items-center rounded-2xl py-3 pr-9 pl-3 text-sm font-medium text-slate-200 transition outline-none data-[highlighted]:bg-cyan-400/12 data-[highlighted]:text-cyan-100 data-[state=checked]:bg-slate-900 data-[state=checked]:text-slate-50"
               >
                 <span className="min-w-0 truncate">
                   <Select.ItemText>{system}</Select.ItemText>

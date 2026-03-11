@@ -1,8 +1,9 @@
-import * as duckdb from "@duckdb/duckdb-wasm"
 import { DuckDbDialect } from "@coji/kysely-duckdb-wasm"
-import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url"
+import * as duckdb from "@duckdb/duckdb-wasm"
 import duckdbEhWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url"
+import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url"
 import { Kysely } from "kysely"
+
 import type { DB } from "./generated/db"
 
 const BASE = import.meta.env.BASE_URL

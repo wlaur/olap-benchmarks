@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react"
+
 import {
   defaultBenchmarkId,
   getBenchmarkDefinition,
@@ -29,11 +30,7 @@ function getSnapshot(): BenchmarkSuiteId {
 }
 
 export function useBenchmarkRoute(): BenchmarkSuiteId {
-  const currentBenchmark = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    () => defaultBenchmarkId,
-  )
+  const currentBenchmark = useSyncExternalStore(subscribe, getSnapshot, () => defaultBenchmarkId)
 
   useEffect(() => {
     const expectedHash = getBenchmarkHref(currentBenchmark)
