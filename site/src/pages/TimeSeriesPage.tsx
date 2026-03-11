@@ -23,6 +23,7 @@ import {
   fetchTimeSeriesRunSummaries,
 } from "../lib/queries"
 import type { QueriesManifest, TimeSeriesQuerySummary, TimeSeriesRunSummary } from "../lib/types"
+import { TimeSeriesPageSkeleton } from "./TimeSeriesPageSkeleton"
 
 interface TimeSeriesPageProps {
   system: string
@@ -56,6 +57,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   })
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
   const selection = useSelectionState()
+  const { selectedQuery, setSelectedQuery } = selection
 
   useEffect(() => {
     let cancelled = false
@@ -174,11 +176,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   }))
   const overviewChartHeight = Math.max(120, Math.min(170, runChartData.length * 28 + 28))
 
-  const selectedRow = selection.selectedQuery
-    ? (queryRows.find((r) => r.query_name === selection.selectedQuery) ?? null)
+  const selectedRow = selectedQuery
+    ? (queryRows.find((r) => r.query_name === selectedQuery) ?? null)
     : null
 
-  const selectedSql = state.queriesManifest?.time_series?.[selection.selectedQuery ?? ""] ?? null
+  const selectedSql = state.queriesManifest?.time_series?.[selectedQuery ?? ""] ?? null
 
   function toggleDatabase(database: string) {
     setSelectedDatabases((currentSelection) => {
@@ -190,19 +192,29 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     })
   }
 
+  useEffect(() => {
+    if (selectedQuery === null) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setSelectedQuery(null)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [selectedQuery, setSelectedQuery])
+
   if (state.loading) {
-    return (
-      <section className="flex h-full min-h-0 items-center justify-center">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 px-6 py-5 text-sm text-slate-400">
-          Loading completed time-series runs for {system}...
-        </div>
-      </section>
-    )
+    return <TimeSeriesPageSkeleton />
   }
 
   if (state.error) {
     return (
-      <section className="flex h-full min-h-0 items-center justify-center">
+      <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <div className="rounded-3xl border border-red-500/30 bg-red-950/20 px-6 py-5 text-sm text-red-300">
           Failed to load time-series data: {state.error}
         </div>
@@ -212,7 +224,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
   if (state.runSummaries.length === 0) {
     return (
-      <section className="flex h-full min-h-0 items-center justify-center">
+      <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 px-6 py-5 text-sm text-slate-400">
           No completed time-series runs were found for {system}.
         </div>
@@ -221,7 +233,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+    <section className="flex h-full min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
       <div className="grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <div className="space-y-2">
@@ -256,7 +268,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 to investigate before diving into per-query detail.
               </p>
             </div>
-            <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium text-slate-400">
+            <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
               {includedDatabases.length} of {databases.length} databases
             </div>
           </div>
