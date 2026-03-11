@@ -112,21 +112,15 @@ def _insert_lazy(
     total_rows = 0
 
     try:
-        file_handles = [path.open("wb") for path in column_files]
+        for batch_idx, batch in enumerate(df.collect_batches(chunk_size=batch_size)):
+            batch_rows = batch.shape[0]
+            total_rows += batch_rows
 
-        try:
-            for batch_idx, batch in enumerate(df.collect_batches(chunk_size=batch_size)):
-                batch_rows = batch.shape[0]
-                total_rows += batch_rows
+            for col_name, path in zip(columns, column_files, strict=True):
+                with path.open("ab") as fh:
+                    fh.write(serialize_binary_column_data(batch[col_name]))
 
-                for col_idx, col_name in enumerate(columns):
-                    data = serialize_binary_column_data(batch[col_name])
-                    file_handles[col_idx].write(data)
-
-                _LOGGER.info(f"Wrote batch {batch_idx + 1:_} ({batch_rows:_} rows, {total_rows:_} total)")
-        finally:
-            for fh in file_handles:
-                fh.close()
+            _LOGGER.info(f"Wrote batch {batch_idx + 1:_} ({batch_rows:_} rows, {total_rows:_} total)")
 
         files_clause = ", ".join(f"'{path_prefix}{subdir}/{path.name}'" for path in column_files)
         cast(Any, con).execute(
