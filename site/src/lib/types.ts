@@ -47,3 +47,24 @@ export interface Filters {
   db: string | null
   operation: string | null
 }
+
+export interface TimeSeriesRunSummary {
+  run_id: number
+  db: string
+  db_version: string
+  started_at: string
+  finished_at: string
+  run_duration_s: number
+  median_query_duration_s: number | null
+  query_count: number
+}
+
+export interface TimeSeriesQuerySummary {
+  query_name: string
+  db: string
+  median_duration_s: number
+  avg_duration_s: number
+  min_duration_s: number
+  max_duration_s: number
+  iterations: number
+}

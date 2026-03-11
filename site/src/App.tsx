@@ -1,174 +1,93 @@
-import { useEffect, useState, useCallback } from "react"
-import { createColumnHelper } from "@tanstack/react-table"
-import { SystemSelector } from "./components/filters/SystemSelector"
-import { FilterBar } from "./components/filters/FilterBar"
-import { QueryTable } from "./components/QueryTable"
-import { TimingChart } from "./components/Chart"
-import {
-  fetchSystems,
-  fetchSuites,
-  fetchDatabases,
-  fetchRuns,
-} from "./lib/queries"
-import { query } from "./lib/duckdb"
-import type { ChartPoint, Filters, Run } from "./lib/types"
-
-const columnHelper = createColumnHelper<Run>()
-
-const columns = [
-  columnHelper.accessor("suite", { header: "Suite" }),
-  columnHelper.accessor("db", { header: "Database" }),
-  columnHelper.accessor("db_version", { header: "Version" }),
-  columnHelper.accessor("operation", { header: "Operation" }),
-  columnHelper.accessor("started_at", {
-    header: "Started",
-    cell: (info) => info.getValue(),
-  }),
-  columnHelper.accessor("finished_at", {
-    header: "Finished",
-    cell: (info) => info.getValue(),
-  }),
-  columnHelper.accessor("duration_s", {
-    header: "Duration (s)",
-    cell: (info) => info.getValue().toFixed(1),
-  }),
-]
+import { Navbar } from "./components/layout/Navbar"
+import { useBenchmarkRoute } from "./hooks/useBenchmarkRoute"
+import { benchmarkDefinitions, getBenchmarkDefinition } from "./lib/benchmarks"
+import { useSystem } from "./features/system/SystemContext"
+import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
+import { TimeSeriesPage } from "./pages/TimeSeriesPage"
 
 export function App() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [systems, setSystems] = useState<string[]>([])
-  const [suites, setSuites] = useState<string[]>([])
-  const [databases, setDatabases] = useState<string[]>([])
-  const [runs, setRuns] = useState<Run[]>([])
-  const [chartData, setChartData] = useState<ChartPoint[]>([])
-  const [filters, setFilters] = useState<Filters>({
-    system: null,
-    suite: null,
-    db: null,
-    operation: null,
-  })
-
-  useEffect(() => {
-    fetchSystems()
-      .then((sys) => {
-        setSystems(sys)
-        if (sys.length > 0) {
-          setFilters((f) => ({ ...f, system: sys[0]! }))
-        }
-        setLoading(false)
-      })
-      .catch((err) => {
-        setError(String(err))
-        setLoading(false)
-      })
-  }, [])
-
-  useEffect(() => {
-    if (!filters.system) return
-    fetchSuites(filters.system).then(setSuites)
-    fetchDatabases(filters.system).then(setDatabases)
-  }, [filters.system])
-
-  const loadRuns = useCallback(async () => {
-    if (!filters.system) return
-    const data = await fetchRuns(filters)
-    setRuns(data)
-  }, [filters])
-
-  useEffect(() => {
-    loadRuns()
-  }, [loadRuns])
-
-  useEffect(() => {
-    if (!filters.system) return
-    const sysClause = `system = '${filters.system}'`
-    const suiteClause = filters.suite ? ` AND suite = '${filters.suite}'` : ""
-    const dbClause = filters.db ? ` AND db = '${filters.db}'` : ""
-    query<ChartPoint>(
-      `SELECT db || ' / ' || suite AS name,
-              EXTRACT(EPOCH FROM (finished_at - started_at)) AS duration_s
-       FROM results.run
-       WHERE ${sysClause}${suiteClause}${dbClause}
-         AND operation = 'run' AND status = 'completed' AND finished_at IS NOT NULL
-       ORDER BY duration_s`,
-    ).then(setChartData)
-  }, [filters.system, filters.suite, filters.db])
+  const currentBenchmark = useBenchmarkRoute()
+  const benchmark = getBenchmarkDefinition(currentBenchmark)
+  const { systems, selectedSystem, setSelectedSystem, loading, error } =
+    useSystem()
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-gray-400">Loading DuckDB...</p>
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <Navbar
+          benchmarks={benchmarkDefinitions}
+          currentBenchmark={currentBenchmark}
+          systems={systems}
+          selectedSystem={selectedSystem}
+          onSelectSystem={setSelectedSystem}
+          isSystemLoading
+        />
+        <div className="mx-auto flex max-w-7xl items-center px-4 py-24">
+          <p className="text-sm text-slate-400">
+            Loading completed benchmark data...
+          </p>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-red-400">Error: {error}</p>
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <Navbar
+          benchmarks={benchmarkDefinitions}
+          currentBenchmark={currentBenchmark}
+          systems={systems}
+          selectedSystem={selectedSystem}
+          onSelectSystem={setSelectedSystem}
+        />
+        <div className="mx-auto max-w-7xl px-4 py-24">
+          <p className="text-sm text-red-300">
+            Failed to load systems: {error}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!selectedSystem) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <Navbar
+          benchmarks={benchmarkDefinitions}
+          currentBenchmark={currentBenchmark}
+          systems={systems}
+          selectedSystem={selectedSystem}
+          onSelectSystem={setSelectedSystem}
+        />
+        <div className="mx-auto max-w-7xl px-4 py-24">
+          <p className="text-sm text-slate-400">
+            No completed benchmark runs are available yet.
+          </p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="mb-8 flex items-center gap-3 text-3xl font-bold">
-        <img
-          src={`${import.meta.env.BASE_URL}logo.svg`}
-          alt=""
-          className="h-9 w-9"
-        />
-        OLAP Benchmarks
-      </h1>
-
-      <div className="mb-6 flex flex-wrap gap-4">
-        <SystemSelector
-          systems={systems}
-          selected={filters.system}
-          onChange={(system) =>
-            setFilters({ system, suite: null, db: null, operation: null })
-          }
-        />
-        <FilterBar
-          label="Suite"
-          options={suites}
-          selected={filters.suite}
-          onChange={(suite) => setFilters((f) => ({ ...f, suite }))}
-        />
-        <FilterBar
-          label="Database"
-          options={databases}
-          selected={filters.db}
-          onChange={(db) => setFilters((f) => ({ ...f, db }))}
-        />
-        <FilterBar
-          label="Operation"
-          options={["populate", "run"]}
-          selected={filters.operation}
-          onChange={(operation) => setFilters((f) => ({ ...f, operation }))}
-        />
-      </div>
-
-      {chartData.length > 0 && (
-        <div className="mb-8">
-          <h2 className="mb-4 text-xl font-semibold">
-            Run Duration Comparison
-          </h2>
-          <TimingChart data={chartData} />
-        </div>
-      )}
-
-      <div>
-        <h2 className="mb-4 text-xl font-semibold">Runs ({runs.length})</h2>
-        {runs.length > 0 ? (
-          <QueryTable data={runs} columns={columns} />
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <Navbar
+        benchmarks={benchmarkDefinitions}
+        currentBenchmark={currentBenchmark}
+        systems={systems}
+        selectedSystem={selectedSystem}
+        onSelectSystem={setSelectedSystem}
+      />
+      <main className="mx-auto max-w-7xl px-4 py-10">
+        {currentBenchmark === "time_series" ? (
+          <TimeSeriesPage system={selectedSystem} />
         ) : (
-          <p className="text-gray-500">
-            No runs found for the selected filters.
-          </p>
+          <BenchmarkPlaceholderPage
+            benchmark={benchmark}
+            system={selectedSystem}
+          />
         )}
-      </div>
+      </main>
     </div>
   )
 }
