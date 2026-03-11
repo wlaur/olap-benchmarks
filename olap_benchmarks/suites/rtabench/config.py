@@ -165,7 +165,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("rtabench")
 
         for table_name in RTABENCH_SCHEMAS:
-            df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+            df = pl.scan_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)

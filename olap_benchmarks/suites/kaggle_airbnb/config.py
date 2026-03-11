@@ -114,7 +114,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("kaggle_airbnb")
 
         for table_name in KAGGLE_AIRBNB_TABLES:
-            df = pl.read_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+            df = pl.scan_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)
