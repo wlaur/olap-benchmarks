@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 @keyframes panel-enter {
   from {
     opacity: 0;
