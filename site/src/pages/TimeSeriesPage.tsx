@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useEffectEvent, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { createColumnHelper } from "@tanstack/react-table"
 import {
   Bar,
@@ -84,33 +84,6 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     querySummaries: [],
   })
 
-  const applyLoadedData = useEffectEvent(
-    (
-      runSummaries: TimeSeriesRunSummary[],
-      querySummaries: TimeSeriesQuerySummary[],
-    ) => {
-      startTransition(() => {
-        setState({
-          loading: false,
-          error: null,
-          runSummaries,
-          querySummaries,
-        })
-      })
-    },
-  )
-
-  const applyLoadError = useEffectEvent((nextError: unknown) => {
-    startTransition(() => {
-      setState({
-        loading: false,
-        error: String(nextError),
-        runSummaries: [],
-        querySummaries: [],
-      })
-    })
-  })
-
   useEffect(() => {
     let cancelled = false
 
@@ -127,17 +100,33 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     ])
       .then(([runSummaries, querySummaries]) => {
         if (cancelled) return
-        applyLoadedData(runSummaries, querySummaries)
+
+        startTransition(() => {
+          setState({
+            loading: false,
+            error: null,
+            runSummaries,
+            querySummaries,
+          })
+        })
       })
       .catch((nextError) => {
         if (cancelled) return
-        applyLoadError(nextError)
+
+        startTransition(() => {
+          setState({
+            loading: false,
+            error: String(nextError),
+            runSummaries: [],
+            querySummaries: [],
+          })
+        })
       })
 
     return () => {
       cancelled = true
     }
-  }, [applyLoadedData, applyLoadError, system])
+  }, [system])
 
   const databases = Array.from(
     new Set(state.runSummaries.map((run) => run.db)),
