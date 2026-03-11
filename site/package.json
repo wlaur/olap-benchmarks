@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "lint": "oxlint",
     "fmt": "oxfmt --write src/",
+    "fmt:check": "oxfmt --check src/",
     "check": "tsgo --noEmit"
   },
   "dependencies": {
