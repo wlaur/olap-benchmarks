@@ -20,44 +20,18 @@ const columns = [
   columnHelper.accessor("db", { header: "Database" }),
   columnHelper.accessor("db_version", { header: "Version" }),
   columnHelper.accessor("operation", { header: "Operation" }),
-  columnHelper.accessor("status", {
-    header: "Status",
-    cell: (info) => {
-      const status = info.getValue()
-      const color =
-        status === "completed"
-          ? "text-green-400"
-          : status === "failed"
-            ? "text-red-400"
-            : "text-yellow-400"
-      return <span className={color}>{status}</span>
-    },
-  }),
   columnHelper.accessor("started_at", {
     header: "Started",
-    cell: (info) => {
-      const val = info.getValue()
-      return val ? new Date(val).toLocaleString() : ""
-    },
+    cell: (info) => info.getValue(),
   }),
-  columnHelper.accessor(
-    (row) => {
-      if (!row.started_at || !row.finished_at) return null
-      return (
-        (new Date(row.finished_at).getTime() -
-          new Date(row.started_at).getTime()) /
-        1000
-      )
-    },
-    {
-      id: "duration",
-      header: "Duration (s)",
-      cell: (info) => {
-        const val = info.getValue()
-        return val !== null && val !== undefined ? val.toFixed(1) : "—"
-      },
-    },
-  ),
+  columnHelper.accessor("finished_at", {
+    header: "Finished",
+    cell: (info) => info.getValue(),
+  }),
+  columnHelper.accessor("duration_s", {
+    header: "Duration (s)",
+    cell: (info) => info.getValue().toFixed(1),
+  }),
 ]
 
 export function App() {
