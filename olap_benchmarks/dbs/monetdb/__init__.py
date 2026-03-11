@@ -6,11 +6,20 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, TableName
-from ...suites.kaggle_airbnb.config import KaggleAirbnb
-from ...suites.time_series.config import TimeSeries
+from ...suites.clickbench.config import Clickbench
+from ...suites.kaggle_airbnb.config import KAGGLE_AIRBNB_TABLES, KaggleAirbnb
+from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
 from .fetch import fetch_binary, fetch_pymonetdb
-from .insert import insert, upsert
+from .insert import (
+    DEFAULT_LAZY_WRITE,
+    ColumnGroupWrite,
+    LazyWrite,
+    MonetDBInsertKwargs,
+    RowBatchWrite,
+    insert,
+    upsert,
+)
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import get_pymonetdb_connection
 
@@ -43,6 +52,34 @@ MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark
 
 
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
+    def insert_kwargs(self) -> MonetDBInsertKwargs:
+        return {"lazy_write": ColumnGroupWrite(group_size=10)}
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.initialize_schema("time_series")
+        insert_kwargs = self.insert_kwargs()
+
+        for table_name, fpath in get_time_series_input_files().items():
+            primary_key = self.get_primary_key(table_name)
+            not_null = self.get_not_null(table_name)
+            df = pl.scan_parquet(fpath)
+
+            with self.db.phase_context("insert", table_name=table_name):
+                self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **insert_kwargs)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.context is not None
@@ -53,7 +90,59 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         return {"method": "pymonetdb"}
 
 
+class MonetDBClickbench(Clickbench["MonetDB"]):
+    def insert_kwargs(self) -> MonetDBInsertKwargs:
+        return {"lazy_write": RowBatchWrite()}
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.initialize_schema("clickbench")
+        df = self.load_dataset()
+        insert_kwargs = self.insert_kwargs()
+        _LOGGER.info("Loaded clickbench dataset (lazy)")
+
+        with self.db.phase_context("insert", table_name="hits"):
+            self.db.insert(df, "hits", **insert_kwargs)
+
+        _LOGGER.info(f"Inserted clickbench table for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+
 class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
+    def insert_kwargs(self) -> MonetDBInsertKwargs:
+        return {"lazy_write": RowBatchWrite()}
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.initialize_schema("kaggle_airbnb")
+        insert_kwargs = self.insert_kwargs()
+
+        for table_name in KAGGLE_AIRBNB_TABLES:
+            df = pl.scan_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+
+            with self.db.phase_context("insert", table_name=table_name):
+                self.db.insert(df, table_name, **insert_kwargs)
+                _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        _LOGGER.info(f"Inserted all kaggle_airbnb tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.context is not None
@@ -154,6 +243,7 @@ class MonetDB(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        lazy_write: LazyWrite = DEFAULT_LAZY_WRITE,
     ) -> None:
         result = self.connect().execute(
             text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
@@ -162,13 +252,17 @@ class MonetDB(Database):
         exists = bool(result.scalar())
 
         try:
-            return insert(df, table, self.connect(), primary_key, not_null, create=not exists)
+            return insert(df, table, self.connect(), primary_key, not_null, create=not exists, lazy_write=lazy_write)
         except Exception:
             self.rollback()
             raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)
+
+    @property
+    def clickbench(self) -> MonetDBClickbench:
+        return MonetDBClickbench(db=self)
 
     @property
     def time_series(self) -> MonetDBTimeSeries:
