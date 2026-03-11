@@ -3,6 +3,7 @@
   "env": {
     "browser": true
   },
+  "ignorePatterns": ["dist"],
   "plugins": ["oxc", "typescript", "unicorn", "react", "react-perf"],
   "settings": {
     "react": {
