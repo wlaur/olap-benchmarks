@@ -37,17 +37,10 @@ TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
 assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
 
-EAV_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
-    "time": pl.Datetime("ms"),
-    "id": pl.Int16,
-    "value": pl.Float32,
-}
-
-
 def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl.DataType]]]:
-    return {f"data_{size}_eav": EAV_SCHEMA for size in TIME_SERIES_DATASET_SIZES} | {
+    return {
         f"data_{size}_wide": pl.read_parquet_schema(
-            SETTINGS.input_data_directory / "time_series" / get_dataset_name("wide", rows, cols)
+            SETTINGS.input_data_directory / "time_series" / get_dataset_name(rows, cols)
         )
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     }
@@ -55,10 +48,7 @@ def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl
 
 def get_time_series_input_files() -> dict[str, Path]:
     return {
-        f"data_{size}_wide": SETTINGS.input_data_directory / "time_series" / get_dataset_name("wide", rows, cols)
-        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
-    } | {
-        f"data_{size}_eav": SETTINGS.input_data_directory / "time_series" / get_dataset_name("eav", rows, cols)
+        f"data_{size}_wide": SETTINGS.input_data_directory / "time_series" / get_dataset_name(rows, cols)
         for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
     }
 
@@ -196,46 +186,16 @@ def _add_downtime_periods(
     return df
 
 
-def write_eav_dataset(fpath: Path, overwrite: bool = False) -> None:
-    eav_fpath = fpath.with_name(fpath.name.replace("_wide_", "_eav_"))
-
-    if eav_fpath.is_file() and not overwrite:
-        return
-
-    df = pl.scan_parquet(fpath)
-
-    columns = df.collect_schema().names()
-
-    assert columns[0] == "time"
-
-    columns.pop(0)
-
-    col_id_map = {n: str(idx) for idx, n in enumerate(columns)}
-    df = df.rename(col_id_map)
-
-    # boolean is converted to float32 (0.0 and 1.0)
-    # sorted by id, time (this is not optimal for all databases when inserting, can be sorted again if necessary)
-    df.unpivot(index="time", variable_name="id", value_name="value").sort("id", "time").with_columns(
-        pl.col.id.cast(pl.Int16), pl.col.value.cast(pl.Float32)
-    ).sink_parquet(eav_fpath)
-
-    _LOGGER.info(f"Wrote EAV dataset {eav_fpath.name}")
-
-
-def get_dataset_name(orientation: Literal["wide", "eav"], rows: int, cols: int) -> str:
-    return f"data_{orientation}_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
+def get_dataset_name(rows: int, cols: int) -> str:
+    return f"data_wide_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
 
 
 def prepare_data(overwrite: bool = False) -> None:
     output_directory = SETTINGS.input_data_directory / "time_series"
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    file_paths: list[Path] = []
-
-    # TODO: make a separate benchmark for very wide data (only use EAV for timescaledb)
     for rows, cols in TIME_SERIES_DATASET_SIZES.values():
-        fpath = output_directory / get_dataset_name("wide", rows, cols)
-        file_paths.append(fpath)
+        fpath = output_directory / get_dataset_name(rows, cols)
 
         if fpath.is_file() and not overwrite:
             continue
@@ -245,9 +205,6 @@ def prepare_data(overwrite: bool = False) -> None:
 
         _LOGGER.info(f"Wrote dataset {fpath.name}")
 
-    for fpath in file_paths:
-        write_eav_dataset(fpath, overwrite)
-
 
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "time_series"
@@ -255,9 +212,8 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
         counts: dict[TableName, int] = {}
 
-        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items():
+        for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items():
             counts[f"data_{size}_wide"] = rows
-            counts[f"data_{size}_eav"] = rows * cols
 
         return counts
 
@@ -266,7 +222,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return None
 
     def get_not_null(self, table_name: TableName) -> str | list[str] | None:
-        return ["time", "id"] if "_eav" in table_name else "time"
+        return "time"
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:

@@ -293,13 +293,6 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
     def index_tables(self) -> None:
         con = self.db.connect()
 
-        # too expensive to create normal b-tree index on (id, time) or (time, id), use brin (block range index) instead
-        con.execute(text("CREATE INDEX data_small_eav_index ON data_small_eav using brin(id)"))
-        _LOGGER.info("Indexed data_small_eav")
-
-        con.execute(text("CREATE INDEX data_large_eav_index ON data_large_eav using brin(id)"))
-        _LOGGER.info("Indexed data_large_eav")
-
         con.execute(text("CREATE INDEX data_small_wide_index ON data_small_wide (time)"))
         _LOGGER.info("Indexed data_small_wide")
 
@@ -316,14 +309,6 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
 
         if restart:
             self.db.restart_event()
-
-    def include_query(self, query_name: str) -> bool:
-        # too slow
-        if "latest_time_range" in query_name and "eav" in query_name:
-            _LOGGER.warning(f"Skipping query '{query_name}'")
-            return False
-
-        return True
 
 
 class Postgres(Database):
