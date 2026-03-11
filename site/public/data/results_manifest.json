@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-03-07T15:19:53.104534+00:00",
+  "source_database": "/Users/williamlauren/repos/olap-benchmarks/results/results.db",
+  "schema_version": 3,
+  "table_counts": {
+    "run": 0,
+    "run_step": 0,
+    "run_metric": 0
+  }
+}
