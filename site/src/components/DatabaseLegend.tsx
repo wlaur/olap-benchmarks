@@ -1,9 +1,10 @@
-interface DatabaseLegendProps {
+export function DatabaseLegend({
+  databases,
+  databaseColors,
+}: {
   databases: string[]
   databaseColors: Record<string, string>
-}
-
-export function DatabaseLegend({ databases, databaseColors }: DatabaseLegendProps) {
+}) {
   return (
     <div className="flex flex-wrap gap-4">
       {databases.map((db) => (
