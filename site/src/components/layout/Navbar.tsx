@@ -25,7 +25,7 @@ export function Navbar({
   return (
     <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-5">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
             <img
               src={`${import.meta.env.BASE_URL}logo.svg`}
@@ -42,7 +42,7 @@ export function Navbar({
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 lg:items-end">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <nav className="flex flex-wrap gap-2">
               {benchmarks.map((benchmark) => {
                 const isActive = benchmark.id === currentBenchmark
@@ -62,18 +62,20 @@ export function Navbar({
               })}
             </nav>
 
-            {systems.length > 0 ? (
-              <SystemSelector
-                systems={systems}
-                selected={selectedSystem}
-                onChange={onSelectSystem}
-                disabled={isSystemLoading}
-              />
-            ) : (
-              <p className="text-sm text-slate-500">
-                No completed systems found.
-              </p>
-            )}
+            <div className="flex justify-start lg:justify-end">
+              {systems.length > 0 ? (
+                <SystemSelector
+                  systems={systems}
+                  selected={selectedSystem}
+                  onChange={onSelectSystem}
+                  disabled={isSystemLoading}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No completed systems found.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
