@@ -1,14 +1,32 @@
 {
-  "name": "olap_benchmarks",
+  "name": "olap-benchmarks",
+  "private": true,
   "type": "module",
-  "version": "0.0.1",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
-    "preview": "astro preview",
-    "astro": "astro"
+    "dev": "vite",
+    "build": "tsgo && vite build",
+    "preview": "vite preview",
+    "lint": "oxlint",
+    "fmt": "oxfmt --write src/",
+    "check": "tsgo --noEmit"
   },
   "dependencies": {
-    "astro": "^5.12.9"
+    "@duckdb/duckdb-wasm": "^1.29.0",
+    "@tanstack/react-table": "^8.21.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^2.15.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@typescript/native-preview": "latest",
+    "oxlint": "^1.1.0",
+    "oxfmt": "^0.1.0",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.4",
+    "@vitejs/plugin-react": "^4.4.1"
   }
 }
