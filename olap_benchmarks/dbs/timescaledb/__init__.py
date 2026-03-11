@@ -19,7 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 
 VERSION = "2.25.0"
 
-DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg16"
+DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg18"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
 
 
