@@ -108,10 +108,11 @@ export function QueryDetailPanel({
             <YAxis
               type="category"
               dataKey="db"
-              width={100}
+              width={132}
               tick={{ fill: "#cbd5e1", fontSize: 12 }}
               axisLine={{ stroke: "#334155" }}
               tickLine={{ stroke: "#334155" }}
+              tickFormatter={truncateAxisLabel}
             />
             <Tooltip
               cursor={{ fill: "rgba(15, 23, 42, 0.45)" }}
@@ -173,4 +174,10 @@ export function QueryDetailPanel({
       )}
     </div>
   )
+}
+
+function truncateAxisLabel(value: string): string {
+  const maxLength = 18
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength - 3)}...`
 }
