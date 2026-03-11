@@ -1,5 +1,14 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "browser": true
+  },
+  "plugins": ["oxc", "typescript", "unicorn", "react", "react-perf"],
+  "settings": {
+    "react": {
+      "version": "19.2.4"
+    }
+  },
   "rules": {
     "no-unused-vars": "error",
     "no-console": "warn",
@@ -7,6 +16,11 @@
     "no-var": "error",
     "prefer-const": "error",
     "no-implicit-coercion": "error",
-    "no-shadow": "error"
+    "no-shadow": "error",
+    "react/exhaustive-deps": "error",
+    "react/rules-of-hooks": "error",
+    "react/jsx-no-constructed-context-values": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/switch-exhaustiveness-check": "warn"
   }
 }
