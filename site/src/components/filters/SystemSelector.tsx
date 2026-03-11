@@ -22,20 +22,21 @@ export function SystemSelector({
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
         aria-label="System"
-        className="inline-flex min-w-[12rem] max-w-[14rem] items-center justify-between gap-2 rounded-full border border-slate-700/80 bg-slate-900/80 py-1.5 pr-2.5 pl-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition hover:border-slate-500 focus:border-cyan-400 data-[placeholder]:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex min-w-[16rem] max-w-[22rem] items-center justify-between gap-3 rounded-full border border-slate-700/80 bg-slate-900/80 py-2 pr-2.5 pl-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition hover:border-slate-500 focus:border-cyan-400 data-[placeholder]:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <span className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300">
             <Server className="h-4 w-4" strokeWidth={1.8} />
           </span>
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <span className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap">
+            <span className="shrink-0 text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-slate-500">
               System
             </span>
-            <Select.Value className="truncate text-sm font-medium text-slate-100" />
+            <span className="h-4 w-px shrink-0 bg-slate-700" />
+            <Select.Value className="block min-w-0 flex-1 truncate whitespace-nowrap text-[1.05rem] font-medium text-slate-100" />
           </span>
         </span>
-        <Select.Icon className="text-slate-500">
+        <Select.Icon className="shrink-0 text-slate-500">
           <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
         </Select.Icon>
       </Select.Trigger>
