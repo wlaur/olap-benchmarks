@@ -4,6 +4,7 @@ import {
   type BenchmarkSuiteId,
 } from "../../lib/benchmarks"
 import { SystemSelector } from "../filters/SystemSelector"
+import { Skeleton } from "../Skeleton"
 
 interface NavbarProps {
   benchmarks: BenchmarkDefinition[]
@@ -53,7 +54,9 @@ export function Navbar({
           </div>
 
           <div className="flex shrink-0 justify-end">
-            {systems.length > 0 ? (
+            {isSystemLoading ? (
+              <Skeleton className="h-12 w-[19rem] rounded-full" />
+            ) : systems.length > 0 ? (
               <SystemSelector
                 systems={systems}
                 selected={selectedSystem}
