@@ -21,7 +21,7 @@ export function InlineDurationBars({
   const range = logMax - LOG_MIN
 
   return (
-    <svg width="100%" height={height} className="min-w-[140px]">
+    <svg width="100%" height={height} className="min-w-[110px]">
       {databases.map((db, idx) => {
         const val = byDatabase[db]
         if (val === null || val === undefined) return null

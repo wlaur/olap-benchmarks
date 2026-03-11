@@ -55,7 +55,7 @@ export function QueryDetailPanel({
   const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
 
   return (
-    <div className="animate-panel-enter space-y-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+    <div className="animate-panel-enter flex h-full min-h-0 flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
       <div className="flex items-start justify-between">
         <div>
           <h4 className="text-lg font-semibold text-slate-50">{row.query_label}</h4>
@@ -72,8 +72,8 @@ export function QueryDetailPanel({
         </button>
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-        <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 36)}>
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+        <ResponsiveContainer width="100%" height={Math.max(170, chartData.length * 30)}>
           <BarChart
             data={chartData}
             layout="vertical"
@@ -117,8 +117,8 @@ export function QueryDetailPanel({
       </div>
 
       {hasTabs ? (
-        <div className="rounded-xl border border-slate-700 bg-slate-950">
-          <div className="flex gap-1 border-b border-slate-800 px-4 py-2">
+        <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-700 bg-slate-950">
+          <div className="flex shrink-0 gap-1 border-b border-slate-800 px-4 py-2">
             {sql?.sql !== null ? (
               <button
                 className={
@@ -145,9 +145,15 @@ export function QueryDetailPanel({
               </button>
             ))}
           </div>
-          <SqlCodeView code={activeSql ?? "No SQL available"} />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SqlCodeView code={activeSql ?? "No SQL available"} />
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 px-6 text-center text-sm text-slate-500">
+          No SQL available for this query.
+        </div>
+      )}
     </div>
   )
 }
