@@ -1,9 +1,14 @@
+import { lazy, Suspense } from "react"
 import { Navbar } from "./components/layout/Navbar"
 import { useBenchmarkRoute } from "./hooks/useBenchmarkRoute"
 import { benchmarkDefinitions, getBenchmarkDefinition } from "./lib/benchmarks"
 import { useSystem } from "./features/system/SystemContext"
 import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
-import { TimeSeriesPage } from "./pages/TimeSeriesPage"
+
+const TimeSeriesPage = lazy(async () => {
+  const module = await import("./pages/TimeSeriesPage")
+  return { default: module.TimeSeriesPage }
+})
 
 export function App() {
   const currentBenchmark = useBenchmarkRoute()
@@ -80,7 +85,15 @@ export function App() {
       />
       <main className="mx-auto max-w-7xl px-4 py-10">
         {currentBenchmark === "time_series" ? (
-          <TimeSeriesPage system={selectedSystem} />
+          <Suspense
+            fallback={
+              <p className="text-sm text-slate-400">
+                Loading time-series visualization...
+              </p>
+            }
+          >
+            <TimeSeriesPage system={selectedSystem} />
+          </Suspense>
         ) : (
           <BenchmarkPlaceholderPage
             benchmark={benchmark}
