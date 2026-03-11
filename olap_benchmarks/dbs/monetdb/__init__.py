@@ -124,6 +124,14 @@ class MonetDB(Database):
         else:
             raise ValueError(f"Invalid method: '{method}'")
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select name as table_name from sys.tables where system = false",
+            schema={"table_name": pl.String},
+            method="pymonetdb",
+        )
+        return set(df.get_column("table_name").to_list())
+
     def insert(
         self,
         df: pl.DataFrame | pl.LazyFrame,
@@ -131,12 +139,23 @@ class MonetDB(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
-        result = self.connect().execute(
-            text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
-        )
+        try:
+            result = self.connect().execute(
+                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
+            )
+        except Exception:
+            self.rollback()
+            result = self.connect(reconnect=True).execute(
+                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
+            )
+
         exists = bool(result.scalar())
 
-        return insert(df, table, self.connect(), primary_key, not_null, create=not exists)
+        try:
+            return insert(df, table, self.connect(), primary_key, not_null, create=not exists)
+        except Exception:
+            self.rollback()
+            raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)

@@ -103,6 +103,14 @@ class DuckDB(Database):
 
         return df
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select table_name from information_schema.tables "
+            "where table_schema = 'main' and table_type = 'BASE TABLE'",
+            schema={"table_name": pl.String},
+        )
+        return set(df.get_column("table_name").to_list())
+
     def insert(
         self,
         df: pl.DataFrame | pl.LazyFrame,
