@@ -273,7 +273,7 @@ class PostgresClickbench(Clickbench["Postgres"]):
 
         df = df.select(columns_ordered)
 
-        _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+        _LOGGER.info("Loaded clickbench dataset (lazy)")
 
         with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
@@ -448,7 +448,7 @@ class Postgres(Database):
 
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
@@ -456,17 +456,24 @@ class Postgres(Database):
         # timescale-parallel-copy also works with normal postgres, and should be faster than \copy or similar
         con = self.connect()
 
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
+
         if not table_exists(con, table):
-            self.create_table(df.schema, table, primary_key, not_null)
+            self.create_table(schema, table, primary_key, not_null)
 
         temp_dir = SETTINGS.temporary_directory / "postgres/data"
 
         temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.csv"
         temp_file_str = temp_file.resolve().as_posix()
 
-        df.write_csv(temp_file)
-
-        _LOGGER.info(f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy")
+        if isinstance(df, pl.LazyFrame):
+            df.sink_csv(temp_file)
+            _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
+        else:
+            df.write_csv(temp_file)
+            _LOGGER.info(
+                f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
+            )
 
         db_host = "localhost"
         db_name = "postgres"

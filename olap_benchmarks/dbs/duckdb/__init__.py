@@ -105,7 +105,7 @@ class DuckDB(Database):
 
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
@@ -123,12 +123,14 @@ class DuckDB(Database):
         assert result is not None
         table_exists = result[0] > 0
 
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
+
         if not table_exists:
             not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
             primary_keys = [primary_key] if isinstance(primary_key, str) else (primary_key or [])
 
             col_defs: list[str] = []
-            for name, dtype in df.schema.items():
+            for name, dtype in schema.items():
                 duck_type = polars_dtype_to_duckdb(dtype)
                 constraints: list[str] = []
                 if name in not_null_cols:
@@ -141,7 +143,19 @@ class DuckDB(Database):
             ddl = f"create table {table} (\n  " + ",\n  ".join(col_defs) + pk_clause + "\n)"
             con.execute(ddl)
 
-        if in_memory:
+        if isinstance(df, pl.LazyFrame):
+            if in_memory:
+                raise ValueError("in_memory=True is not compatible with LazyFrame input")
+
+            fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
+            df.sink_parquet(fpath)
+            _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
+
+            try:
+                con.execute(f"insert into {table} select * from '{fpath.as_posix()}'")
+            finally:
+                fpath.unlink()
+        elif in_memory:
             con.register("source", df)
             _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 

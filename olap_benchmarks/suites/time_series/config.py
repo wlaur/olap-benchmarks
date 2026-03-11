@@ -283,7 +283,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
-            df = pl.read_parquet(fpath)
+            df = pl.scan_parquet(fpath)
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)

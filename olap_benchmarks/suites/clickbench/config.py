@@ -26,7 +26,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     def expected_table_row_counts(self) -> dict[TableName, int]:
         return {"hits": self.parquet_row_count(SETTINGS.input_data_directory / "clickbench/hits.parquet")}
 
-    def load_dataset(self) -> pl.DataFrame:
+    def load_dataset(self) -> pl.LazyFrame:
         # parquet file stores these as integers, the schema expects correct dtypes
         timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
         date_columns = ["EventDate"]
@@ -35,7 +35,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
             pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
             .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
             .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
-        ).collect()
+        )
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:
@@ -54,7 +54,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
         # to and from the database, so this is appropriate,
         # although not directly comparable with the insert times from the official clickbench results
         df = self.load_dataset()
-        _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+        _LOGGER.info("Loaded clickbench dataset (lazy)")
 
         with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
