@@ -1,4 +1,3 @@
-import { createColumnHelper } from "@tanstack/react-table"
 import { startTransition, useEffect, useMemo, useState } from "react"
 import {
   Bar,
@@ -15,7 +14,6 @@ import { DatabaseLegend } from "../components/DatabaseLegend"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
-import { QueryTable } from "../components/QueryTable"
 import { StatCard } from "../components/StatCard"
 import { useSelectionState } from "../hooks/useSelectionState"
 import { formatDurationSeconds } from "../lib/format"
@@ -38,30 +36,15 @@ interface TimeSeriesPageState {
   queriesManifest: QueriesManifest | null
 }
 
+interface DatabaseAggregateStats {
+  db: string
+  score: number | null
+  wins: number
+}
+
 const LOG_FLOOR = 1e-6
 
 const DATABASE_COLORS = ["#38bdf8", "#f97316", "#34d399", "#facc15", "#f472b6", "#a78bfa"]
-
-const runColumnHelper = createColumnHelper<TimeSeriesRunSummary>()
-
-const RUN_COLUMNS = [
-  runColumnHelper.accessor("db", { header: "Database" }),
-  runColumnHelper.accessor("db_version", { header: "Version" }),
-  runColumnHelper.accessor("started_at", { header: "Started" }),
-  runColumnHelper.accessor("finished_at", { header: "Finished" }),
-  runColumnHelper.accessor("run_duration_s", {
-    header: "Run Duration",
-    cell: (info) => formatDurationSeconds(info.getValue()),
-  }),
-  runColumnHelper.accessor("median_query_duration_s", {
-    header: "Median Query",
-    cell: (info) => {
-      const value = info.getValue()
-      return value === null ? "—" : formatDurationSeconds(value)
-    },
-  }),
-  runColumnHelper.accessor("query_count", { header: "Queries" }),
-]
 
 export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   const [state, setState] = useState<TimeSeriesPageState>({
@@ -166,22 +149,24 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     }
     return max
   }, LOG_FLOOR)
+  const databaseAggregateStats = buildDatabaseAggregateStats(queryRows, includedDatabases)
+  const scoreLeader =
+    databaseAggregateStats
+      .filter((entry) => entry.score !== null)
+      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))[0] ?? null
+  const winsLeader =
+    [...databaseAggregateStats].sort(
+      (left, right) => right.wins - left.wins || left.db.localeCompare(right.db),
+    )[0] ?? null
+  const widestSpreadRow =
+    [...queryRows].sort((left, right) => right.spread_ratio - left.spread_ratio)[0] ?? null
 
   const fastestRun = filteredRunSummaries[0] ?? null
-  const slowestQuery = filteredQuerySummaries.reduce<TimeSeriesQuerySummary | null>(
-    (currentSlowest, qs) => {
-      if (!currentSlowest || qs.median_duration_s > currentSlowest.median_duration_s) {
-        return qs
-      }
-      return currentSlowest
-    },
-    null,
-  )
   const queryCount = new Set(filteredQuerySummaries.map((row) => row.query_name)).size
 
   const runChartData = filteredRunSummaries.map((run) => ({
     db: run.db,
-    duration_s: Math.max(run.run_duration_s, LOG_FLOOR),
+    duration_s: run.run_duration_s,
     fill: databaseColors[run.db] ?? "#94a3b8",
   }))
 
@@ -201,104 +186,91 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     })
   }
 
-  return (
-    <section className="space-y-10">
-      <header className="max-w-4xl space-y-4">
-        <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">Time Series</p>
-        <h2 className="text-4xl font-semibold tracking-tight text-slate-50">
-          Query-by-query latency comparison
-        </h2>
-        <p className="text-lg leading-8 text-slate-300">
-          Click any query row to see a detailed comparison across databases with the actual SQL.
-          Hover to highlight.
-        </p>
-      </header>
+  if (state.loading) {
+    return (
+      <section className="flex h-full min-h-0 items-center justify-center">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 px-6 py-5 text-sm text-slate-400">
+          Loading completed time-series runs for {system}...
+        </div>
+      </section>
+    )
+  }
 
-      {state.loading ? (
-        <p className="text-sm text-slate-400">Loading completed time-series runs for {system}...</p>
-      ) : null}
+  if (state.error) {
+    return (
+      <section className="flex h-full min-h-0 items-center justify-center">
+        <div className="rounded-3xl border border-red-500/30 bg-red-950/20 px-6 py-5 text-sm text-red-300">
+          Failed to load time-series data: {state.error}
+        </div>
+      </section>
+    )
+  }
 
-      {state.error ? (
-        <p className="text-sm text-red-300">Failed to load time-series data: {state.error}</p>
-      ) : null}
-
-      {!state.loading && !state.error && state.runSummaries.length === 0 ? (
-        <p className="text-sm text-slate-400">
+  if (state.runSummaries.length === 0) {
+    return (
+      <section className="flex h-full min-h-0 items-center justify-center">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 px-6 py-5 text-sm text-slate-400">
           No completed time-series runs were found for {system}.
-        </p>
-      ) : null}
+        </div>
+      </section>
+    )
+  }
 
-      {!state.loading && !state.error && state.runSummaries.length > 0 ? (
-        <>
-          <DatabaseMultiSelect
-            databases={databases}
-            selectedDatabases={includedDatabases}
-            onSelectAll={() => setSelectedDatabases(databases)}
-            onToggleDatabase={toggleDatabase}
-          />
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="System"
-              value={system}
-              detail="Global app scope. Cross-system comparisons stay out of the UI."
-            />
-            <StatCard
-              label="Completed Runs"
-              value={String(filteredRunSummaries.length)}
-              detail={`${includedDatabases.length} databases across ${queryCount} benchmark queries.`}
-            />
-            <StatCard
-              label="Fastest Full Run"
-              value={
-                fastestRun
-                  ? `${fastestRun.db} · ${formatDurationSeconds(fastestRun.run_duration_s)}`
-                  : "—"
-              }
-              detail={
-                fastestRun?.median_query_duration_s !== null &&
-                fastestRun?.median_query_duration_s !== undefined
-                  ? `Median query ${formatDurationSeconds(fastestRun.median_query_duration_s)}`
-                  : fastestRun
-                    ? "Median query unavailable"
-                    : undefined
-              }
-            />
-            <StatCard
-              label="Slowest Query Median"
-              value={slowestQuery ? formatDurationSeconds(slowestQuery.median_duration_s) : "—"}
-              detail={
-                slowestQuery
-                  ? `${formatTimeSeriesQueryName(slowestQuery.query_name).queryLabel} on ${slowestQuery.db}`
-                  : undefined
-              }
-            />
+  return (
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <div className="grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <div className="space-y-2">
+            <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
+              Time Series
+            </p>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-50">
+              Latency workbench
+            </h2>
+            <p className="max-w-2xl text-sm leading-6 text-slate-300">
+              Scope the comparison to the databases you care about, scan the aggregate spread, then
+              drill into query-level behavior and SQL without leaving the screen.
+            </p>
           </div>
 
-          <section className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">Full benchmark run duration</h3>
-              <p className="text-sm text-slate-400">
-                Total time per database (log scale). The per-query view below explains where the
-                differences come from.
+          <div className="mt-5">
+            <DatabaseMultiSelect
+              databases={databases}
+              selectedDatabases={includedDatabases}
+              onSelectAll={() => setSelectedDatabases(databases)}
+              onToggleDatabase={toggleDatabase}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
+              <p className="mt-1 text-sm text-slate-400">
+                Full-run duration by database on a direct scale. This top view should tell you where
+                to investigate before diving into per-query detail.
               </p>
             </div>
+            <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium text-slate-400">
+              {includedDatabases.length} of {databases.length} databases
+            </div>
+          </div>
 
-            <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={runChartData} margin={{ top: 16, right: 16, bottom: 16, left: 16 }}>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem]">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <ResponsiveContainer width="100%" height={190}>
+                <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
                   <CartesianGrid stroke="#1e293b" vertical={false} />
                   <XAxis
                     dataKey="db"
-                    tick={{ fill: "#94a3b8" }}
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
                     axisLine={{ stroke: "#334155" }}
                     tickLine={{ stroke: "#334155" }}
                   />
                   <YAxis
-                    scale="log"
-                    domain={[LOG_FLOOR, "auto"]}
-                    allowDataOverflow
-                    tick={{ fill: "#94a3b8" }}
+                    domain={[0, "auto"]}
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
                     axisLine={{ stroke: "#334155" }}
                     tickLine={{ stroke: "#334155" }}
                     tickFormatter={(value: number) => formatDurationSeconds(value)}
@@ -320,49 +292,136 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </section>
 
-          <section className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">Query latency comparison</h3>
-              <p className="text-sm text-slate-400">
-                Each row shows median latency per database on a log scale. Click a row to see
-                detailed comparison and SQL.
+            <div className="space-y-3">
+              {databaseAggregateStats.slice(0, 3).map((entry, index) => (
+                <div
+                  key={entry.db}
+                  className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3"
+                >
+                  <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
+                    Rank {index + 1}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p className="text-lg font-semibold text-slate-100">{entry.db}</p>
+                    <p className="text-sm font-medium text-cyan-300">
+                      {entry.score === null ? "—" : `${entry.score.toFixed(1)} score`}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {entry.wins} query wins across {queryCount} benchmark queries
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Score Leader"
+          value={scoreLeader ? `${scoreLeader.db} · ${scoreLeader.score?.toFixed(1)}` : "—"}
+          detail="Geometric score vs fastest query result. 100 means fastest on every query."
+        />
+        <StatCard
+          label="Query Wins Leader"
+          value={winsLeader ? `${winsLeader.db} · ${winsLeader.wins}` : "—"}
+          detail={`${queryCount} queries across ${includedDatabases.length} included databases.`}
+        />
+        <StatCard
+          label="Fastest Full Run"
+          value={
+            fastestRun
+              ? `${fastestRun.db} · ${formatDurationSeconds(fastestRun.run_duration_s)}`
+              : "—"
+          }
+          detail={
+            fastestRun?.median_query_duration_s !== null &&
+            fastestRun?.median_query_duration_s !== undefined
+              ? `Median query ${formatDurationSeconds(fastestRun.median_query_duration_s)}`
+              : fastestRun
+                ? "Median query unavailable"
+                : undefined
+          }
+        />
+        <StatCard
+          label="Widest Spread"
+          value={widestSpreadRow ? `${widestSpreadRow.spread_ratio.toFixed(2)}x` : "—"}
+          detail={
+            widestSpreadRow
+              ? `${widestSpreadRow.query_label} · ${widestSpreadRow.category}`
+              : undefined
+          }
+        />
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
+        <section className="flex min-h-0 flex-col rounded-3xl border border-slate-800 bg-slate-900/70">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-50">Query latency comparison</h3>
+              <p className="mt-1 text-sm text-slate-400">
+                Click a row to inspect its latency spread and SQL. Scrolling stays inside the table.
               </p>
             </div>
-
             <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
+          </div>
 
+          <div className="min-h-0 flex-1 p-5 pt-4">
             <QueryComparisonTable
               rows={queryRows}
               databases={includedDatabases}
               databaseColors={databaseColors}
               selection={selection}
               maxDuration={globalMaxDuration}
+              containerClassName="h-full min-h-0"
             />
+          </div>
+        </section>
 
-            {selectedRow ? (
-              <QueryDetailPanel
-                row={selectedRow}
-                databases={includedDatabases}
-                databaseColors={databaseColors}
-                sql={selectedSql}
-                onClose={() => selection.setSelectedQuery(null)}
-              />
-            ) : null}
-          </section>
+        <section className="min-h-0">
+          {selectedRow ? (
+            <QueryDetailPanel
+              row={selectedRow}
+              databases={includedDatabases}
+              databaseColors={databaseColors}
+              sql={selectedSql}
+              onClose={() => selection.setSelectedQuery(null)}
+            />
+          ) : (
+            <div className="flex h-full min-h-0 flex-col justify-between rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+              <div>
+                <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
+                  Inspector
+                </p>
+                <h3 className="mt-3 text-2xl font-semibold text-slate-50">Pick a query row</h3>
+                <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+                  The detail pane stays pinned on the right. Select any query to inspect latency by
+                  database and compare the SQL variants for only the databases currently included.
+                </p>
+              </div>
 
-          <section className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">Completed run details</h3>
-              <p className="text-sm text-slate-400">
-                Full run metadata for the currently included databases.
-              </p>
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                  <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
+                    Rows available
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-slate-100">{queryRows.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                  <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
+                    Active databases
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-slate-100">
+                    {includedDatabases.length}
+                  </p>
+                </div>
+              </div>
             </div>
-            <QueryTable data={filteredRunSummaries} columns={RUN_COLUMNS} />
-          </section>
-        </>
-      ) : null}
+          )}
+        </section>
+      </div>
     </section>
   )
 }
@@ -405,6 +464,44 @@ function buildQueryComparisonRows(
         spread_ratio: slowestDuration / fastestDuration,
         by_database: byDatabase,
       }
+    })
+}
+
+function buildDatabaseAggregateStats(
+  rows: QueryComparisonRow[],
+  databases: string[],
+): DatabaseAggregateStats[] {
+  return databases
+    .map((db) => {
+      let wins = 0
+      const ratios: number[] = []
+
+      for (const row of rows) {
+        const durations = Object.values(row.by_database).filter(
+          (value): value is number => value !== null,
+        )
+        const duration = row.by_database[db]
+        if (durations.length === 0 || duration === null || duration === undefined) continue
+
+        const fastest = Math.min(...durations)
+        if (duration === fastest) {
+          wins += 1
+        }
+
+        ratios.push(fastest / duration)
+      }
+
+      const score =
+        ratios.length === 0
+          ? null
+          : Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) * 100
+
+      return { db, score, wins }
+    })
+    .sort((left, right) => {
+      const scoreDelta = (right.score ?? -1) - (left.score ?? -1)
+      if (scoreDelta !== 0) return scoreDelta
+      return right.wins - left.wins || left.db.localeCompare(right.db)
     })
 }
 

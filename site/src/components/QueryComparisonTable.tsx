@@ -27,6 +27,7 @@ interface QueryComparisonTableProps {
   databaseColors: Record<string, string>
   selection: SelectionState
   maxDuration: number
+  containerClassName?: string
 }
 
 const columnHelper = createColumnHelper<QueryComparisonRow>()
@@ -37,12 +38,22 @@ export function QueryComparisonTable({
   databaseColors,
   selection,
   maxDuration,
+  containerClassName,
 }: QueryComparisonTableProps) {
   const columns = useMemo(
     () => [
-      columnHelper.accessor("query_label", { header: "Query" }),
-      columnHelper.accessor("category", { header: "Category" }),
-      columnHelper.accessor("scale", { header: "Scale" }),
+      columnHelper.display({
+        id: "query",
+        header: "Query",
+        cell: (info) => (
+          <div className="min-w-0">
+            <p className="font-medium text-slate-100">{info.row.original.query_label}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {info.row.original.category} · {info.row.original.scale}
+            </p>
+          </div>
+        ),
+      }),
       columnHelper.display({
         id: "duration_bars",
         header: "Latency (log scale)",
@@ -60,19 +71,18 @@ export function QueryComparisonTable({
         header: "Spread",
         cell: (info) => formatMultiplier(info.getValue()),
       }),
-      ...databases.map((database) =>
-        columnHelper.accessor(
-          (row) => (Object.hasOwn(row.by_database, database) ? row.by_database[database] : null),
-          {
-            id: `${database}-median`,
-            header: database,
-            cell: (info) => {
-              const value = info.getValue()
-              return value === null || value === undefined ? "—" : formatDurationSeconds(value)
-            },
-          },
-        ),
-      ),
+      columnHelper.display({
+        id: "best_duration",
+        header: "Best Median",
+        cell: (info) => {
+          const values = Object.values(info.row.original.by_database).filter(
+            (value): value is number => value !== null,
+          )
+
+          if (values.length === 0) return "—"
+          return formatDurationSeconds(Math.min(...values))
+        },
+      }),
     ],
     [databases, databaseColors, maxDuration],
   )
@@ -84,9 +94,21 @@ export function QueryComparisonTable({
   })
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-800">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-slate-900/80 text-slate-400">
+    <div
+      className={cn(
+        "overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/40",
+        containerClassName,
+      )}
+    >
+      <table className="w-full table-fixed text-left text-sm">
+        <colgroup>
+          <col className="w-[32%]" />
+          <col className="w-[34%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-slate-900/95 text-slate-400 backdrop-blur">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
@@ -120,7 +142,7 @@ export function QueryComparisonTable({
                 onClick={() => selection.toggleSelectedQuery(queryName)}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-2.5 whitespace-nowrap">
+                  <td key={cell.id} className="px-4 py-3 align-top">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
