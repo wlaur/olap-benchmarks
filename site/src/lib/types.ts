@@ -5,9 +5,9 @@ export interface Run {
   db_version: string
   operation: string
   system: string
-  status: string
   started_at: string
-  finished_at: string | null
+  finished_at: string
+  duration_s: number
   error_type: string | null
   error_message: string | null
 }
@@ -21,8 +21,7 @@ export interface RunStep {
   iteration: number | null
   table_name: string | null
   started_at: string
-  finished_at: string | null
-  status: string
+  finished_at: string
   row_count: number | null
   error_type: string | null
   error_message: string | null
