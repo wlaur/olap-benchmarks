@@ -1,7 +1,7 @@
 import * as duckdb from "@duckdb/duckdb-wasm"
 import { DuckDbDialect } from "@coji/kysely-duckdb-wasm"
-import duckdbWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url"
-import duckdbWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url"
+import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url"
+import duckdbEhWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url"
 import { Kysely } from "kysely"
 import type { DB } from "./generated/db"
 
@@ -14,11 +14,11 @@ let kyselyInstance: Kysely<DB> | null = null
 export async function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
   if (duckDbInstance) return duckDbInstance
 
-  const worker = new Worker(duckdbWorker, { type: "module" })
+  const worker = new Worker(duckdbEhWorker)
   const logger = new duckdb.VoidLogger()
   const database = new duckdb.AsyncDuckDB(logger, worker)
 
-  await database.instantiate(duckdbWasm)
+  await database.instantiate(duckdbEhWasm)
   await database.registerFileURL(
     RESULTS_DB_FILE,
     `${BASE}data/results.duckdb`,
