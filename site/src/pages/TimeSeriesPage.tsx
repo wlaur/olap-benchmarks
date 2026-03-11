@@ -180,16 +180,17 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
       header: "Fastest DB",
     }),
     ...databases.map((database) =>
-      queryColumnHelper.accessor((row) => row.by_database[database], {
-        id: `${database}-median`,
-        header: `${database} Median`,
-        cell: (info) => {
-          const value = info.getValue()
-          return value === null || value === undefined
-            ? "—"
-            : formatDurationSeconds(value)
+      queryColumnHelper.accessor(
+        (row) => getDatabaseMedianDuration(row, database),
+        {
+          id: `${database}-median`,
+          header: `${database} Median`,
+          cell: (info) => {
+            const value = info.getValue()
+            return value === null ? "—" : formatDurationSeconds(value)
+          },
         },
-      }),
+      ),
     ),
     queryColumnHelper.accessor("spread_ratio", {
       header: "Spread",
@@ -481,11 +482,20 @@ function buildTimeSeriesChartRows(
     }
 
     for (const database of databases) {
-      chartRow[database] = row.by_database[database] ?? null
+      chartRow[database] = getDatabaseMedianDuration(row, database)
     }
 
     return chartRow
   })
+}
+
+function getDatabaseMedianDuration(
+  row: TimeSeriesQueryComparisonRow,
+  database: string,
+): number | null {
+  return Object.hasOwn(row.by_database, database)
+    ? row.by_database[database]!
+    : null
 }
 
 function formatTimeSeriesQueryName(
