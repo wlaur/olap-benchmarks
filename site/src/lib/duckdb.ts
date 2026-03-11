@@ -7,7 +7,7 @@ import { Kysely } from "kysely"
 import type { DB } from "./generated/db"
 
 const BASE = import.meta.env.BASE_URL
-const RESULTS_DB_FILE = "results.duckdb"
+const RESULTS_DB_FILE = "results.db"
 
 let duckDbInstance: duckdb.AsyncDuckDB | null = null
 let kyselyInstance: Kysely<DB> | null = null
@@ -22,7 +22,7 @@ export async function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
   await database.instantiate(duckdbEhWasm)
   await database.registerFileURL(
     RESULTS_DB_FILE,
-    `${BASE}data/results.duckdb`,
+    `${BASE}data/results.db`,
     duckdb.DuckDBDataProtocol.HTTP,
     false,
   )

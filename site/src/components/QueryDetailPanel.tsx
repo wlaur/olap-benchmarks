@@ -10,12 +10,19 @@ import {
   YAxis,
 } from "recharts"
 
-import { formatDurationSeconds, formatMultiplier } from "../lib/format"
+import {
+  formatDurationAxisTick,
+  formatDurationSeconds,
+  formatMultiplier,
+  getDurationAxisDomain,
+  getDurationAxisTicks,
+  scaleDurationForChart,
+  type DurationScaleMode,
+} from "../lib/format"
 import type { QuerySqlEntry } from "../lib/types"
+import { DurationScaleToggle } from "./DurationScaleToggle"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 import { SqlCodeView } from "./SqlCodeView"
-
-const LOG_FLOOR = 1e-6
 
 interface QueryDetailPanelProps {
   row: QueryComparisonRow
@@ -38,6 +45,7 @@ export function QueryDetailPanel({
   const hasTabs = sql !== null && (sql.sql !== null || overrideKeys.length > 0)
   const defaultTab = sql?.sql !== null ? "common" : (overrideKeys[0] ?? "common")
   const [activeTab, setActiveTab] = useState(defaultTab)
+  const [chartScaleMode, setChartScaleMode] = useState<DurationScaleMode>("log")
 
   useEffect(() => {
     setActiveTab(defaultTab)
@@ -46,11 +54,15 @@ export function QueryDetailPanel({
   const chartData = databases
     .map((db) => ({
       db,
-      duration: Math.max(row.by_database[db] ?? 0, LOG_FLOOR),
+      duration: row.by_database[db] ?? 0,
+      chart_duration: scaleDurationForChart(row.by_database[db] ?? 0, chartScaleMode),
       raw: row.by_database[db],
       fill: databaseColors[db] ?? "#94a3b8",
     }))
     .filter((d) => d.raw !== null)
+  const maxDuration = Math.max(0, ...chartData.map((entry) => entry.duration))
+  const axisDomain = getDurationAxisDomain(maxDuration, chartScaleMode)
+  const axisTicks = getDurationAxisTicks(maxDuration, chartScaleMode)
 
   const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
 
@@ -73,6 +85,9 @@ export function QueryDetailPanel({
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+        <div className="mb-4 flex items-center justify-end">
+          <DurationScaleToggle mode={chartScaleMode} onChange={setChartScaleMode} />
+        </div>
         <ResponsiveContainer width="100%" height={Math.max(170, chartData.length * 30)}>
           <BarChart
             data={chartData}
@@ -82,13 +97,13 @@ export function QueryDetailPanel({
             <CartesianGrid stroke="#1e293b" horizontal={false} />
             <XAxis
               type="number"
-              scale="log"
-              domain={[LOG_FLOOR, "auto"]}
+              domain={axisDomain}
+              ticks={axisTicks}
               allowDataOverflow
               tick={{ fill: "#94a3b8", fontSize: 11 }}
               axisLine={{ stroke: "#334155" }}
               tickLine={{ stroke: "#334155" }}
-              tickFormatter={(value: number) => formatDurationSeconds(value)}
+              tickFormatter={(value: number) => formatDurationAxisTick(value, chartScaleMode)}
             />
             <YAxis
               type="category"
@@ -105,9 +120,11 @@ export function QueryDetailPanel({
                 border: "1px solid #334155",
                 borderRadius: 12,
               }}
-              formatter={(value: number) => formatDurationSeconds(value)}
+              formatter={(_value: number, _name, item) =>
+                formatDurationSeconds((item.payload as { duration: number }).duration)
+              }
             />
-            <Bar dataKey="duration" radius={[0, 6, 6, 0]}>
+            <Bar dataKey="chart_duration" radius={[0, 6, 6, 0]}>
               {chartData.map((entry) => (
                 <Cell key={entry.db} fill={entry.fill} />
               ))}
