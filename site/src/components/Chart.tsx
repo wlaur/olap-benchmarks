@@ -7,14 +7,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-
-interface TimingDataPoint {
-  name: string
-  duration_s: number
-}
+import type { ChartPoint } from "../lib/types"
 
 interface TimingChartProps {
-  data: TimingDataPoint[]
+  data: ChartPoint[]
 }
 
 export function TimingChart({ data }: TimingChartProps) {

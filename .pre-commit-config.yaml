@@ -11,3 +11,18 @@ repos:
     hooks:
       - id: ruff-format
       - id: ruff-check
+
+  - repo: local
+    hooks:
+      - id: oxfmt
+        name: oxfmt
+        language: system
+        entry: sh -c 'cd site && npx oxfmt --check src/ vite.config.ts'
+        files: ^site/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: oxlint
+        name: oxlint
+        language: system
+        entry: sh -c 'cd site && npx oxlint'
+        files: ^site/.*\.(ts|tsx)$
+        pass_filenames: false

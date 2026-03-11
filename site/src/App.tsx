@@ -11,7 +11,7 @@ import {
   fetchRuns,
 } from "./lib/queries"
 import { query } from "./lib/duckdb"
-import type { Filters, Run } from "./lib/types"
+import type { ChartPoint, Filters, Run } from "./lib/types"
 
 const columnHelper = createColumnHelper<Run>()
 
@@ -67,10 +67,7 @@ export function App() {
   const [suites, setSuites] = useState<string[]>([])
   const [databases, setDatabases] = useState<string[]>([])
   const [runs, setRuns] = useState<Run[]>([])
-  const [chartData, setChartData] = useState<{
-    name: string
-    duration_s: number
-  }[]>([])
+  const [chartData, setChartData] = useState<ChartPoint[]>([])
   const [filters, setFilters] = useState<Filters>({
     system: null,
     suite: null,
@@ -114,7 +111,7 @@ export function App() {
     const sysClause = `system = '${filters.system}'`
     const suiteClause = filters.suite ? ` AND suite = '${filters.suite}'` : ""
     const dbClause = filters.db ? ` AND db = '${filters.db}'` : ""
-    query<{ name: string, duration_s: number }>(
+    query<ChartPoint>(
       `SELECT db || ' / ' || suite AS name,
               EXTRACT(EPOCH FROM (finished_at - started_at)) AS duration_s
        FROM results.run
