@@ -139,7 +139,14 @@ export function App() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="mb-8 text-3xl font-bold">OLAP Benchmarks</h1>
+      <h1 className="mb-8 flex items-center gap-3 text-3xl font-bold">
+        <img
+          src={`${import.meta.env.BASE_URL}logo.svg`}
+          alt=""
+          className="h-9 w-9"
+        />
+        OLAP Benchmarks
+      </h1>
 
       <div className="mb-6 flex flex-wrap gap-4">
         <SystemSelector
