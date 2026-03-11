@@ -17,7 +17,7 @@ from ..postgres import generate_create_table_sql, table_exists
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2.21.1"
+VERSION = "2.25.0"
 
 DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg16"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
