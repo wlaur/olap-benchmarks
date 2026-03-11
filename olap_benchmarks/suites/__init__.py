@@ -47,6 +47,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
             try:
                 actual_row_count = self.db.get_row_count(table_name)
             except Exception as exc:
+                self.db.rollback()
                 checks.append(
                     TableRowCountCheck(
                         table_name=table_name,
@@ -74,6 +75,11 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
             for check in checks
         )
 
+    def _format_table_names(self, table_names: set[TableName]) -> str:
+        if not table_names:
+            return "(none)"
+        return ", ".join(sorted(table_names))
+
     def should_populate(self) -> bool:
         checks = self._collect_table_row_count_checks()
 
@@ -88,7 +94,16 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
             return False
 
         if all(check.is_missing for check in checks):
-            return True
+            existing_tables = self.db.get_table_names()
+
+            if not existing_tables:
+                return True
+
+            raise RuntimeError(
+                f"Refusing to populate {self.name} on {self.db.name}; expected tables are missing but the database "
+                f"is not empty. Existing tables: {self._format_table_names(existing_tables)}. "
+                f"Row-count checks: {self._format_table_row_count_checks(checks)}"
+            )
 
         raise RuntimeError(
             f"Refusing to populate {self.name} on {self.db.name}; existing data does not match expected row counts: "

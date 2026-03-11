@@ -130,6 +130,15 @@ class QuestDB(Database):
 
         return df
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select table_name from information_schema.tables "
+            "where table_schema = 'public' and table_type = 'BASE TABLE'",
+            schema={"table_name": pl.String},
+            method="python",
+        )
+        return set(df.get_column("table_name").to_list())
+
     def get_count(self, table: TableName) -> int:
         ret = self.connect().execute(text(f"select count(*) from {table}")).fetchone()
         assert ret is not None

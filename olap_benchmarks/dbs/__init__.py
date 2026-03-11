@@ -321,6 +321,9 @@ class Database(BaseModel, ABC):
         return int(df.item(0, 0))
 
     @abstractmethod
+    def get_table_names(self) -> set[TableName]: ...
+
+    @abstractmethod
     def insert(
         self,
         df: pl.DataFrame | pl.LazyFrame,

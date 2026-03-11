@@ -360,6 +360,14 @@ class Postgres(Database):
         # schemas do not match exactly between these (i32 vs i64 for example)
         return self.fetch_python(query, schema)
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select table_name from information_schema.tables "
+            "where table_schema = 'public' and table_type = 'BASE TABLE'",
+            schema={"table_name": pl.String},
+        )
+        return set(df.get_column("table_name").to_list())
+
     def fetch_python(
         self,
         query: str,
