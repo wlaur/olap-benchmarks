@@ -1,10 +1,7 @@
 import { sql } from "kysely"
+
 import { getKyselyDb } from "./duckdb"
-import type {
-  QueriesManifest,
-  TimeSeriesQuerySummary,
-  TimeSeriesRunSummary,
-} from "./types"
+import type { QueriesManifest, TimeSeriesQuerySummary, TimeSeriesRunSummary } from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -17,7 +14,7 @@ export async function fetchQueriesManifest(): Promise<QueriesManifest> {
   if (!response.ok) {
     throw new Error(`Failed to load queries.json: ${response.status}`)
   }
-  queriesCache = ((await response.json()) as QueriesManifest)
+  queriesCache = (await response.json()) as QueriesManifest
   return queriesCache
 }
 
@@ -35,9 +32,7 @@ export async function fetchSystems(): Promise<string[]> {
   return rows.map((row) => row.system)
 }
 
-export async function fetchTimeSeriesRunSummaries(
-  system: string,
-): Promise<TimeSeriesRunSummary[]> {
+export async function fetchTimeSeriesRunSummaries(system: string): Promise<TimeSeriesRunSummary[]> {
   const db = await getKyselyDb()
 
   return db
@@ -47,9 +42,7 @@ export async function fetchTimeSeriesRunSummaries(
       eb.ref("run.id").as("run_id"),
       eb.ref("run.db").as("db"),
       eb.ref("run.db_version").as("db_version"),
-      sql<string>`strftime(${eb.ref("run.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
-        "started_at",
-      ),
+      sql<string>`strftime(${eb.ref("run.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as("started_at"),
       sql<string>`strftime(${eb.ref("run.finished_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
         "finished_at",
       ),
@@ -76,13 +69,7 @@ export async function fetchTimeSeriesRunSummaries(
     .where("run.status", "=", "completed")
     .where("run.finished_at", "is not", null)
     .where("run.system", "=", system)
-    .groupBy([
-      "run.id",
-      "run.db",
-      "run.db_version",
-      "run.started_at",
-      "run.finished_at",
-    ])
+    .groupBy(["run.id", "run.db", "run.db_version", "run.started_at", "run.finished_at"])
     .orderBy(sql`run_duration_s`)
     .orderBy("run.db")
     .execute()

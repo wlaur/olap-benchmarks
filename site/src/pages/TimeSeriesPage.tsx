@@ -1,5 +1,5 @@
-import { startTransition, useEffect, useState } from "react"
 import { createColumnHelper } from "@tanstack/react-table"
+import { startTransition, useEffect, useState } from "react"
 import {
   Bar,
   BarChart,
@@ -10,11 +10,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+
 import { DatabaseLegend } from "../components/DatabaseLegend"
-import {
-  QueryComparisonTable,
-  type QueryComparisonRow,
-} from "../components/QueryComparisonTable"
+import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { QueryTable } from "../components/QueryTable"
 import { StatCard } from "../components/StatCard"
@@ -25,11 +23,7 @@ import {
   fetchTimeSeriesQuerySummaries,
   fetchTimeSeriesRunSummaries,
 } from "../lib/queries"
-import type {
-  QueriesManifest,
-  TimeSeriesQuerySummary,
-  TimeSeriesRunSummary,
-} from "../lib/types"
+import type { QueriesManifest, TimeSeriesQuerySummary, TimeSeriesRunSummary } from "../lib/types"
 
 interface TimeSeriesPageProps {
   system: string
@@ -45,14 +39,7 @@ interface TimeSeriesPageState {
 
 const LOG_FLOOR = 1e-6
 
-const DATABASE_COLORS = [
-  "#38bdf8",
-  "#f97316",
-  "#34d399",
-  "#facc15",
-  "#f472b6",
-  "#a78bfa",
-]
+const DATABASE_COLORS = ["#38bdf8", "#f97316", "#34d399", "#facc15", "#f472b6", "#a78bfa"]
 
 const runColumnHelper = createColumnHelper<TimeSeriesRunSummary>()
 
@@ -133,15 +120,10 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     }
   }, [system])
 
-  const databases = Array.from(
-    new Set(state.runSummaries.map((run) => run.db)),
-  ).sort()
+  const databases = Array.from(new Set(state.runSummaries.map((run) => run.db))).sort()
 
   const databaseColors = Object.fromEntries(
-    databases.map((db, idx) => [
-      db,
-      DATABASE_COLORS[idx % DATABASE_COLORS.length]!,
-    ]),
+    databases.map((db, idx) => [db, DATABASE_COLORS[idx % DATABASE_COLORS.length]!]),
   )
 
   const queryRows = buildQueryComparisonRows(state.querySummaries, databases)
@@ -156,21 +138,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   }, LOG_FLOOR)
 
   const fastestRun = state.runSummaries[0] ?? null
-  const slowestQuery =
-    state.querySummaries.reduce<TimeSeriesQuerySummary | null>(
-      (currentSlowest, qs) => {
-        if (
-          !currentSlowest ||
-          qs.median_duration_s > currentSlowest.median_duration_s
-        ) {
-          return qs
-        }
-        return currentSlowest
-      },
-      null,
-    )
-  const queryCount = new Set(state.querySummaries.map((row) => row.query_name))
-    .size
+  const slowestQuery = state.querySummaries.reduce<TimeSeriesQuerySummary | null>(
+    (currentSlowest, qs) => {
+      if (!currentSlowest || qs.median_duration_s > currentSlowest.median_duration_s) {
+        return qs
+      }
+      return currentSlowest
+    },
+    null,
+  )
+  const queryCount = new Set(state.querySummaries.map((row) => row.query_name)).size
 
   const runChartData = state.runSummaries.map((run) => ({
     db: run.db,
@@ -182,34 +159,27 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     ? (queryRows.find((r) => r.query_name === selection.selectedQuery) ?? null)
     : null
 
-  const selectedSql =
-    state.queriesManifest?.time_series?.[selection.selectedQuery ?? ""] ?? null
+  const selectedSql = state.queriesManifest?.time_series?.[selection.selectedQuery ?? ""] ?? null
 
   return (
     <section className="space-y-10">
       <header className="max-w-4xl space-y-4">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-300">
-          Time Series
-        </p>
+        <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">Time Series</p>
         <h2 className="text-4xl font-semibold tracking-tight text-slate-50">
           Query-by-query latency comparison
         </h2>
         <p className="text-lg leading-8 text-slate-300">
-          Click any query row to see a detailed comparison across databases with
-          the actual SQL. Hover to highlight.
+          Click any query row to see a detailed comparison across databases with the actual SQL.
+          Hover to highlight.
         </p>
       </header>
 
       {state.loading ? (
-        <p className="text-sm text-slate-400">
-          Loading completed time-series runs for {system}...
-        </p>
+        <p className="text-sm text-slate-400">Loading completed time-series runs for {system}...</p>
       ) : null}
 
       {state.error ? (
-        <p className="text-sm text-red-300">
-          Failed to load time-series data: {state.error}
-        </p>
+        <p className="text-sm text-red-300">Failed to load time-series data: {state.error}</p>
       ) : null}
 
       {!state.loading && !state.error && state.runSummaries.length === 0 ? (
@@ -249,11 +219,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             />
             <StatCard
               label="Slowest Query Median"
-              value={
-                slowestQuery
-                  ? formatDurationSeconds(slowestQuery.median_duration_s)
-                  : "—"
-              }
+              value={slowestQuery ? formatDurationSeconds(slowestQuery.median_duration_s) : "—"}
               detail={
                 slowestQuery
                   ? `${formatTimeSeriesQueryName(slowestQuery.query_name).queryLabel} on ${slowestQuery.db}`
@@ -264,21 +230,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
           <section className="space-y-4">
             <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">
-                Full benchmark run duration
-              </h3>
+              <h3 className="text-2xl font-semibold text-slate-50">Full benchmark run duration</h3>
               <p className="text-sm text-slate-400">
-                Total time per database (log scale). The per-query view below
-                explains where the differences come from.
+                Total time per database (log scale). The per-query view below explains where the
+                differences come from.
               </p>
             </div>
 
             <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart
-                  data={runChartData}
-                  margin={{ top: 16, right: 16, bottom: 16, left: 16 }}
-                >
+                <BarChart data={runChartData} margin={{ top: 16, right: 16, bottom: 16, left: 16 }}>
                   <CartesianGrid stroke="#1e293b" vertical={false} />
                   <XAxis
                     dataKey="db"
@@ -293,9 +254,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                     tick={{ fill: "#94a3b8" }}
                     axisLine={{ stroke: "#334155" }}
                     tickLine={{ stroke: "#334155" }}
-                    tickFormatter={(value: number) =>
-                      formatDurationSeconds(value)
-                    }
+                    tickFormatter={(value: number) => formatDurationSeconds(value)}
                   />
                   <Tooltip
                     cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
@@ -318,19 +277,14 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
           <section className="space-y-4">
             <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">
-                Query latency comparison
-              </h3>
+              <h3 className="text-2xl font-semibold text-slate-50">Query latency comparison</h3>
               <p className="text-sm text-slate-400">
-                Each row shows median latency per database on a log scale. Click
-                a row to see detailed comparison and SQL.
+                Each row shows median latency per database on a log scale. Click a row to see
+                detailed comparison and SQL.
               </p>
             </div>
 
-            <DatabaseLegend
-              databases={databases}
-              databaseColors={databaseColors}
-            />
+            <DatabaseLegend databases={databases} databaseColors={databaseColors} />
 
             <QueryComparisonTable
               rows={queryRows}
@@ -353,12 +307,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
           <section className="space-y-4">
             <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">
-                Completed run details
-              </h3>
-              <p className="text-sm text-slate-400">
-                Full run metadata for completed runs.
-              </p>
+              <h3 className="text-2xl font-semibold text-slate-50">Completed run details</h3>
+              <p className="text-sm text-slate-400">Full run metadata for completed runs.</p>
             </div>
             <QueryTable data={state.runSummaries} columns={RUN_COLUMNS} />
           </section>
@@ -383,8 +333,7 @@ function buildQueryComparisonRows(
   return Array.from(groupedQueries.entries())
     .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
     .map(([queryName, rows]) => {
-      const { category, queryLabel, scale } =
-        formatTimeSeriesQueryName(queryName)
+      const { category, queryLabel, scale } = formatTimeSeriesQueryName(queryName)
       const byDatabase = Object.fromEntries(
         databases.map((database) => [database, null]),
       ) as Record<string, number | null>
@@ -393,13 +342,10 @@ function buildQueryComparisonRows(
         byDatabase[row.db] = row.median_duration_s
       }
 
-      const numericDurations = Object.values(byDatabase).filter(
-        (value) => value !== null,
-      )
+      const numericDurations = Object.values(byDatabase).filter((value) => value !== null)
       const fastestDuration = Math.min(...numericDurations)
       const slowestDuration = Math.max(...numericDurations)
-      const fastestDb =
-        rows.find((row) => row.median_duration_s === fastestDuration)?.db ?? "—"
+      const fastestDb = rows.find((row) => row.median_duration_s === fastestDuration)?.db ?? "—"
 
       return {
         query_name: queryName,
@@ -413,9 +359,7 @@ function buildQueryComparisonRows(
     })
 }
 
-function formatTimeSeriesQueryName(
-  queryName: string,
-): {
+function formatTimeSeriesQueryName(queryName: string): {
   category: string
   queryLabel: string
   scale: string
@@ -426,9 +370,7 @@ function formatTimeSeriesQueryName(
     : normalizedName.includes("_large_")
       ? "Large wide"
       : "Wide"
-  const cleanedName = normalizedName
-    .replace(/_(small|large)_wide$/, "")
-    .replace(/_wide$/, "")
+  const cleanedName = normalizedName.replace(/_(small|large)_wide$/, "").replace(/_wide$/, "")
   const queryLabel = toTitleCase(cleanedName.replace(/_/g, " "))
 
   return {
@@ -446,10 +388,7 @@ function getTimeSeriesCategory(queryName: string): string {
   if (queryName.includes("raw_filtered")) return "Filtered scan"
   if (queryName.includes("raw")) return "Raw scan"
   if (queryName.includes("conditional")) return "Conditional aggregate"
-  if (
-    queryName.includes("max_time") ||
-    queryName.includes("latest_time_range")
-  ) {
+  if (queryName.includes("max_time") || queryName.includes("latest_time_range")) {
     return "Time boundary"
   }
   return "Other"

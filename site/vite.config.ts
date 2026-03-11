@@ -1,6 +1,6 @@
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
 
 export default defineConfig({
   base: "/olap-benchmarks/",
@@ -22,11 +22,7 @@ export default defineConfig({
           if (id.includes("@radix-ui") || id.includes("lucide-react")) {
             return "ui"
           }
-          if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("scheduler")
-          ) {
+          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("scheduler")) {
             return "react-vendor"
           }
           return undefined

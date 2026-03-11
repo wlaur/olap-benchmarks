@@ -1,4 +1,13 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "semi": false
+  "semi": false,
+  "experimentalSortImports": {},
+  "experimentalSortPackageJson": {
+    "sortScripts": true
+  },
+  "experimentalTailwindcss": {
+    "stylesheet": "./src/index.css",
+    "attributes": ["class", "className"],
+    "functions": ["cn"]
+  }
 }
