@@ -4,38 +4,35 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts"
+import { DatabaseLegend } from "../components/DatabaseLegend"
+import {
+  QueryComparisonTable,
+  type QueryComparisonRow,
+} from "../components/QueryComparisonTable"
+import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { QueryTable } from "../components/QueryTable"
 import { StatCard } from "../components/StatCard"
-import { formatDurationSeconds, formatMultiplier } from "../lib/format"
+import { useSelectionState } from "../hooks/useSelectionState"
+import { formatDurationSeconds } from "../lib/format"
 import {
+  fetchQueriesManifest,
   fetchTimeSeriesQuerySummaries,
   fetchTimeSeriesRunSummaries,
 } from "../lib/queries"
-import type { TimeSeriesQuerySummary, TimeSeriesRunSummary } from "../lib/types"
+import type {
+  QueriesManifest,
+  TimeSeriesQuerySummary,
+  TimeSeriesRunSummary,
+} from "../lib/types"
 
 interface TimeSeriesPageProps {
   system: string
-}
-
-interface TimeSeriesQueryComparisonRow {
-  query_name: string
-  query_label: string
-  category: string
-  scale: string
-  fastest_db: string
-  spread_ratio: number
-  by_database: Record<string, number | null>
-}
-
-interface TimeSeriesChartRow {
-  queryLabel: string
-  [database: string]: number | string | null
 }
 
 interface TimeSeriesPageState {
@@ -43,10 +40,21 @@ interface TimeSeriesPageState {
   error: string | null
   runSummaries: TimeSeriesRunSummary[]
   querySummaries: TimeSeriesQuerySummary[]
+  queriesManifest: QueriesManifest | null
 }
 
+const LOG_FLOOR = 1e-6
+
+const DATABASE_COLORS = [
+  "#38bdf8",
+  "#f97316",
+  "#34d399",
+  "#facc15",
+  "#f472b6",
+  "#a78bfa",
+]
+
 const runColumnHelper = createColumnHelper<TimeSeriesRunSummary>()
-const queryColumnHelper = createColumnHelper<TimeSeriesQueryComparisonRow>()
 
 const RUN_COLUMNS = [
   runColumnHelper.accessor("db", { header: "Database" }),
@@ -67,22 +75,15 @@ const RUN_COLUMNS = [
   runColumnHelper.accessor("query_count", { header: "Queries" }),
 ]
 
-const DATABASE_COLORS = [
-  "#38bdf8",
-  "#f97316",
-  "#34d399",
-  "#facc15",
-  "#f472b6",
-  "#a78bfa",
-]
-
 export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   const [state, setState] = useState<TimeSeriesPageState>({
     loading: true,
     error: null,
     runSummaries: [],
     querySummaries: [],
+    queriesManifest: null,
   })
+  const selection = useSelectionState()
 
   useEffect(() => {
     let cancelled = false
@@ -92,13 +93,15 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
       error: null,
       runSummaries: [],
       querySummaries: [],
+      queriesManifest: null,
     })
 
     Promise.all([
       fetchTimeSeriesRunSummaries(system),
       fetchTimeSeriesQuerySummaries(system),
+      fetchQueriesManifest().catch(() => null),
     ])
-      .then(([runSummaries, querySummaries]) => {
+      .then(([runSummaries, querySummaries, queriesManifest]) => {
         if (cancelled) return
 
         startTransition(() => {
@@ -107,6 +110,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             error: null,
             runSummaries,
             querySummaries,
+            queriesManifest,
           })
         })
       })
@@ -119,6 +123,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             error: String(nextError),
             runSummaries: [],
             querySummaries: [],
+            queriesManifest: null,
           })
         })
       })
@@ -131,17 +136,34 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   const databases = Array.from(
     new Set(state.runSummaries.map((run) => run.db)),
   ).sort()
-  const queryRows = buildTimeSeriesQueryRows(state.querySummaries, databases)
-  const queryChartRows = buildTimeSeriesChartRows(queryRows, databases)
+
+  const databaseColors = Object.fromEntries(
+    databases.map((db, idx) => [
+      db,
+      DATABASE_COLORS[idx % DATABASE_COLORS.length]!,
+    ]),
+  )
+
+  const queryRows = buildQueryComparisonRows(state.querySummaries, databases)
+
+  const globalMaxDuration = queryRows.reduce((max, row) => {
+    for (const val of Object.values(row.by_database)) {
+      if (val !== null && val > max) {
+        max = val
+      }
+    }
+    return max
+  }, LOG_FLOOR)
+
   const fastestRun = state.runSummaries[0] ?? null
   const slowestQuery =
     state.querySummaries.reduce<TimeSeriesQuerySummary | null>(
-      (currentSlowest, querySummary) => {
+      (currentSlowest, qs) => {
         if (
           !currentSlowest ||
-          querySummary.median_duration_s > currentSlowest.median_duration_s
+          qs.median_duration_s > currentSlowest.median_duration_s
         ) {
-          return querySummary
+          return qs
         }
         return currentSlowest
       },
@@ -152,40 +174,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
   const runChartData = state.runSummaries.map((run) => ({
     db: run.db,
-    duration_s: run.run_duration_s,
+    duration_s: Math.max(run.run_duration_s, LOG_FLOOR),
+    fill: databaseColors[run.db] ?? "#94a3b8",
   }))
 
-  const queryColumns = [
-    queryColumnHelper.accessor("query_label", {
-      header: "Query",
-    }),
-    queryColumnHelper.accessor("category", {
-      header: "Category",
-    }),
-    queryColumnHelper.accessor("scale", {
-      header: "Scale",
-    }),
-    queryColumnHelper.accessor("fastest_db", {
-      header: "Fastest DB",
-    }),
-    ...databases.map((database) =>
-      queryColumnHelper.accessor(
-        (row) => getDatabaseMedianDuration(row, database),
-        {
-          id: `${database}-median`,
-          header: `${database} Median`,
-          cell: (info) => {
-            const value = info.getValue()
-            return value === null ? "—" : formatDurationSeconds(value)
-          },
-        },
-      ),
-    ),
-    queryColumnHelper.accessor("spread_ratio", {
-      header: "Spread",
-      cell: (info) => formatMultiplier(info.getValue()),
-    }),
-  ]
+  const selectedRow = selection.selectedQuery
+    ? (queryRows.find((r) => r.query_name === selection.selectedQuery) ?? null)
+    : null
+
+  const selectedSql =
+    state.queriesManifest?.time_series?.[selection.selectedQuery ?? ""] ?? null
 
   return (
     <section className="space-y-10">
@@ -194,13 +192,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           Time Series
         </p>
         <h2 className="text-4xl font-semibold tracking-tight text-slate-50">
-          Query-pattern latency should be the primary view
+          Query-by-query latency comparison
         </h2>
         <p className="text-lg leading-8 text-slate-300">
-          The time-series suite mixes boundary lookups, aggregates, raw scans,
-          resamples, scalar lookups, and export. The clearest visualization is a
-          query-by-query latency comparison on one system, with total benchmark
-          run duration kept as supporting context.
+          Click any query row to see a detailed comparison across databases with
+          the actual SQL. Hover to highlight.
         </p>
       </header>
 
@@ -239,26 +235,23 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               label="Fastest Full Run"
               value={
                 fastestRun
-                  ? `${fastestRun.db} · ${formatDurationSeconds(
-                      fastestRun.run_duration_s,
-                    )}`
+                  ? `${fastestRun.db} · ${formatDurationSeconds(fastestRun.run_duration_s)}`
                   : "—"
               }
               detail={
-                fastestRun
-                  ? fastestRun.median_query_duration_s === null
+                fastestRun?.median_query_duration_s !== null &&
+                fastestRun?.median_query_duration_s !== undefined
+                  ? `Median query ${formatDurationSeconds(fastestRun.median_query_duration_s)}`
+                  : fastestRun
                     ? "Median query unavailable"
-                    : `Median query ${formatDurationSeconds(
-                        fastestRun.median_query_duration_s,
-                      )}`
-                  : undefined
+                    : undefined
               }
             />
             <StatCard
               label="Slowest Query Median"
               value={
                 slowestQuery
-                  ? `${formatDurationSeconds(slowestQuery.median_duration_s)}`
+                  ? formatDurationSeconds(slowestQuery.median_duration_s)
                   : "—"
               }
               detail={
@@ -275,14 +268,13 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 Full benchmark run duration
               </h3>
               <p className="text-sm text-slate-400">
-                Keep full-run time visible, but treat it as a secondary summary.
-                The per-query view below explains where the differences come
-                from.
+                Total time per database (log scale). The per-query view below
+                explains where the differences come from.
               </p>
             </div>
 
             <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={200}>
                 <BarChart
                   data={runChartData}
                   margin={{ top: 16, right: 16, bottom: 16, left: 16 }}
@@ -295,11 +287,14 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                     tickLine={{ stroke: "#334155" }}
                   />
                   <YAxis
+                    scale="log"
+                    domain={[LOG_FLOOR, "auto"]}
+                    allowDataOverflow
                     tick={{ fill: "#94a3b8" }}
                     axisLine={{ stroke: "#334155" }}
                     tickLine={{ stroke: "#334155" }}
-                    tickFormatter={(value) =>
-                      formatDurationSeconds(Number(value))
+                    tickFormatter={(value: number) =>
+                      formatDurationSeconds(value)
                     }
                   />
                   <Tooltip
@@ -311,11 +306,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                     }}
                     formatter={(value: number) => formatDurationSeconds(value)}
                   />
-                  <Bar
-                    dataKey="duration_s"
-                    fill="#38bdf8"
-                    radius={[10, 10, 0, 0]}
-                  />
+                  <Bar dataKey="duration_s" radius={[10, 10, 0, 0]}>
+                    {runChartData.map((entry) => (
+                      <Cell key={entry.db} fill={entry.fill} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -324,78 +319,36 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           <section className="space-y-4">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold text-slate-50">
-                Median query latency by workload
+                Query latency comparison
               </h3>
               <p className="text-sm text-slate-400">
-                This is the recommended primary visualization for the
-                time-series benchmark. It preserves workload identity and
-                exposes scaling behavior between the small and large query
-                variants.
+                Each row shows median latency per database on a log scale. Click
+                a row to see detailed comparison and SQL.
               </p>
             </div>
 
-            <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-              <ResponsiveContainer
-                width="100%"
-                height={Math.max(560, queryChartRows.length * 34)}
-              >
-                <BarChart
-                  data={queryChartRows}
-                  layout="vertical"
-                  margin={{ top: 16, right: 20, bottom: 16, left: 16 }}
-                >
-                  <CartesianGrid stroke="#1e293b" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "#94a3b8" }}
-                    axisLine={{ stroke: "#334155" }}
-                    tickLine={{ stroke: "#334155" }}
-                    tickFormatter={(value) =>
-                      formatDurationSeconds(Number(value))
-                    }
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="queryLabel"
-                    width={260}
-                    tick={{ fill: "#cbd5e1", fontSize: 12 }}
-                    axisLine={{ stroke: "#334155" }}
-                    tickLine={{ stroke: "#334155" }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "rgba(15, 23, 42, 0.45)" }}
-                    contentStyle={{
-                      backgroundColor: "#020617",
-                      border: "1px solid #334155",
-                      borderRadius: 16,
-                    }}
-                    formatter={(value: number) => formatDurationSeconds(value)}
-                  />
-                  <Legend />
-                  {databases.map((database, index) => (
-                    <Bar
-                      key={database}
-                      dataKey={database}
-                      fill={DATABASE_COLORS[index % DATABASE_COLORS.length]}
-                      radius={[0, 6, 6, 0]}
-                    />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+            <DatabaseLegend
+              databases={databases}
+              databaseColors={databaseColors}
+            />
 
-          <section className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-50">
-                Query comparison table
-              </h3>
-              <p className="text-sm text-slate-400">
-                Use this table to scan categories, scale variants, the fastest
-                engine per query, and the spread between databases.
-              </p>
-            </div>
-            <QueryTable data={queryRows} columns={queryColumns} />
+            <QueryComparisonTable
+              rows={queryRows}
+              databases={databases}
+              databaseColors={databaseColors}
+              selection={selection}
+              maxDuration={globalMaxDuration}
+            />
+
+            {selectedRow ? (
+              <QueryDetailPanel
+                row={selectedRow}
+                databases={databases}
+                databaseColors={databaseColors}
+                sql={selectedSql}
+                onClose={() => selection.setSelectedQuery(null)}
+              />
+            ) : null}
           </section>
 
           <section className="space-y-4">
@@ -404,8 +357,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 Completed run details
               </h3>
               <p className="text-sm text-slate-400">
-                Full run metadata remains available, but only for completed
-                runs.
+                Full run metadata for completed runs.
               </p>
             </div>
             <QueryTable data={state.runSummaries} columns={RUN_COLUMNS} />
@@ -416,10 +368,10 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   )
 }
 
-function buildTimeSeriesQueryRows(
+function buildQueryComparisonRows(
   querySummaries: TimeSeriesQuerySummary[],
   databases: string[],
-): TimeSeriesQueryComparisonRow[] {
+): QueryComparisonRow[] {
   const groupedQueries = new Map<string, TimeSeriesQuerySummary[]>()
 
   for (const querySummary of querySummaries) {
@@ -459,32 +411,6 @@ function buildTimeSeriesQueryRows(
         by_database: byDatabase,
       }
     })
-}
-
-function buildTimeSeriesChartRows(
-  rows: TimeSeriesQueryComparisonRow[],
-  databases: string[],
-): TimeSeriesChartRow[] {
-  return rows.map((row) => {
-    const chartRow: TimeSeriesChartRow = {
-      queryLabel: `${row.query_label} · ${row.scale}`,
-    }
-
-    for (const database of databases) {
-      chartRow[database] = getDatabaseMedianDuration(row, database)
-    }
-
-    return chartRow
-  })
-}
-
-function getDatabaseMedianDuration(
-  row: TimeSeriesQueryComparisonRow,
-  database: string,
-): number | null {
-  return Object.hasOwn(row.by_database, database)
-    ? row.by_database[database]!
-    : null
 }
 
 function formatTimeSeriesQueryName(
