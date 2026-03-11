@@ -6,6 +6,7 @@ export default defineConfig({
   base: "/olap-benchmarks/",
   plugins: [react(), tailwindcss()],
   build: {
+    target: "es2022",
     rollupOptions: {
       output: {
         manualChunks(id) {
