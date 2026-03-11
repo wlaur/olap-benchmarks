@@ -31,6 +31,9 @@ class DummyDatabase(Database):
     ) -> pl.DataFrame:
         raise NotImplementedError
 
+    def get_table_names(self) -> set[TableName]:
+        raise NotImplementedError
+
     def insert(
         self,
         df: pl.DataFrame | pl.LazyFrame,
@@ -47,12 +50,20 @@ class DummyDatabase(Database):
 class CountingDatabase(DummyDatabase):
     row_counts: dict[str, int] = {}
     row_count_errors: dict[str, str] = {}
+    table_names: set[str] = set()
+    rollback_calls: int = 0
 
     def get_row_count(self, table: TableName) -> int:
         if table in self.row_count_errors:
             raise RuntimeError(self.row_count_errors[table])
 
         return self.row_counts[table]
+
+    def get_table_names(self) -> set[TableName]:
+        return set(self.table_names)
+
+    def rollback(self) -> None:
+        self.rollback_calls += 1
 
 
 class DummySuite(BenchmarkSuite[CountingDatabase]):
@@ -84,9 +95,23 @@ def test_suite_should_skip_populate_when_expected_data_exists() -> None:
 
 
 def test_suite_should_populate_when_expected_tables_are_missing() -> None:
-    suite = DummySuite(db=CountingDatabase(row_count_errors={"hits": "missing", "events": "missing"}))
+    db = CountingDatabase(row_count_errors={"hits": "missing", "events": "missing"})
+    suite = DummySuite(db=db)
 
     assert suite.should_populate() is True
+    assert db.rollback_calls == 2
+
+
+def test_suite_should_fail_when_expected_tables_are_missing_but_db_is_not_empty() -> None:
+    suite = DummySuite(
+        db=CountingDatabase(
+            row_count_errors={"hits": "missing", "events": "missing"},
+            table_names={"legacy_table"},
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="database is not empty"):
+        suite.should_populate()
 
 
 def test_suite_should_fail_when_existing_data_is_inconsistent() -> None:

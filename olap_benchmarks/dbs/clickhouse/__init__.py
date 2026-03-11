@@ -183,6 +183,13 @@ class Clickhouse(Database):
 
         return df
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select name as table_name from system.tables where database = currentDatabase()",
+            schema={"table_name": pl.String},
+        )
+        return set(df.get_column("table_name").to_list())
+
     def run_sql(self, statement: str) -> None:
         retries = 10
         for retry in range(retries):
