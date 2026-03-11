@@ -5,6 +5,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { useMemo } from "react"
+
 import type { SelectionState } from "../hooks/useSelectionState"
 import { cn } from "../lib/cn"
 import { formatDurationSeconds, formatMultiplier } from "../lib/format"
@@ -61,18 +62,13 @@ export function QueryComparisonTable({
       }),
       ...databases.map((database) =>
         columnHelper.accessor(
-          (row) =>
-            Object.hasOwn(row.by_database, database)
-              ? row.by_database[database]
-              : null,
+          (row) => (Object.hasOwn(row.by_database, database) ? row.by_database[database] : null),
           {
             id: `${database}-median`,
             header: database,
             cell: (info) => {
               const value = info.getValue()
-              return value === null || value === undefined
-                ? "—"
-                : formatDurationSeconds(value)
+              return value === null || value === undefined ? "—" : formatDurationSeconds(value)
             },
           },
         ),
@@ -97,10 +93,7 @@ export function QueryComparisonTable({
                 <th key={header.id} className="px-4 py-3 font-medium">
                   {header.isPlaceholder
                     ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
+                    : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
               ))}
             </tr>
@@ -119,7 +112,7 @@ export function QueryComparisonTable({
                   "cursor-pointer transition-opacity duration-150",
                   highlighted ? "opacity-100" : "opacity-20",
                   isSelected
-                    ? "bg-cyan-950/30 ring-1 ring-inset ring-cyan-500/40"
+                    ? "bg-cyan-950/30 ring-1 ring-cyan-500/40 ring-inset"
                     : "hover:bg-slate-900/50",
                 )}
                 onMouseEnter={() => selection.setHoveredQuery(queryName)}

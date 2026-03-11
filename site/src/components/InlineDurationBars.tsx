@@ -26,8 +26,7 @@ export function InlineDurationBars({
         const val = byDatabase[db]
         if (val === null || val === undefined) return null
         const logVal = Math.log10(Math.max(val, LOG_FLOOR))
-        const pct =
-          range <= 0 ? 100 : Math.max(0, (logVal - LOG_MIN) / range) * 100
+        const pct = range <= 0 ? 100 : Math.max(0, (logVal - LOG_MIN) / range) * 100
 
         return (
           <rect

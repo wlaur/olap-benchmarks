@@ -40,9 +40,7 @@ export const benchmarkDefinitions: BenchmarkDefinition[] = [
 
 export const defaultBenchmarkId = benchmarkDefinitions[0]!.id
 
-export function getBenchmarkDefinition(
-  benchmarkId: BenchmarkSuiteId,
-): BenchmarkDefinition {
+export function getBenchmarkDefinition(benchmarkId: BenchmarkSuiteId): BenchmarkDefinition {
   return (
     benchmarkDefinitions.find((benchmark) => benchmark.id === benchmarkId) ??
     benchmarkDefinitions[0]!

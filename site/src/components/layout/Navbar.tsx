@@ -1,9 +1,9 @@
-import { SystemSelector } from "../filters/SystemSelector"
 import {
   getBenchmarkHref,
   type BenchmarkDefinition,
   type BenchmarkSuiteId,
 } from "../../lib/benchmarks"
+import { SystemSelector } from "../filters/SystemSelector"
 
 interface NavbarProps {
   benchmarks: BenchmarkDefinition[]
@@ -27,15 +27,9 @@ export function Navbar({
       <div className="mx-auto max-w-7xl px-4 py-5">
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
-            <img
-              src={`${import.meta.env.BASE_URL}logo.svg`}
-              alt=""
-              className="h-9 w-9"
-            />
+            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="h-9 w-9" />
             <div>
-              <h1 className="text-xl font-semibold text-slate-50">
-                OLAP Benchmarks
-              </h1>
+              <h1 className="text-xl font-semibold text-slate-50">OLAP Benchmarks</h1>
               <p className="text-sm text-slate-400">
                 Benchmark-specific views, scoped to one system at a time.
               </p>
@@ -71,9 +65,7 @@ export function Navbar({
                   disabled={isSystemLoading}
                 />
               ) : (
-                <p className="text-sm text-slate-500">
-                  No completed systems found.
-                </p>
+                <p className="text-sm text-slate-500">No completed systems found.</p>
               )}
             </div>
           </div>

@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react"
+
 import { fetchSystems } from "../../lib/queries"
 
 interface SystemContextValue {
@@ -78,9 +79,7 @@ export function SystemProvider({ children }: { children: ReactNode }) {
     [systems, selectedSystem, loading, error],
   )
 
-  return (
-    <SystemContext.Provider value={value}>{children}</SystemContext.Provider>
-  )
+  return <SystemContext.Provider value={value}>{children}</SystemContext.Provider>
 }
 
 export function useSystem(): SystemContextValue {

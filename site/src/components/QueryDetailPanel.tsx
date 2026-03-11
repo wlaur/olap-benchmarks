@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+
 import { formatDurationSeconds, formatMultiplier } from "../lib/format"
 import type { QuerySqlEntry } from "../lib/types"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
@@ -32,8 +33,7 @@ export function QueryDetailPanel({
 }: QueryDetailPanelProps) {
   const overrideKeys = sql ? Object.keys(sql.db_overrides) : []
   const hasTabs = sql !== null && (sql.sql !== null || overrideKeys.length > 0)
-  const defaultTab =
-    sql?.sql !== null ? "common" : (overrideKeys[0] ?? "common")
+  const defaultTab = sql?.sql !== null ? "common" : (overrideKeys[0] ?? "common")
   const [activeTab, setActiveTab] = useState(defaultTab)
 
   useEffect(() => {
@@ -49,16 +49,13 @@ export function QueryDetailPanel({
     }))
     .filter((d) => d.raw !== null)
 
-  const activeSql =
-    activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
+  const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
 
   return (
     <div className="animate-panel-enter space-y-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h4 className="text-lg font-semibold text-slate-50">
-            {row.query_label}
-          </h4>
+          <h4 className="text-lg font-semibold text-slate-50">{row.query_label}</h4>
           <p className="mt-0.5 text-sm text-slate-400">
             {row.category} · {row.scale} · Fastest: {row.fastest_db} · Spread:{" "}
             {formatMultiplier(row.spread_ratio)}
@@ -73,10 +70,7 @@ export function QueryDetailPanel({
       </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-        <ResponsiveContainer
-          width="100%"
-          height={Math.max(180, chartData.length * 36)}
-        >
+        <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 36)}>
           <BarChart
             data={chartData}
             layout="vertical"
