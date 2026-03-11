@@ -119,9 +119,9 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
-            df = pl.scan_parquet(fpath).sort("time").collect()
+            df = pl.scan_parquet(fpath)
 
-            _LOGGER.info(f"Read and sorted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+            _LOGGER.info(f"Streaming {table_name} from parquet to staged CSV")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)

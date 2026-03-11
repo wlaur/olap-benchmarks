@@ -11,18 +11,35 @@ import {
 } from "recharts"
 
 import { DatabaseLegend } from "../components/DatabaseLegend"
+import { DurationScaleToggle } from "../components/DurationScaleToggle"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
+import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { StatCard } from "../components/StatCard"
 import { useSelectionState } from "../hooks/useSelectionState"
-import { formatDurationSeconds } from "../lib/format"
 import {
+  formatDurationAxisTick,
+  formatDurationSeconds,
+  getDurationAxisDomain,
+  getDurationAxisTicks,
+  scaleDurationForChart,
+  type DurationScaleMode,
+} from "../lib/format"
+import {
+  fetchTimeSeriesMetricSamples,
+  fetchTimeSeriesOperationSummaries,
   fetchQueriesManifest,
   fetchTimeSeriesQuerySummaries,
   fetchTimeSeriesRunSummaries,
 } from "../lib/queries"
-import type { QueriesManifest, TimeSeriesQuerySummary, TimeSeriesRunSummary } from "../lib/types"
+import type {
+  QueriesManifest,
+  TimeSeriesMetricSample,
+  TimeSeriesOperationSummary,
+  TimeSeriesQuerySummary,
+  TimeSeriesRunSummary,
+} from "../lib/types"
 import { TimeSeriesPageSkeleton } from "./TimeSeriesPageSkeleton"
 
 interface TimeSeriesPageProps {
@@ -33,6 +50,8 @@ interface TimeSeriesPageState {
   loading: boolean
   error: string | null
   runSummaries: TimeSeriesRunSummary[]
+  operationSummaries: TimeSeriesOperationSummary[]
+  metricSamples: TimeSeriesMetricSample[]
   querySummaries: TimeSeriesQuerySummary[]
   queriesManifest: QueriesManifest | null
 }
@@ -41,6 +60,17 @@ interface DatabaseAggregateStats {
   db: string
   score: number | null
   wins: number
+}
+
+interface OverviewChartRow {
+  db: string
+  db_version: string
+  fill?: string
+  populate_duration_s: number
+  run_duration_s: number
+  total_duration_s: number
+  populate_chart_duration_s: number
+  run_chart_duration_s: number
 }
 
 const LOG_FLOOR = 1e-6
@@ -52,10 +82,13 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     loading: true,
     error: null,
     runSummaries: [],
+    operationSummaries: [],
+    metricSamples: [],
     querySummaries: [],
     queriesManifest: null,
   })
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
+  const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("log")
   const selection = useSelectionState()
   const { selectedQuery, setSelectedQuery } = selection
 
@@ -66,28 +99,36 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
       loading: true,
       error: null,
       runSummaries: [],
+      operationSummaries: [],
+      metricSamples: [],
       querySummaries: [],
       queriesManifest: null,
     })
 
     Promise.all([
       fetchTimeSeriesRunSummaries(system),
+      fetchTimeSeriesOperationSummaries(system),
+      fetchTimeSeriesMetricSamples(system),
       fetchTimeSeriesQuerySummaries(system),
       fetchQueriesManifest().catch(() => null),
     ])
-      .then(([runSummaries, querySummaries, queriesManifest]) => {
-        if (cancelled) return
+      .then(
+        ([runSummaries, operationSummaries, metricSamples, querySummaries, queriesManifest]) => {
+          if (cancelled) return
 
-        startTransition(() => {
-          setState({
-            loading: false,
-            error: null,
-            runSummaries,
-            querySummaries,
-            queriesManifest,
+          startTransition(() => {
+            setState({
+              loading: false,
+              error: null,
+              runSummaries,
+              operationSummaries,
+              metricSamples,
+              querySummaries,
+              queriesManifest,
+            })
           })
-        })
-      })
+        },
+      )
       .catch((nextError) => {
         if (cancelled) return
 
@@ -96,6 +137,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             loading: false,
             error: String(nextError),
             runSummaries: [],
+            operationSummaries: [],
+            metricSamples: [],
             querySummaries: [],
             queriesManifest: null,
           })
@@ -136,6 +179,9 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   const filteredQuerySummaries = state.querySummaries.filter((row) =>
     includedDatabaseSet.has(row.db),
   )
+  const filteredOperationSummaries = state.operationSummaries.filter((run) =>
+    includedDatabaseSet.has(run.db),
+  )
 
   const databaseColors = Object.fromEntries(
     databases.map((db, idx) => [db, DATABASE_COLORS[idx % DATABASE_COLORS.length]!]),
@@ -169,12 +215,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     filteredRunSummaries.map((run) => [run.db, run.db_version]),
   )
 
-  const runChartData = filteredRunSummaries.map((run) => ({
-    db: run.db,
-    duration_s: run.run_duration_s,
-    fill: databaseColors[run.db] ?? "#94a3b8",
-  }))
+  const runChartData = buildOverviewChartData(filteredOperationSummaries, overviewScaleMode).map(
+    (entry) => ({
+      ...entry,
+      fill: databaseColors[entry.db] ?? "#94a3b8",
+    }),
+  )
   const overviewChartHeight = Math.max(120, Math.min(170, runChartData.length * 28 + 28))
+  const overviewMaxDuration = Math.max(0, ...runChartData.map((run) => run.total_duration_s))
+  const overviewAxisDomain = getDurationAxisDomain(overviewMaxDuration, overviewScaleMode)
+  const overviewAxisTicks = getDurationAxisTicks(overviewMaxDuration, overviewScaleMode)
 
   const selectedRow = selectedQuery
     ? (queryRows.find((r) => r.query_name === selectedQuery) ?? null)
@@ -233,7 +283,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   }
 
   return (
-    <section className="flex h-full min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden">
+    <section className="flex min-h-full w-full flex-col gap-4 pb-4">
       <div className="grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <div className="space-y-2">
@@ -264,12 +314,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Full-run duration by database on a direct scale. This top view should tell you where
-                to investigate before diving into per-query detail.
+                Latest completed populate and run durations stacked per database. Toggle between a
+                zero-based log view and linear scale before diving into per-query detail. Each
+                database keeps one color family: muted for populate, stronger for run.
               </p>
             </div>
-            <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
-              {includedDatabases.length} of {databases.length} databases
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
+              <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
+                {includedDatabases.length} of {databases.length} databases
+              </div>
             </div>
           </div>
 
@@ -288,11 +342,14 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                     tickLine={{ stroke: "#334155" }}
                   />
                   <YAxis
-                    domain={[0, "auto"]}
+                    domain={overviewAxisDomain}
+                    ticks={overviewAxisTicks}
                     tick={{ fill: "#94a3b8", fontSize: 11 }}
                     axisLine={{ stroke: "#334155" }}
                     tickLine={{ stroke: "#334155" }}
-                    tickFormatter={(value: number) => formatDurationSeconds(value)}
+                    tickFormatter={(value: number) =>
+                      formatDurationAxisTick(value, overviewScaleMode)
+                    }
                   />
                   <Tooltip
                     cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
@@ -301,11 +358,41 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                       border: "1px solid #334155",
                       borderRadius: 16,
                     }}
-                    formatter={(value: number) => formatDurationSeconds(value)}
+                    formatter={(_value: number, name, item) => {
+                      const row = item.payload as OverviewChartRow
+
+                      return [
+                        formatDurationSeconds(
+                          name === "Populate" ? row.populate_duration_s : row.run_duration_s,
+                        ),
+                        name,
+                      ]
+                    }}
+                    labelFormatter={(label: string, payload) => {
+                      const row = payload?.[0]?.payload as OverviewChartRow | undefined
+                      if (!row) return label
+
+                      return `${label} · total ${formatDurationSeconds(row.total_duration_s)}`
+                    }}
                   />
-                  <Bar dataKey="duration_s" radius={[10, 10, 0, 0]}>
+                  <Bar
+                    dataKey="populate_chart_duration_s"
+                    stackId="total"
+                    radius={[0, 0, 10, 10]}
+                    name="Populate"
+                  >
                     {runChartData.map((entry) => (
-                      <Cell key={entry.db} fill={entry.fill} />
+                      <Cell key={`${entry.db}-populate`} fill={withAlpha(entry.fill, 0.45)} />
+                    ))}
+                  </Bar>
+                  <Bar
+                    dataKey="run_chart_duration_s"
+                    stackId="total"
+                    radius={[10, 10, 0, 0]}
+                    name="Run"
+                  >
+                    {runChartData.map((entry) => (
+                      <Cell key={`${entry.db}-run`} fill={entry.fill} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -388,7 +475,13 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
         />
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
+      <MetricsTimeSeriesPanel
+        samples={state.metricSamples}
+        databases={includedDatabases}
+        databaseColors={databaseColors}
+      />
+
+      <div className="grid min-h-[44rem] flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
         <section className="flex min-h-0 flex-col rounded-3xl border border-slate-800 bg-slate-900/70">
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
             <div>
@@ -412,7 +505,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           </div>
         </section>
 
-        <section className="min-h-0">
+        <section className="min-h-[28rem] xl:min-h-0">
           {selectedRow ? (
             <QueryDetailPanel
               row={selectedRow}
@@ -535,6 +628,71 @@ function buildDatabaseAggregateStats(
       if (scoreDelta !== 0) return scoreDelta
       return right.wins - left.wins || left.db.localeCompare(right.db)
     })
+}
+
+function buildOverviewChartData(
+  operationSummaries: TimeSeriesOperationSummary[],
+  scaleMode: DurationScaleMode,
+): OverviewChartRow[] {
+  const summariesByDatabase = new Map<
+    string,
+    {
+      db: string
+      db_version: string
+      populate_duration_s: number
+      run_duration_s: number
+    }
+  >()
+
+  for (const summary of operationSummaries) {
+    const existing = summariesByDatabase.get(summary.db) ?? {
+      db: summary.db,
+      db_version: summary.db_version,
+      populate_duration_s: 0,
+      run_duration_s: 0,
+    }
+
+    existing.db_version = summary.db_version
+    if (summary.operation === "populate") {
+      existing.populate_duration_s = summary.run_duration_s
+    } else {
+      existing.run_duration_s = summary.run_duration_s
+    }
+
+    summariesByDatabase.set(summary.db, existing)
+  }
+
+  return Array.from(summariesByDatabase.values())
+    .map((entry) => {
+      const totalDuration = entry.populate_duration_s + entry.run_duration_s
+      const populateTop = scaleDurationForChart(entry.populate_duration_s, scaleMode)
+      const totalTop = scaleDurationForChart(totalDuration, scaleMode)
+
+      return {
+        db: entry.db,
+        db_version: entry.db_version,
+        populate_duration_s: entry.populate_duration_s,
+        run_duration_s: entry.run_duration_s,
+        total_duration_s: totalDuration,
+        populate_chart_duration_s: populateTop,
+        run_chart_duration_s: Math.max(0, totalTop - populateTop),
+      }
+    })
+    .sort(
+      (left, right) =>
+        left.total_duration_s - right.total_duration_s || left.db.localeCompare(right.db),
+    )
+}
+
+function withAlpha(hexColor: string, alpha: number): string {
+  const normalized = hexColor.replace("#", "")
+  if (normalized.length !== 6) return hexColor
+
+  const red = Number.parseInt(normalized.slice(0, 2), 16)
+  const green = Number.parseInt(normalized.slice(2, 4), 16)
+  const blue = Number.parseInt(normalized.slice(4, 6), 16)
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
 
 function formatTimeSeriesQueryName(queryName: string): {
