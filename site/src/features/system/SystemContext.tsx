@@ -3,16 +3,18 @@ import {
   startTransition,
   useContext,
   useEffect,
-  useEffectEvent,
+  useMemo,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react"
 import { fetchSystems } from "../../lib/queries"
 
 interface SystemContextValue {
   systems: string[]
   selectedSystem: string | null
-  setSelectedSystem: (system: string) => void
+  setSelectedSystem: Dispatch<SetStateAction<string | null>>
   loading: boolean
   error: string | null
 }
@@ -27,66 +29,57 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const applyLoadedSystems = useEffectEvent((loadedSystems: string[]) => {
-    const storedSystem = window.localStorage.getItem(STORAGE_KEY)
-    const nextSelectedSystem = loadedSystems.includes(storedSystem ?? "")
-      ? storedSystem
-      : (loadedSystems[0] ?? null)
-
-    startTransition(() => {
-      setSystems(loadedSystems)
-      setSelectedSystemState(nextSelectedSystem)
-      setError(null)
-      setLoading(false)
-    })
-  })
-
-  const applyLoadError = useEffectEvent((nextError: unknown) => {
-    startTransition(() => {
-      setError(String(nextError))
-      setLoading(false)
-    })
-  })
-
   useEffect(() => {
     let cancelled = false
 
     fetchSystems()
       .then((loadedSystems) => {
         if (cancelled) return
-        applyLoadedSystems(loadedSystems)
+
+        const storedSystem = window.localStorage.getItem(STORAGE_KEY)
+        const nextSelectedSystem = loadedSystems.includes(storedSystem ?? "")
+          ? storedSystem
+          : (loadedSystems[0] ?? null)
+
+        startTransition(() => {
+          setSystems(loadedSystems)
+          setSelectedSystemState(nextSelectedSystem)
+          setError(null)
+          setLoading(false)
+        })
       })
       .catch((nextError) => {
         if (cancelled) return
-        applyLoadError(nextError)
+
+        startTransition(() => {
+          setError(String(nextError))
+          setLoading(false)
+        })
       })
 
     return () => {
       cancelled = true
     }
-  }, [applyLoadedSystems, applyLoadError])
+  }, [])
 
   useEffect(() => {
     if (!selectedSystem) return
     window.localStorage.setItem(STORAGE_KEY, selectedSystem)
   }, [selectedSystem])
 
-  const setSelectedSystem = (system: string) => {
-    setSelectedSystemState(system)
-  }
+  const value = useMemo<SystemContextValue>(
+    () => ({
+      systems,
+      selectedSystem,
+      setSelectedSystem: setSelectedSystemState,
+      loading,
+      error,
+    }),
+    [systems, selectedSystem, loading, error],
+  )
 
   return (
-    <SystemContext.Provider
-      value={{
-        systems,
-        selectedSystem,
-        setSelectedSystem,
-        loading,
-        error,
-      }}
-    >
-      {children}
-    </SystemContext.Provider>
+    <SystemContext.Provider value={value}>{children}</SystemContext.Provider>
   )
 }
 
