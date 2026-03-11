@@ -42,8 +42,8 @@ export function Navbar({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <nav className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <nav className="flex min-w-0 flex-1 flex-wrap gap-2">
               {benchmarks.map((benchmark) => {
                 const isActive = benchmark.id === currentBenchmark
                 return (
@@ -62,7 +62,7 @@ export function Navbar({
               })}
             </nav>
 
-            <div className="flex justify-start lg:justify-end">
+            <div className="flex shrink-0 justify-end">
               {systems.length > 0 ? (
                 <SystemSelector
                   systems={systems}
