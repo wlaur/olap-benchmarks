@@ -23,14 +23,16 @@ TIME_SERIES_QUERY_NAMES = {
 
 
 DatasetSize = Literal[
-    "small",
+    "tall",
+    "wide",
     "large",
 ]
 
 
 TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
-    "small": (500_000, 100),
-    "large": (2_000_000, 1_000),
+    "tall": (2_000_000, 10),
+    "wide": (200_000, 1_500),
+    "large": (4_000_000, 1_500),
 }
 
 
