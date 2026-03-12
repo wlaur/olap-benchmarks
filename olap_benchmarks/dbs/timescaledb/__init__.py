@@ -86,9 +86,9 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         "data_wide_eav": "wide_eav_post_insert.sql",
     }
 
-    # data_large exceeds PostgreSQL's max tuple size for compressed rows
-    # (18072 bytes vs 8160 max), confirmed on TimescaleDB 2.25.0 / PG 18
-    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large"}
+    # wide columnar tables can exceed PostgreSQL's max tuple size for compressed rows
+    # on TimescaleDB 2.25.0 / PG 18.
+    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large", "data_wide"}
 
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
