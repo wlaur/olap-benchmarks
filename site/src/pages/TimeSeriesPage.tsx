@@ -536,7 +536,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           value={widestSpreadRow ? `${widestSpreadRow.spread_ratio.toFixed(2)}x` : "—"}
           detail={
             widestSpreadRow
-              ? `${widestSpreadRow.query_label} · ${widestSpreadRow.category}`
+              ? `${widestSpreadRow.query_label} · ${widestSpreadRow.table_family} · Q${widestSpreadRow.query_id}`
               : undefined
           }
         />
@@ -631,9 +631,9 @@ function buildQueryComparisonRows(
   }
 
   return Array.from(groupedQueries.entries())
-    .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+    .sort(([leftName], [rightName]) => compareTimeSeriesQueryNames(leftName, rightName))
     .map(([queryName, rows]) => {
-      const { category, queryLabel, scale } = formatTimeSeriesQueryName(queryName)
+      const { queryId, queryLabel, tableFamily } = parseTimeSeriesQueryName(queryName)
       const byDatabase = Object.fromEntries(
         databases.map((database) => [database, null]),
       ) as Record<string, number | null>
@@ -650,8 +650,8 @@ function buildQueryComparisonRows(
       return {
         query_name: queryName,
         query_label: queryLabel,
-        category,
-        scale,
+        table_family: tableFamily,
+        query_id: queryId,
         fastest_db: fastestDb,
         spread_ratio: slowestDuration / fastestDuration,
         by_database: byDatabase,
@@ -765,41 +765,55 @@ function withAlpha(hexColor: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
 
-function formatTimeSeriesQueryName(queryName: string): {
-  category: string
+function parseTimeSeriesQueryName(queryName: string): {
+  queryId: string
   queryLabel: string
-  scale: string
+  tableFamily: string
 } {
-  const normalizedName = queryName.replace(/^\d+_/, "")
-  const scale = normalizedName.includes("_small_")
-    ? "Small wide"
-    : normalizedName.includes("_large_")
-      ? "Large wide"
-      : "Wide"
-  const cleanedName = normalizedName.replace(/_(small|large)_wide$/, "").replace(/_wide$/, "")
-  const queryLabel = toTitleCase(cleanedName.replace(/_/g, " "))
+  const match = /^(?<table>[a-z]+)_(?<queryId>\d+)_(?<description>.+)$/.exec(queryName)
+  if (!match?.groups) {
+    return {
+      queryId: "00",
+      queryLabel: toTitleCase(queryName.replace(/_/g, " ")),
+      tableFamily: "Unknown",
+    }
+  }
+
+  const queryId = match.groups.queryId ?? "00"
+  const description = match.groups.description ?? queryName
+  const table = match.groups.table ?? "unknown"
 
   return {
-    category: getTimeSeriesCategory(normalizedName),
-    queryLabel,
-    scale,
+    queryId,
+    queryLabel: toTitleCase(description.replace(/_/g, " ")),
+    tableFamily: formatTimeSeriesTableFamily(table),
   }
 }
 
-function getTimeSeriesCategory(queryName: string): string {
-  if (queryName.includes("export")) return "Export"
-  if (queryName.includes("resample")) return "Resample"
-  if (queryName.includes("aggregate")) return "Aggregate"
-  if (queryName.includes("scalar")) return "Scalar lookup"
-  if (queryName.includes("raw_filtered")) return "Filtered scan"
-  if (queryName.includes("raw")) return "Raw scan"
-  if (queryName.includes("conditional")) return "Conditional aggregate"
-  if (queryName.includes("max_time") || queryName.includes("latest_time_range")) {
-    return "Time boundary"
-  }
-  return "Other"
+function formatTimeSeriesTableFamily(value: string): string {
+  if (value === "eav") return "EAV"
+  if (value === "wide") return "Wide"
+  if (value === "tall") return "Tall"
+  if (value === "large") return "Large"
+  return toTitleCase(value)
 }
 
 function toTitleCase(value: string): string {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function compareTimeSeriesQueryNames(left: string, right: string): number {
+  const leftMeta = parseTimeSeriesQueryName(left)
+  const rightMeta = parseTimeSeriesQueryName(right)
+  const tableDelta = leftMeta.tableFamily.localeCompare(rightMeta.tableFamily)
+  if (tableDelta !== 0) return tableDelta
+
+  const queryIdDelta =
+    Number.parseInt(leftMeta.queryId, 10) - Number.parseInt(rightMeta.queryId, 10)
+  if (queryIdDelta !== 0) return queryIdDelta
+
+  const labelDelta = leftMeta.queryLabel.localeCompare(rightMeta.queryLabel)
+  if (labelDelta !== 0) return labelDelta
+
+  return left.localeCompare(right)
 }

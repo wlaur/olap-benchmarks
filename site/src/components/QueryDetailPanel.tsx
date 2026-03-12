@@ -72,7 +72,7 @@ export function QueryDetailPanel({
         <div>
           <h4 className="text-lg font-semibold text-slate-50">{row.query_label}</h4>
           <p className="mt-0.5 text-sm text-slate-400">
-            {row.category} · {row.scale} · Fastest: {row.fastest_db} · Spread:{" "}
+            {row.table_family} · Q{row.query_id} · Fastest: {row.fastest_db} · Spread:{" "}
             {formatMultiplier(row.spread_ratio)}
           </p>
         </div>
