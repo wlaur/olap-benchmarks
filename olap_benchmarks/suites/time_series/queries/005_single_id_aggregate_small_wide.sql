@@ -1,8 +1,0 @@
-select
-    avg(process_4) as val,
-    count(process_4) as cnt
-from
-    data_tall
-where
-    time > '2024-02-02'
-    and time < '2024-12-16 12:00:00'
