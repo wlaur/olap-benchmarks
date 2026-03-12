@@ -1,13 +1,13 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     avg(value) as value
 from
     data_wide_eav
 where
     id = 484
 group by
-    hour
+    hr
 order by
-    hour
+    hr
 limit
     100

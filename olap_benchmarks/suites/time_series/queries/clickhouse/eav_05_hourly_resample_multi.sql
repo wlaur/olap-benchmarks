@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     avgIf(value, id = 892) as value_1,
     avgIf(value, id = 22) as value_2,
     avgIf(value, id = 87) as value_3,
@@ -11,8 +11,8 @@ from
 where
     id in (892, 22, 87, 484, 467, 189)
 group by
-    hour
+    hr
 order by
-    hour
+    hr
 limit
     100

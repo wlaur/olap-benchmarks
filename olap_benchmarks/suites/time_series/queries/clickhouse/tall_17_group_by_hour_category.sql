@@ -1,14 +1,14 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     binary_1,
     avg(process_4) as value
 from
     data_tall
 group by
-    hour,
+    hr,
     binary_1
 order by
-    hour,
+    hr,
     binary_1
 limit
     200

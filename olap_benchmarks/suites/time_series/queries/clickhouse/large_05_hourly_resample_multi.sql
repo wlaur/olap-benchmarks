@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     avg(process_667) as value_1,
     avg(cast(binary_22 as Nullable(int))) as value_2,
     avg(ratio_12) as value_3,
@@ -9,8 +9,8 @@ select
 from
     data_large
 group by
-    hour
+    hr
 order by
-    hour
+    hr
 limit
     100

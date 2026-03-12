@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     binary_1,
     avg(process_4) as value
 from
@@ -8,7 +8,7 @@ group by
     date_trunc('hour', time),
     binary_1
 order by
-    hour,
+    hr,
     binary_1
 limit
     200
