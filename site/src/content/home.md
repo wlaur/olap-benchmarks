@@ -27,7 +27,7 @@ All benchmarks for a given **system** (e.g. `macbook-pro-m4`) run on the same ph
 
 - Every run is fully automated: schema creation, data loading, query execution, and metric collection
 - Database versions, configuration, and query SQL are pinned per revision
-- Raw results are stored in a [DuckDB](https://duckdb.org/) database and checked into version control
+- Raw results are stored in a DuckDB database and checked into version control
 
 ### Metrics collected
 
