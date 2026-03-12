@@ -17,12 +17,12 @@ repos:
       - id: oxfmt
         name: oxfmt
         language: system
-        entry: sh -c 'cd site && npx oxfmt --check src/ vite.config.ts'
+        entry: sh -c 'cd site && ./node_modules/.bin/oxfmt --write src/ vite.config.ts'
         files: ^site/.*\.(ts|tsx)$
         pass_filenames: false
       - id: oxlint
         name: oxlint
         language: system
-        entry: sh -c 'cd site && npx oxlint'
+        entry: sh -c 'cd site && ./node_modules/.bin/oxlint .'
         files: ^site/.*\.(ts|tsx)$
         pass_filenames: false

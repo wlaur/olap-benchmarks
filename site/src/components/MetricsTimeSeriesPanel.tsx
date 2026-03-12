@@ -172,7 +172,10 @@ export function MetricsTimeSeriesPanel({
                                 backgroundColor: "#020617",
                                 border: "1px solid #334155",
                                 borderRadius: 14,
+                                color: "#e2e8f0",
                               }}
+                              labelStyle={{ color: "#e2e8f0" }}
+                              itemStyle={{ color: "#e2e8f0" }}
                               cursor={{ stroke: "#475569", strokeDasharray: "4 4" }}
                               labelFormatter={(value) =>
                                 `Elapsed ${formatElapsedLabel(Number(value))}`

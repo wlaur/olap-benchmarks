@@ -36,6 +36,7 @@ import {
 import type {
   QueriesManifest,
   TimeSeriesMetricSample,
+  TimeSeriesOperation,
   TimeSeriesOperationSummary,
   TimeSeriesQuerySummary,
   TimeSeriesRunSummary,
@@ -73,6 +74,8 @@ interface OverviewChartRow {
   run_chart_duration_s: number
 }
 
+type OverviewOperationVisibility = Record<TimeSeriesOperation, boolean>
+
 const LOG_FLOOR = 1e-6
 
 const DATABASE_COLORS = ["#38bdf8", "#f97316", "#34d399", "#facc15", "#f472b6", "#a78bfa"]
@@ -89,6 +92,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   })
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("log")
+  const [overviewOperationVisibility, setOverviewOperationVisibility] =
+    useState<OverviewOperationVisibility>({
+      populate: true,
+      run: true,
+    })
   const selection = useSelectionState()
   const { selectedQuery, setSelectedQuery } = selection
 
@@ -215,16 +223,19 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     filteredRunSummaries.map((run) => [run.db, run.db_version]),
   )
 
-  const runChartData = buildOverviewChartData(filteredOperationSummaries, overviewScaleMode).map(
-    (entry) => ({
-      ...entry,
-      fill: databaseColors[entry.db] ?? "#94a3b8",
-    }),
-  )
+  const runChartData = buildOverviewChartData(
+    filteredOperationSummaries,
+    overviewScaleMode,
+    overviewOperationVisibility,
+  ).map((entry) => ({
+    ...entry,
+    fill: databaseColors[entry.db] ?? "#94a3b8",
+  }))
   const overviewChartHeight = Math.max(120, Math.min(170, runChartData.length * 28 + 28))
   const overviewMaxDuration = Math.max(0, ...runChartData.map((run) => run.total_duration_s))
   const overviewAxisDomain = getDurationAxisDomain(overviewMaxDuration, overviewScaleMode)
   const overviewAxisTicks = getDurationAxisTicks(overviewMaxDuration, overviewScaleMode)
+  const hasVisibleOverviewSegments = runChartData.some((entry) => entry.total_duration_s > 0)
 
   const selectedRow = selectedQuery
     ? (queryRows.find((r) => r.query_name === selectedQuery) ?? null)
@@ -240,6 +251,13 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
       return nextSelection.length > 0 ? nextSelection : currentSelection
     })
+  }
+
+  function toggleOverviewOperation(operation: TimeSeriesOperation) {
+    setOverviewOperationVisibility((currentVisibility) => ({
+      ...currentVisibility,
+      [operation]: !currentVisibility[operation],
+    }))
   }
 
   useEffect(() => {
@@ -314,12 +332,43 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Latest completed populate and run durations stacked per database. Toggle between a
-                zero-based log view and linear scale before diving into per-query detail. Each
-                database keeps one color family: muted for populate, stronger for run.
+                Latest completed populate and run durations per database. Toggle either phase on or
+                off, then switch between a zero-based log view and linear scale before diving into
+                per-query detail. Each database keeps one color family: muted for populate, stronger
+                for run.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="inline-flex rounded-full border border-slate-800 bg-slate-950/80 p-1">
+                {(
+                  [
+                    ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
+                    ["run", "Run", "rgba(148, 163, 184, 1)"],
+                  ] as const
+                ).map(([operation, label, chipColor]) => {
+                  const isActive = overviewOperationVisibility[operation]
+
+                  return (
+                    <button
+                      key={operation}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => toggleOverviewOperation(operation)}
+                      className={
+                        isActive
+                          ? "inline-flex items-center gap-2 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.5)]"
+                          : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+                      }
+                    >
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.9)" }}
+                      />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
               <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
               <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
                 {includedDatabases.length} of {databases.length} databases
@@ -332,71 +381,89 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               className="h-full rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
               style={{ minHeight: overviewChartHeight }}
             >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid stroke="#1e293b" vertical={false} />
-                  <XAxis
-                    dataKey="db"
-                    tick={{ fill: "#94a3b8", fontSize: 11 }}
-                    axisLine={{ stroke: "#334155" }}
-                    tickLine={{ stroke: "#334155" }}
-                  />
-                  <YAxis
-                    domain={overviewAxisDomain}
-                    ticks={overviewAxisTicks}
-                    tick={{ fill: "#94a3b8", fontSize: 11 }}
-                    axisLine={{ stroke: "#334155" }}
-                    tickLine={{ stroke: "#334155" }}
-                    tickFormatter={(value: number) =>
-                      formatDurationAxisTick(value, overviewScaleMode)
-                    }
-                  />
-                  <Tooltip
-                    cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
-                    contentStyle={{
-                      backgroundColor: "#020617",
-                      border: "1px solid #334155",
-                      borderRadius: 16,
-                    }}
-                    formatter={(_value: number, name, item) => {
-                      const row = item.payload as OverviewChartRow
+              {!hasVisibleOverviewSegments ? (
+                <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
+                  Enable populate or run to display overview bars for the selected databases.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
+                    <CartesianGrid stroke="#1e293b" vertical={false} />
+                    <XAxis
+                      dataKey="db"
+                      tick={{ fill: "#94a3b8", fontSize: 11 }}
+                      axisLine={{ stroke: "#334155" }}
+                      tickLine={{ stroke: "#334155" }}
+                    />
+                    <YAxis
+                      domain={overviewAxisDomain}
+                      ticks={overviewAxisTicks}
+                      tick={{ fill: "#94a3b8", fontSize: 11 }}
+                      axisLine={{ stroke: "#334155" }}
+                      tickLine={{ stroke: "#334155" }}
+                      tickFormatter={(value: number) =>
+                        formatDurationAxisTick(value, overviewScaleMode)
+                      }
+                    />
+                    <Tooltip
+                      cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
+                      contentStyle={{
+                        backgroundColor: "#020617",
+                        border: "1px solid #334155",
+                        borderRadius: 16,
+                        color: "#e2e8f0",
+                      }}
+                      labelStyle={{ color: "#e2e8f0" }}
+                      itemStyle={{ color: "#e2e8f0" }}
+                      formatter={(_value: number, name, item) => {
+                        const row = item.payload as OverviewChartRow
 
-                      return [
-                        formatDurationSeconds(
-                          name === "Populate" ? row.populate_duration_s : row.run_duration_s,
-                        ),
-                        name,
-                      ]
-                    }}
-                    labelFormatter={(label: string, payload) => {
-                      const row = payload?.[0]?.payload as OverviewChartRow | undefined
-                      if (!row) return label
+                        return [
+                          formatDurationSeconds(
+                            name === "Populate" ? row.populate_duration_s : row.run_duration_s,
+                          ),
+                          name,
+                        ]
+                      }}
+                      labelFormatter={(label: string, payload) => {
+                        const row = payload?.[0]?.payload as OverviewChartRow | undefined
+                        if (!row) return label
 
-                      return `${label} · total ${formatDurationSeconds(row.total_duration_s)}`
-                    }}
-                  />
-                  <Bar
-                    dataKey="populate_chart_duration_s"
-                    stackId="total"
-                    radius={[0, 0, 10, 10]}
-                    name="Populate"
-                  >
-                    {runChartData.map((entry) => (
-                      <Cell key={`${entry.db}-populate`} fill={withAlpha(entry.fill, 0.45)} />
-                    ))}
-                  </Bar>
-                  <Bar
-                    dataKey="run_chart_duration_s"
-                    stackId="total"
-                    radius={[10, 10, 0, 0]}
-                    name="Run"
-                  >
-                    {runChartData.map((entry) => (
-                      <Cell key={`${entry.db}-run`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                        return overviewOperationVisibility.populate &&
+                          overviewOperationVisibility.run
+                          ? `${label} · total ${formatDurationSeconds(row.total_duration_s)}`
+                          : `${label} · ${formatDurationSeconds(row.total_duration_s)}`
+                      }}
+                    />
+                    {overviewOperationVisibility.populate ? (
+                      <Bar
+                        dataKey="populate_chart_duration_s"
+                        stackId="total"
+                        radius={overviewOperationVisibility.run ? [0, 0, 10, 10] : [10, 10, 10, 10]}
+                        name="Populate"
+                      >
+                        {runChartData.map((entry) => (
+                          <Cell key={`${entry.db}-populate`} fill={withAlpha(entry.fill, 0.45)} />
+                        ))}
+                      </Bar>
+                    ) : null}
+                    {overviewOperationVisibility.run ? (
+                      <Bar
+                        dataKey="run_chart_duration_s"
+                        stackId="total"
+                        radius={
+                          overviewOperationVisibility.populate ? [10, 10, 0, 0] : [10, 10, 10, 10]
+                        }
+                        name="Run"
+                      >
+                        {runChartData.map((entry) => (
+                          <Cell key={`${entry.db}-run`} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    ) : null}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -633,6 +700,7 @@ function buildDatabaseAggregateStats(
 function buildOverviewChartData(
   operationSummaries: TimeSeriesOperationSummary[],
   scaleMode: DurationScaleMode,
+  visibleOperations: OverviewOperationVisibility,
 ): OverviewChartRow[] {
   const summariesByDatabase = new Map<
     string,
@@ -664,8 +732,10 @@ function buildOverviewChartData(
 
   return Array.from(summariesByDatabase.values())
     .map((entry) => {
-      const totalDuration = entry.populate_duration_s + entry.run_duration_s
-      const populateTop = scaleDurationForChart(entry.populate_duration_s, scaleMode)
+      const visiblePopulateDuration = visibleOperations.populate ? entry.populate_duration_s : 0
+      const visibleRunDuration = visibleOperations.run ? entry.run_duration_s : 0
+      const totalDuration = visiblePopulateDuration + visibleRunDuration
+      const populateTop = scaleDurationForChart(visiblePopulateDuration, scaleMode)
       const totalTop = scaleDurationForChart(totalDuration, scaleMode)
 
       return {

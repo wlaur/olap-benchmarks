@@ -8,7 +8,8 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
 import { cn } from "../lib/cn"
@@ -32,6 +33,11 @@ interface QueryComparisonTableProps {
   selection: SelectionState
   maxDuration: number
   containerClassName?: string
+}
+
+interface HeaderMeta {
+  tooltip?: ReactNode
+  tooltipLabel?: string
 }
 
 const columnHelper = createColumnHelper<QueryComparisonRow>()
@@ -89,12 +95,22 @@ export function QueryComparisonTable({
       }),
       columnHelper.accessor("fastest_db", { header: "Fastest" }),
       columnHelper.accessor("spread_ratio", {
-        header: "Spread",
+        header: "Gap",
+        meta: {
+          tooltip:
+            "Slowest median divided by fastest median for this query across the selected databases. 1.0x means a tie. Higher values mean a wider latency gap.",
+          tooltipLabel: "Explain gap",
+        } satisfies HeaderMeta,
         cell: (info) => formatMultiplier(info.getValue()),
       }),
       columnHelper.accessor((row) => getBestMedian(row), {
         id: "best_duration",
-        header: "Best Median",
+        header: "Best",
+        meta: {
+          tooltip:
+            "Lowest median query time across the selected databases. For each database we take the median of its recorded runs for this query, then keep the fastest median.",
+          tooltipLabel: "Explain best median",
+        } satisfies HeaderMeta,
         sortingFn: bestMedianSort,
         cell: (info) => {
           const bestMedian = info.getValue()
@@ -133,22 +149,41 @@ export function QueryComparisonTable({
         <thead className="sticky top-0 z-10 bg-slate-900/95 text-slate-400 backdrop-blur">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id} className="px-4 py-3 font-medium">
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 text-left transition-colors hover:text-slate-200"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      <SortIcon direction={header.column.getIsSorted()} />
-                    </button>
-                  ) : (
-                    flexRender(header.column.columnDef.header, header.getContext())
-                  )}
-                </th>
-              ))}
+              {headerGroup.headers.map((header) => {
+                const meta = header.column.columnDef.meta as HeaderMeta | undefined
+                const headerContent = flexRender(
+                  header.column.columnDef.header,
+                  header.getContext(),
+                )
+
+                return (
+                  <th key={header.id} className="px-4 py-3 font-medium">
+                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-slate-200"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {meta?.tooltip ? (
+                            <HeaderInfoTooltip
+                              label={meta.tooltipLabel ?? `Explain ${header.id}`}
+                              tooltip={meta.tooltip}
+                            >
+                              {headerContent}
+                            </HeaderInfoTooltip>
+                          ) : (
+                            headerContent
+                          )}
+                          <SortIcon direction={header.column.getIsSorted()} />
+                        </button>
+                      </div>
+                    ) : (
+                      headerContent
+                    )}
+                  </th>
+                )
+              })}
             </tr>
           ))}
         </thead>
@@ -201,12 +236,97 @@ function compareNullableNumbers(left: number | null, right: number | null): numb
 
 function SortIcon({ direction }: { direction: false | "asc" | "desc" }) {
   if (direction === "asc") {
-    return <ArrowUp className="size-3.5 text-cyan-300" />
+    return <ArrowUp className="size-4 shrink-0 text-cyan-300" />
   }
 
   if (direction === "desc") {
-    return <ArrowDown className="size-3.5 text-cyan-300" />
+    return <ArrowDown className="size-4 shrink-0 text-cyan-300" />
   }
 
-  return <ArrowUpDown className="size-3.5 text-slate-500" />
+  return <ArrowUpDown className="size-4 shrink-0 text-slate-500" />
+}
+
+interface HeaderWithTooltipProps {
+  label: string
+  tooltip: ReactNode
+  children: ReactNode
+}
+
+interface TooltipPosition {
+  left: number
+  top: number
+  placement: "top" | "bottom"
+}
+
+function HeaderInfoTooltip({ label, tooltip, children }: HeaderWithTooltipProps) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const [position, setPosition] = useState<TooltipPosition | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    function updatePosition() {
+      const trigger = triggerRef.current
+      if (!trigger) return
+
+      const rect = trigger.getBoundingClientRect()
+      const tooltipWidth = 288
+      const margin = 12
+      const gap = 10
+      const left = clamp(
+        rect.left + rect.width / 2 - tooltipWidth / 2,
+        margin,
+        window.innerWidth - tooltipWidth - margin,
+      )
+      const placement = rect.top > 120 ? "top" : "bottom"
+
+      setPosition({
+        left,
+        top: placement === "top" ? rect.top - gap : rect.bottom + gap,
+        placement,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+    }
+  }, [isOpen])
+
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        aria-label={label}
+        onMouseEnter={() => setIsOpen(true)}
+        onMouseLeave={() => setIsOpen(false)}
+        className="transition-colors hover:text-slate-100"
+      >
+        {children}
+      </span>
+      {isOpen && position
+        ? createPortal(
+            <div
+              className={cn(
+                "pointer-events-none fixed z-[80] w-72 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-slate-700 bg-slate-950/98 px-3 py-2 text-xs leading-5 text-slate-200 shadow-[0_20px_50px_rgba(2,6,23,0.55)]",
+                position.placement === "top" ? "-translate-y-full" : undefined,
+              )}
+              style={{ left: position.left, top: position.top }}
+            >
+              {tooltip}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  )
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
 }
