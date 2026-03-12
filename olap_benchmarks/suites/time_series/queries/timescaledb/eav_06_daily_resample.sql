@@ -1,5 +1,5 @@
 select
-    time_bucket(INTERVAL '1 day', time) as day,
+    time_bucket(INTERVAL '1 day', time) as d,
     avg(value) as value
 from
     data_wide_eav
@@ -8,4 +8,4 @@ where
 group by
     time_bucket(INTERVAL '1 day', time)
 order by
-    day
+    d
