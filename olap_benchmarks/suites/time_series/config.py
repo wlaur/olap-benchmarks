@@ -203,7 +203,12 @@ def build_time_series_generation_spec(n_rows: int, n_cols: int, seed: int = 1) -
 
 
 def generate_time_series_data(n_rows: int, n_cols: int, seed: int = 1) -> pl.DataFrame:
-    return generate_time_series_data_batch(build_time_series_generation_spec(n_rows, n_cols, seed), 0, n_rows)
+    return generate_time_series_data_batch(
+        build_time_series_generation_spec(n_rows, n_cols, seed),
+        0,
+        n_rows,
+        batch_index=0,
+    )
 
 
 def _generate_time_values(batch_start: int, batch_end: int, total_rows: int) -> pl.Series:
@@ -282,9 +287,9 @@ def generate_time_series_data_batch(
     spec: TimeSeriesGenerationSpec,
     batch_start: int,
     batch_end: int,
+    batch_index: int,
 ) -> pl.DataFrame:
     batch_rows = batch_end - batch_start
-    batch_index = batch_start // max(1, batch_rows)
     base_signals = {
         base_index: _generate_base_signal_batch(spec, base_index, batch_start, batch_end, batch_index)
         for base_index in range(len(spec.base_specs))
@@ -357,7 +362,9 @@ def write_time_series_dataset(
             batch_count = batch_number
             batch_end = min(batch_start + batch_rows, n_rows)
             batch_path = temp_dir / f"part_{batch_number:05d}.parquet"
-            generate_time_series_data_batch(spec, batch_start, batch_end).write_parquet(batch_path)
+            generate_time_series_data_batch(spec, batch_start, batch_end, batch_index=batch_number - 1).write_parquet(
+                batch_path
+            )
             _LOGGER.info(
                 f"Wrote {fpath.stem} partition {batch_number:_} "
                 f"({batch_end - batch_start:_} rows, {batch_end:_}/{n_rows:_})"
