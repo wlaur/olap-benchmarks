@@ -4,10 +4,16 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..results import get_results_engine, get_results_head_revision, migrate_results, rename_database
+from ..results import (
+    abort_running_runs,
+    get_results_engine,
+    get_results_head_revision,
+    migrate_results,
+    rename_database,
+)
 from ..results.models import Run, RunMetric, RunStep
 from ..results.schema import ensure_results_schema
 
@@ -78,8 +84,8 @@ def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Pa
     try:
         ensure_results_schema(engine)
 
-        with Session(engine) as session:
-            head_revision = session.execute(text("select version_num from alembic_version")).scalar_one()
+        with engine.begin() as connection:
+            head_revision = connection.exec_driver_sql("select version_num from alembic_version").scalar_one()
             assert head_revision == get_results_head_revision()
     finally:
         engine.dispose()
@@ -117,16 +123,13 @@ def test_rename_database_updates_run_db_only(tmp_path: Path) -> None:
         assert renamed_runs == 2
 
         with Session(engine) as session:
-            renamed_dbs = session.scalars(text("select db from run order by id")).all()
+            renamed_dbs = session.scalars(select(Run.db).order_by(Run.id)).all()
             assert renamed_dbs == ["timescale", "timescale", untouched_db]
 
-            suites = session.scalars(text("select suite from run order by id")).all()
+            suites = session.scalars(select(Run.suite).order_by(Run.id)).all()
             assert suites == ["time_series", "clickbench", untouched_suite]
 
-            query_name = session.execute(
-                text("select query_name from run_step where run_id = :run_id"),
-                {"run_id": renamed_run_id},
-            ).scalar_one()
+            query_name = session.scalar(select(RunStep.query_name).where(RunStep.run_id == renamed_run_id))
             assert query_name == "001_max_time_small_wide"
     finally:
         engine.dispose()
@@ -163,5 +166,59 @@ def test_rename_database_errors_when_new_name_exists(tmp_path: Path) -> None:
 
         with pytest.raises(SystemExit, match="Database 'monetdb' already exists"):
             rename_database("timescaledb", "monetdb", db_path=db_path)
+    finally:
+        engine.dispose()
+
+
+def test_abort_running_runs_marks_runs_and_steps_aborted(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        ensure_results_schema(engine)
+
+        with Session(engine) as session:
+            running_run = _insert_run(session, suite="time_series", db="timescaledb")
+            running_run_id = running_run.id
+            completed_run = _insert_run(session, suite="time_series", db="monetdb")
+            completed_run_id = completed_run.id
+            completed_run.status = "completed"
+            completed_run.finished_at = datetime.now()
+
+            session.add(
+                RunStep(
+                    run_id=running_run.id,
+                    step_type="phase",
+                    step_name="populate",
+                    started_at=datetime.now(),
+                    status="running",
+                )
+            )
+            session.add(
+                RunStep(
+                    run_id=completed_run.id,
+                    step_type="phase",
+                    step_name="populate",
+                    started_at=datetime.now(),
+                    finished_at=datetime.now(),
+                    status="completed",
+                )
+            )
+            session.commit()
+
+        aborted_runs = abort_running_runs(db_path=db_path)
+        assert aborted_runs == 1
+
+        with Session(engine) as session:
+            statuses = session.execute(select(Run.id, Run.status, Run.error_type).order_by(Run.id)).all()
+            assert statuses[0] == (running_run_id, "aborted", "KeyboardInterrupt")
+            assert statuses[1] == (completed_run_id, "completed", None)
+
+            step_statuses = session.execute(
+                select(RunStep.run_id, RunStep.status, RunStep.error_type).order_by(RunStep.run_id),
+            ).all()
+            assert step_statuses[0] == (running_run_id, "aborted", "KeyboardInterrupt")
+            assert step_statuses[1] == (completed_run_id, "completed", None)
     finally:
         engine.dispose()

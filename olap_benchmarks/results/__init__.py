@@ -310,6 +310,51 @@ def rename_database(
         engine.dispose()
 
 
+def abort_running_runs(
+    revision: Revision = "default",
+    db_path: Path | None = None,
+    error_type: str = "KeyboardInterrupt",
+    error_message: str = "Interrupted by user",
+) -> int:
+    db_path = db_path or _require_revision(revision)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        with Session(engine) as session:
+            run_ids = list(session.scalars(select(Run.id).where(Run.status == "running")).all())
+
+            if not run_ids:
+                return 0
+
+            finished_at = datetime.now(UTC).replace(tzinfo=None)
+            session.execute(
+                update(RunStep)
+                .where(RunStep.run_id.in_(run_ids))
+                .where(RunStep.status == "running")
+                .values(
+                    finished_at=finished_at,
+                    status="aborted",
+                    error_type=error_type,
+                    error_message=error_message,
+                )
+            )
+            session.execute(
+                update(Run)
+                .where(Run.id.in_(run_ids))
+                .where(Run.status == "running")
+                .values(
+                    finished_at=finished_at,
+                    status="aborted",
+                    error_type=error_type,
+                    error_message=error_message,
+                )
+            )
+            session.commit()
+            return len(run_ids)
+    finally:
+        engine.dispose()
+
+
 def config(as_json: bool = False) -> None:
     settings_dict = {
         "input_data_directory": str(SETTINGS.input_data_directory),
