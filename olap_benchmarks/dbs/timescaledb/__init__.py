@@ -113,6 +113,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
 
             self.db.create_table(schema, table_name, primary_key, not_null)
 
+        # convert small_wide to hypertable before insert (columnstore benefits from direct chunk writes)
         self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
 
         for table_name, fpath in input_files.items():
@@ -126,6 +127,13 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
+
+        # convert large_wide to hypertable after insert — inserting into a plain table allows
+        # timescaledb-parallel-copy to use all workers (hypertable chunk locks limit parallelism)
+        with self.db.phase_context("create_hypertable", table_name="data_large_wide"):
+            self.db.execute_schema_file(
+                REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide_post_insert.sql"
+            )
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
 
