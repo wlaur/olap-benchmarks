@@ -7,8 +7,8 @@ import cyclopts
 from setproctitle import setproctitle
 
 from .metrics.storage import start_writer_process
-from .results import config as show_config
 from .results import (
+    abort_running_runs,
     delete_runs,
     delete_runs_by_status,
     list_revisions,
@@ -17,6 +17,7 @@ from .results import (
     query_results,
     rename_database,
 )
+from .results import config as show_config
 from .results import publish as publish_results
 from .settings import (
     MAIN_PROCESS_TITLE,
@@ -134,6 +135,7 @@ def benchmark(
         _check_input_data(suite_name)
 
     writer = start_writer_process(revision=revision)
+    interrupted = False
 
     try:
         for db_name in resolve_dbs(db):
@@ -153,8 +155,15 @@ def benchmark(
                         db_instance.benchmark(suite_name, operation)
                 finally:
                     _stop_db(db_instance)
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
     finally:
         writer.close()
+        if interrupted:
+            aborted_runs = abort_running_runs(revision=revision)
+            if aborted_runs:
+                _LOGGER.warning(f"Marked {aborted_runs} interrupted run(s) as aborted")
 
 
 @app.command
@@ -179,6 +188,30 @@ results_app = cyclopts.App(name="results", help="Inspect and manage the results 
 app.command(results_app)
 
 
+def _print_runs(rows: list[dict[str, object]]) -> None:
+    import json
+
+    if not rows:
+        print("No runs found.")
+        return
+
+    print(json.dumps(rows, indent=2))
+
+
+def _confirm_delete(description: str, force: bool = False) -> None:
+    if force:
+        return
+
+    confirmation = input(f"Type 'yes' to {description}: ").strip()
+    if confirmation != "yes":
+        raise SystemExit("Aborted.")
+
+
+def _validate_delete_status(status: str) -> None:
+    if status not in {"failed", "aborted"}:
+        raise SystemExit("`results delete --status` only supports 'failed' or 'aborted'.")
+
+
 @results_app.command
 def runs(
     status: str | None = None,
@@ -187,14 +220,19 @@ def runs(
     revision: Revision = "default",
 ) -> None:
     """List benchmark runs, optionally filtered by status, suite, or db."""
-    import json
-
     rows = list_runs(revision=revision, status=status, suite=suite, db=db)
-    if not rows:
-        print("No runs found.")
-        return
+    _print_runs(rows)
 
-    print(json.dumps(rows, indent=2))
+
+@results_app.command(name="failed")
+def failed_runs(
+    suite: str | None = None,
+    db: str | None = None,
+    revision: Revision = "default",
+) -> None:
+    """List failed benchmark runs, optionally filtered by suite or db."""
+    rows = list_runs(revision=revision, status="failed", suite=suite, db=db)
+    _print_runs(rows)
 
 
 @results_app.command(name="delete")
@@ -202,6 +240,7 @@ def delete_cmd(
     run_id: list[int] | None = None,
     status: str | None = None,
     revision: Revision = "default",
+    force: bool = False,
 ) -> None:
     """Delete runs (and their steps/metrics) by run ID or status (e.g. 'failed', 'aborted')."""
     if run_id and status:
@@ -210,9 +249,12 @@ def delete_cmd(
         raise SystemExit("Specify --run-id or --status to select runs to delete.")
 
     if run_id:
+        _confirm_delete(f"delete {len(run_id)} run(s)", force=force)
         count = delete_runs(run_id, revision=revision)
     else:
         assert status is not None
+        _validate_delete_status(status)
+        _confirm_delete(f"delete all '{status}' run(s)", force=force)
         count = delete_runs_by_status(status, revision=revision)
 
     print(f"Deleted {count} run(s) and their associated steps and metrics.")

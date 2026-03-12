@@ -80,18 +80,11 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 
 class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     def compress_tables(self) -> None:
-        skip = ["data_large_wide"]
-
         for table_name in get_time_series_input_files():
-            if table_name in skip:
-                _LOGGER.warning(f"Skipping compression for {table_name}")
-            else:
-                con = self.db.connect(reconnect=True)
-                con.execute(
-                    text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i")
-                )
-                con.commit()
-                _LOGGER.info(f"Compressed table {table_name}")
+            con = self.db.connect(reconnect=True)
+            con.execute(text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"))
+            con.commit()
+            _LOGGER.info(f"Compressed table {table_name}")
 
             con = self.db.connect(reconnect=True)
             con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
