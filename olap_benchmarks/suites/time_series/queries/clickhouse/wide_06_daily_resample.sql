@@ -1,9 +1,9 @@
 select
-    date_trunc('day', time) as day,
+    date_trunc('day', time) as d,
     avg(process_545) as value
 from
     data_wide
 group by
-    day
+    d
 order by
-    day
+    d
