@@ -7,24 +7,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
     target: "es2022",
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("@duckdb/duckdb-wasm")) return "duckdb"
-          if (
-            id.includes("kysely") ||
-            id.includes("@coji/kysely-duckdb-wasm") ||
-            id.includes("@20chan/kysely-duckdb")
-          ) {
-            return "query-builder"
-          }
-          if (id.includes("recharts")) return "charts"
-          if (id.includes("@radix-ui") || id.includes("lucide-react")) {
-            return "ui"
-          }
-          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("scheduler")) {
-            return "react-vendor"
-          }
+          if (id.includes("node_modules")) return "vendor"
           return undefined
         },
       },
