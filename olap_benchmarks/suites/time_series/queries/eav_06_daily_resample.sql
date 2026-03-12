@@ -1,5 +1,5 @@
 select
-    date_trunc('day', time) as day,
+    date_trunc('day', time) as d,
     avg(value) as value
 from
     data_wide_eav
@@ -8,4 +8,4 @@ where
 group by
     date_trunc('day', time)
 order by
-    day
+    d
