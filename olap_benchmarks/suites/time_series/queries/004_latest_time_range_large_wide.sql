@@ -1,7 +1,7 @@
 select
     time
 from
-    data_large_wide
+    data_wide
 order by
     time desc
 limit

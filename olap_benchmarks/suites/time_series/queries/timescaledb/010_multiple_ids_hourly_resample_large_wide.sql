@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', time) as time,
+    time_bucket(INTERVAL '1 hour', time) as time,
     avg(process_667) as value_1,
     avg(cast(binary_22 as int)) as value_2,
     avg(ratio_12) as value_3,
@@ -9,7 +9,7 @@ select
 from
     data_wide
 group by
-    date_trunc('hour', time)
+    time_bucket(INTERVAL '1 hour', time)
 order by
     time
 limit

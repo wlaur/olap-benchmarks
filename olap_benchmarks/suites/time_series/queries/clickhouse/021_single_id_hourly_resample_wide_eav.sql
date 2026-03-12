@@ -1,8 +1,10 @@
 select
     date_trunc('hour', time) as time,
-    avg(process_364) as value
+    avg(value) as value
 from
-    data_wide
+    data_wide_eav
+where
+    id = 589
 group by
     time
 order by

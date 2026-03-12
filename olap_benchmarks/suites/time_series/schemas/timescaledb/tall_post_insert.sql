@@ -1,12 +1,13 @@
 SELECT
     create_hypertable(
-        'data_small_wide',
+        'data_tall',
         'time',
-        chunk_time_interval => INTERVAL '1 days'
+        chunk_time_interval => INTERVAL '7 days',
+        migrate_data => true
     );
 
 ALTER TABLE
-    data_small_wide
+    data_tall
 SET
     (
         timescaledb.enable_columnstore = true,

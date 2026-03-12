@@ -293,11 +293,17 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
     def index_tables(self) -> None:
         con = self.db.connect()
 
-        con.execute(text("CREATE INDEX data_small_wide_index ON data_small_wide (time)"))
-        _LOGGER.info("Indexed data_small_wide")
+        con.execute(text("CREATE INDEX data_tall_time_index ON data_tall (time)"))
+        _LOGGER.info("Indexed data_tall")
 
-        con.execute(text("CREATE INDEX data_large_wide_index ON data_large_wide (time)"))
-        _LOGGER.info("Indexed data_large_wide")
+        con.execute(text("CREATE INDEX data_wide_time_index ON data_wide (time)"))
+        _LOGGER.info("Indexed data_wide")
+
+        con.execute(text("CREATE INDEX data_large_time_index ON data_large (time)"))
+        _LOGGER.info("Indexed data_large")
+
+        con.execute(text("CREATE INDEX data_wide_eav_id_time_index ON data_wide_eav (id, time)"))
+        _LOGGER.info("Indexed data_wide_eav")
 
         con.commit()
 
