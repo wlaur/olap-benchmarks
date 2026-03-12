@@ -36,6 +36,8 @@ TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "large": (4_000_000, 1_500),
 }
 
+TIME_SERIES_EAV_TABLE_NAME: TableName = "data_wide_eav"
+
 
 assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
@@ -52,10 +54,6 @@ def get_time_series_table_name(size: DatasetSize) -> TableName:
     return f"data_{size}"
 
 
-def get_time_series_eav_table_name() -> TableName:
-    return "data_wide_eav"
-
-
 def get_time_series_column_counts(n_cols: int) -> TimeSeriesColumnCounts:
     return TimeSeriesColumnCounts(
         binary=max(1, int(0.05 * n_cols)),
@@ -70,20 +68,20 @@ def get_time_series_schemas() -> Mapping[TableName, Mapping[str, pl.DataType | t
         get_time_series_table_name(size): pl.read_parquet_schema(get_dataset_path(size))
         for size in TIME_SERIES_DATASET_SIZES
     }
-    schemas[get_time_series_eav_table_name()] = pl.read_parquet_schema(get_eav_dataset_path("wide"))
+    schemas[TIME_SERIES_EAV_TABLE_NAME] = pl.read_parquet_schema(get_eav_dataset_path())
     return schemas
 
 
 def get_time_series_input_files() -> dict[TableName, Path]:
     files = {get_time_series_table_name(size): get_dataset_path(size) for size in TIME_SERIES_DATASET_SIZES}
-    files[get_time_series_eav_table_name()] = get_eav_dataset_path("wide")
+    files[TIME_SERIES_EAV_TABLE_NAME] = get_eav_dataset_path()
     return files
 
 
 def get_time_series_expected_row_counts() -> dict[TableName, int]:
     counts = {get_time_series_table_name(size): rows for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items()}
     wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
-    counts[get_time_series_eav_table_name()] = wide_rows * wide_cols
+    counts[TIME_SERIES_EAV_TABLE_NAME] = wide_rows * wide_cols
     return counts
 
 
@@ -213,20 +211,12 @@ def _add_downtime_periods(
     return df
 
 
-def get_dataset_name(rows: int, cols: int) -> str:
-    column_label = f"{cols}c" if cols < 1_000 else f"{cols / 1e3:.1f}k"
-    return f"data_wide_{rows / 1e6:.1f}M_{column_label}.parquet"
-
-
 def get_dataset_path(size: DatasetSize) -> Path:
-    rows, cols = TIME_SERIES_DATASET_SIZES[size]
-    return SETTINGS.input_data_directory / "time_series" / f"{size}_{get_dataset_name(rows, cols)}"
+    return SETTINGS.input_data_directory / "time_series" / f"{get_time_series_table_name(size)}.parquet"
 
 
-def get_eav_dataset_path(size: DatasetSize) -> Path:
-    rows, cols = TIME_SERIES_DATASET_SIZES[size]
-    stem = get_dataset_name(rows, cols).removesuffix(".parquet")
-    return SETTINGS.input_data_directory / "time_series" / f"{size}_{stem}_eav.parquet"
+def get_eav_dataset_path() -> Path:
+    return SETTINGS.input_data_directory / "time_series" / f"{TIME_SERIES_EAV_TABLE_NAME}.parquet"
 
 
 def get_eav_metric_id(column_name: str, n_cols: int) -> int:
@@ -286,7 +276,7 @@ def prepare_data(overwrite: bool = False) -> None:
         if size != "wide":
             continue
 
-        eav_path = get_eav_dataset_path(size)
+        eav_path = get_eav_dataset_path()
         if eav_path.is_file() and not overwrite:
             _LOGGER.info(f"Reusing dataset {eav_path.name}")
             continue
@@ -305,7 +295,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return None
 
     def get_not_null(self, table_name: TableName) -> str | list[str] | None:
-        if table_name == get_time_series_eav_table_name():
+        if table_name == TIME_SERIES_EAV_TABLE_NAME:
             return ["time", "id"]
         return "time"
 
