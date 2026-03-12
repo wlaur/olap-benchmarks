@@ -17,7 +17,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "18.0"
+VERSION = "18.3"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
