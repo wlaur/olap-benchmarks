@@ -1,5 +1,5 @@
 select
-    time_bucket(INTERVAL '1 hour', time) as hour,
+    time_bucket(INTERVAL '1 hour', time) as hr,
     avg(value) as avg_value
 from
     data_wide_eav

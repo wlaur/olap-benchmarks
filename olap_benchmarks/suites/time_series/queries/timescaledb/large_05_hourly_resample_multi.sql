@@ -1,5 +1,5 @@
 select
-    time_bucket(INTERVAL '1 hour', time) as hour,
+    time_bucket(INTERVAL '1 hour', time) as hr,
     avg(process_667) as value_1,
     avg(cast(binary_22 as int)) as value_2,
     avg(ratio_12) as value_3,
@@ -11,6 +11,6 @@ from
 group by
     time_bucket(INTERVAL '1 hour', time)
 order by
-    hour
+    hr
 limit
     100

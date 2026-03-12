@@ -1,10 +1,10 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     avg(process_4) as avg_value
 from
     data_tall
 group by
-    hour
+    hr
 order by
     avg_value desc
 limit
