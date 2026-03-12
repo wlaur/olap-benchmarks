@@ -43,17 +43,39 @@ export async function fetchTimeSeriesRunSummaries(system: string): Promise<TimeS
   const db = await getKyselyDb()
 
   return db
-    .selectFrom("run")
-    .leftJoin("run_step", "run_step.run_id", "run.id")
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.db_version").as("db_version"),
+          eb.ref("run.started_at").as("started_at"),
+          eb.ref("run.finished_at").$notNull().as("finished_at"),
+          sql<number>`row_number() over (
+            partition by ${eb.ref("run.db")}
+            order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
+          )`.as("run_rank"),
+        ])
+        .where("run.suite", "=", "time_series")
+        .where("run.operation", "=", "run")
+        .where("run.status", "=", "completed")
+        .where("run.finished_at", "is not", null)
+        .where("run.system", "=", system),
+    )
+    .selectFrom("latest_runs")
+    .leftJoin("run_step", "run_step.run_id", "latest_runs.run_id")
     .select((eb) => [
-      eb.ref("run.id").as("run_id"),
-      eb.ref("run.db").as("db"),
-      eb.ref("run.db_version").as("db_version"),
-      sql<string>`strftime(${eb.ref("run.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as("started_at"),
-      sql<string>`strftime(${eb.ref("run.finished_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
+      eb.ref("latest_runs.run_id").as("run_id"),
+      eb.ref("latest_runs.db").as("db"),
+      eb.ref("latest_runs.db_version").as("db_version"),
+      sql<string>`strftime(${eb.ref("latest_runs.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
+        "started_at",
+      ),
+      sql<string>`strftime(${eb.ref("latest_runs.finished_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
         "finished_at",
       ),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run.finished_at")} - ${eb.ref("run.started_at")}))`.as(
+      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.finished_at")} - ${eb.ref("latest_runs.started_at")}))`.as(
         "run_duration_s",
       ),
       sql<number | null>`median(
@@ -71,14 +93,16 @@ export async function fetchTimeSeriesRunSummaries(system: string): Promise<TimeS
           ) as integer
         )`.as("query_count"),
     ])
-    .where("run.suite", "=", "time_series")
-    .where("run.operation", "=", "run")
-    .where("run.status", "=", "completed")
-    .where("run.finished_at", "is not", null)
-    .where("run.system", "=", system)
-    .groupBy(["run.id", "run.db", "run.db_version", "run.started_at", "run.finished_at"])
+    .where("latest_runs.run_rank", "=", 1)
+    .groupBy([
+      "latest_runs.run_id",
+      "latest_runs.db",
+      "latest_runs.db_version",
+      "latest_runs.started_at",
+      "latest_runs.finished_at",
+    ])
     .orderBy(sql`run_duration_s`)
-    .orderBy("run.db")
+    .orderBy("latest_runs.db")
     .execute()
 }
 
@@ -137,11 +161,28 @@ export async function fetchTimeSeriesQuerySummaries(
   const db = await getKyselyDb()
 
   return db
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          sql<number>`row_number() over (
+            partition by ${eb.ref("run.db")}
+            order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
+          )`.as("run_rank"),
+        ])
+        .where("run.suite", "=", "time_series")
+        .where("run.operation", "=", "run")
+        .where("run.status", "=", "completed")
+        .where("run.finished_at", "is not", null)
+        .where("run.system", "=", system),
+    )
     .selectFrom("run_step")
-    .innerJoin("run", "run.id", "run_step.run_id")
+    .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
     .select((eb) => [
       eb.ref("run_step.query_name").$notNull().as("query_name"),
-      eb.ref("run.db").as("db"),
+      eb.ref("latest_runs.db").as("db"),
       sql<number>`median(
           EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
         )`.as("median_duration_s"),
@@ -156,18 +197,14 @@ export async function fetchTimeSeriesQuerySummaries(
         )`.as("max_duration_s"),
       sql<number>`cast(count(*) as integer)`.as("iterations"),
     ])
-    .where("run.suite", "=", "time_series")
-    .where("run.operation", "=", "run")
-    .where("run.status", "=", "completed")
-    .where("run.finished_at", "is not", null)
-    .where("run.system", "=", system)
+    .where("latest_runs.run_rank", "=", 1)
     .where("run_step.step_type", "=", "query")
     .where("run_step.status", "=", "completed")
     .where("run_step.finished_at", "is not", null)
     .where("run_step.query_name", "is not", null)
-    .groupBy(["run_step.query_name", "run.db"])
+    .groupBy(["run_step.query_name", "latest_runs.db"])
     .orderBy("run_step.query_name")
-    .orderBy("run.db")
+    .orderBy("latest_runs.db")
     .execute()
 }
 
