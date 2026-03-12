@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import perf_counter
@@ -39,20 +40,51 @@ TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
 assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
 
-def get_time_series_schemas() -> Mapping[str, Mapping[str, pl.DataType | type[pl.DataType]]]:
-    return {
-        f"data_{size}_wide": pl.read_parquet_schema(
-            SETTINGS.input_data_directory / "time_series" / get_dataset_name(rows, cols)
-        )
-        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
-    }
+@dataclass(frozen=True)
+class TimeSeriesColumnCounts:
+    binary: int
+    ratio: int
+    deviation: int
+    process: int
 
 
-def get_time_series_input_files() -> dict[str, Path]:
-    return {
-        f"data_{size}_wide": SETTINGS.input_data_directory / "time_series" / get_dataset_name(rows, cols)
-        for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items()
+def get_time_series_table_name(size: DatasetSize) -> TableName:
+    return f"data_{size}"
+
+
+def get_time_series_eav_table_name() -> TableName:
+    return "data_wide_eav"
+
+
+def get_time_series_column_counts(n_cols: int) -> TimeSeriesColumnCounts:
+    return TimeSeriesColumnCounts(
+        binary=max(1, int(0.05 * n_cols)),
+        ratio=max(1, int(0.05 * n_cols)),
+        deviation=max(1, int(0.05 * n_cols)),
+        process=n_cols - 3 * max(1, int(0.05 * n_cols)),
+    )
+
+
+def get_time_series_schemas() -> Mapping[TableName, Mapping[str, pl.DataType | type[pl.DataType]]]:
+    schemas = {
+        get_time_series_table_name(size): pl.read_parquet_schema(get_dataset_path(size))
+        for size in TIME_SERIES_DATASET_SIZES
     }
+    schemas[get_time_series_eav_table_name()] = pl.read_parquet_schema(get_eav_dataset_path("wide"))
+    return schemas
+
+
+def get_time_series_input_files() -> dict[TableName, Path]:
+    files = {get_time_series_table_name(size): get_dataset_path(size) for size in TIME_SERIES_DATASET_SIZES}
+    files[get_time_series_eav_table_name()] = get_eav_dataset_path("wide")
+    return files
+
+
+def get_time_series_expected_row_counts() -> dict[TableName, int]:
+    counts = {get_time_series_table_name(size): rows for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items()}
+    wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
+    counts[get_time_series_eav_table_name()] = wide_rows * wide_cols
+    return counts
 
 
 def generate_time_series_data(n_rows: int, n_cols: int, seed: int = 1) -> pl.DataFrame:
@@ -63,18 +95,11 @@ def generate_time_series_data(n_rows: int, n_cols: int, seed: int = 1) -> pl.Dat
     start = end - timedelta(minutes=n_rows - 1)
     time = pl.datetime_range(start, end, interval="1m", eager=True, time_unit="ms")
 
-    fraction_binary = 0.05
-    fraction_0_1 = 0.05
-    fraction_neg_100_pos_100 = 0.05
-
-    n_binary = max(1, int(fraction_binary * n_cols))
-    n_bounded_0_1 = max(1, int(fraction_0_1 * n_cols))
-    n_bounded_neg100_100 = max(1, int(fraction_neg_100_pos_100 * n_cols))
-    n_correlated = n_cols - n_binary - n_bounded_0_1 - n_bounded_neg100_100
+    counts = get_time_series_column_counts(n_cols)
 
     base_signals: list[np.ndarray] = []
 
-    for _ in range(max(1, n_correlated // 3)):
+    for _ in range(max(1, counts.process // 3)):
         t = np.linspace(0, 4 * np.pi, n_rows)
         trend = np.linspace(0, 2, n_rows) * rng.uniform(-1, 1)
         seasonal = np.sin(t / 4) * rng.uniform(0.5, 2.0)
@@ -88,7 +113,7 @@ def generate_time_series_data(n_rows: int, n_cols: int, seed: int = 1) -> pl.Dat
     columns_data: dict[str, np.ndarray] = {}
     col_idx = 1
 
-    for idx in range(n_binary):
+    for idx in range(counts.binary):
         prob = rng.uniform(0.3, 0.7)
         binary_data = rng.choice([0, 1], size=n_rows, p=[1 - prob, prob])
         for j in range(1, n_rows):
@@ -97,18 +122,18 @@ def generate_time_series_data(n_rows: int, n_cols: int, seed: int = 1) -> pl.Dat
         columns_data[f"binary_{idx + 1}"] = binary_data.astype(bool)
         col_idx += 1
 
-    for idx in range(n_bounded_0_1):
+    for idx in range(counts.ratio):
         data = rng.beta(2, 2, n_rows)
         columns_data[f"ratio_{idx + 1}"] = data.astype(np.float32)
         col_idx += 1
 
-    for idx in range(n_bounded_neg100_100):
+    for idx in range(counts.deviation):
         data = rng.normal(0, 30, n_rows)
         data = np.clip(data, -100, 100)
         columns_data[f"deviation_{idx + 1}"] = data.astype(np.float32)
         col_idx += 1
 
-    for idx in range(n_correlated):
+    for idx in range(counts.process):
         base_idx = idx % len(base_signals)
         base_signal = base_signals[base_idx]
 
@@ -189,41 +214,99 @@ def _add_downtime_periods(
 
 
 def get_dataset_name(rows: int, cols: int) -> str:
-    return f"data_wide_{rows / 1e6:.1f}M_{cols / 1e3:.1f}k.parquet"
+    column_label = f"{cols}c" if cols < 1_000 else f"{cols / 1e3:.1f}k"
+    return f"data_wide_{rows / 1e6:.1f}M_{column_label}.parquet"
+
+
+def get_dataset_path(size: DatasetSize) -> Path:
+    rows, cols = TIME_SERIES_DATASET_SIZES[size]
+    return SETTINGS.input_data_directory / "time_series" / f"{size}_{get_dataset_name(rows, cols)}"
+
+
+def get_eav_dataset_path(size: DatasetSize) -> Path:
+    rows, cols = TIME_SERIES_DATASET_SIZES[size]
+    stem = get_dataset_name(rows, cols).removesuffix(".parquet")
+    return SETTINGS.input_data_directory / "time_series" / f"{size}_{stem}_eav.parquet"
+
+
+def get_eav_metric_id(column_name: str, n_cols: int) -> int:
+    prefix, raw_index = column_name.rsplit("_", 1)
+    index = int(raw_index)
+    counts = get_time_series_column_counts(n_cols)
+
+    if prefix == "binary":
+        return index
+    if prefix == "ratio":
+        return counts.binary + index
+    if prefix == "deviation":
+        return counts.binary + counts.ratio + index
+    if prefix == "process":
+        return counts.binary + counts.ratio + counts.deviation + index
+
+    raise ValueError(f"Unknown time-series column prefix for EAV conversion: {column_name}")
+
+
+def convert_wide_to_eav(source_path: Path, target_path: Path, n_cols: int) -> None:
+    value_columns = [column for column in pl.read_parquet(source_path, n_rows=0).columns if column != "time"]
+
+    id_lookup = pl.DataFrame(
+        {
+            "metric_name": value_columns,
+            "id": [get_eav_metric_id(column, n_cols) for column in value_columns],
+        }
+    )
+
+    eav = (
+        pl.scan_parquet(source_path)
+        .with_columns([pl.col(column).cast(pl.Float32).alias(column) for column in value_columns])
+        .unpivot(on=value_columns, index="time", variable_name="metric_name", value_name="value")
+        .join(id_lookup.lazy(), on="metric_name", how="inner")
+        .select("time", pl.col("id").cast(pl.Int32), pl.col("value").cast(pl.Float32))
+    )
+
+    eav.sink_parquet(target_path)
+    _LOGGER.info(f"Wrote EAV dataset {target_path.name}")
 
 
 def prepare_data(overwrite: bool = False) -> None:
     output_directory = SETTINGS.input_data_directory / "time_series"
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    for rows, cols in TIME_SERIES_DATASET_SIZES.values():
-        fpath = output_directory / get_dataset_name(rows, cols)
+    for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items():
+        fpath = get_dataset_path(size)
 
         if fpath.is_file() and not overwrite:
+            _LOGGER.info(f"Reusing dataset {fpath.name}")
+        else:
+            df = generate_time_series_data(rows, cols)
+            df.write_parquet(fpath)
+
+            _LOGGER.info(f"Wrote dataset {fpath.name}")
+
+        if size != "wide":
             continue
 
-        df = generate_time_series_data(rows, cols)
-        df.write_parquet(fpath)
+        eav_path = get_eav_dataset_path(size)
+        if eav_path.is_file() and not overwrite:
+            _LOGGER.info(f"Reusing dataset {eav_path.name}")
+            continue
 
-        _LOGGER.info(f"Wrote dataset {fpath.name}")
+        convert_wide_to_eav(fpath, eav_path, cols)
 
 
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "time_series"
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
-        counts: dict[TableName, int] = {}
-
-        for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items():
-            counts[f"data_{size}_wide"] = rows
-
-        return counts
+        return get_time_series_expected_row_counts()
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
         return None
 
     def get_not_null(self, table_name: TableName) -> str | list[str] | None:
+        if table_name == get_time_series_eav_table_name():
+            return ["time", "id"]
         return "time"
 
     @property

@@ -2,7 +2,7 @@ select
     time,
     process_259 as value
 from
-    data_large_wide
+    data_large
 order by
     time
 limit

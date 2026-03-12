@@ -1,8 +1,8 @@
 select
     date_trunc('hour', time) as time,
-    avg(process_21) as value
+    avg(process_4) as value
 from
-    data_small_wide
+    data_tall
 group by
     date_trunc('hour', time)
 order by

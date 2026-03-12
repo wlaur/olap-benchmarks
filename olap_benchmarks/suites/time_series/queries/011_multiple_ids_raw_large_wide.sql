@@ -7,7 +7,7 @@ select
     process_242 as value_5,
     deviation_39 as value_6
 from
-    data_large_wide
+    data_large
 order by
     time
 limit

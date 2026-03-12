@@ -1,4 +1,4 @@
 select
     max(time)
 from
-    data_small_wide
+    data_tall
