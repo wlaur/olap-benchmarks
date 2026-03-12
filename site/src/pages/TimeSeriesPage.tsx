@@ -18,6 +18,7 @@ import { QueryComparisonTable, type QueryComparisonRow } from "../components/Que
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { StatCard } from "../components/StatCard"
 import { useSelectionState } from "../hooks/useSelectionState"
+import { getDatabaseColors } from "../lib/databaseColors"
 import {
   formatDurationAxisTick,
   formatDurationSeconds,
@@ -77,8 +78,6 @@ interface OverviewChartRow {
 type OverviewOperationVisibility = Record<TimeSeriesOperation, boolean>
 
 const LOG_FLOOR = 1e-6
-
-const DATABASE_COLORS = ["#38bdf8", "#f97316", "#34d399", "#facc15", "#f472b6", "#a78bfa"]
 
 export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   const [state, setState] = useState<TimeSeriesPageState>({
@@ -192,9 +191,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     includedDatabaseSet.has(run.db),
   )
 
-  const databaseColors = Object.fromEntries(
-    databases.map((db, idx) => [db, DATABASE_COLORS[idx % DATABASE_COLORS.length]!]),
-  )
+  const databaseColors = getDatabaseColors(databases)
 
   const queryRows = buildQueryComparisonRows(filteredQuerySummaries, includedDatabases)
 
