@@ -120,7 +120,10 @@ export function QueryDetailPanel({
                 backgroundColor: "#020617",
                 border: "1px solid #334155",
                 borderRadius: 12,
+                color: "#e2e8f0",
               }}
+              labelStyle={{ color: "#e2e8f0" }}
+              itemStyle={{ color: "#e2e8f0" }}
               formatter={(_value: number, _name, item) =>
                 formatDurationSeconds((item.payload as { duration: number }).duration)
               }
