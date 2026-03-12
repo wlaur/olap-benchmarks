@@ -1,11 +1,16 @@
 import { lazy, Suspense } from "react"
+import { Navigate, Route, Routes, useParams } from "react-router-dom"
 
 import { Navbar } from "./components/layout/Navbar"
-import { Skeleton } from "./components/Skeleton"
 import { useSystem } from "./features/system/SystemContext"
-import { useBenchmarkRoute } from "./hooks/useBenchmarkRoute"
-import { benchmarkDefinitions, getBenchmarkDefinition } from "./lib/benchmarks"
+import {
+  benchmarkDefinitions,
+  defaultBenchmarkId,
+  getBenchmarkDefinition,
+  type BenchmarkSuiteId,
+} from "./lib/benchmarks"
 import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
+import { HomePage } from "./pages/HomePage"
 import { TimeSeriesPageSkeleton } from "./pages/TimeSeriesPageSkeleton"
 
 const TimeSeriesPage = lazy(async () => {
@@ -13,119 +18,105 @@ const TimeSeriesPage = lazy(async () => {
   return { default: module.TimeSeriesPage }
 })
 
+function BenchmarkRoute({ system }: { system: string }) {
+  const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
+  const benchmark = getBenchmarkDefinition((rawId ?? defaultBenchmarkId) as BenchmarkSuiteId)
+
+  if (benchmark.id === "time_series") {
+    return (
+      <Suspense fallback={<TimeSeriesPageSkeleton />}>
+        <TimeSeriesPage system={system} />
+      </Suspense>
+    )
+  }
+
+  return <BenchmarkPlaceholderPage benchmark={benchmark} system={system} />
+}
+
 export function App() {
-  const currentBenchmark = useBenchmarkRoute()
-  const benchmark = getBenchmarkDefinition(currentBenchmark)
   const { systems, selectedSystem, setSelectedSystem, loading, error } = useSystem()
 
-  if (loading) {
-    return (
-      <div
-        className={
-          currentBenchmark === "time_series"
-            ? "flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100"
-            : "flex min-h-screen flex-col bg-slate-950 text-slate-100"
+  const navbar = (
+    <Navbar
+      benchmarks={benchmarkDefinitions}
+      systems={systems}
+      selectedSystem={selectedSystem}
+      onSelectSystem={setSelectedSystem}
+      isSystemLoading={loading}
+    />
+  )
+
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+            {navbar}
+            <main className="mx-auto w-full max-w-7xl flex-1 px-4">
+              <HomePage />
+            </main>
+          </div>
         }
-      >
-        <Navbar
-          benchmarks={benchmarkDefinitions}
-          currentBenchmark={currentBenchmark}
-          systems={systems}
-          selectedSystem={selectedSystem}
-          onSelectSystem={setSelectedSystem}
-          isSystemLoading
-        />
-        <main
-          className={
-            currentBenchmark === "time_series"
-              ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
-              : "mx-auto w-full max-w-7xl flex-1 px-4 py-10"
-          }
-        >
-          {currentBenchmark === "time_series" ? (
-            <TimeSeriesPageSkeleton />
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-                <Skeleton className="h-4 w-32 rounded-full" />
-                <Skeleton className="mt-4 h-10 w-72" />
-                <Skeleton className="mt-3 h-4 w-full max-w-2xl" />
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Skeleton className="h-36 rounded-3xl" />
-                <Skeleton className="h-36 rounded-3xl" />
-                <Skeleton className="h-36 rounded-3xl" />
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    )
-  }
+      />
+      <Route
+        path="/benchmarks/:benchmarkId"
+        element={
+          <BenchmarkLayout
+            navbar={navbar}
+            systems={systems}
+            selectedSystem={selectedSystem}
+            loading={loading}
+            error={error}
+          />
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100">
-        <Navbar
-          benchmarks={benchmarkDefinitions}
-          currentBenchmark={currentBenchmark}
-          systems={systems}
-          selectedSystem={selectedSystem}
-          onSelectSystem={setSelectedSystem}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-24">
-          <p className="text-sm text-red-300">Failed to load systems: {error}</p>
-        </div>
-      </div>
-    )
-  }
+interface BenchmarkLayoutProps {
+  navbar: React.ReactNode
+  systems: string[]
+  selectedSystem: string | null
+  loading: boolean
+  error: string | null
+}
 
-  if (!selectedSystem) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100">
-        <Navbar
-          benchmarks={benchmarkDefinitions}
-          currentBenchmark={currentBenchmark}
-          systems={systems}
-          selectedSystem={selectedSystem}
-          onSelectSystem={setSelectedSystem}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-24">
-          <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
-        </div>
-      </div>
-    )
-  }
+function BenchmarkLayout({ navbar, selectedSystem, loading, error }: BenchmarkLayoutProps) {
+  const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
+  const isTimeSeries = (rawId ?? defaultBenchmarkId) === "time_series"
+
+  const content = loading ? (
+    isTimeSeries ? (
+      <TimeSeriesPageSkeleton />
+    ) : null
+  ) : error ? (
+    <p className="text-sm text-red-300">Failed to load systems: {error}</p>
+  ) : !selectedSystem ? (
+    <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
+  ) : (
+    <BenchmarkRoute system={selectedSystem} />
+  )
 
   return (
     <div
       className={
-        currentBenchmark === "time_series"
+        isTimeSeries
           ? "flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100"
           : "flex min-h-screen flex-col bg-slate-950 text-slate-100"
       }
     >
-      <Navbar
-        benchmarks={benchmarkDefinitions}
-        currentBenchmark={currentBenchmark}
-        systems={systems}
-        selectedSystem={selectedSystem}
-        onSelectSystem={setSelectedSystem}
-      />
+      {navbar}
       <main
         className={
-          currentBenchmark === "time_series"
+          isTimeSeries
             ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
             : "mx-auto w-full max-w-7xl flex-1 px-4 py-10"
         }
       >
-        {currentBenchmark === "time_series" ? (
-          <Suspense fallback={<TimeSeriesPageSkeleton />}>
-            <TimeSeriesPage system={selectedSystem} />
-          </Suspense>
-        ) : (
-          <BenchmarkPlaceholderPage benchmark={benchmark} system={selectedSystem} />
-        )}
+        {content}
       </main>
     </div>
   )
