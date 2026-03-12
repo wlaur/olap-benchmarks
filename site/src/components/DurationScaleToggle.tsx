@@ -25,7 +25,7 @@ export function DurationScaleToggle({ mode, onChange, compact = false }: Duratio
           onClick={() => onChange(option)}
           className={mode === option ? activeClassName : inactiveClassName}
         >
-          {option === "log" ? "Log" : compact ? "Lin" : "Linear"}
+          {option === "log" ? "Log" : "Linear"}
         </button>
       ))}
     </div>
