@@ -145,11 +145,11 @@ def publish(revision: Revision = "default") -> Path:
         "table_counts": table_counts,
     }
 
-    manifest_path.write_text(json.dumps(manifest, indent=2))
+    manifest_path.write_text(f"{json.dumps(manifest, indent=2)}\n")
 
     queries_manifest = _build_queries_manifest()
     queries_path = output_dir / "queries.json"
-    queries_path.write_text(json.dumps(queries_manifest, indent=2))
+    queries_path.write_text(f"{json.dumps(queries_manifest, indent=2)}\n")
 
     return output_dir
 
