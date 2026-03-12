@@ -13,7 +13,8 @@ import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
 import { cn } from "../lib/cn"
-import { formatDurationSeconds, formatMultiplier } from "../lib/format"
+import { formatDurationSeconds, formatMultiplier, type DurationScaleMode } from "../lib/format"
+import { DurationScaleToggle } from "./DurationScaleToggle"
 import { InlineDurationBars } from "./InlineDurationBars"
 
 export interface QueryComparisonRow {
@@ -32,6 +33,8 @@ interface QueryComparisonTableProps {
   databaseColors: Record<string, string>
   selection: SelectionState
   maxDuration: number
+  scaleMode: DurationScaleMode
+  onScaleModeChange: (mode: DurationScaleMode) => void
   containerClassName?: string
 }
 
@@ -62,9 +65,18 @@ export function QueryComparisonTable({
   databaseColors,
   selection,
   maxDuration,
+  scaleMode,
+  onScaleModeChange,
   containerClassName,
 }: QueryComparisonTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "query", desc: false }])
+  const linearMaxDuration = useMemo(() => {
+    const durations = rows.flatMap((row) =>
+      Object.values(row.by_database).filter((value): value is number => value !== null),
+    )
+
+    return getQuantile(durations, 0.9) ?? Math.max(...durations, 0)
+  }, [rows])
 
   const columns = useMemo(
     () => [
@@ -83,7 +95,12 @@ export function QueryComparisonTable({
       }),
       columnHelper.display({
         id: "duration_bars",
-        header: "Latency (log scale)",
+        header: () => (
+          <div className="flex items-center justify-between gap-3">
+            <span>Latency</span>
+            <DurationScaleToggle mode={scaleMode} onChange={onScaleModeChange} compact />
+          </div>
+        ),
         enableSorting: false,
         cell: (info) => (
           <InlineDurationBars
@@ -91,6 +108,8 @@ export function QueryComparisonTable({
             databases={databases}
             databaseColors={databaseColors}
             maxDuration={maxDuration}
+            linearMaxDuration={linearMaxDuration}
+            scaleMode={scaleMode}
           />
         ),
       }),
@@ -120,7 +139,7 @@ export function QueryComparisonTable({
         },
       }),
     ],
-    [databases, databaseColors, maxDuration],
+    [databases, databaseColors, linearMaxDuration, maxDuration, onScaleModeChange, scaleMode],
   )
 
   const table = useReactTable({
@@ -220,6 +239,26 @@ export function QueryComparisonTable({
       </table>
     </div>
   )
+}
+
+function getQuantile(values: number[], quantile: number): number | null {
+  if (values.length === 0) return null
+
+  const sortedValues = [...values].sort((left, right) => left - right)
+  const position = (sortedValues.length - 1) * quantile
+  const lowerIndex = Math.floor(position)
+  const upperIndex = Math.ceil(position)
+  const lowerValue = sortedValues[lowerIndex]
+  const upperValue = sortedValues[upperIndex]
+
+  if (lowerValue === undefined || upperValue === undefined) {
+    return sortedValues.at(-1) ?? null
+  }
+
+  if (lowerIndex === upperIndex) return lowerValue
+
+  const weight = position - lowerIndex
+  return lowerValue + (upperValue - lowerValue) * weight
 }
 
 function getBestMedian(row: QueryComparisonRow): number | null {

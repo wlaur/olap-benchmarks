@@ -92,6 +92,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   })
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("log")
+  const [queryTableScaleMode, setQueryTableScaleMode] = useState<DurationScaleMode>("log")
   const [overviewOperationVisibility, setOverviewOperationVisibility] =
     useState<OverviewOperationVisibility>({
       populate: true,
@@ -567,6 +568,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               databaseColors={databaseColors}
               selection={selection}
               maxDuration={globalMaxDuration}
+              scaleMode={queryTableScaleMode}
+              onScaleModeChange={setQueryTableScaleMode}
               containerClassName="h-full min-h-0"
             />
           </div>
