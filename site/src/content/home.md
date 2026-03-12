@@ -4,7 +4,7 @@ A reproducible benchmarking framework for comparing analytical (OLAP) database e
 
 ## What this project measures
 
-Each benchmark suite runs a fixed set of SQL queries against multiple database engines under identical conditions — same hardware, same data, same queries. Results capture end-to-end wall-clock latency including data loading (populate) and query execution (run), along with system-level resource metrics (CPU, memory, disk I/O).
+Each benchmark suite runs a fixed set of SQL queries against multiple database engines under identical conditions — same hardware, same data, same queries. Results capture end-to-end wall-clock latency including data loading (populate) and query execution (run), along with system-level resource metrics (CPU, memory, on-disk size).
 
 The goal is **not** to declare a single winner, but to provide transparent, apples-to-apples comparisons across engines so you can make informed decisions for your own workloads.
 
@@ -33,7 +33,7 @@ All benchmarks for a given **system** (e.g. `macbook-pro-m4`) run on the same ph
 
 - **Populate latency** — time to create tables and load data
 - **Run latency** — wall-clock time for each query (median of multiple iterations)
-- **Resource traces** — CPU utilization, memory usage, and disk I/O sampled throughout each phase
+- **Resource traces** — CPU utilization, memory usage, and on-disk size sampled throughout each phase
 
 ### Scoring
 
