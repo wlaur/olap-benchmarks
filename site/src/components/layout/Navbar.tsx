@@ -1,3 +1,4 @@
+import { Home } from "lucide-react"
 import { NavLink } from "react-router-dom"
 
 import type { BenchmarkDefinition } from "../../lib/benchmarks"
@@ -30,6 +31,20 @@ export function Navbar({
 
           <div className="min-w-0 flex-1 overflow-x-auto py-1">
             <nav className="flex min-w-full items-center gap-2">
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) =>
+                  `inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${
+                    isActive
+                      ? "bg-cyan-400/10 text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.8)]"
+                      : "bg-slate-900 text-slate-400 shadow-[inset_0_0_0_1px_rgba(51,65,85,0.95)] hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(100,116,139,0.95)]"
+                  }`
+                }
+                title="Home"
+              >
+                <Home size={18} />
+              </NavLink>
               {benchmarks.map((benchmark) => (
                 <NavLink
                   key={benchmark.id}
