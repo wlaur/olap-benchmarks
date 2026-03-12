@@ -19,8 +19,8 @@ import { InlineDurationBars } from "./InlineDurationBars"
 export interface QueryComparisonRow {
   query_name: string
   query_label: string
-  category: string
-  scale: string
+  table_family: string
+  query_id: string
   fastest_db: string
   spread_ratio: number
   by_database: Record<string, number | null>
@@ -43,13 +43,14 @@ interface HeaderMeta {
 const columnHelper = createColumnHelper<QueryComparisonRow>()
 
 const querySort: SortingFn<QueryComparisonRow> = (left, right) => {
-  const labelDelta = left.original.query_label.localeCompare(right.original.query_label)
-  if (labelDelta !== 0) return labelDelta
+  const tableDelta = left.original.table_family.localeCompare(right.original.table_family)
+  if (tableDelta !== 0) return tableDelta
 
-  const categoryDelta = left.original.category.localeCompare(right.original.category)
-  if (categoryDelta !== 0) return categoryDelta
+  const queryIdDelta =
+    Number.parseInt(left.original.query_id, 10) - Number.parseInt(right.original.query_id, 10)
+  if (queryIdDelta !== 0) return queryIdDelta
 
-  return left.original.scale.localeCompare(right.original.scale)
+  return left.original.query_label.localeCompare(right.original.query_label)
 }
 
 const bestMedianSort: SortingFn<QueryComparisonRow> = (left, right) =>
@@ -75,7 +76,7 @@ export function QueryComparisonTable({
           <div className="min-w-0">
             <p className="font-medium text-slate-100">{info.row.original.query_label}</p>
             <p className="mt-1 text-xs text-slate-500">
-              {info.row.original.category} · {info.row.original.scale}
+              {info.row.original.table_family} · Q{info.row.original.query_id}
             </p>
           </div>
         ),
