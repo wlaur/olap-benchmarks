@@ -7,7 +7,7 @@ select
     avg(process_242) as value_5,
     avg(deviation_39) as value_6
 from
-    data_large_wide
+    data_wide
 group by
     time
 order by

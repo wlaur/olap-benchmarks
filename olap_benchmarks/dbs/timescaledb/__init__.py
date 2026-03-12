@@ -79,9 +79,16 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 
 
 class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
-    # data_large_wide exceeds PostgreSQL's max tuple size for compressed rows
+    POST_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
+        "data_tall": "tall_post_insert.sql",
+        "data_wide": "wide_post_insert.sql",
+        "data_large": "large_post_insert.sql",
+        "data_wide_eav": "wide_eav_post_insert.sql",
+    }
+
+    # data_large exceeds PostgreSQL's max tuple size for compressed rows
     # (18072 bytes vs 8160 max), confirmed on TimescaleDB 2.25.0 / PG 18
-    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large_wide"}
+    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large"}
 
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
@@ -115,9 +122,6 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
 
             self.db.create_table(schema, table_name, primary_key, not_null)
 
-        # convert small_wide to hypertable before insert (columnstore benefits from direct chunk writes)
-        self.db.execute_schema_file(REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide.sql")
-
         for table_name, fpath in input_files.items():
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
@@ -130,12 +134,11 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
                 self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
-        # convert large_wide to hypertable after insert — inserting into a plain table allows
-        # timescaledb-parallel-copy to use all workers (hypertable chunk locks limit parallelism)
-        with self.db.phase_context("create_hypertable", table_name="data_large_wide"):
-            self.db.execute_schema_file(
-                REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb/wide_post_insert.sql"
-            )
+        for table_name, schema_file in self.POST_INSERT_SCHEMA_FILES.items():
+            with self.db.phase_context("create_hypertable", table_name=table_name):
+                self.db.execute_schema_file(
+                    REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / schema_file
+                )
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")
 

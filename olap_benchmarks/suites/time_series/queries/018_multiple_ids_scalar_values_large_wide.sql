@@ -7,6 +7,6 @@ select
     process_242 as value_5,
     deviation_39 as value_6
 from
-    data_large_wide
+    data_large
 where
     time = '2023-11-24 06:23:00'
