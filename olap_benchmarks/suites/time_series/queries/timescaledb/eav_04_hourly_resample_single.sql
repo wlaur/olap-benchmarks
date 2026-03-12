@@ -1,5 +1,5 @@
 select
-    time_bucket(INTERVAL '1 hour', time) as hour,
+    time_bucket(INTERVAL '1 hour', time) as hr,
     avg(value) as value
 from
     data_wide_eav
@@ -8,6 +8,6 @@ where
 group by
     time_bucket(INTERVAL '1 hour', time)
 order by
-    hour
+    hr
 limit
     100

@@ -1,5 +1,5 @@
 select
-    time_bucket(INTERVAL '1 hour', time) as hour,
+    time_bucket(INTERVAL '1 hour', time) as hr,
     avg(process_364) as avg_value
 from
     data_large

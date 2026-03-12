@@ -1,14 +1,14 @@
 select
-    date_trunc('hour', time) as hour,
+    date_trunc('hour', time) as hr,
     binary_22,
     avg(process_364) as value
 from
     data_large
 group by
-    hour,
+    hr,
     binary_22
 order by
-    hour,
+    hr,
     binary_22
 limit
     200
