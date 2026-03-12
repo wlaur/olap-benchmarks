@@ -79,12 +79,21 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 
 
 class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
+    # data_large_wide exceeds PostgreSQL's max tuple size for compressed rows
+    # (18072 bytes vs 8160 max), confirmed on TimescaleDB 2.25.0 / PG 18
+    SKIP_COMPRESS = {"data_large_wide"}
+
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
-            con = self.db.connect(reconnect=True)
-            con.execute(text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"))
-            con.commit()
-            _LOGGER.info(f"Compressed table {table_name}")
+            if table_name in self.SKIP_COMPRESS:
+                _LOGGER.warning(f"Skipping compression for {table_name} (exceeds PG max tuple size)")
+            else:
+                con = self.db.connect(reconnect=True)
+                con.execute(
+                    text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i")
+                )
+                con.commit()
+                _LOGGER.info(f"Compressed table {table_name}")
 
             con = self.db.connect(reconnect=True)
             con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
