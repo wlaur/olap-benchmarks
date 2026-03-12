@@ -1,4 +1,6 @@
 select
-    count(distinct date_trunc('day', time)) as distinct_days
-from
-    data_tall
+    count(*) as distinct_days
+from (
+    select distinct date_trunc('day', time)
+    from data_tall
+) t
