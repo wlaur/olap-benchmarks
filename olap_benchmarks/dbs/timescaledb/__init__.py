@@ -2,7 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import connectorx
 import polars as pl
@@ -81,7 +81,7 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     # data_large_wide exceeds PostgreSQL's max tuple size for compressed rows
     # (18072 bytes vs 8160 max), confirmed on TimescaleDB 2.25.0 / PG 18
-    SKIP_COMPRESS = {"data_large_wide"}
+    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large_wide"}
 
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
