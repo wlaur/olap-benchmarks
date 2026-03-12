@@ -47,44 +47,38 @@ export function App() {
   )
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-            {navbar}
-            <main className="mx-auto w-full max-w-7xl flex-1 px-4">
-              <HomePage />
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+      {navbar}
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <main className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-7xl px-4">
+                <HomePage />
+              </div>
             </main>
-          </div>
-        }
-      />
-      <Route
-        path="/benchmarks/:benchmarkId"
-        element={
-          <BenchmarkLayout
-            navbar={navbar}
-            systems={systems}
-            selectedSystem={selectedSystem}
-            loading={loading}
-            error={error}
-          />
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+          }
+        />
+        <Route
+          path="/benchmarks/:benchmarkId"
+          element={
+            <BenchmarkMain selectedSystem={selectedSystem} loading={loading} error={error} />
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </div>
   )
 }
 
-interface BenchmarkLayoutProps {
-  navbar: React.ReactNode
-  systems: string[]
+interface BenchmarkMainProps {
   selectedSystem: string | null
   loading: boolean
   error: string | null
 }
 
-function BenchmarkLayout({ navbar, selectedSystem, loading, error }: BenchmarkLayoutProps) {
+function BenchmarkMain({ selectedSystem, loading, error }: BenchmarkMainProps) {
   const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
   const isTimeSeries = (rawId ?? defaultBenchmarkId) === "time_series"
 
@@ -101,23 +95,14 @@ function BenchmarkLayout({ navbar, selectedSystem, loading, error }: BenchmarkLa
   )
 
   return (
-    <div
+    <main
       className={
         isTimeSeries
-          ? "flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100"
-          : "flex min-h-screen flex-col bg-slate-950 text-slate-100"
+          ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
+          : "min-h-0 flex-1 overflow-y-auto px-4 py-10"
       }
     >
-      {navbar}
-      <main
-        className={
-          isTimeSeries
-            ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
-            : "mx-auto w-full max-w-7xl flex-1 px-4 py-10"
-        }
-      >
-        {content}
-      </main>
-    </div>
+      {isTimeSeries ? content : <div className="mx-auto w-full max-w-7xl">{content}</div>}
+    </main>
   )
 }
