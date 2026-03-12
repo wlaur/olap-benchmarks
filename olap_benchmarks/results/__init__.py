@@ -10,7 +10,7 @@ from typing import Any, cast
 import duckdb
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import create_engine, delete, func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -273,6 +273,39 @@ def delete_runs_by_status(status: str, revision: Revision = "default") -> int:
             session.execute(delete(Run).where(Run.id.in_(run_ids)))
             session.commit()
             return len(run_ids)
+    finally:
+        engine.dispose()
+
+
+def rename_database(
+    old_name: str,
+    new_name: str,
+    revision: Revision = "default",
+    db_path: Path | None = None,
+) -> int:
+    db_path = db_path or _require_revision(revision)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        with Session(engine) as session:
+            if old_name == new_name:
+                raise SystemExit("Old and new database names must differ.")
+
+            existing_names = sorted(session.scalars(select(Run.db).distinct()).all())
+
+            if old_name not in existing_names:
+                available_names = ", ".join(existing_names) if existing_names else "none"
+                raise SystemExit(
+                    f"Database '{old_name}' not found in revision '{revision}'. Available databases: {available_names}."
+                )
+
+            if new_name in existing_names:
+                raise SystemExit(f"Database '{new_name}' already exists in revision '{revision}'.")
+
+            renamed_runs = int(session.scalar(select(func.count()).select_from(Run).where(Run.db == old_name)) or 0)
+            session.execute(update(Run).where(Run.db == old_name).values(db=new_name))
+            session.commit()
+            return renamed_runs
     finally:
         engine.dispose()
 

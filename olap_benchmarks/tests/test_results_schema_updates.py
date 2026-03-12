@@ -3,12 +3,28 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..results import get_results_engine, get_results_head_revision, migrate_results
+from ..results import get_results_engine, get_results_head_revision, migrate_results, rename_database
 from ..results.models import Run, RunMetric, RunStep
 from ..results.schema import ensure_results_schema
+
+
+def _insert_run(session: Session, suite: str, db: str = "monetdb") -> Run:
+    run = Run(
+        suite=suite,
+        db=db,
+        db_version="test",
+        operation="populate",
+        system="test",
+        status="running",
+        started_at=datetime.now(),
+    )
+    session.add(run)
+    session.commit()
+    return run
 
 
 def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -> None:
@@ -20,17 +36,7 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
         ensure_results_schema(engine)
 
         with Session(engine) as session:
-            run = Run(
-                suite="time_series",
-                db="monetdb",
-                db_version="test",
-                operation="populate",
-                system="test",
-                status="running",
-                started_at=datetime.now(),
-            )
-            session.add(run)
-            session.commit()
+            run = _insert_run(session, suite="time_series")
 
             session.add(
                 RunStep(
@@ -75,5 +81,87 @@ def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Pa
         with Session(engine) as session:
             head_revision = session.execute(text("select version_num from alembic_version")).scalar_one()
             assert head_revision == get_results_head_revision()
+    finally:
+        engine.dispose()
+
+
+def test_rename_database_updates_run_db_only(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        ensure_results_schema(engine)
+
+        with Session(engine) as session:
+            renamed_run = _insert_run(session, suite="time_series", db="timescaledb")
+            renamed_run_id = renamed_run.id
+            _insert_run(session, suite="clickbench", db="timescaledb")
+            untouched_db = "monetdb"
+            untouched_suite = "rtabench"
+            _insert_run(session, suite=untouched_suite, db=untouched_db)
+
+            session.add(
+                RunStep(
+                    run_id=renamed_run.id,
+                    step_type="query",
+                    step_name="query",
+                    query_name="001_max_time_small_wide",
+                    started_at=datetime.now(),
+                    status="completed",
+                )
+            )
+            session.commit()
+
+        renamed_runs = rename_database("timescaledb", "timescale", db_path=db_path)
+        assert renamed_runs == 2
+
+        with Session(engine) as session:
+            renamed_dbs = session.scalars(text("select db from run order by id")).all()
+            assert renamed_dbs == ["timescale", "timescale", untouched_db]
+
+            suites = session.scalars(text("select suite from run order by id")).all()
+            assert suites == ["time_series", "clickbench", untouched_suite]
+
+            query_name = session.execute(
+                text("select query_name from run_step where run_id = :run_id"),
+                {"run_id": renamed_run_id},
+            ).scalar_one()
+            assert query_name == "001_max_time_small_wide"
+    finally:
+        engine.dispose()
+
+
+def test_rename_database_errors_when_old_name_missing(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        ensure_results_schema(engine)
+
+        with Session(engine) as session:
+            _insert_run(session, suite="time_series")
+
+        with pytest.raises(SystemExit, match="Database 'timescaledb' not found"):
+            rename_database("timescaledb", "timescale", db_path=db_path)
+    finally:
+        engine.dispose()
+
+
+def test_rename_database_errors_when_new_name_exists(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        ensure_results_schema(engine)
+
+        with Session(engine) as session:
+            _insert_run(session, suite="time_series", db="timescaledb")
+            _insert_run(session, suite="clickbench", db="monetdb")
+
+        with pytest.raises(SystemExit, match="Database 'monetdb' already exists"):
+            rename_database("timescaledb", "monetdb", db_path=db_path)
     finally:
         engine.dispose()

@@ -15,6 +15,7 @@ from .results import (
     list_runs,
     migrate_results,
     query_results,
+    rename_database,
 )
 from .results import publish as publish_results
 from .settings import (
@@ -239,6 +240,13 @@ def migrate(revision: Revision = "default") -> None:
     """Apply Alembic migrations through head to a results database revision."""
     db_path = migrate_results(revision=revision)
     print(f"Migrated revision '{revision}' to Alembic head at {db_path}")
+
+
+@results_app.command(name="rename-db")
+def rename_database_cmd(old_name: str, new_name: str, revision: Revision = "default") -> None:
+    """Rename a database name stored in a results database revision."""
+    renamed_runs = rename_database(old_name, new_name, revision=revision)
+    print(f"Renamed database '{old_name}' to '{new_name}' in {renamed_runs} run(s).")
 
 
 @app.command
