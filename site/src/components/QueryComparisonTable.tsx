@@ -108,7 +108,7 @@ export function QueryComparisonTable({
         header: "Best",
         meta: {
           tooltip:
-            "Lowest median query time across the selected databases. For each database we take the median of its recorded runs for this query, then keep the fastest median.",
+            "Lowest median query time across the selected databases. For each database we take the median of the iterations from its latest completed run for this query, then keep the fastest median.",
           tooltipLabel: "Explain best median",
         } satisfies HeaderMeta,
         sortingFn: bestMedianSort,
