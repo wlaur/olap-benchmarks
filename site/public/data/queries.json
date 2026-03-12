@@ -975,7 +975,7 @@
       "db_overrides": {}
     },
     "eav_16_count_distinct_days": {
-      "sql": "select\n    count(distinct date_trunc('day', time)) as distinct_days\nfrom\n    data_wide_eav\n",
+      "sql": "select\n    count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time)\n    from data_wide_eav\n) t\n",
       "db_overrides": {}
     },
     "eav_18_top_n_hourly": {
@@ -1058,7 +1058,7 @@
       "db_overrides": {}
     },
     "large_16_count_distinct_days": {
-      "sql": "select\n    count(distinct date_trunc('day', time)) as distinct_days\nfrom\n    data_large\n",
+      "sql": "select\n    count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time)\n    from data_large\n) t\n",
       "db_overrides": {}
     },
     "large_17_group_by_hour_category": {
@@ -1168,7 +1168,7 @@
       "db_overrides": {}
     },
     "tall_16_count_distinct_days": {
-      "sql": "select\n    count(distinct date_trunc('day', time)) as distinct_days\nfrom\n    data_tall\n",
+      "sql": "select\n    count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time)\n    from data_tall\n) t\n",
       "db_overrides": {}
     },
     "tall_17_group_by_hour_category": {
@@ -1262,7 +1262,7 @@
       "db_overrides": {}
     },
     "wide_16_count_distinct_days": {
-      "sql": "select\n    count(distinct date_trunc('day', time)) as distinct_days\nfrom\n    data_wide\n",
+      "sql": "select\n    count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time)\n    from data_wide\n) t\n",
       "db_overrides": {}
     },
     "wide_17_group_by_hour_category": {
