@@ -47,6 +47,6 @@ export function getBenchmarkDefinition(benchmarkId: BenchmarkSuiteId): Benchmark
   )
 }
 
-export function getBenchmarkHref(benchmarkId: BenchmarkSuiteId): string {
-  return `#/benchmarks/${benchmarkId}`
+export function getBenchmarkPath(benchmarkId: BenchmarkSuiteId): string {
+  return `/benchmarks/${benchmarkId}`
 }
