@@ -82,7 +82,7 @@ export function Navbar({
 
           <div className="flex shrink-0 justify-end">
             {isSystemLoading ? (
-              <Skeleton className="h-12 w-[19rem] rounded-full max-sm:w-36" />
+              <Skeleton className="h-10 w-[16.5rem] rounded-full max-sm:w-32" />
             ) : systems.length > 0 ? (
               <SystemSelector
                 systems={systems}
