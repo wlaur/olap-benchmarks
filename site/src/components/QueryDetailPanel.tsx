@@ -24,6 +24,7 @@ import type { QuerySqlEntry } from "../lib/types"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 import { SqlCodeView } from "./SqlCodeView"
+import { BodyText, SectionTitle } from "./Typography"
 
 interface QueryDetailPanelProps {
   row: QueryComparisonRow
@@ -97,11 +98,11 @@ export function QueryDetailPanel({
     <div className="animate-panel-enter flex h-full min-h-0 flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
       <div className="flex items-start justify-between">
         <div>
-          <h4 className="text-lg font-semibold text-slate-50">{row.query_label}</h4>
-          <p className="mt-0.5 text-sm text-slate-400">
+          <SectionTitle as="h4">{row.query_label}</SectionTitle>
+          <BodyText className="mt-0.5">
             {row.table_family} · Q{row.query_id} · Fastest: {row.fastest_db} · Spread:{" "}
             {formatMultiplier(row.spread_ratio)}
-          </p>
+          </BodyText>
         </div>
         <button
           onClick={onClose}

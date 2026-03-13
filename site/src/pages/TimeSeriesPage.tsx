@@ -18,6 +18,14 @@ import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { Skeleton } from "../components/Skeleton"
+import {
+  BodyText,
+  DisplayTitle,
+  Eyebrow,
+  FeatureTitle,
+  MetaLabel,
+  SectionTitle,
+} from "../components/Typography"
 import { useSelectionState } from "../hooks/useSelectionState"
 import { getDatabaseColors } from "../lib/databaseColors"
 import {
@@ -292,16 +300,12 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       <div className={TIME_SERIES_TOP_GRID_CLASS}>
         <PanelCard className={TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS}>
           <div className="space-y-2">
-            <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
-              Time Series
-            </p>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-50">
-              Latency workbench
-            </h2>
-            <p className="max-w-2xl text-sm leading-6 text-slate-300">
+            <Eyebrow>Time Series</Eyebrow>
+            <DisplayTitle as="h2">Latency workbench</DisplayTitle>
+            <BodyText className="max-w-2xl leading-6 text-slate-300">
               Scope the comparison to the databases you care about, scan the aggregate spread, then
               drill into query-level behavior and SQL without leaving the screen.
-            </p>
+            </BodyText>
           </div>
 
           <div className="mt-5">
@@ -321,13 +325,13 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         <PanelCard className={TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS}>
           <PanelHeader className={TIME_SERIES_OVERVIEW_HEADER_CLASS}>
             <div>
-              <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
-              <p className="mt-1 text-sm text-slate-400">
+              <SectionTitle as="h3">Aggregate overview</SectionTitle>
+              <BodyText className="mt-1">
                 Latest completed populate and run durations per database. Toggle either phase on or
                 off, then switch between a zero-based log view and linear scale before diving into
                 per-query detail. Each database keeps one color family: muted for populate, stronger
                 for run.
-              </p>
+              </BodyText>
             </div>
             {isLoading ? (
               <OverviewControlsSkeleton />
@@ -485,10 +489,10 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
             <div>
-              <h3 className="text-lg font-semibold text-slate-50">Query latency comparison</h3>
-              <p className="mt-1 text-sm text-slate-400">
+              <SectionTitle as="h3">Query latency comparison</SectionTitle>
+              <BodyText className="mt-1">
                 Click a row to inspect its latency spread and SQL.
-              </p>
+              </BodyText>
             </div>
             {isLoading ? (
               <LegendSkeleton />
@@ -529,27 +533,23 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
           ) : (
             <div className="flex h-full min-h-0 flex-col justify-between rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
               <div>
-                <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
-                  Inspector
-                </p>
-                <h3 className="mt-3 text-2xl font-semibold text-slate-50">Pick a query row</h3>
-                <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+                <Eyebrow>Inspector</Eyebrow>
+                <FeatureTitle as="h3" className="mt-3">
+                  Pick a query row
+                </FeatureTitle>
+                <BodyText className="mt-3 max-w-md leading-6">
                   The detail pane stays pinned on the right. Select any query to inspect latency by
                   database and compare the SQL variants for only the databases currently included.
-                </p>
+                </BodyText>
               </div>
 
               <div className="grid gap-3">
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
-                  <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
-                    Rows available
-                  </p>
+                  <MetaLabel>Rows available</MetaLabel>
                   <p className="mt-2 text-lg font-semibold text-slate-100">{queryRows.length}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
-                  <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
-                    Active databases
-                  </p>
+                  <MetaLabel>Active databases</MetaLabel>
                   <p className="mt-2 text-lg font-semibold text-slate-100">
                     {includedDatabases.length}
                   </p>
@@ -699,25 +699,23 @@ function InspectorSkeleton() {
   return (
     <div className="flex h-full min-h-0 flex-col justify-between rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
       <div>
-        <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">Inspector</p>
-        <h3 className="mt-3 text-2xl font-semibold text-slate-50">Pick a query row</h3>
-        <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+        <Eyebrow>Inspector</Eyebrow>
+        <FeatureTitle as="h3" className="mt-3">
+          Pick a query row
+        </FeatureTitle>
+        <BodyText className="mt-3 max-w-md leading-6">
           The detail pane stays pinned on the right. Select any query to inspect latency by database
           and compare the SQL variants for only the databases currently included.
-        </p>
+        </BodyText>
       </div>
 
       <div className="grid gap-3">
         <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
-          <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
-            Rows available
-          </p>
+          <MetaLabel>Rows available</MetaLabel>
           <Skeleton className="mt-2 h-7 w-16" />
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
-          <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
-            Active databases
-          </p>
+          <MetaLabel>Active databases</MetaLabel>
           <Skeleton className="mt-2 h-7 w-14" />
         </div>
       </div>

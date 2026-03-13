@@ -1,4 +1,5 @@
 import { cn } from "../../lib/cn"
+import { BodyText, MetaLabel } from "../Typography"
 
 interface DatabaseMultiSelectProps {
   databases: string[]
@@ -19,12 +20,10 @@ export function DatabaseMultiSelect({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
-            Included Databases
-          </p>
-          <p className="mt-1 text-sm text-slate-400">
+          <MetaLabel>Included Databases</MetaLabel>
+          <BodyText className="mt-1">
             Filter the comparison, charts, and SQL overrides to the databases you care about.
-          </p>
+          </BodyText>
         </div>
         <button
           type="button"
