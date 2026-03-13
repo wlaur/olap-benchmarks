@@ -95,7 +95,7 @@ export function QueryDetailPanel({
   const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
 
   return (
-    <div className="animate-panel-enter flex h-full min-h-0 flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+    <div className="animate-panel-enter flex h-full min-h-0 flex-col gap-4 rounded-2xl bg-surface-raised p-5">
       <div className="flex items-start justify-between">
         <div>
           <SectionTitle as="h4">{row.query_label}</SectionTitle>
@@ -106,13 +106,13 @@ export function QueryDetailPanel({
         </div>
         <button
           onClick={onClose}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-surface-inset hover:text-slate-200"
         >
           Close
         </button>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+      <div className="rounded-xl bg-surface-inset p-4">
         <div className="mb-4 flex items-center justify-end">
           <DurationScaleToggle mode={chartScaleMode} onChange={setChartScaleMode} />
         </div>
@@ -122,31 +122,31 @@ export function QueryDetailPanel({
             layout="vertical"
             margin={{ top: 8, right: 20, bottom: 8, left: 8 }}
           >
-            <CartesianGrid stroke="#1e293b" horizontal={false} />
+            <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" horizontal={false} />
             <XAxis
               type="number"
               domain={axisDomain}
               ticks={axisTicks}
               allowDataOverflow
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
-              axisLine={{ stroke: "#334155" }}
-              tickLine={{ stroke: "#334155" }}
+              tick={{ fill: "#64748b", fontSize: 11 }}
+              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={(value: number) => formatDurationAxisTick(value, chartScaleMode)}
             />
             <YAxis
               type="category"
               dataKey="db"
               width={132}
-              tick={{ fill: "#cbd5e1", fontSize: 12 }}
-              axisLine={{ stroke: "#334155" }}
-              tickLine={{ stroke: "#334155" }}
+              tick={{ fill: "#94a3b8", fontSize: 12 }}
+              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={truncateAxisLabel}
             />
             <Tooltip
-              cursor={{ fill: "rgba(15, 23, 42, 0.45)" }}
+              cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
               contentStyle={{
-                backgroundColor: "#020617",
-                border: "1px solid #334155",
+                backgroundColor: "#161a23",
+                border: "1px solid rgba(148, 163, 184, 0.12)",
                 borderRadius: 12,
                 color: "#e2e8f0",
               }}
@@ -165,12 +165,12 @@ export function QueryDetailPanel({
                 if (!entry?.stats) return null
 
                 return (
-                  <div className="rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-slate-200 shadow-2xl">
+                  <div className="rounded-xl border border-border-default bg-surface-primary/95 px-3 py-2 text-xs text-slate-200 shadow-2xl">
                     <p className="font-medium text-slate-50">{String(label)}</p>
                     <p className="mt-1 text-slate-300">
                       Min {formatDurationSeconds(entry.stats.min_duration_s)}
                     </p>
-                    <p className="text-cyan-300">
+                    <p className="text-accent-300">
                       Median {formatDurationSeconds(entry.stats.median_duration_s)}
                     </p>
                     <p className="text-slate-300">
@@ -206,7 +206,7 @@ export function QueryDetailPanel({
               <ErrorBar
                 dataKey="chart_error"
                 width={5}
-                stroke="rgba(103, 232, 249, 0.98)"
+                stroke="rgba(108, 142, 239, 0.8)"
                 strokeWidth={2.25}
                 isAnimationActive
               />
@@ -216,13 +216,13 @@ export function QueryDetailPanel({
       </div>
 
       {hasTabs ? (
-        <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-700 bg-slate-950">
-          <div className="flex shrink-0 gap-1 border-b border-slate-800 px-4 py-2">
+        <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-border-default bg-surface-inset">
+          <div className="flex shrink-0 gap-1 border-b border-border-default px-4 py-2">
             {sql?.sql !== null ? (
               <button
                 className={
                   activeTab === "common"
-                    ? "rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300"
+                    ? "rounded-md border border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-300"
                     : "rounded-md px-3 py-1 text-xs font-medium text-slate-400 hover:text-slate-200"
                 }
                 onClick={() => setActiveTab("common")}
@@ -235,7 +235,7 @@ export function QueryDetailPanel({
                 key={db}
                 className={
                   activeTab === db
-                    ? "rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300"
+                    ? "rounded-md border border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-300"
                     : "rounded-md px-3 py-1 text-xs font-medium text-slate-400 hover:text-slate-200"
                 }
                 onClick={() => setActiveTab(db)}
@@ -249,7 +249,7 @@ export function QueryDetailPanel({
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 px-6 text-center text-sm text-slate-500">
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 text-center text-sm text-slate-500">
           No SQL available for this query.
         </div>
       )}

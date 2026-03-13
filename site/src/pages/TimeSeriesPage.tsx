@@ -278,7 +278,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   if (!isLoading && state.error) {
     return (
       <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
-        <div className="rounded-3xl border border-red-500/30 bg-red-950/20 px-6 py-5 text-sm text-red-300">
+        <div className="rounded-2xl border border-red-500/30 bg-red-950/20 px-6 py-5 text-sm text-red-300">
           Failed to load time-series data: {state.error}
         </div>
       </section>
@@ -288,7 +288,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   if (!isLoading && state.runSummaries.length === 0) {
     return (
       <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 px-6 py-5 text-sm text-slate-400">
+        <div className="rounded-2xl bg-surface-raised px-6 py-5 text-sm text-slate-400">
           No completed time-series runs were found for {system ?? "the selected system"}.
         </div>
       </section>
@@ -337,7 +337,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
               <OverviewControlsSkeleton />
             ) : (
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <div className="inline-flex rounded-full border border-slate-800 bg-slate-950/80 p-1">
+                <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
                   {(
                     [
                       ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
@@ -354,7 +354,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                         onClick={() => toggleOverviewOperation(operation)}
                         className={
                           isActive
-                            ? "inline-flex items-center gap-2 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.5)]"
+                            ? "inline-flex items-center gap-2 rounded-full bg-accent-400/10 px-3 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
                             : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
                         }
                       >
@@ -370,7 +370,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                   })}
                 </div>
                 <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
-                <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
+                <div className="rounded-full border border-border-default bg-surface-inset px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
                   {includedDatabases.length} of {databases.length} databases
                 </div>
               </div>
@@ -381,7 +381,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
             {isLoading ? (
               <OverviewChartSkeleton />
             ) : !hasVisibleOverviewSegments ? (
-              <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
+              <div className="flex h-full min-h-28 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 text-center text-sm text-slate-500">
                 Enable populate or run to display overview bars for the selected databases.
               </div>
             ) : (
@@ -391,29 +391,29 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                 initialDimension={{ width: 640, height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
               >
                 <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid stroke="#1e293b" vertical={false} />
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
                   <XAxis
                     dataKey="db"
-                    tick={{ fill: "#94a3b8", fontSize: 11 }}
-                    axisLine={{ stroke: "#334155" }}
-                    tickLine={{ stroke: "#334155" }}
+                    tick={{ fill: "#64748b", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                    tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                   />
                   <YAxis
                     domain={overviewAxisDomain}
                     ticks={overviewAxisTicks}
-                    tick={{ fill: "#94a3b8", fontSize: 11 }}
-                    axisLine={{ stroke: "#334155" }}
-                    tickLine={{ stroke: "#334155" }}
+                    tick={{ fill: "#64748b", fontSize: 11 }}
+                    axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                    tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                     tickFormatter={(value: number) =>
                       formatDurationAxisTick(value, overviewScaleMode)
                     }
                   />
                   <Tooltip
-                    cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
+                    cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
                     contentStyle={{
-                      backgroundColor: "#020617",
-                      border: "1px solid #334155",
-                      borderRadius: 16,
+                      backgroundColor: "#161a23",
+                      border: "1px solid rgba(148, 163, 184, 0.12)",
+                      borderRadius: 12,
                       color: "#e2e8f0",
                     }}
                     labelStyle={{ color: "#e2e8f0" }}
@@ -487,7 +487,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
 
       <div className={TIME_SERIES_BOTTOM_GRID_CLASS}>
         <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
             <div>
               <SectionTitle as="h3">Query latency comparison</SectionTitle>
               <BodyText className="mt-1">
@@ -531,7 +531,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
               onClose={() => selection.setSelectedQuery(null)}
             />
           ) : (
-            <div className="flex h-full min-h-0 flex-col justify-between rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+            <div className="flex h-full min-h-0 flex-col justify-between rounded-2xl bg-surface-raised p-5">
               <div>
                 <Eyebrow>Inspector</Eyebrow>
                 <FeatureTitle as="h3" className="mt-3">
@@ -544,11 +544,11 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
               </div>
 
               <div className="grid gap-3">
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                <div className="rounded-xl border border-border-default bg-surface-inset px-4 py-3">
                   <MetaLabel>Rows available</MetaLabel>
                   <p className="mt-2 text-lg font-semibold text-slate-100">{queryRows.length}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                <div className="rounded-xl border border-border-default bg-surface-inset px-4 py-3">
                   <MetaLabel>Active databases</MetaLabel>
                   <p className="mt-2 text-lg font-semibold text-slate-100">
                     {includedDatabases.length}
@@ -646,11 +646,11 @@ function OverviewChartSkeleton() {
         <Skeleton className="h-3 w-8 rounded-full" />
       </div>
       <div className="relative min-h-0 rounded-xl">
-        <div className="absolute inset-x-0 bottom-0 border-t border-slate-800/80" />
-        <div className="absolute inset-y-0 left-0 border-l border-slate-800/80" />
-        <div className="absolute inset-x-0 top-[20%] border-t border-slate-800/40" />
-        <div className="absolute inset-x-0 top-[45%] border-t border-slate-800/40" />
-        <div className="absolute inset-x-0 top-[70%] border-t border-slate-800/40" />
+        <div className="absolute inset-x-0 bottom-0 border-t border-border-default" />
+        <div className="absolute inset-y-0 left-0 border-l border-border-default" />
+        <div className="absolute inset-x-0 top-[20%] border-t border-border-subtle" />
+        <div className="absolute inset-x-0 top-[45%] border-t border-border-subtle" />
+        <div className="absolute inset-x-0 top-[70%] border-t border-border-subtle" />
         <div className="absolute inset-0 flex items-end gap-4 px-4 pt-4 pb-6">
           <Skeleton className="h-[72%] flex-1 rounded-xl" />
           <Skeleton className="h-[48%] flex-1 rounded-xl" />
@@ -675,9 +675,9 @@ function LegendSkeleton() {
 function QueryTableSkeleton() {
   return (
     <div
-      className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/40 bg-slate-950/35 ${TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}`}
+      className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-surface-inset ${TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}`}
     >
-      <div className="grid shrink-0 grid-cols-[32%_34%_12%_10%_12%] gap-0 border-b border-slate-800/40 bg-slate-900/80 px-4 py-3">
+      <div className="grid shrink-0 grid-cols-[32%_34%_12%_10%_12%] gap-0 border-b border-border-default bg-surface-raised/80 px-4 py-3">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-28" />
         <Skeleton className="h-4 w-12" />
@@ -697,7 +697,7 @@ function QueryTableSkeleton() {
 
 function InspectorSkeleton() {
   return (
-    <div className="flex h-full min-h-0 flex-col justify-between rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+    <div className="flex h-full min-h-0 flex-col justify-between rounded-2xl bg-surface-raised p-5">
       <div>
         <Eyebrow>Inspector</Eyebrow>
         <FeatureTitle as="h3" className="mt-3">
@@ -710,11 +710,11 @@ function InspectorSkeleton() {
       </div>
 
       <div className="grid gap-3">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+        <div className="rounded-xl border border-border-default bg-surface-inset px-4 py-3">
           <MetaLabel>Rows available</MetaLabel>
           <Skeleton className="mt-2 h-7 w-16" />
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+        <div className="rounded-xl border border-border-default bg-surface-inset px-4 py-3">
           <MetaLabel>Active databases</MetaLabel>
           <Skeleton className="mt-2 h-7 w-14" />
         </div>

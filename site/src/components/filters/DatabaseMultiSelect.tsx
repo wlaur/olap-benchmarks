@@ -30,8 +30,8 @@ export function DatabaseMultiSelect({
           className={cn(
             "rounded-full border px-3 py-1.5 text-xs font-medium transition",
             allSelected
-              ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
-              : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+              ? "border-accent-400/30 bg-accent-400/10 text-accent-200"
+              : "border-border-default bg-surface-raised text-slate-300 hover:border-slate-600 hover:text-slate-100",
           )}
           onClick={onSelectAll}
         >
@@ -49,8 +49,8 @@ export function DatabaseMultiSelect({
               className={cn(
                 "rounded-full border px-3 py-1.5 text-sm font-medium transition",
                 selected
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
-                  : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+                  ? "border-accent-400/30 bg-accent-400/10 text-accent-200"
+                  : "border-border-default bg-surface-raised text-slate-300 hover:border-slate-600 hover:text-slate-100",
               )}
               onClick={() => onToggleDatabase(database)}
             >

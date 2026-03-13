@@ -36,13 +36,13 @@ const sqlViewerTheme = EditorView.theme(
       minWidth: "2.75rem",
       border: "none",
       backgroundColor: "transparent",
-      color: "#64748b",
+      color: "#475569",
     },
     ".cm-activeLine, .cm-activeLineGutter": {
       backgroundColor: "transparent",
     },
     ".cm-selectionBackground, ::selection": {
-      backgroundColor: "rgba(56, 189, 248, 0.16) !important",
+      backgroundColor: "rgba(108, 142, 239, 0.12) !important",
     },
     ".cm-lineNumbers .cm-gutterElement": {
       padding: "0 0.75rem 0 1rem",

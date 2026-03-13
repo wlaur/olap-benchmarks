@@ -93,7 +93,7 @@ export function MetricsTimeSeriesPanel({
           <button
             type="button"
             disabled
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-800 bg-slate-950/80 px-4 py-2 text-sm font-medium text-slate-500"
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-500"
           >
             <ChevronDown className="size-4" />
             Show
@@ -120,7 +120,7 @@ export function MetricsTimeSeriesPanel({
           ) : null}
           <button
             onClick={() => setIsExpanded((current) => !current)}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-800 bg-slate-950/80 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100"
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100"
           >
             {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             {isExpanded ? "Hide" : "Show"}
@@ -129,14 +129,14 @@ export function MetricsTimeSeriesPanel({
       </div>
 
       {!isExpanded ? null : filteredSamples.length === 0 ? (
-        <div className="mt-4 rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 px-6 py-8 text-sm text-slate-500">
+        <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
           No resource metrics were recorded for the selected databases.
         </div>
       ) : (
-        <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/45 p-4">
+        <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="inline-flex rounded-full border border-slate-800 bg-slate-950/80 p-1">
+              <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
                 {OPERATIONS.map((operation) => (
                   <button
                     key={operation}
@@ -144,7 +144,7 @@ export function MetricsTimeSeriesPanel({
                     onClick={() => setSelectedOperation(operation)}
                     className={
                       selectedOperation === operation
-                        ? "rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.5)]"
+                        ? "rounded-full bg-accent-400/10 px-3 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
                         : "rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
                     }
                   >
@@ -159,13 +159,13 @@ export function MetricsTimeSeriesPanel({
                 {selectedOperationLabel} · X-axis is elapsed time from start
               </BodyText>
             </div>
-            <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs text-slate-400">
+            <div className="rounded-full border border-border-default bg-surface-inset px-3 py-1 text-xs text-slate-400">
               Max {formatElapsedLabel(xDomains[selectedOperation])}
             </div>
           </div>
 
           {selectedOperationSamples.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 px-6 py-8 text-sm text-slate-500">
+            <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
               No {selectedOperation} resource metrics were recorded for the selected databases.
             </div>
           ) : (
@@ -173,7 +173,7 @@ export function MetricsTimeSeriesPanel({
               {METRIC_CONFIGS.map((metric) => (
                 <div
                   key={`${selectedOperation}-${metric.key}`}
-                  className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3"
+                  className="rounded-2xl border border-border-default bg-surface-primary/60 p-3"
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="text-sm font-medium text-slate-200">{metric.label}</p>
@@ -190,36 +190,36 @@ export function MetricsTimeSeriesPanel({
                         syncId={`time-series-metrics-${selectedOperation}`}
                         margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
                       >
-                        <CartesianGrid stroke="#1e293b" vertical={false} />
+                        <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
                         <XAxis
                           type="number"
                           dataKey="elapsed_s"
                           domain={[0, xDomains[selectedOperation]]}
                           ticks={xTicks[selectedOperation]}
-                          tick={{ fill: "#94a3b8", fontSize: 11 }}
-                          axisLine={{ stroke: "#334155" }}
-                          tickLine={{ stroke: "#334155" }}
+                          tick={{ fill: "#64748b", fontSize: 11 }}
+                          axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                          tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                           tickFormatter={formatElapsedLabel}
                         />
                         <YAxis
                           domain={yScales[metric.key].domain}
                           ticks={yScales[metric.key].ticks}
                           width={70}
-                          tick={{ fill: "#94a3b8", fontSize: 11 }}
-                          axisLine={{ stroke: "#334155" }}
-                          tickLine={{ stroke: "#334155" }}
+                          tick={{ fill: "#64748b", fontSize: 11 }}
+                          axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                          tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                           tickFormatter={metric.formatter}
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#020617",
-                            border: "1px solid #334155",
-                            borderRadius: 14,
+                            backgroundColor: "#161a23",
+                            border: "1px solid rgba(148, 163, 184, 0.12)",
+                            borderRadius: 12,
                             color: "#e2e8f0",
                           }}
                           labelStyle={{ color: "#e2e8f0" }}
                           itemStyle={{ color: "#e2e8f0" }}
-                          cursor={{ stroke: "#475569", strokeDasharray: "4 4" }}
+                          cursor={{ stroke: "rgba(148, 163, 184, 0.15)", strokeDasharray: "4 4" }}
                           labelFormatter={(value) => {
                             const numericValue =
                               typeof value === "number" ? value : Number(value ?? 0)
