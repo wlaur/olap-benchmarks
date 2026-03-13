@@ -88,8 +88,8 @@ function BenchmarkMain({ selectedSystem, loading, error }: BenchmarkMainProps) {
   )
 
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:py-8">
-      <div className="mx-auto w-full max-w-7xl">{content}</div>
+    <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 lg:py-8">
+      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col">{content}</div>
     </main>
   )
 }
