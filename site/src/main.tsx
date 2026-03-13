@@ -7,6 +7,14 @@ import { SystemProvider } from "./features/system/SystemContext"
 
 import "./index.css"
 
+const faviconHref = `${import.meta.env.BASE_URL}favicon.ico`
+const faviconLink = document.head.querySelector('link[rel="icon"]') as HTMLLinkElement | null
+
+if (faviconLink) {
+  faviconLink.type = "image/x-icon"
+  faviconLink.href = faviconHref
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <HashRouter>
