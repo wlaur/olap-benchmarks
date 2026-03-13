@@ -12,6 +12,7 @@ import {
 
 import type { TimeSeriesMetricSample, TimeSeriesOperation } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
+import { Skeleton } from "./Skeleton"
 
 const OPERATIONS: TimeSeriesOperation[] = ["populate", "run"]
 
@@ -43,12 +44,14 @@ interface MetricsTimeSeriesPanelProps {
   samples: TimeSeriesMetricSample[]
   databases: string[]
   databaseColors: Record<string, string>
+  loading?: boolean
 }
 
 export function MetricsTimeSeriesPanel({
   samples,
   databases,
   databaseColors,
+  loading = false,
 }: MetricsTimeSeriesPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedOperation, setSelectedOperation] = useState<TimeSeriesOperation>("run")
@@ -73,6 +76,34 @@ export function MetricsTimeSeriesPanel({
     selectedOperationSamples.length === 0
       ? "No completed runs"
       : `${selectedOperationDatabaseCount} database${selectedOperationDatabaseCount === 1 ? "" : "s"}`
+
+  if (loading) {
+    return (
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-50">Resource metrics</h3>
+            <p className="mt-1 max-w-3xl text-sm text-slate-400">
+              Latest completed traces for each database, aligned on elapsed time from operation
+              start. Switch between populate and run, while CPU, memory, and disk share the same
+              database overlays.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-800 bg-slate-950/80 px-4 py-2 text-sm font-medium text-slate-500"
+          >
+            <ChevronDown className="size-4" />
+            Show
+          </button>
+        </div>
+        <div className="mt-4">
+          <Skeleton className="h-px w-full rounded-none bg-slate-800/70" />
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
