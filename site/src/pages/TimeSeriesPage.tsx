@@ -384,7 +384,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                   Enable populate or run to display overview bars for the selected databases.
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  initialDimension={{ width: 640, height: overviewChartHeight }}
+                >
                   <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
                     <CartesianGrid stroke="#1e293b" vertical={false} />
                     <XAxis
@@ -556,8 +560,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
         databaseColors={databaseColors}
       />
 
-      <div className="grid min-h-[44rem] flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
-        <section className="flex min-h-0 flex-col rounded-3xl border border-slate-800 bg-slate-900/70">
+      <div className="grid gap-4 xl:min-h-[44rem] xl:flex-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
+        <section className="flex min-h-[26rem] flex-col rounded-3xl border border-slate-800 bg-slate-900/70 xl:min-h-0">
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Query latency comparison</h3>
@@ -568,7 +572,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
           </div>
 
-          <div className="min-h-0 flex-1 p-5 pt-4">
+          <div className="min-h-[24rem] flex-1 p-5 pt-4 md:min-h-[30rem] xl:min-h-0">
             <QueryComparisonTable
               rows={queryRows}
               databases={includedDatabases}
@@ -577,7 +581,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               maxDuration={globalMaxDuration}
               scaleMode={queryTableScaleMode}
               onScaleModeChange={setQueryTableScaleMode}
-              containerClassName="h-full min-h-0"
+              containerClassName="h-[24rem] min-h-[24rem] md:h-[30rem] md:min-h-[30rem] xl:h-full xl:min-h-0"
             />
           </div>
         </section>
