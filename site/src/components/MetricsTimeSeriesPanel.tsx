@@ -13,6 +13,7 @@ import {
 import type { TimeSeriesMetricSample, TimeSeriesOperation } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard } from "./layout/Panel"
+import { BodyText, SectionTitle } from "./Typography"
 
 const OPERATIONS: TimeSeriesOperation[] = ["populate", "run"]
 
@@ -82,12 +83,12 @@ export function MetricsTimeSeriesPanel({
       <PanelCard>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-slate-50">Resource metrics</h3>
-            <p className="mt-1 max-w-3xl text-sm text-slate-400">
+            <SectionTitle as="h3">Resource metrics</SectionTitle>
+            <BodyText className="mt-1 max-w-3xl">
               Latest completed traces for each database, aligned on elapsed time from operation
               start. Switch between populate and run, while CPU, memory, and disk share the same
               database overlays.
-            </p>
+            </BodyText>
           </div>
           <button
             type="button"
@@ -106,12 +107,12 @@ export function MetricsTimeSeriesPanel({
     <PanelCard>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-50">Resource metrics</h3>
-          <p className="mt-1 max-w-3xl text-sm text-slate-400">
+          <SectionTitle as="h3">Resource metrics</SectionTitle>
+          <BodyText className="mt-1 max-w-3xl">
             Latest completed traces for each database, aligned on elapsed time from operation start.
             Switch between populate and run, while CPU, memory, and disk share the same database
             overlays.
-          </p>
+          </BodyText>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           {isExpanded ? (
@@ -154,9 +155,9 @@ export function MetricsTimeSeriesPanel({
               <h4 className="mt-3 text-xl font-semibold text-slate-50">
                 {toTitleCase(selectedOperation)} trace
               </h4>
-              <p className="mt-1 text-sm text-slate-400">
+              <BodyText className="mt-1">
                 {selectedOperationLabel} · X-axis is elapsed time from start
-              </p>
+              </BodyText>
             </div>
             <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs text-slate-400">
               Max {formatElapsedLabel(xDomains[selectedOperation])}

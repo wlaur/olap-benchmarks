@@ -1,3 +1,4 @@
+import { BodyText, DisplayTitle, Eyebrow } from "../components/Typography"
 import type { BenchmarkDefinition } from "../lib/benchmarks"
 
 interface BenchmarkPlaceholderPageProps {
@@ -9,13 +10,11 @@ export function BenchmarkPlaceholderPage({ benchmark, system }: BenchmarkPlaceho
   return (
     <section className="space-y-6">
       <header className="max-w-3xl space-y-3">
-        <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
-          {benchmark.title}
-        </p>
-        <h2 className="text-4xl font-semibold tracking-tight text-slate-50">
+        <Eyebrow>{benchmark.title}</Eyebrow>
+        <DisplayTitle as="h2" className="text-4xl">
           Dedicated visualization pending
-        </h2>
-        <p className="text-lg leading-8 text-slate-300">{benchmark.summary}</p>
+        </DisplayTitle>
+        <BodyText className="text-lg leading-8 text-slate-300">{benchmark.summary}</BodyText>
       </header>
 
       <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900/40 p-8">
