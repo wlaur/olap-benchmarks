@@ -17,6 +17,14 @@ import { formatDurationSeconds, formatMultiplier, type DurationScaleMode } from 
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { InlineDurationBars } from "./InlineDurationBars"
 
+export interface QueryDurationStats {
+  median_duration_s: number
+  avg_duration_s: number
+  min_duration_s: number
+  max_duration_s: number
+  iterations: number
+}
+
 export interface QueryComparisonRow {
   query_name: string
   query_label: string
@@ -25,6 +33,7 @@ export interface QueryComparisonRow {
   fastest_db: string
   spread_ratio: number
   by_database: Record<string, number | null>
+  stats_by_database: Record<string, QueryDurationStats | null>
 }
 
 interface QueryComparisonTableProps {
