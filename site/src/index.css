@@ -31,12 +31,12 @@
 .animate-skeleton {
   background-image: linear-gradient(
     90deg,
-    rgba(30, 41, 59, 0.9) 0%,
-    rgba(51, 65, 85, 0.95) 35%,
-    rgba(30, 41, 59, 0.9) 70%
+    rgba(30, 41, 59, 0.72) 0%,
+    rgba(51, 65, 85, 0.84) 35%,
+    rgba(30, 41, 59, 0.72) 70%
   );
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.4s linear infinite;
+  background-size: 240% 100%;
+  animation: skeleton-shimmer 2s linear infinite;
 }
 
 .animate-panel-enter {

@@ -16,7 +16,6 @@ import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
-import { StatCard } from "../components/StatCard"
 import { useSelectionState } from "../hooks/useSelectionState"
 import { getDatabaseColors } from "../lib/databaseColors"
 import {
@@ -42,6 +41,16 @@ import type {
   TimeSeriesQuerySummary,
   TimeSeriesRunSummary,
 } from "../lib/types"
+import {
+  TIME_SERIES_BOTTOM_GRID_CLASS,
+  TIME_SERIES_DETAIL_SECTION_CLASS,
+  TIME_SERIES_OVERVIEW_CHART_HEIGHT,
+  TIME_SERIES_TOP_CARD_CLASS,
+  TIME_SERIES_QUERY_SECTION_CLASS,
+  TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS,
+  TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS,
+  TIME_SERIES_TOP_GRID_CLASS,
+} from "./timeSeriesLayout"
 import { TimeSeriesPageSkeleton } from "./TimeSeriesPageSkeleton"
 
 interface TimeSeriesPageProps {
@@ -56,12 +65,6 @@ interface TimeSeriesPageState {
   metricSamples: TimeSeriesMetricSample[]
   querySummaries: TimeSeriesQuerySummary[]
   queriesManifest: QueriesManifest | null
-}
-
-interface DatabaseAggregateStats {
-  db: string
-  score: number | null
-  wins: number
 }
 
 interface OverviewChartRow {
@@ -183,7 +186,6 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
   const includedDatabases = selectedDatabases.length > 0 ? selectedDatabases : databases
   const includedDatabaseSet = new Set(includedDatabases)
-  const filteredRunSummaries = state.runSummaries.filter((run) => includedDatabaseSet.has(run.db))
   const filteredQuerySummaries = state.querySummaries.filter((row) =>
     includedDatabaseSet.has(row.db),
   )
@@ -203,23 +205,6 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     }
     return max
   }, LOG_FLOOR)
-  const databaseAggregateStats = buildDatabaseAggregateStats(queryRows, includedDatabases)
-  const scoreLeader =
-    databaseAggregateStats
-      .filter((entry) => entry.score !== null)
-      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))[0] ?? null
-  const winsLeader =
-    [...databaseAggregateStats].sort(
-      (left, right) => right.wins - left.wins || left.db.localeCompare(right.db),
-    )[0] ?? null
-  const widestSpreadRow =
-    [...queryRows].sort((left, right) => right.spread_ratio - left.spread_ratio)[0] ?? null
-
-  const fastestRun = filteredRunSummaries[0] ?? null
-  const queryCount = new Set(filteredQuerySummaries.map((row) => row.query_name)).size
-  const versionByDatabase = Object.fromEntries(
-    filteredRunSummaries.map((run) => [run.db, run.db_version]),
-  )
 
   const runChartData = buildOverviewChartData(
     filteredOperationSummaries,
@@ -229,7 +214,6 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     ...entry,
     fill: databaseColors[entry.db] ?? "#94a3b8",
   }))
-  const overviewChartHeight = Math.max(120, Math.min(170, runChartData.length * 28 + 28))
   const overviewMaxDuration = Math.max(0, ...runChartData.map((run) => run.total_duration_s))
   const overviewAxisDomain = getDurationAxisDomain(overviewMaxDuration, overviewScaleMode)
   const overviewAxisTicks = getDurationAxisTicks(overviewMaxDuration, overviewScaleMode)
@@ -300,8 +284,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
 
   return (
     <section className="flex min-h-full w-full flex-col gap-4 pb-4">
-      <div className="grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+      <div className={TIME_SERIES_TOP_GRID_CLASS}>
+        <div className={TIME_SERIES_TOP_CARD_CLASS}>
           <div className="space-y-2">
             <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
               Time Series
@@ -325,7 +309,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+        <div className={TIME_SERIES_TOP_CARD_CLASS}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
@@ -374,10 +358,10 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem]">
+          <div className="mt-4">
             <div
-              className="h-full rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
-              style={{ minHeight: overviewChartHeight }}
+              className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
+              style={{ height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
             >
               {!hasVisibleOverviewSegments ? (
                 <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
@@ -387,7 +371,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 <ResponsiveContainer
                   width="100%"
                   height="100%"
-                  initialDimension={{ width: 640, height: overviewChartHeight }}
+                  initialDimension={{ width: 640, height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
                 >
                   <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
                     <CartesianGrid stroke="#1e293b" vertical={false} />
@@ -477,81 +461,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 </ResponsiveContainer>
               )}
             </div>
-
-            <div className="space-y-3">
-              {databaseAggregateStats.slice(0, 3).map((entry, index) => (
-                <div
-                  key={entry.db}
-                  className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3"
-                >
-                  <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
-                    Rank {index + 1}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-semibold text-slate-100">{entry.db}</p>
-                      <p className="text-xs text-slate-500">
-                        {versionByDatabase[entry.db] ?? "Version unavailable"}
-                      </p>
-                    </div>
-                    <p className="text-sm font-medium text-cyan-300">
-                      {entry.score === null ? "—" : `${entry.score.toFixed(1)} score`}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {entry.wins} query wins across {queryCount} benchmark queries
-                  </p>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
-      </div>
-
-      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Score Leader"
-          value={scoreLeader ? `${scoreLeader.db} · ${scoreLeader.score?.toFixed(1)}` : "—"}
-          detail={
-            scoreLeader
-              ? `${versionByDatabase[scoreLeader.db] ?? "Version unavailable"} · 100 means fastest on every query.`
-              : "Geometric score vs fastest query result."
-          }
-        />
-        <StatCard
-          label="Query Wins Leader"
-          value={winsLeader ? `${winsLeader.db} · ${winsLeader.wins}` : "—"}
-          detail={
-            winsLeader
-              ? `${versionByDatabase[winsLeader.db] ?? "Version unavailable"} · ${queryCount} queries across ${includedDatabases.length} included databases.`
-              : `${queryCount} queries across ${includedDatabases.length} included databases.`
-          }
-        />
-        <StatCard
-          label="Fastest Full Run"
-          value={
-            fastestRun
-              ? `${fastestRun.db} · ${formatDurationSeconds(fastestRun.run_duration_s)}`
-              : "—"
-          }
-          detail={
-            fastestRun?.median_query_duration_s !== null &&
-            fastestRun?.median_query_duration_s !== undefined
-              ? `${fastestRun.db_version} · Median query ${formatDurationSeconds(fastestRun.median_query_duration_s)}`
-              : fastestRun
-                ? `${fastestRun.db_version} · Median query unavailable`
-                : undefined
-          }
-        />
-        <StatCard
-          label="Widest Spread"
-          value={widestSpreadRow ? `${widestSpreadRow.spread_ratio.toFixed(2)}x` : "—"}
-          detail={
-            widestSpreadRow
-              ? `${widestSpreadRow.query_label} · ${widestSpreadRow.table_family} · Q${widestSpreadRow.query_id}`
-              : undefined
-          }
-        />
       </div>
 
       <MetricsTimeSeriesPanel
@@ -560,8 +471,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
         databaseColors={databaseColors}
       />
 
-      <div className="grid gap-4 xl:min-h-[44rem] xl:flex-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]">
-        <section className="flex min-h-[26rem] flex-col rounded-3xl border border-slate-800 bg-slate-900/70 xl:min-h-0">
+      <div className={TIME_SERIES_BOTTOM_GRID_CLASS}>
+        <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Query latency comparison</h3>
@@ -572,7 +483,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
             <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
           </div>
 
-          <div className="min-h-[24rem] flex-1 p-5 pt-4 md:min-h-[30rem] xl:min-h-0">
+          <div className={TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS}>
             <QueryComparisonTable
               rows={queryRows}
               databases={includedDatabases}
@@ -581,12 +492,12 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               maxDuration={globalMaxDuration}
               scaleMode={queryTableScaleMode}
               onScaleModeChange={setQueryTableScaleMode}
-              containerClassName="h-[24rem] min-h-[24rem] md:h-[30rem] md:min-h-[30rem] xl:h-full xl:min-h-0"
+              containerClassName={TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}
             />
           </div>
         </section>
 
-        <section className="min-h-[28rem] xl:min-h-0">
+        <section className={TIME_SERIES_DETAIL_SECTION_CLASS}>
           {selectedRow ? (
             <QueryDetailPanel
               row={selectedRow}
@@ -681,44 +592,6 @@ function buildQueryComparisonRows(
         by_database: byDatabase,
         stats_by_database: statsByDatabase,
       }
-    })
-}
-
-function buildDatabaseAggregateStats(
-  rows: QueryComparisonRow[],
-  databases: string[],
-): DatabaseAggregateStats[] {
-  return databases
-    .map((db) => {
-      let wins = 0
-      const ratios: number[] = []
-
-      for (const row of rows) {
-        const durations = Object.values(row.by_database).filter(
-          (value): value is number => value !== null,
-        )
-        const duration = row.by_database[db]
-        if (durations.length === 0 || duration === null || duration === undefined) continue
-
-        const fastest = Math.min(...durations)
-        if (duration === fastest) {
-          wins += 1
-        }
-
-        ratios.push(fastest / duration)
-      }
-
-      const score =
-        ratios.length === 0
-          ? null
-          : Math.exp(ratios.reduce((sum, ratio) => sum + Math.log(ratio), 0) / ratios.length) * 100
-
-      return { db, score, wins }
-    })
-    .sort((left, right) => {
-      const scoreDelta = (right.score ?? -1) - (left.score ?? -1)
-      if (scoreDelta !== 0) return scoreDelta
-      return right.wins - left.wins || left.db.localeCompare(right.db)
     })
 }
 
