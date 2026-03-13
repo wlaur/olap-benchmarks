@@ -3,7 +3,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  ErrorBar,
+  Rectangle,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -52,17 +53,43 @@ export function QueryDetailPanel({
   }, [defaultTab, row.query_name])
 
   const chartData = databases
-    .map((db) => ({
-      db,
-      duration: row.by_database[db] ?? 0,
-      chart_duration: scaleDurationForChart(row.by_database[db] ?? 0, chartScaleMode),
-      raw: row.by_database[db],
-      fill: databaseColors[db] ?? "#94a3b8",
-    }))
+    .map((db) => {
+      const raw = row.by_database[db]
+      const stats = row.stats_by_database[db]
+      const medianDuration = raw ?? 0
+      const chartDuration = scaleDurationForChart(medianDuration, chartScaleMode)
+      const minDuration = stats?.min_duration_s ?? medianDuration
+      const maxDuration = stats?.max_duration_s ?? medianDuration
+      const minChartDuration = scaleDurationForChart(minDuration, chartScaleMode)
+      const maxChartDuration = scaleDurationForChart(maxDuration, chartScaleMode)
+
+      return {
+        db,
+        duration: medianDuration,
+        chart_duration: chartDuration,
+        chart_error: [
+          Math.max(0, chartDuration - minChartDuration),
+          Math.max(0, maxChartDuration - chartDuration),
+        ] as const,
+        chart_error_span: Math.max(0, maxChartDuration - minChartDuration),
+        stats,
+        raw,
+        fill: databaseColors[db] ?? "#94a3b8",
+      }
+    })
     .filter((d) => d.raw !== null)
-  const maxDuration = Math.max(0, ...chartData.map((entry) => entry.duration))
+  const maxDuration = Math.max(
+    0,
+    ...chartData.map((entry) => entry.stats?.max_duration_s ?? entry.duration),
+  )
   const axisDomain = getDurationAxisDomain(maxDuration, chartScaleMode)
   const axisTicks = getDurationAxisTicks(maxDuration, chartScaleMode)
+  const chartSpan = Math.max(0, axisDomain[1] - axisDomain[0])
+  const minVisibleErrorSpan = chartSpan * 0.018
+  const visibleChartData = chartData.map((entry) => ({
+    ...entry,
+    chart_error: entry.chart_error_span >= minVisibleErrorSpan ? entry.chart_error : undefined,
+  }))
 
   const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
 
@@ -90,7 +117,7 @@ export function QueryDetailPanel({
         </div>
         <ResponsiveContainer width="100%" height={Math.max(170, chartData.length * 30)}>
           <BarChart
-            data={chartData}
+            data={visibleChartData}
             layout="vertical"
             margin={{ top: 8, right: 20, bottom: 8, left: 8 }}
           >
@@ -124,14 +151,64 @@ export function QueryDetailPanel({
               }}
               labelStyle={{ color: "#e2e8f0" }}
               itemStyle={{ color: "#e2e8f0" }}
-              formatter={(_value, _name, item) =>
-                formatDurationSeconds((item.payload as { duration: number }).duration)
-              }
+              content={({ active, label, payload }) => {
+                if (!active || !payload || payload.length === 0) return null
+
+                const entry = payload[0]?.payload as
+                  | {
+                      db: string
+                      stats: QueryComparisonRow["stats_by_database"][string]
+                    }
+                  | undefined
+
+                if (!entry?.stats) return null
+
+                return (
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-slate-200 shadow-2xl">
+                    <p className="font-medium text-slate-50">{String(label)}</p>
+                    <p className="mt-1 text-slate-300">
+                      Min {formatDurationSeconds(entry.stats.min_duration_s)}
+                    </p>
+                    <p className="text-cyan-300">
+                      Median {formatDurationSeconds(entry.stats.median_duration_s)}
+                    </p>
+                    <p className="text-slate-300">
+                      Max {formatDurationSeconds(entry.stats.max_duration_s)}
+                    </p>
+                    <p className="text-slate-400">
+                      Median / max{" "}
+                      {(entry.stats.max_duration_s / entry.stats.median_duration_s).toFixed(2)}x
+                    </p>
+                    <p className="mt-1 text-slate-500">{entry.stats.iterations} runs</p>
+                  </div>
+                )
+              }}
             />
-            <Bar dataKey="chart_duration" radius={[0, 6, 6, 0]}>
-              {chartData.map((entry) => (
-                <Cell key={entry.db} fill={entry.fill} />
-              ))}
+            <Bar
+              dataKey="chart_duration"
+              name="Duration"
+              radius={[0, 6, 6, 0]}
+              shape={(props) => (
+                <Rectangle
+                  {...props}
+                  fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
+                />
+              )}
+            >
+              <ErrorBar
+                dataKey="chart_error"
+                width={7}
+                stroke="rgba(30, 41, 59, 0.72)"
+                strokeWidth={4}
+                isAnimationActive
+              />
+              <ErrorBar
+                dataKey="chart_error"
+                width={5}
+                stroke="rgba(103, 232, 249, 0.98)"
+                strokeWidth={2.25}
+                isAnimationActive
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
