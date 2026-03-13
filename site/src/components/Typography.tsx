@@ -28,7 +28,7 @@ export function Eyebrow({
   return (
     <Text
       as={as}
-      className={cn("text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase", className)}
+      className={cn("text-sm font-medium tracking-wide text-accent-300 uppercase", className)}
     >
       {children}
     </Text>
@@ -47,7 +47,7 @@ export function MetaLabel({
   return (
     <Text
       as={as}
-      className={cn("text-xs font-medium tracking-[0.18em] text-slate-500 uppercase", className)}
+      className={cn("text-xs font-medium tracking-wide text-slate-500 uppercase", className)}
     >
       {children}
     </Text>

@@ -11,7 +11,7 @@ export const TIME_SERIES_BOTTOM_GRID_CLASS =
   "grid gap-4 xl:min-h-[44rem] xl:flex-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]"
 
 export const TIME_SERIES_QUERY_SECTION_CLASS =
-  "flex min-h-[26rem] flex-col rounded-3xl border border-slate-800 bg-slate-900/70 xl:min-h-0"
+  "flex min-h-[26rem] flex-col rounded-2xl bg-surface-raised xl:min-h-0"
 
 export const TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS =
   "min-h-[24rem] flex-1 p-5 pt-4 md:min-h-[30rem] xl:min-h-0"

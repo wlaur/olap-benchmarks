@@ -37,7 +37,7 @@ export function App() {
   )
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen flex-col overflow-hidden bg-surface-primary text-slate-100">
       {navbar}
       <Routes>
         <Route

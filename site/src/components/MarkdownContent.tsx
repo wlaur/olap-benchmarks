@@ -38,7 +38,7 @@ interface MarkdownContentProps {
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
   return (
-    <div className="prose max-w-none prose-invert prose-headings:text-slate-50 prose-p:text-slate-300 prose-a:text-cyan-400 prose-a:no-underline hover:prose-a:text-cyan-300 hover:prose-a:underline prose-strong:text-slate-200 prose-code:text-cyan-300 prose-th:text-slate-300 prose-td:text-slate-400 prose-hr:border-slate-800">
+    <div className="prose max-w-none prose-invert prose-headings:text-slate-50 prose-p:text-slate-300 prose-a:text-accent-400 prose-a:no-underline hover:prose-a:text-accent-300 hover:prose-a:underline prose-strong:text-slate-200 prose-code:text-accent-300 prose-th:text-slate-300 prose-td:text-slate-400 prose-hr:border-border-default">
       <Markdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink }}>
         {content}
       </Markdown>

@@ -22,18 +22,18 @@ export function SystemSelector({
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
         aria-label="System"
-        className="inline-flex max-w-[22rem] min-w-[16rem] items-center justify-between gap-3 rounded-full bg-slate-900/80 py-2 pr-2.5 pl-2.5 text-left shadow-[inset_0_0_0_1px_rgba(51,65,85,0.8),inset_0_1px_0_rgba(255,255,255,0.04)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(100,116,139,0.95),inset_0_1px_0_rgba(255,255,255,0.04)] focus:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.9),inset_0_1px_0_rgba(255,255,255,0.04)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500"
+        className="inline-flex max-w-[20rem] min-w-0 items-center justify-between gap-2 rounded-full bg-surface-raised py-1.5 pr-2.5 pl-2 text-left shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] focus:shadow-[inset_0_0_0_1px_rgba(108,142,239,0.6)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500 sm:min-w-[14rem]"
       >
         <span className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300">
-            <Server className="h-4 w-4" strokeWidth={1.8} />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-400/10 text-accent-300">
+            <Server className="h-3.5 w-3.5" strokeWidth={1.8} />
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap">
-            <span className="shrink-0 text-[0.7rem] font-semibold tracking-[0.22em] text-slate-500 uppercase">
+          <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
+            <span className="hidden shrink-0 text-[0.65rem] font-semibold tracking-wide text-slate-500 uppercase sm:inline">
               System
             </span>
-            <span className="h-4 w-px shrink-0 bg-slate-700" />
-            <Select.Value className="block min-w-0 flex-1 truncate text-[1.05rem] font-medium whitespace-nowrap text-slate-100" />
+            <span className="hidden h-3.5 w-px shrink-0 bg-slate-700/50 sm:inline" />
+            <Select.Value className="block min-w-0 flex-1 truncate text-sm font-medium whitespace-nowrap text-slate-100" />
           </span>
         </span>
         <Select.Icon className="shrink-0 text-slate-500">
@@ -45,7 +45,7 @@ export function SystemSelector({
         <Select.Content
           position="popper"
           sideOffset={10}
-          className="z-50 max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-3xl border border-slate-700 bg-slate-950/98 p-2 text-slate-100 shadow-2xl shadow-slate-950/60 backdrop-blur data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1"
+          className="z-50 max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-border-default bg-surface-primary/98 p-2 text-slate-100 shadow-2xl shadow-black/40 backdrop-blur data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1"
         >
           <Select.ScrollUpButton className="flex h-8 items-center justify-center text-slate-500">
             <ChevronUp className="h-4 w-4" strokeWidth={1.8} />
@@ -55,12 +55,12 @@ export function SystemSelector({
               <Select.Item
                 key={system}
                 value={system}
-                className="relative flex cursor-default items-center rounded-2xl py-3 pr-9 pl-3 text-sm font-medium text-slate-200 transition outline-none data-[highlighted]:bg-cyan-400/12 data-[highlighted]:text-cyan-100 data-[state=checked]:bg-slate-900 data-[state=checked]:text-slate-50"
+                className="relative flex cursor-default items-center rounded-xl py-3 pr-9 pl-3 text-sm font-medium text-slate-200 transition outline-none data-[highlighted]:bg-accent-400/10 data-[highlighted]:text-accent-200 data-[state=checked]:bg-surface-raised data-[state=checked]:text-slate-50"
               >
                 <span className="min-w-0 truncate">
                   <Select.ItemText>{system}</Select.ItemText>
                 </span>
-                <Select.ItemIndicator className="absolute right-3 inline-flex items-center text-cyan-300">
+                <Select.ItemIndicator className="absolute right-3 inline-flex items-center text-accent-300">
                   <Check className="h-4 w-4" strokeWidth={2} />
                 </Select.ItemIndicator>
               </Select.Item>

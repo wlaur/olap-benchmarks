@@ -161,21 +161,16 @@ export function QueryComparisonTable({
   })
 
   return (
-    <div
-      className={cn(
-        "panel-scrollbar overflow-x-auto overflow-y-scroll rounded-2xl border border-slate-800 bg-slate-950/40",
-        containerClassName,
-      )}
-    >
+    <div className={cn("panel-scrollbar overflow-x-auto overflow-y-scroll", containerClassName)}>
       <table className="w-full table-fixed text-left text-sm">
         <colgroup>
-          <col className="w-[32%]" />
-          <col className="w-[34%]" />
+          <col className="w-[28%]" />
+          <col className="w-[30%]" />
+          <col className="w-[16%]" />
           <col className="w-[12%]" />
-          <col className="w-[10%]" />
-          <col className="w-[12%]" />
+          <col className="w-[14%]" />
         </colgroup>
-        <thead className="sticky top-0 z-10 bg-slate-900/95 text-slate-400 backdrop-blur">
+        <thead className="sticky top-0 z-10 border-b border-border-default bg-surface-raised text-xs tracking-wide text-slate-500 uppercase">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
@@ -186,7 +181,7 @@ export function QueryComparisonTable({
                 )
 
                 return (
-                  <th key={header.id} className="px-4 py-3 font-medium">
+                  <th key={header.id} className="px-4 py-2.5 font-medium">
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
                       <div className="flex min-w-0 items-center gap-1.5">
                         <button
@@ -216,19 +211,22 @@ export function QueryComparisonTable({
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-slate-800/60">
-          {table.getRowModel().rows.map((row) => {
+        <tbody>
+          {table.getRowModel().rows.map((row, rowIndex) => {
             const queryName = row.original.query_name
             const isSelected = selection.selectedQuery === queryName
+            const isEven = rowIndex % 2 === 0
 
             return (
               <tr
                 key={row.id}
                 className={cn(
-                  "cursor-pointer transition-colors duration-150",
+                  "cursor-pointer border-b border-border-subtle transition-colors duration-150",
                   isSelected
-                    ? "bg-cyan-950/30 ring-1 ring-cyan-500/40 ring-inset"
-                    : "hover:bg-slate-900/50",
+                    ? "bg-accent-500/8 shadow-[inset_2px_0_0_0_rgba(108,142,239,0.5)]"
+                    : isEven
+                      ? "hover:bg-white/[0.03]"
+                      : "bg-white/[0.02] hover:bg-white/[0.04]",
                 )}
                 onMouseEnter={() => selection.setHoveredQuery(queryName)}
                 onMouseLeave={() => selection.setHoveredQuery(null)}
@@ -283,11 +281,11 @@ function compareNullableNumbers(left: number | null, right: number | null): numb
 
 function SortIcon({ direction }: { direction: false | "asc" | "desc" }) {
   if (direction === "asc") {
-    return <ArrowUp className="size-4 shrink-0 text-cyan-300" />
+    return <ArrowUp className="size-4 shrink-0 text-accent-300" />
   }
 
   if (direction === "desc") {
-    return <ArrowDown className="size-4 shrink-0 text-cyan-300" />
+    return <ArrowDown className="size-4 shrink-0 text-accent-300" />
   }
 
   return <ArrowUpDown className="size-4 shrink-0 text-slate-500" />
@@ -360,7 +358,7 @@ function HeaderInfoTooltip({ label, tooltip, children }: HeaderWithTooltipProps)
         ? createPortal(
             <div
               className={cn(
-                "pointer-events-none fixed z-[80] w-72 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-slate-700 bg-slate-950/98 px-3 py-2 text-xs leading-5 text-slate-200 shadow-[0_20px_50px_rgba(2,6,23,0.55)]",
+                "pointer-events-none fixed z-[80] w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-border-default bg-surface-primary/98 px-3 py-2 text-xs leading-5 text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.4)]",
                 position.placement === "top" ? "-translate-y-full" : undefined,
               )}
               style={{ left: position.left, top: position.top }}
