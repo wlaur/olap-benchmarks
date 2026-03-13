@@ -3,7 +3,7 @@ import type { BenchmarkDefinition } from "../lib/benchmarks"
 
 interface BenchmarkPlaceholderPageProps {
   benchmark: BenchmarkDefinition
-  system: string
+  system: string | null
 }
 
 export function BenchmarkPlaceholderPage({ benchmark, system }: BenchmarkPlaceholderPageProps) {
@@ -24,7 +24,7 @@ export function BenchmarkPlaceholderPage({ benchmark, system }: BenchmarkPlaceho
           design.
         </p>
         <p className="mt-4 text-sm text-slate-500">
-          Active system: <span className="text-slate-300">{system}</span>
+          Active system: <span className="text-slate-300">{system ?? "Loading..."}</span>
         </p>
       </div>
     </section>
