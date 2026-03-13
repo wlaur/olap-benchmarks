@@ -124,7 +124,7 @@ export function QueryDetailPanel({
               }}
               labelStyle={{ color: "#e2e8f0" }}
               itemStyle={{ color: "#e2e8f0" }}
-              formatter={(_value: number, _name, item) =>
+              formatter={(_value, _name, item) =>
                 formatDurationSeconds((item.payload as { duration: number }).duration)
               }
             />

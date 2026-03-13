@@ -187,11 +187,16 @@ export function MetricsTimeSeriesPanel({
                           labelStyle={{ color: "#e2e8f0" }}
                           itemStyle={{ color: "#e2e8f0" }}
                           cursor={{ stroke: "#475569", strokeDasharray: "4 4" }}
-                          labelFormatter={(value) => `Elapsed ${formatElapsedLabel(Number(value))}`}
-                          formatter={(value: number, _name, item) => [
-                            metric.formatter(value),
-                            item.name,
-                          ]}
+                          labelFormatter={(value) => {
+                            const numericValue =
+                              typeof value === "number" ? value : Number(value ?? 0)
+                            return `Elapsed ${formatElapsedLabel(numericValue)}`
+                          }}
+                          formatter={(value, _name, item) => {
+                            const numericValue =
+                              typeof value === "number" ? value : Number(value ?? 0)
+                            return [metric.formatter(numericValue), item.name ?? ""] as const
+                          }}
                         />
                         {databases.map((db) => (
                           <Line
