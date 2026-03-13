@@ -15,7 +15,11 @@ import { DurationScaleToggle } from "../components/DurationScaleToggle"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
-import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
+import {
+  QueryComparisonTable,
+  QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS,
+  type QueryComparisonRow,
+} from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import { Skeleton } from "../components/Skeleton"
 import {
@@ -675,21 +679,27 @@ function LegendSkeleton() {
 function QueryTableSkeleton() {
   return (
     <div
-      className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-surface-inset ${TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}`}
+      className={`flex min-h-0 flex-col rounded-2xl border border-border-default bg-surface-inset ${TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}`}
     >
-      <div className="grid shrink-0 grid-cols-[32%_34%_12%_10%_12%] gap-0 border-b border-border-default bg-surface-raised/80 px-4 py-3">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-28" />
-        <Skeleton className="h-4 w-12" />
-        <Skeleton className="h-4 w-12" />
-        <Skeleton className="h-4 w-20" />
-      </div>
-      <div className="space-y-3 p-4">
-        <Skeleton className="h-16 w-full rounded-2xl" />
-        <Skeleton className="h-16 w-full rounded-2xl" />
-        <Skeleton className="h-16 w-full rounded-2xl" />
-        <Skeleton className="h-16 w-full rounded-2xl" />
-        <Skeleton className="h-16 w-full rounded-2xl" />
+      <div className="panel-scrollbar min-h-0 overflow-x-scroll overflow-y-hidden">
+        <div className={`h-full min-h-0 ${QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS}`}>
+          <div className="panel-scrollbar h-full min-h-0 overflow-y-scroll">
+            <div className="grid shrink-0 grid-cols-[32%_34%_12%_10%_12%] gap-0 border-b border-border-default bg-surface-raised/80 px-4 py-3">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <div className="space-y-3 p-4">
+              <Skeleton className="h-16 w-full rounded-2xl" />
+              <Skeleton className="h-16 w-full rounded-2xl" />
+              <Skeleton className="h-16 w-full rounded-2xl" />
+              <Skeleton className="h-16 w-full rounded-2xl" />
+              <Skeleton className="h-16 w-full rounded-2xl" />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
