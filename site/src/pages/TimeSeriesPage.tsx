@@ -45,13 +45,17 @@ import {
   TIME_SERIES_BOTTOM_GRID_CLASS,
   TIME_SERIES_DETAIL_SECTION_CLASS,
   TIME_SERIES_OVERVIEW_CHART_HEIGHT,
-  TIME_SERIES_TOP_CARD_CLASS,
   TIME_SERIES_QUERY_SECTION_CLASS,
   TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS,
   TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS,
   TIME_SERIES_TOP_GRID_CLASS,
 } from "./timeSeriesLayout"
 import { TimeSeriesPageSkeleton } from "./TimeSeriesPageSkeleton"
+import {
+  TimeSeriesOverviewChartFrame,
+  TimeSeriesOverviewHeader,
+  TimeSeriesTopCard,
+} from "./timeSeriesShell"
 
 interface TimeSeriesPageProps {
   system: string
@@ -285,7 +289,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   return (
     <section className="flex min-h-full w-full flex-col gap-4 pb-4">
       <div className={TIME_SERIES_TOP_GRID_CLASS}>
-        <div className={TIME_SERIES_TOP_CARD_CLASS}>
+        <TimeSeriesTopCard>
           <div className="space-y-2">
             <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
               Time Series
@@ -307,10 +311,10 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               onToggleDatabase={toggleDatabase}
             />
           </div>
-        </div>
+        </TimeSeriesTopCard>
 
-        <div className={TIME_SERIES_TOP_CARD_CLASS}>
-          <div className="flex items-start justify-between gap-4">
+        <TimeSeriesTopCard>
+          <TimeSeriesOverviewHeader>
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
               <p className="mt-1 text-sm text-slate-400">
@@ -356,113 +360,105 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 {includedDatabases.length} of {databases.length} databases
               </div>
             </div>
-          </div>
+          </TimeSeriesOverviewHeader>
 
-          <div className="mt-4">
-            <div
-              className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
-              style={{ height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
-            >
-              {!hasVisibleOverviewSegments ? (
-                <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
-                  Enable populate or run to display overview bars for the selected databases.
-                </div>
-              ) : (
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  initialDimension={{ width: 640, height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
-                >
-                  <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
-                    <CartesianGrid stroke="#1e293b" vertical={false} />
-                    <XAxis
-                      dataKey="db"
-                      tick={{ fill: "#94a3b8", fontSize: 11 }}
-                      axisLine={{ stroke: "#334155" }}
-                      tickLine={{ stroke: "#334155" }}
-                    />
-                    <YAxis
-                      domain={overviewAxisDomain}
-                      ticks={overviewAxisTicks}
-                      tick={{ fill: "#94a3b8", fontSize: 11 }}
-                      axisLine={{ stroke: "#334155" }}
-                      tickLine={{ stroke: "#334155" }}
-                      tickFormatter={(value: number) =>
-                        formatDurationAxisTick(value, overviewScaleMode)
-                      }
-                    />
-                    <Tooltip
-                      cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
-                      contentStyle={{
-                        backgroundColor: "#020617",
-                        border: "1px solid #334155",
-                        borderRadius: 16,
-                        color: "#e2e8f0",
-                      }}
-                      labelStyle={{ color: "#e2e8f0" }}
-                      itemStyle={{ color: "#e2e8f0" }}
-                      formatter={(_value, name, item) => {
-                        const row = item.payload as OverviewChartRow
+          <TimeSeriesOverviewChartFrame>
+            {!hasVisibleOverviewSegments ? (
+              <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
+                Enable populate or run to display overview bars for the selected databases.
+              </div>
+            ) : (
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                initialDimension={{ width: 640, height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
+              >
+                <BarChart data={runChartData} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
+                  <CartesianGrid stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="db"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    axisLine={{ stroke: "#334155" }}
+                    tickLine={{ stroke: "#334155" }}
+                  />
+                  <YAxis
+                    domain={overviewAxisDomain}
+                    ticks={overviewAxisTicks}
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    axisLine={{ stroke: "#334155" }}
+                    tickLine={{ stroke: "#334155" }}
+                    tickFormatter={(value: number) =>
+                      formatDurationAxisTick(value, overviewScaleMode)
+                    }
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(15, 23, 42, 0.55)" }}
+                    contentStyle={{
+                      backgroundColor: "#020617",
+                      border: "1px solid #334155",
+                      borderRadius: 16,
+                      color: "#e2e8f0",
+                    }}
+                    labelStyle={{ color: "#e2e8f0" }}
+                    itemStyle={{ color: "#e2e8f0" }}
+                    formatter={(_value, name, item) => {
+                      const row = item.payload as OverviewChartRow
 
-                        return [
-                          formatDurationSeconds(
-                            name === "Populate" ? row.populate_duration_s : row.run_duration_s,
-                          ),
-                          name ?? "",
-                        ] as const
-                      }}
-                      labelFormatter={(label, payload) => {
-                        const row = payload?.[0]?.payload as OverviewChartRow | undefined
-                        if (!row) return label
+                      return [
+                        formatDurationSeconds(
+                          name === "Populate" ? row.populate_duration_s : row.run_duration_s,
+                        ),
+                        name ?? "",
+                      ] as const
+                    }}
+                    labelFormatter={(label, payload) => {
+                      const row = payload?.[0]?.payload as OverviewChartRow | undefined
+                      if (!row) return label
 
-                        const labelText =
-                          typeof label === "string" || typeof label === "number"
-                            ? String(label)
-                            : ""
+                      const labelText =
+                        typeof label === "string" || typeof label === "number" ? String(label) : ""
 
-                        return overviewOperationVisibility.populate &&
-                          overviewOperationVisibility.run
-                          ? `${labelText} · total ${formatDurationSeconds(row.total_duration_s)}`
-                          : `${labelText} · ${formatDurationSeconds(row.total_duration_s)}`
-                      }}
-                    />
-                    <Bar
-                      dataKey="populate_chart_duration_s"
-                      stackId="total"
-                      hide={!overviewOperationVisibility.populate}
-                      radius={overviewOperationVisibility.run ? [0, 0, 10, 10] : [10, 10, 10, 10]}
-                      name="Populate"
-                      shape={(props) => (
-                        <Rectangle
-                          {...props}
-                          fill={withAlpha(
-                            (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
-                            0.45,
-                          )}
-                        />
-                      )}
-                    />
-                    <Bar
-                      dataKey="run_chart_duration_s"
-                      stackId="total"
-                      hide={!overviewOperationVisibility.run}
-                      radius={
-                        overviewOperationVisibility.populate ? [10, 10, 0, 0] : [10, 10, 10, 10]
-                      }
-                      name="Run"
-                      shape={(props) => (
-                        <Rectangle
-                          {...props}
-                          fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
-                        />
-                      )}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
+                      return overviewOperationVisibility.populate && overviewOperationVisibility.run
+                        ? `${labelText} · total ${formatDurationSeconds(row.total_duration_s)}`
+                        : `${labelText} · ${formatDurationSeconds(row.total_duration_s)}`
+                    }}
+                  />
+                  <Bar
+                    dataKey="populate_chart_duration_s"
+                    stackId="total"
+                    hide={!overviewOperationVisibility.populate}
+                    radius={overviewOperationVisibility.run ? [0, 0, 10, 10] : [10, 10, 10, 10]}
+                    name="Populate"
+                    shape={(props) => (
+                      <Rectangle
+                        {...props}
+                        fill={withAlpha(
+                          (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
+                          0.45,
+                        )}
+                      />
+                    )}
+                  />
+                  <Bar
+                    dataKey="run_chart_duration_s"
+                    stackId="total"
+                    hide={!overviewOperationVisibility.run}
+                    radius={
+                      overviewOperationVisibility.populate ? [10, 10, 0, 0] : [10, 10, 10, 10]
+                    }
+                    name="Run"
+                    shape={(props) => (
+                      <Rectangle
+                        {...props}
+                        fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
+                      />
+                    )}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </TimeSeriesOverviewChartFrame>
+        </TimeSeriesTopCard>
       </div>
 
       <MetricsTimeSeriesPanel
