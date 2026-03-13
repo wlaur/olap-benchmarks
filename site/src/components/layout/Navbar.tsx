@@ -2,8 +2,7 @@ import { Home } from "lucide-react"
 import { NavLink } from "react-router-dom"
 
 import type { BenchmarkDefinition } from "../../lib/benchmarks"
-import { SystemSelector } from "../filters/SystemSelector"
-import { Skeleton } from "../Skeleton"
+import { SystemSelector, SystemSelectorSkeleton } from "../filters/SystemSelector"
 
 interface NavbarProps {
   benchmarks: BenchmarkDefinition[]
@@ -40,7 +39,7 @@ export function Navbar({
               to="/"
               end
               className={({ isActive }) =>
-                `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition md:hidden ${
+                `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition min-[1060px]:hidden ${
                   isActive ? activeNavClass : inactiveNavClass
                 }`
               }
@@ -50,7 +49,7 @@ export function Navbar({
             </NavLink>
           </div>
 
-          <div className="hidden min-w-0 flex-1 py-1 md:block">
+          <div className="hidden min-w-0 flex-1 py-1 min-[1060px]:block">
             <nav className="flex min-w-full items-center gap-2">
               <NavLink
                 to="/"
@@ -82,7 +81,7 @@ export function Navbar({
 
           <div className="flex shrink-0 justify-end">
             {isSystemLoading ? (
-              <Skeleton className="h-10 w-[16.5rem] rounded-full max-sm:w-32" />
+              <SystemSelectorSkeleton />
             ) : systems.length > 0 ? (
               <SystemSelector
                 systems={systems}
@@ -96,7 +95,7 @@ export function Navbar({
           </div>
         </div>
 
-        <div className="mt-2 md:hidden">
+        <div className="mt-2 min-[1060px]:hidden">
           <nav className="flex flex-wrap items-center gap-2">
             {benchmarks.map((benchmark) => (
               <NavLink
