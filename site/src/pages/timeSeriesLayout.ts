@@ -1,8 +1,9 @@
 export const TIME_SERIES_TOP_GRID_CLASS =
   "grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]"
 
-export const TIME_SERIES_TOP_CARD_CLASS =
-  "rounded-3xl border border-slate-800 bg-slate-900/70 p-5 min-h-[26rem]"
+export const TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS = "min-h-[26rem]"
+
+export const TIME_SERIES_OVERVIEW_HEADER_CLASS = "min-h-[8.5rem]"
 
 export const TIME_SERIES_OVERVIEW_CHART_HEIGHT = 220
 
