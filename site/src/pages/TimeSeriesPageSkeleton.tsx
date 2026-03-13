@@ -2,19 +2,22 @@ import { Skeleton } from "../components/Skeleton"
 import {
   TIME_SERIES_BOTTOM_GRID_CLASS,
   TIME_SERIES_DETAIL_SECTION_CLASS,
-  TIME_SERIES_OVERVIEW_CHART_HEIGHT,
-  TIME_SERIES_TOP_CARD_CLASS,
   TIME_SERIES_QUERY_SECTION_CLASS,
   TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS,
   TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS,
   TIME_SERIES_TOP_GRID_CLASS,
 } from "./timeSeriesLayout"
+import {
+  TimeSeriesOverviewChartFrame,
+  TimeSeriesOverviewHeader,
+  TimeSeriesTopCard,
+} from "./timeSeriesShell"
 
 export function TimeSeriesPageSkeleton() {
   return (
     <section className="flex min-h-full w-full flex-col gap-4 pb-4">
       <div className={TIME_SERIES_TOP_GRID_CLASS}>
-        <div className={TIME_SERIES_TOP_CARD_CLASS}>
+        <TimeSeriesTopCard>
           <Skeleton className="h-3 w-24 rounded-full" />
           <Skeleton className="mt-4 h-10 w-64" />
           <Skeleton className="mt-3 h-4 w-full max-w-xl" />
@@ -28,10 +31,10 @@ export function TimeSeriesPageSkeleton() {
               <Skeleton className="h-11 w-32 rounded-full" />
             </div>
           </div>
-        </div>
+        </TimeSeriesTopCard>
 
-        <div className={TIME_SERIES_TOP_CARD_CLASS}>
-          <div className="flex items-start justify-between gap-4">
+        <TimeSeriesTopCard>
+          <TimeSeriesOverviewHeader>
             <div>
               <Skeleton className="h-6 w-44" />
               <Skeleton className="mt-2 h-4 w-80 max-w-full" />
@@ -43,12 +46,9 @@ export function TimeSeriesPageSkeleton() {
               <Skeleton className="h-8 w-20 rounded-full" />
               <Skeleton className="h-8 w-28 rounded-full" />
             </div>
-          </div>
+          </TimeSeriesOverviewHeader>
 
-          <div
-            className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
-            style={{ height: TIME_SERIES_OVERVIEW_CHART_HEIGHT }}
-          >
+          <TimeSeriesOverviewChartFrame>
             <div className="grid h-full grid-cols-[4rem_minmax(0,1fr)] gap-4">
               <div className="flex flex-col justify-around py-3">
                 <Skeleton className="h-3 w-10 rounded-full" />
@@ -70,8 +70,8 @@ export function TimeSeriesPageSkeleton() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+          </TimeSeriesOverviewChartFrame>
+        </TimeSeriesTopCard>
       </div>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
