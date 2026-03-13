@@ -3,7 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  Rectangle,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -438,32 +438,37 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                           : `${labelText} · ${formatDurationSeconds(row.total_duration_s)}`
                       }}
                     />
-                    {overviewOperationVisibility.populate ? (
-                      <Bar
-                        dataKey="populate_chart_duration_s"
-                        stackId="total"
-                        radius={overviewOperationVisibility.run ? [0, 0, 10, 10] : [10, 10, 10, 10]}
-                        name="Populate"
-                      >
-                        {runChartData.map((entry) => (
-                          <Cell key={`${entry.db}-populate`} fill={withAlpha(entry.fill, 0.45)} />
-                        ))}
-                      </Bar>
-                    ) : null}
-                    {overviewOperationVisibility.run ? (
-                      <Bar
-                        dataKey="run_chart_duration_s"
-                        stackId="total"
-                        radius={
-                          overviewOperationVisibility.populate ? [10, 10, 0, 0] : [10, 10, 10, 10]
-                        }
-                        name="Run"
-                      >
-                        {runChartData.map((entry) => (
-                          <Cell key={`${entry.db}-run`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    ) : null}
+                    <Bar
+                      dataKey="populate_chart_duration_s"
+                      stackId="total"
+                      hide={!overviewOperationVisibility.populate}
+                      radius={overviewOperationVisibility.run ? [0, 0, 10, 10] : [10, 10, 10, 10]}
+                      name="Populate"
+                      shape={(props) => (
+                        <Rectangle
+                          {...props}
+                          fill={withAlpha(
+                            (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
+                            0.45,
+                          )}
+                        />
+                      )}
+                    />
+                    <Bar
+                      dataKey="run_chart_duration_s"
+                      stackId="total"
+                      hide={!overviewOperationVisibility.run}
+                      radius={
+                        overviewOperationVisibility.populate ? [10, 10, 0, 0] : [10, 10, 10, 10]
+                      }
+                      name="Run"
+                      shape={(props) => (
+                        <Rectangle
+                          {...props}
+                          fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
+                        />
+                      )}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -642,9 +647,19 @@ function buildQueryComparisonRows(
       const byDatabase = Object.fromEntries(
         databases.map((database) => [database, null]),
       ) as Record<string, number | null>
+      const statsByDatabase = Object.fromEntries(
+        databases.map((database) => [database, null]),
+      ) as QueryComparisonRow["stats_by_database"]
 
       for (const row of rows) {
         byDatabase[row.db] = row.median_duration_s
+        statsByDatabase[row.db] = {
+          median_duration_s: row.median_duration_s,
+          avg_duration_s: row.avg_duration_s,
+          min_duration_s: row.min_duration_s,
+          max_duration_s: row.max_duration_s,
+          iterations: row.iterations,
+        }
       }
 
       const numericDurations = Object.values(byDatabase).filter((value) => value !== null)
@@ -660,6 +675,7 @@ function buildQueryComparisonRows(
         fastest_db: fastestDb,
         spread_ratio: slowestDuration / fastestDuration,
         by_database: byDatabase,
+        stats_by_database: statsByDatabase,
       }
     })
 }

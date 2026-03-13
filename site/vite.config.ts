@@ -4,6 +4,15 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   base: "/olap-benchmarks/",
+  resolve: {
+    dedupe: [
+      "@codemirror/state",
+      "@codemirror/view",
+      "@codemirror/language",
+      "@codemirror/lang-sql",
+      "@codemirror/theme-one-dark",
+    ],
+  },
   plugins: [react(), tailwindcss()],
   build: {
     target: "es2022",
