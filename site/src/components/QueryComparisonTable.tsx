@@ -220,14 +220,12 @@ export function QueryComparisonTable({
           {table.getRowModel().rows.map((row) => {
             const queryName = row.original.query_name
             const isSelected = selection.selectedQuery === queryName
-            const highlighted = selection.isHighlighted(queryName)
 
             return (
               <tr
                 key={row.id}
                 className={cn(
-                  "cursor-pointer transition-opacity duration-150",
-                  highlighted ? "opacity-100" : "opacity-20",
+                  "cursor-pointer transition-colors duration-150",
                   isSelected
                     ? "bg-cyan-950/30 ring-1 ring-cyan-500/40 ring-inset"
                     : "hover:bg-slate-900/50",
