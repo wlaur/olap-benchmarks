@@ -1,11 +1,32 @@
 import * as Select from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp, Server } from "lucide-react"
 
+import { Skeleton } from "../Skeleton"
+
 interface SystemSelectorProps {
   systems: string[]
   selected: string | null
   onChange: (system: string) => void
   disabled?: boolean
+}
+
+const selectorTriggerClass =
+  "inline-flex max-w-[18rem] min-w-0 items-center justify-between gap-1.5 rounded-full bg-surface-raised py-1 pr-2 pl-1.5 text-left shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] focus:shadow-[inset_0_0_0_1px_rgba(108,142,239,0.6)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500 sm:min-w-[12.5rem]"
+
+export function SystemSelectorSkeleton() {
+  return (
+    <div className={selectorTriggerClass} aria-hidden="true">
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <Skeleton className="h-6 w-6 shrink-0 rounded-full" />
+        <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
+          <Skeleton className="hidden h-2 w-10 shrink-0 rounded-full md:block" />
+          <span className="hidden h-3 w-px shrink-0 bg-slate-700/50 md:inline" />
+          <Skeleton className="h-3 w-24 rounded-full sm:w-28" />
+        </span>
+      </span>
+      <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-full" />
+    </div>
+  )
 }
 
 export function SystemSelector({
@@ -20,10 +41,7 @@ export function SystemSelector({
 
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
-      <Select.Trigger
-        aria-label="System"
-        className="inline-flex max-w-[18rem] min-w-0 items-center justify-between gap-1.5 rounded-full bg-surface-raised py-1 pr-2 pl-1.5 text-left shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] focus:shadow-[inset_0_0_0_1px_rgba(108,142,239,0.6)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500 sm:min-w-[12.5rem]"
-      >
+      <Select.Trigger aria-label="System" className={selectorTriggerClass}>
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-400/8 text-accent-300">
             <Server className="h-3 w-3" strokeWidth={1.8} />
