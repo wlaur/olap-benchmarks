@@ -12,7 +12,7 @@ import {
 
 import type { TimeSeriesMetricSample, TimeSeriesOperation } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
-import { Skeleton } from "./Skeleton"
+import { PanelCard } from "./layout/Panel"
 
 const OPERATIONS: TimeSeriesOperation[] = ["populate", "run"]
 
@@ -79,7 +79,7 @@ export function MetricsTimeSeriesPanel({
 
   if (loading) {
     return (
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+      <PanelCard>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Resource metrics</h3>
@@ -98,15 +98,12 @@ export function MetricsTimeSeriesPanel({
             Show
           </button>
         </div>
-        <div className="mt-4">
-          <Skeleton className="h-px w-full rounded-none bg-slate-800/70" />
-        </div>
-      </section>
+      </PanelCard>
     )
   }
 
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+    <PanelCard>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-semibold text-slate-50">Resource metrics</h3>
@@ -256,7 +253,7 @@ export function MetricsTimeSeriesPanel({
           )}
         </div>
       )}
-    </section>
+    </PanelCard>
   )
 }
 
