@@ -22,22 +22,22 @@ export function SystemSelector({
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
         aria-label="System"
-        className="inline-flex max-w-[20rem] min-w-0 items-center justify-between gap-2 rounded-full bg-surface-raised py-1.5 pr-2.5 pl-2 text-left shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] focus:shadow-[inset_0_0_0_1px_rgba(108,142,239,0.6)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500 sm:min-w-[14rem]"
+        className="inline-flex max-w-[18rem] min-w-0 items-center justify-between gap-1.5 rounded-full bg-surface-raised py-1 pr-2 pl-1.5 text-left shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] transition outline-none hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] focus:shadow-[inset_0_0_0_1px_rgba(108,142,239,0.6)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-slate-500 sm:min-w-[12.5rem]"
       >
-        <span className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-400/10 text-accent-300">
-            <Server className="h-3.5 w-3.5" strokeWidth={1.8} />
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-400/8 text-accent-300">
+            <Server className="h-3 w-3" strokeWidth={1.8} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
-            <span className="hidden shrink-0 text-[0.65rem] font-semibold tracking-wide text-slate-500 uppercase sm:inline">
+            <span className="hidden shrink-0 text-[0.6rem] font-semibold tracking-[0.18em] text-slate-500 uppercase md:inline">
               System
             </span>
-            <span className="hidden h-3.5 w-px shrink-0 bg-slate-700/50 sm:inline" />
-            <Select.Value className="block min-w-0 flex-1 truncate text-sm font-medium whitespace-nowrap text-slate-100" />
+            <span className="hidden h-3 w-px shrink-0 bg-slate-700/50 md:inline" />
+            <Select.Value className="block min-w-0 flex-1 truncate text-[0.8125rem] font-medium whitespace-nowrap text-slate-100" />
           </span>
         </span>
         <Select.Icon className="shrink-0 text-slate-500">
-          <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
+          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
         </Select.Icon>
       </Select.Trigger>
 
@@ -55,13 +55,13 @@ export function SystemSelector({
               <Select.Item
                 key={system}
                 value={system}
-                className="relative flex cursor-default items-center rounded-xl py-3 pr-9 pl-3 text-sm font-medium text-slate-200 transition outline-none data-[highlighted]:bg-accent-400/10 data-[highlighted]:text-accent-200 data-[state=checked]:bg-surface-raised data-[state=checked]:text-slate-50"
+                className="relative flex cursor-default items-center rounded-xl py-2.5 pr-8 pl-3 text-[0.8125rem] font-medium text-slate-200 transition outline-none data-[highlighted]:bg-accent-400/10 data-[highlighted]:text-accent-200 data-[state=checked]:bg-surface-raised data-[state=checked]:text-slate-50"
               >
                 <span className="min-w-0 truncate">
                   <Select.ItemText>{system}</Select.ItemText>
                 </span>
                 <Select.ItemIndicator className="absolute right-3 inline-flex items-center text-accent-300">
-                  <Check className="h-4 w-4" strokeWidth={2} />
+                  <Check className="h-3.5 w-3.5" strokeWidth={2} />
                 </Select.ItemIndicator>
               </Select.Item>
             ))}
