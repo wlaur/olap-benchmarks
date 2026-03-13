@@ -13,6 +13,7 @@ import {
 import { DatabaseLegend } from "../components/DatabaseLegend"
 import { DurationScaleToggle } from "../components/DurationScaleToggle"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
+import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
@@ -45,17 +46,14 @@ import {
   TIME_SERIES_BOTTOM_GRID_CLASS,
   TIME_SERIES_DETAIL_SECTION_CLASS,
   TIME_SERIES_OVERVIEW_CHART_HEIGHT,
+  TIME_SERIES_OVERVIEW_HEADER_CLASS,
   TIME_SERIES_QUERY_SECTION_CLASS,
   TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS,
   TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS,
+  TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS,
   TIME_SERIES_TOP_GRID_CLASS,
 } from "./timeSeriesLayout"
 import { TimeSeriesPageSkeleton } from "./TimeSeriesPageSkeleton"
-import {
-  TimeSeriesOverviewChartFrame,
-  TimeSeriesOverviewHeader,
-  TimeSeriesTopCard,
-} from "./timeSeriesShell"
 
 interface TimeSeriesPageProps {
   system: string
@@ -289,7 +287,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   return (
     <section className="flex min-h-full w-full flex-col gap-4 pb-4">
       <div className={TIME_SERIES_TOP_GRID_CLASS}>
-        <TimeSeriesTopCard>
+        <PanelCard className={TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS}>
           <div className="space-y-2">
             <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">
               Time Series
@@ -311,10 +309,10 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
               onToggleDatabase={toggleDatabase}
             />
           </div>
-        </TimeSeriesTopCard>
+        </PanelCard>
 
-        <TimeSeriesTopCard>
-          <TimeSeriesOverviewHeader>
+        <PanelCard className={TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS}>
+          <PanelHeader className={TIME_SERIES_OVERVIEW_HEADER_CLASS}>
             <div>
               <h3 className="text-lg font-semibold text-slate-50">Aggregate overview</h3>
               <p className="mt-1 text-sm text-slate-400">
@@ -360,9 +358,9 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 {includedDatabases.length} of {databases.length} databases
               </div>
             </div>
-          </TimeSeriesOverviewHeader>
+          </PanelHeader>
 
-          <TimeSeriesOverviewChartFrame>
+          <ChartFrame className="mt-4" height={TIME_SERIES_OVERVIEW_CHART_HEIGHT}>
             {!hasVisibleOverviewSegments ? (
               <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
                 Enable populate or run to display overview bars for the selected databases.
@@ -457,8 +455,8 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 </BarChart>
               </ResponsiveContainer>
             )}
-          </TimeSeriesOverviewChartFrame>
-        </TimeSeriesTopCard>
+          </ChartFrame>
+        </PanelCard>
       </div>
 
       <MetricsTimeSeriesPanel
