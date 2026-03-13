@@ -413,24 +413,29 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                       }}
                       labelStyle={{ color: "#e2e8f0" }}
                       itemStyle={{ color: "#e2e8f0" }}
-                      formatter={(_value: number, name, item) => {
+                      formatter={(_value, name, item) => {
                         const row = item.payload as OverviewChartRow
 
                         return [
                           formatDurationSeconds(
                             name === "Populate" ? row.populate_duration_s : row.run_duration_s,
                           ),
-                          name,
-                        ]
+                          name ?? "",
+                        ] as const
                       }}
-                      labelFormatter={(label: string, payload) => {
+                      labelFormatter={(label, payload) => {
                         const row = payload?.[0]?.payload as OverviewChartRow | undefined
                         if (!row) return label
 
+                        const labelText =
+                          typeof label === "string" || typeof label === "number"
+                            ? String(label)
+                            : ""
+
                         return overviewOperationVisibility.populate &&
                           overviewOperationVisibility.run
-                          ? `${label} · total ${formatDurationSeconds(row.total_duration_s)}`
-                          : `${label} · ${formatDurationSeconds(row.total_duration_s)}`
+                          ? `${labelText} · total ${formatDurationSeconds(row.total_duration_s)}`
+                          : `${labelText} · ${formatDurationSeconds(row.total_duration_s)}`
                       }}
                     />
                     {overviewOperationVisibility.populate ? (
