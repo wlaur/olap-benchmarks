@@ -12,15 +12,21 @@ import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
 import { HomePage } from "./pages/HomePage"
 import { TimeSeriesPage } from "./pages/TimeSeriesPage"
 
-function BenchmarkRoute({ system }: { system: string }) {
+function BenchmarkRoute({
+  selectedSystem,
+  isSystemLoading,
+}: {
+  selectedSystem: string | null
+  isSystemLoading: boolean
+}) {
   const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
   const benchmark = getBenchmarkDefinition((rawId ?? defaultBenchmarkId) as BenchmarkSuiteId)
 
   if (benchmark.id === "time_series") {
-    return <TimeSeriesPage system={system} />
+    return <TimeSeriesPage system={selectedSystem} isSystemLoading={isSystemLoading} />
   }
 
-  return <BenchmarkPlaceholderPage benchmark={benchmark} system={system} />
+  return <BenchmarkPlaceholderPage benchmark={benchmark} system={selectedSystem} />
 }
 
 export function App() {
@@ -37,7 +43,7 @@ export function App() {
   )
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-surface-primary text-slate-100">
+    <div className="flex h-dvh min-h-screen flex-col overflow-hidden bg-surface-primary text-slate-100">
       {navbar}
       <Routes>
         <Route
@@ -69,30 +75,21 @@ interface BenchmarkMainProps {
 }
 
 function BenchmarkMain({ selectedSystem, loading, error }: BenchmarkMainProps) {
-  const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
-  const isTimeSeries = (rawId ?? defaultBenchmarkId) === "time_series"
-
-  const content = loading ? (
-    isTimeSeries ? (
-      <TimeSeriesPage system={selectedSystem} isSystemLoading />
-    ) : null
-  ) : error ? (
+  const content = error ? (
     <p className="text-sm text-red-300">Failed to load systems: {error}</p>
   ) : !selectedSystem ? (
-    <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
+    loading ? (
+      <BenchmarkRoute selectedSystem={selectedSystem} isSystemLoading />
+    ) : (
+      <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
+    )
   ) : (
-    <BenchmarkRoute system={selectedSystem} />
+    <BenchmarkRoute selectedSystem={selectedSystem} isSystemLoading={loading} />
   )
 
   return (
-    <main
-      className={
-        isTimeSeries
-          ? "flex min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 lg:px-5"
-          : "min-h-0 flex-1 overflow-y-auto px-4 py-10"
-      }
-    >
-      {isTimeSeries ? content : <div className="mx-auto w-full max-w-7xl">{content}</div>}
+    <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:py-8">
+      <div className="mx-auto w-full max-w-7xl">{content}</div>
     </main>
   )
 }
