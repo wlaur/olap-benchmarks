@@ -1,4 +1,3 @@
-import { lazy, Suspense } from "react"
 import { Navigate, Route, Routes, useParams } from "react-router-dom"
 
 import { Navbar } from "./components/layout/Navbar"
@@ -11,23 +10,14 @@ import {
 } from "./lib/benchmarks"
 import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
 import { HomePage } from "./pages/HomePage"
-import { TimeSeriesPageSkeleton } from "./pages/TimeSeriesPageSkeleton"
-
-const TimeSeriesPage = lazy(async () => {
-  const module = await import("./pages/TimeSeriesPage")
-  return { default: module.TimeSeriesPage }
-})
+import { TimeSeriesPage } from "./pages/TimeSeriesPage"
 
 function BenchmarkRoute({ system }: { system: string }) {
   const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
   const benchmark = getBenchmarkDefinition((rawId ?? defaultBenchmarkId) as BenchmarkSuiteId)
 
   if (benchmark.id === "time_series") {
-    return (
-      <Suspense fallback={<TimeSeriesPageSkeleton />}>
-        <TimeSeriesPage system={system} />
-      </Suspense>
-    )
+    return <TimeSeriesPage system={system} />
   }
 
   return <BenchmarkPlaceholderPage benchmark={benchmark} system={system} />
@@ -84,7 +74,7 @@ function BenchmarkMain({ selectedSystem, loading, error }: BenchmarkMainProps) {
 
   const content = loading ? (
     isTimeSeries ? (
-      <TimeSeriesPageSkeleton />
+      <TimeSeriesPage system={selectedSystem} isSystemLoading />
     ) : null
   ) : error ? (
     <p className="text-sm text-red-300">Failed to load systems: {error}</p>

@@ -17,6 +17,7 @@ import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
 import { QueryComparisonTable, type QueryComparisonRow } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
+import { Skeleton } from "../components/Skeleton"
 import { useSelectionState } from "../hooks/useSelectionState"
 import { getDatabaseColors } from "../lib/databaseColors"
 import {
@@ -53,10 +54,10 @@ import {
   TIME_SERIES_TOP_CARD_MIN_HEIGHT_CLASS,
   TIME_SERIES_TOP_GRID_CLASS,
 } from "./timeSeriesLayout"
-import { TimeSeriesPageSkeleton } from "./TimeSeriesPageSkeleton"
 
 interface TimeSeriesPageProps {
-  system: string
+  system: string | null
+  isSystemLoading?: boolean
 }
 
 interface TimeSeriesPageState {
@@ -84,8 +85,8 @@ type OverviewOperationVisibility = Record<TimeSeriesOperation, boolean>
 
 const LOG_FLOOR = 1e-6
 
-export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
-  const [state, setState] = useState<TimeSeriesPageState>({
+function createInitialTimeSeriesPageState(): TimeSeriesPageState {
+  return {
     loading: true,
     error: null,
     runSummaries: [],
@@ -93,6 +94,12 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     metricSamples: [],
     querySummaries: [],
     queriesManifest: null,
+  }
+}
+
+export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPageProps) {
+  const [state, setState] = useState<TimeSeriesPageState>({
+    ...createInitialTimeSeriesPageState(),
   })
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("log")
@@ -106,17 +113,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
   const { selectedQuery, setSelectedQuery } = selection
 
   useEffect(() => {
+    if (isSystemLoading || system === null) {
+      startTransition(() => {
+        setState(createInitialTimeSeriesPageState())
+      })
+      return
+    }
+
     let cancelled = false
 
-    setState({
-      loading: true,
-      error: null,
-      runSummaries: [],
-      operationSummaries: [],
-      metricSamples: [],
-      querySummaries: [],
-      queriesManifest: null,
-    })
+    setState(createInitialTimeSeriesPageState())
 
     Promise.all([
       fetchTimeSeriesRunSummaries(system),
@@ -161,7 +167,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     return () => {
       cancelled = true
     }
-  }, [system])
+  }, [isSystemLoading, system])
 
   const databases = useMemo(
     () => Array.from(new Set(state.runSummaries.map((run) => run.db))).sort(),
@@ -226,6 +232,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     : null
 
   const selectedSql = state.queriesManifest?.time_series?.[selectedQuery ?? ""] ?? null
+  const isLoading = isSystemLoading || state.loading
 
   function toggleDatabase(database: string) {
     setSelectedDatabases((currentSelection) => {
@@ -260,11 +267,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     }
   }, [selectedQuery, setSelectedQuery])
 
-  if (state.loading) {
-    return <TimeSeriesPageSkeleton />
-  }
-
-  if (state.error) {
+  if (!isLoading && state.error) {
     return (
       <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <div className="rounded-3xl border border-red-500/30 bg-red-950/20 px-6 py-5 text-sm text-red-300">
@@ -274,11 +277,11 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
     )
   }
 
-  if (state.runSummaries.length === 0) {
+  if (!isLoading && state.runSummaries.length === 0) {
     return (
       <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 px-6 py-5 text-sm text-slate-400">
-          No completed time-series runs were found for {system}.
+          No completed time-series runs were found for {system ?? "the selected system"}.
         </div>
       </section>
     )
@@ -302,12 +305,16 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
           </div>
 
           <div className="mt-5">
-            <DatabaseMultiSelect
-              databases={databases}
-              selectedDatabases={includedDatabases}
-              onSelectAll={() => setSelectedDatabases(databases)}
-              onToggleDatabase={toggleDatabase}
-            />
+            {isLoading ? (
+              <FilterChipsSkeleton />
+            ) : (
+              <DatabaseMultiSelect
+                databases={databases}
+                selectedDatabases={includedDatabases}
+                onSelectAll={() => setSelectedDatabases(databases)}
+                onToggleDatabase={toggleDatabase}
+              />
+            )}
           </div>
         </PanelCard>
 
@@ -322,46 +329,54 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 for run.
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="inline-flex rounded-full border border-slate-800 bg-slate-950/80 p-1">
-                {(
-                  [
-                    ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
-                    ["run", "Run", "rgba(148, 163, 184, 1)"],
-                  ] as const
-                ).map(([operation, label, chipColor]) => {
-                  const isActive = overviewOperationVisibility[operation]
+            {isLoading ? (
+              <OverviewControlsSkeleton />
+            ) : (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="inline-flex rounded-full border border-slate-800 bg-slate-950/80 p-1">
+                  {(
+                    [
+                      ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
+                      ["run", "Run", "rgba(148, 163, 184, 1)"],
+                    ] as const
+                  ).map(([operation, label, chipColor]) => {
+                    const isActive = overviewOperationVisibility[operation]
 
-                  return (
-                    <button
-                      key={operation}
-                      type="button"
-                      aria-pressed={isActive}
-                      onClick={() => toggleOverviewOperation(operation)}
-                      className={
-                        isActive
-                          ? "inline-flex items-center gap-2 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.5)]"
-                          : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                      }
-                    >
-                      <span
-                        className="size-2 rounded-full"
-                        style={{ backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.9)" }}
-                      />
-                      {label}
-                    </button>
-                  )
-                })}
+                    return (
+                      <button
+                        key={operation}
+                        type="button"
+                        aria-pressed={isActive}
+                        onClick={() => toggleOverviewOperation(operation)}
+                        className={
+                          isActive
+                            ? "inline-flex items-center gap-2 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.5)]"
+                            : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+                        }
+                      >
+                        <span
+                          className="size-2 rounded-full"
+                          style={{
+                            backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.9)",
+                          }}
+                        />
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
+                <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
+                  {includedDatabases.length} of {databases.length} databases
+                </div>
               </div>
-              <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
-              <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
-                {includedDatabases.length} of {databases.length} databases
-              </div>
-            </div>
+            )}
           </PanelHeader>
 
           <ChartFrame className="mt-4" height={TIME_SERIES_OVERVIEW_CHART_HEIGHT}>
-            {!hasVisibleOverviewSegments ? (
+            {isLoading ? (
+              <OverviewChartSkeleton />
+            ) : !hasVisibleOverviewSegments ? (
               <div className="flex h-full min-h-28 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center text-sm text-slate-500">
                 Enable populate or run to display overview bars for the selected databases.
               </div>
@@ -463,6 +478,7 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
         samples={state.metricSamples}
         databases={includedDatabases}
         databaseColors={databaseColors}
+        loading={isLoading}
       />
 
       <div className={TIME_SERIES_BOTTOM_GRID_CLASS}>
@@ -474,25 +490,35 @@ export function TimeSeriesPage({ system }: TimeSeriesPageProps) {
                 Click a row to inspect its latency spread and SQL.
               </p>
             </div>
-            <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
+            {isLoading ? (
+              <LegendSkeleton />
+            ) : (
+              <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
+            )}
           </div>
 
           <div className={TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS}>
-            <QueryComparisonTable
-              rows={queryRows}
-              databases={includedDatabases}
-              databaseColors={databaseColors}
-              selection={selection}
-              maxDuration={globalMaxDuration}
-              scaleMode={queryTableScaleMode}
-              onScaleModeChange={setQueryTableScaleMode}
-              containerClassName={TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}
-            />
+            {isLoading ? (
+              <QueryTableSkeleton />
+            ) : (
+              <QueryComparisonTable
+                rows={queryRows}
+                databases={includedDatabases}
+                databaseColors={databaseColors}
+                selection={selection}
+                maxDuration={globalMaxDuration}
+                scaleMode={queryTableScaleMode}
+                onScaleModeChange={setQueryTableScaleMode}
+                containerClassName={TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}
+              />
+            )}
           </div>
         </section>
 
         <section className={TIME_SERIES_DETAIL_SECTION_CLASS}>
-          {selectedRow ? (
+          {isLoading ? (
+            <InspectorSkeleton />
+          ) : selectedRow ? (
             <QueryDetailPanel
               row={selectedRow}
               databases={includedDatabases}
@@ -587,6 +613,116 @@ function buildQueryComparisonRows(
         stats_by_database: statsByDatabase,
       }
     })
+}
+
+function FilterChipsSkeleton() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Skeleton className="h-11 w-28 rounded-full" />
+      <Skeleton className="h-11 w-32 rounded-full" />
+      <Skeleton className="h-11 w-24 rounded-full" />
+      <Skeleton className="h-11 w-32 rounded-full" />
+    </div>
+  )
+}
+
+function OverviewControlsSkeleton() {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Skeleton className="h-8 w-24 rounded-full" />
+      <Skeleton className="h-8 w-20 rounded-full" />
+      <Skeleton className="h-8 w-28 rounded-full" />
+    </div>
+  )
+}
+
+function OverviewChartSkeleton() {
+  return (
+    <div className="grid h-full grid-cols-[4rem_minmax(0,1fr)] gap-4">
+      <div className="flex flex-col justify-around py-3">
+        <Skeleton className="h-3 w-10 rounded-full" />
+        <Skeleton className="h-3 w-9 rounded-full" />
+        <Skeleton className="h-3 w-11 rounded-full" />
+        <Skeleton className="h-3 w-8 rounded-full" />
+      </div>
+      <div className="relative min-h-0 rounded-xl">
+        <div className="absolute inset-x-0 bottom-0 border-t border-slate-800/80" />
+        <div className="absolute inset-y-0 left-0 border-l border-slate-800/80" />
+        <div className="absolute inset-x-0 top-[20%] border-t border-slate-800/40" />
+        <div className="absolute inset-x-0 top-[45%] border-t border-slate-800/40" />
+        <div className="absolute inset-x-0 top-[70%] border-t border-slate-800/40" />
+        <div className="absolute inset-0 flex items-end gap-4 px-4 pt-4 pb-6">
+          <Skeleton className="h-[72%] flex-1 rounded-xl" />
+          <Skeleton className="h-[48%] flex-1 rounded-xl" />
+          <Skeleton className="h-[28%] flex-1 rounded-xl" />
+          <Skeleton className="h-[62%] flex-1 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LegendSkeleton() {
+  return (
+    <div className="flex gap-2">
+      <Skeleton className="h-6 w-16 rounded-full" />
+      <Skeleton className="h-6 w-20 rounded-full" />
+      <Skeleton className="h-6 w-20 rounded-full" />
+    </div>
+  )
+}
+
+function QueryTableSkeleton() {
+  return (
+    <div
+      className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/40 bg-slate-950/35 ${TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}`}
+    >
+      <div className="grid shrink-0 grid-cols-[32%_34%_12%_10%_12%] gap-0 border-b border-slate-800/40 bg-slate-900/80 px-4 py-3">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-4 w-12" />
+        <Skeleton className="h-4 w-12" />
+        <Skeleton className="h-4 w-20" />
+      </div>
+      <div className="space-y-3 p-4">
+        <Skeleton className="h-16 w-full rounded-2xl" />
+        <Skeleton className="h-16 w-full rounded-2xl" />
+        <Skeleton className="h-16 w-full rounded-2xl" />
+        <Skeleton className="h-16 w-full rounded-2xl" />
+        <Skeleton className="h-16 w-full rounded-2xl" />
+      </div>
+    </div>
+  )
+}
+
+function InspectorSkeleton() {
+  return (
+    <div className="flex h-full min-h-0 flex-col justify-between rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+      <div>
+        <p className="text-sm font-medium tracking-[0.18em] text-cyan-300 uppercase">Inspector</p>
+        <h3 className="mt-3 text-2xl font-semibold text-slate-50">Pick a query row</h3>
+        <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+          The detail pane stays pinned on the right. Select any query to inspect latency by database
+          and compare the SQL variants for only the databases currently included.
+        </p>
+      </div>
+
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
+            Rows available
+          </p>
+          <Skeleton className="mt-2 h-7 w-16" />
+        </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+          <p className="text-xs font-medium tracking-[0.18em] text-slate-500 uppercase">
+            Active databases
+          </p>
+          <Skeleton className="mt-2 h-7 w-14" />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function buildOverviewChartData(
