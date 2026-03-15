@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { formatDurationSeconds } from "../lib/format"
 import type { TimeSeriesQueryStep } from "../lib/types"
@@ -60,7 +60,23 @@ export function RunTimeline({
   selectedQuery,
 }: RunTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [legendExpanded, setLegendExpanded] = useState(false)
+  const [svgWidth, setSvgWidth] = useState(0)
+
+  useLayoutEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setSvgWidth(entry.contentRect.width)
+      }
+    })
+    observer.observe(svg)
+    setSvgWidth(svg.getBoundingClientRect().width)
+    return () => observer.disconnect()
+  }, [])
 
   const filteredSteps = useMemo(
     () => querySteps.filter((s) => databases.includes(s.db)),
@@ -120,49 +136,37 @@ export function RunTimeline({
         <DatabaseLegend databases={databases} databaseColors={databaseColors} />
       </PanelHeader>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {queryNames.map((name) => {
-          const short = shortenQueryName(name)
-          const colors = queryColorMap[name]!
-          const isSelected = selectedQuery === name
-          return (
-            <button
-              key={name}
-              type="button"
-              onClick={() => onSelectQuery?.(name)}
-              className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors hover:border-slate-600"
-              style={{
-                backgroundColor: isSelected ? "rgba(108, 142, 239, 0.15)" : "transparent",
-                borderColor: isSelected ? "rgba(108, 142, 239, 0.4)" : "rgba(148, 163, 184, 0.15)",
-              }}
-            >
-              <span
-                className="inline-block size-2 rounded-sm"
-                style={{ backgroundColor: colors[isSelected ? 1 : 0] }}
-              />
-              <span className="text-slate-400">{short}</span>
-            </button>
-          )
-        })}
-      </div>
+      <QueryLegend
+        queryNames={queryNames}
+        queryColorMap={queryColorMap}
+        selectedQuery={selectedQuery ?? null}
+        expanded={legendExpanded}
+        onToggleExpanded={() => setLegendExpanded((v) => !v)}
+        onSelectQuery={onSelectQuery}
+      />
 
       <div
         ref={containerRef}
         className="relative mt-4 rounded-xl bg-surface-inset p-4"
         style={{ height: chartHeight + 16 }}
       >
-        <TimelineSvg
-          databases={databases}
-          databaseColors={databaseColors}
-          segmentsByDb={segmentsByDb}
-          maxElapsed={maxElapsed}
-          queryColorMap={queryColorMap}
-          selectedQuery={selectedQuery ?? null}
-          onSegmentClick={handleSegmentClick}
-          onSegmentEnter={handleSegmentEnter}
-          onSegmentLeave={handleSegmentLeave}
-          height={chartHeight}
-        />
+        <svg ref={svgRef} width="100%" height={chartHeight} className="overflow-visible">
+          {svgWidth > 0 ? (
+            <SvgContent
+              databases={databases}
+              databaseColors={databaseColors}
+              segmentsByDb={segmentsByDb}
+              maxElapsed={maxElapsed}
+              queryColorMap={queryColorMap}
+              selectedQuery={selectedQuery ?? null}
+              onSegmentClick={handleSegmentClick}
+              onSegmentEnter={handleSegmentEnter}
+              onSegmentLeave={handleSegmentLeave}
+              height={chartHeight}
+              svgWidth={svgWidth}
+            />
+          ) : null}
+        </svg>
 
         {tooltip ? (
           <div
@@ -185,44 +189,61 @@ export function RunTimeline({
   )
 }
 
-function TimelineSvg({
-  databases,
-  databaseColors,
-  segmentsByDb,
-  maxElapsed,
+const LEGEND_COLLAPSED_COUNT = 14
+
+function QueryLegend({
+  queryNames,
   queryColorMap,
   selectedQuery,
-  onSegmentClick,
-  onSegmentEnter,
-  onSegmentLeave,
-  height,
+  expanded,
+  onToggleExpanded,
+  onSelectQuery,
 }: {
-  databases: string[]
-  databaseColors: Record<string, string>
-  segmentsByDb: Map<string, TimelineSegment[]>
-  maxElapsed: number
+  queryNames: string[]
   queryColorMap: Record<string, [string, string]>
   selectedQuery: string | null
-  onSegmentClick: (queryName: string) => void
-  onSegmentEnter: (segment: TimelineSegment, event: React.MouseEvent) => void
-  onSegmentLeave: () => void
-  height: number
+  expanded: boolean
+  onToggleExpanded: () => void
+  onSelectQuery?: (queryName: string) => void
 }) {
+  const visibleNames = expanded ? queryNames : queryNames.slice(0, LEGEND_COLLAPSED_COUNT)
+  const hiddenCount = queryNames.length - LEGEND_COLLAPSED_COUNT
+
   return (
-    <svg width="100%" height={height} className="overflow-visible">
-      <SvgContent
-        databases={databases}
-        databaseColors={databaseColors}
-        segmentsByDb={segmentsByDb}
-        maxElapsed={maxElapsed}
-        queryColorMap={queryColorMap}
-        selectedQuery={selectedQuery}
-        onSegmentClick={onSegmentClick}
-        onSegmentEnter={onSegmentEnter}
-        onSegmentLeave={onSegmentLeave}
-        height={height}
-      />
-    </svg>
+    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      {visibleNames.map((name) => {
+        const short = shortenQueryName(name)
+        const colors = queryColorMap[name]!
+        const isSelected = selectedQuery === name
+        return (
+          <button
+            key={name}
+            type="button"
+            onClick={() => onSelectQuery?.(name)}
+            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors hover:border-slate-600"
+            style={{
+              backgroundColor: isSelected ? "rgba(108, 142, 239, 0.15)" : "transparent",
+              borderColor: isSelected ? "rgba(108, 142, 239, 0.4)" : "rgba(148, 163, 184, 0.15)",
+            }}
+          >
+            <span
+              className="inline-block size-2 rounded-sm"
+              style={{ backgroundColor: colors[isSelected ? 1 : 0] }}
+            />
+            <span className="text-slate-400">{short}</span>
+          </button>
+        )
+      })}
+      {queryNames.length > LEGEND_COLLAPSED_COUNT ? (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="rounded-full border border-border-default px-2.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
+        >
+          {expanded ? "Show less" : `+${hiddenCount} more`}
+        </button>
+      ) : null}
+    </div>
   )
 }
 
@@ -237,6 +258,7 @@ function SvgContent({
   onSegmentEnter,
   onSegmentLeave,
   height,
+  svgWidth,
 }: {
   databases: string[]
   databaseColors: Record<string, string>
@@ -248,33 +270,44 @@ function SvgContent({
   onSegmentEnter: (segment: TimelineSegment, event: React.MouseEvent) => void
   onSegmentLeave: () => void
   height: number
+  svgWidth: number
 }) {
   const chartLeft = LABEL_WIDTH
-  const chartRight = PADDING_RIGHT
+  const chartWidth = svgWidth - chartLeft - PADDING_RIGHT
   const ticks = buildElapsedTicks(maxElapsed)
+
+  const toX = (seconds: number) => chartLeft + chartWidth * (seconds / maxElapsed)
+  const toW = (seconds: number) => chartWidth * (seconds / maxElapsed)
 
   return (
     <g>
-      {ticks.map((tick) => (
-        <g key={tick}>
-          <line
-            x1={`calc(${chartLeft}px + (100% - ${chartLeft + chartRight}px) * ${tick / maxElapsed})`}
-            y1={0}
-            x2={`calc(${chartLeft}px + (100% - ${chartLeft + chartRight}px) * ${tick / maxElapsed})`}
-            y2={height - PADDING_BOTTOM}
-            stroke="rgba(148, 163, 184, 0.06)"
-          />
-          <text
-            x={`calc(${chartLeft}px + (100% - ${chartLeft + chartRight}px) * ${tick / maxElapsed})`}
-            y={height - PADDING_BOTTOM + 16}
-            fill="#64748b"
-            fontSize={11}
-            textAnchor="middle"
-          >
-            {formatElapsed(tick)}
-          </text>
-        </g>
-      ))}
+      {ticks.map((tick, tickIdx) => {
+        const isFirst = tickIdx === 0
+        const isLast = tickIdx === ticks.length - 1
+        const anchor = isFirst ? "start" : isLast ? "end" : "middle"
+        const x = toX(tick)
+
+        return (
+          <g key={tick}>
+            <line
+              x1={x}
+              y1={0}
+              x2={x}
+              y2={height - PADDING_BOTTOM}
+              stroke="rgba(148, 163, 184, 0.06)"
+            />
+            <text
+              x={x}
+              y={height - PADDING_BOTTOM + 16}
+              fill="#64748b"
+              fontSize={11}
+              textAnchor={anchor}
+            >
+              {formatElapsed(tick)}
+            </text>
+          </g>
+        )
+      })}
 
       {databases.map((db, dbIndex) => {
         const y = PADDING_TOP + dbIndex * (ROW_HEIGHT + ROW_GAP)
@@ -285,7 +318,7 @@ function SvgContent({
             <line
               x1={chartLeft}
               y1={y + ROW_HEIGHT}
-              x2="100%"
+              x2={svgWidth}
               y2={y + ROW_HEIGHT}
               stroke="rgba(148, 163, 184, 0.06)"
             />
@@ -316,15 +349,15 @@ function SvgContent({
                   : colors[0]
                 : "rgba(148, 163, 184, 0.4)"
 
-              const xPct = seg.start_s / maxElapsed
-              const wPct = (seg.end_s - seg.start_s) / maxElapsed
+              const x = toX(seg.start_s)
+              const w = Math.max(MIN_SEGMENT_WIDTH, toW(seg.end_s - seg.start_s))
 
               return (
                 <rect
                   key={segIdx}
-                  x={`calc(${chartLeft}px + (100% - ${chartLeft + chartRight}px) * ${xPct})`}
+                  x={x}
                   y={y + 2}
-                  width={`max(${MIN_SEGMENT_WIDTH}px, calc((100% - ${chartLeft + chartRight}px) * ${wPct}))`}
+                  width={w}
                   height={ROW_HEIGHT - 4}
                   rx={3}
                   fill={fill}
@@ -380,24 +413,17 @@ function buildTimelineData(steps: TimeSeriesQueryStep[], databases: string[]) {
   return { segmentsByDb, maxElapsed, queryNames }
 }
 
+const TIME_STEPS = [
+  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
+]
+
 function buildElapsedTicks(maxSeconds: number): number[] {
   const safeMax = Math.max(1, Math.ceil(maxSeconds))
-  const roughStep = safeMax / 5
-  const step = getNiceStep(roughStep)
+  const target = safeMax / 5
+  const step = TIME_STEPS.find((s) => s >= target) ?? TIME_STEPS[TIME_STEPS.length - 1]!
   const ticks: number[] = []
   for (let t = 0; t <= safeMax; t += step) ticks.push(t)
-  if (ticks[ticks.length - 1] !== safeMax) ticks.push(safeMax)
   return ticks
-}
-
-function getNiceStep(value: number): number {
-  const exponent = Math.floor(Math.log10(Math.max(value, 1)))
-  const magnitude = 10 ** exponent
-  const normalized = value / magnitude
-  if (normalized <= 1) return magnitude
-  if (normalized <= 2) return 2 * magnitude
-  if (normalized <= 5) return 5 * magnitude
-  return 10 * magnitude
 }
 
 function shortenQueryName(name: string): string {
@@ -415,7 +441,7 @@ function formatElapsed(value: number): string {
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${s}s`
+  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
   return `${s}s`
 }
