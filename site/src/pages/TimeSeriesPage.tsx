@@ -46,23 +46,23 @@ import {
   type DurationScaleMode,
 } from "../lib/format"
 import {
-  fetchTimeSeriesInsertSteps,
-  fetchTimeSeriesMetricSamples,
-  fetchTimeSeriesOperationSummaries,
+  fetchInsertSteps,
+  fetchMetricSamples,
+  fetchOperationSummaries,
   fetchQueriesManifest,
-  fetchTimeSeriesQuerySteps,
-  fetchTimeSeriesQuerySummaries,
-  fetchTimeSeriesRunSummaries,
+  fetchQuerySteps,
+  fetchQuerySummaries,
+  fetchRunSummaries,
 } from "../lib/queries"
 import type {
+  BenchmarkOperation,
+  InsertStep,
+  MetricSample,
+  OperationSummary,
   QueriesManifest,
-  TimeSeriesInsertStep,
-  TimeSeriesMetricSample,
-  TimeSeriesOperation,
-  TimeSeriesOperationSummary,
-  TimeSeriesQueryStep,
-  TimeSeriesQuerySummary,
-  TimeSeriesRunSummary,
+  QueryStep,
+  QuerySummary,
+  RunSummary,
 } from "../lib/types"
 import {
   TIME_SERIES_BOTTOM_GRID_CLASS,
@@ -84,12 +84,12 @@ interface TimeSeriesPageProps {
 interface TimeSeriesPageState {
   loading: boolean
   error: string | null
-  runSummaries: TimeSeriesRunSummary[]
-  operationSummaries: TimeSeriesOperationSummary[]
-  metricSamples: TimeSeriesMetricSample[]
-  querySummaries: TimeSeriesQuerySummary[]
-  insertSteps: TimeSeriesInsertStep[]
-  querySteps: TimeSeriesQueryStep[]
+  runSummaries: RunSummary[]
+  operationSummaries: OperationSummary[]
+  metricSamples: MetricSample[]
+  querySummaries: QuerySummary[]
+  insertSteps: InsertStep[]
+  querySteps: QueryStep[]
   queriesManifest: QueriesManifest | null
 }
 
@@ -104,7 +104,7 @@ interface OverviewChartRow {
   run_chart_duration_s: number
 }
 
-type OverviewOperationVisibility = Record<TimeSeriesOperation, boolean>
+type OverviewOperationVisibility = Record<BenchmarkOperation, boolean>
 
 const LOG_FLOOR = 1e-6
 
@@ -151,12 +151,12 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
     setState(createInitialTimeSeriesPageState())
 
     Promise.all([
-      fetchTimeSeriesRunSummaries(system),
-      fetchTimeSeriesOperationSummaries(system),
-      fetchTimeSeriesMetricSamples(system),
-      fetchTimeSeriesQuerySummaries(system),
-      fetchTimeSeriesInsertSteps(system),
-      fetchTimeSeriesQuerySteps(system),
+      fetchRunSummaries(system, "time_series"),
+      fetchOperationSummaries(system, "time_series"),
+      fetchMetricSamples(system, "time_series"),
+      fetchQuerySummaries(system, "time_series"),
+      fetchInsertSteps(system, "time_series"),
+      fetchQuerySteps(system, "time_series"),
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
@@ -284,7 +284,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
     })
   }
 
-  function toggleOverviewOperation(operation: TimeSeriesOperation) {
+  function toggleOverviewOperation(operation: BenchmarkOperation) {
     setOverviewOperationVisibility((currentVisibility) => ({
       ...currentVisibility,
       [operation]: !currentVisibility[operation],
@@ -626,10 +626,10 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
 }
 
 function buildQueryComparisonRows(
-  querySummaries: TimeSeriesQuerySummary[],
+  querySummaries: QuerySummary[],
   databases: string[],
 ): QueryComparisonRow[] {
-  const groupedQueries = new Map<string, TimeSeriesQuerySummary[]>()
+  const groupedQueries = new Map<string, QuerySummary[]>()
 
   for (const querySummary of querySummaries) {
     const existingRows = groupedQueries.get(querySummary.query_name) ?? []
@@ -792,7 +792,7 @@ function InspectorSkeleton() {
 }
 
 function buildOverviewChartData(
-  operationSummaries: TimeSeriesOperationSummary[],
+  operationSummaries: OperationSummary[],
   scaleMode: DurationScaleMode,
   visibleOperations: OverviewOperationVisibility,
 ): OverviewChartRow[] {
