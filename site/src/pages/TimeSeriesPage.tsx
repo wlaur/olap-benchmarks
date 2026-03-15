@@ -545,7 +545,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
 
       <div className={TIME_SERIES_BOTTOM_GRID_CLASS}>
         <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
+          <div className="flex min-h-[5.5rem] shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
             <div>
               <SectionTitle as="h3">Query latency comparison</SectionTitle>
               <BodyText className="mt-1">
@@ -555,20 +555,22 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
             {isLoading ? (
               <LegendSkeleton />
             ) : (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {selectedQuery && hasTraceDrawer && !resourceDrawerOpen ? (
-                  <button
-                    type="button"
-                    onClick={() => setResourceDrawerOpen(true)}
-                    className="hover:text-accent-100 inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-inset px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:border-accent-400/40 hover:bg-accent-400/10"
-                  >
-                    Resource traces
-                    <span className="text-xs text-slate-400">
-                      {traceEligibleDatabases.length}{" "}
-                      {traceEligibleDatabases.length === 1 ? "database" : "databases"}
-                    </span>
-                  </button>
-                ) : null}
+              <div className="flex min-w-[13rem] flex-col items-end gap-2">
+                <div className="flex h-9 items-center">
+                  {selectedQuery && hasTraceDrawer && !resourceDrawerOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setResourceDrawerOpen(true)}
+                      className="hover:text-accent-100 inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-inset px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:border-accent-400/40 hover:bg-accent-400/10"
+                    >
+                      Resource traces
+                      <span className="text-xs text-slate-400">
+                        {traceEligibleDatabases.length}{" "}
+                        {traceEligibleDatabases.length === 1 ? "database" : "databases"}
+                      </span>
+                    </button>
+                  ) : null}
+                </div>
                 <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
               </div>
             )}
