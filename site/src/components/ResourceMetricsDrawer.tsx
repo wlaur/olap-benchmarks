@@ -59,6 +59,23 @@ const ITERATION_GAP_S = 0.25
 
 export const RESOURCE_DRAWER_HEIGHT_PX = 460
 
+export function getTraceEligibleDatabases(
+  querySteps: QueryStep[],
+  selectedQuery: string | null,
+  databases: string[],
+): string[] {
+  if (!selectedQuery) return []
+
+  const maxDurationByDb = new Map<string, number>()
+  for (const step of querySteps) {
+    if (step.query_name !== selectedQuery || !databases.includes(step.db)) continue
+    const current = maxDurationByDb.get(step.db) ?? 0
+    maxDurationByDb.set(step.db, Math.max(current, step.duration_s))
+  }
+
+  return databases.filter((db) => (maxDurationByDb.get(db) ?? 0) >= SAMPLING_THRESHOLD_S)
+}
+
 export function ResourceMetricsDrawer({
   isOpen,
   onClose,
@@ -466,9 +483,5 @@ export function shouldShowResourceDrawer(
   selectedQuery: string | null,
   databases: string[],
 ): boolean {
-  if (!selectedQuery) return false
-  const steps = querySteps.filter((s) => s.query_name === selectedQuery && databases.includes(s.db))
-  if (steps.length === 0) return false
-  const maxDuration = Math.max(...steps.map((s) => s.duration_s))
-  return maxDuration >= SAMPLING_THRESHOLD_S
+  return getTraceEligibleDatabases(querySteps, selectedQuery, databases).length > 0
 }
