@@ -48,7 +48,7 @@ export interface Filters {
   operation: string | null
 }
 
-export interface TimeSeriesRunSummary {
+export interface RunSummary {
   run_id: number
   db: string
   db_version: string
@@ -59,17 +59,17 @@ export interface TimeSeriesRunSummary {
   query_count: number
 }
 
-export interface TimeSeriesOperationSummary {
+export interface OperationSummary {
   run_id: number
   db: string
   db_version: string
-  operation: TimeSeriesOperation
+  operation: BenchmarkOperation
   started_at: string
   finished_at: string
   run_duration_s: number
 }
 
-export interface TimeSeriesQuerySummary {
+export interface QuerySummary {
   query_name: string
   db: string
   median_duration_s: number
@@ -79,13 +79,13 @@ export interface TimeSeriesQuerySummary {
   iterations: number
 }
 
-export type TimeSeriesOperation = "populate" | "run"
+export type BenchmarkOperation = "populate" | "run"
 
-export interface TimeSeriesMetricSample {
+export interface MetricSample {
   run_id: number
   db: string
   db_version: string
-  operation: TimeSeriesOperation
+  operation: BenchmarkOperation
   started_at: string
   finished_at: string
   sample_time: string
@@ -96,7 +96,7 @@ export interface TimeSeriesMetricSample {
   disk_mb: number
 }
 
-export interface TimeSeriesInsertStep {
+export interface InsertStep {
   run_id: number
   db: string
   db_version: string
@@ -108,7 +108,7 @@ export interface TimeSeriesInsertStep {
   elapsed_end_s: number
 }
 
-export interface TimeSeriesQueryStep {
+export interface QueryStep {
   run_id: number
   db: string
   query_name: string

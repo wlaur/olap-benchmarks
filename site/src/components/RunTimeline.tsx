@@ -1,13 +1,13 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { formatDurationSeconds } from "../lib/format"
-import type { TimeSeriesQueryStep } from "../lib/types"
+import type { QueryStep } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard, PanelHeader } from "./layout/Panel"
 import { BodyText, SectionTitle } from "./Typography"
 
 interface RunTimelineProps {
-  querySteps: TimeSeriesQueryStep[]
+  querySteps: QueryStep[]
   databases: string[]
   databaseColors: Record<string, string>
   onSelectQuery?: (queryName: string) => void
@@ -375,7 +375,7 @@ function SvgContent({
   )
 }
 
-function buildTimelineData(steps: TimeSeriesQueryStep[], databases: string[]) {
+function buildTimelineData(steps: QueryStep[], databases: string[]) {
   const segmentsByDb = new Map<string, TimelineSegment[]>()
   const queryNameSet = new Set<string>()
   let maxElapsed = 0
