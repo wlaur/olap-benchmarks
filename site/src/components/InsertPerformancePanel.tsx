@@ -13,14 +13,14 @@ import {
 } from "recharts"
 
 import { formatDurationSeconds } from "../lib/format"
-import type { TimeSeriesInsertStep, TimeSeriesMetricSample } from "../lib/types"
+import type { InsertStep, MetricSample } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
 import { BodyText, SectionTitle } from "./Typography"
 
 interface InsertPerformancePanelProps {
-  insertSteps: TimeSeriesInsertStep[]
-  metricSamples: TimeSeriesMetricSample[]
+  insertSteps: InsertStep[]
+  metricSamples: MetricSample[]
   databases: string[]
   databaseColors: Record<string, string>
 }
@@ -261,7 +261,7 @@ function MetricMiniChart({
   )
 }
 
-function buildInsertBarData(steps: TimeSeriesInsertStep[], databases: string[]): InsertBarRow[] {
+function buildInsertBarData(steps: InsertStep[], databases: string[]): InsertBarRow[] {
   const byTable = new Map<string, InsertBarRow>()
 
   for (const step of steps) {
@@ -282,7 +282,7 @@ function buildInsertBarData(steps: TimeSeriesInsertStep[], databases: string[]):
 }
 
 function buildMetricRows(
-  samples: TimeSeriesMetricSample[],
+  samples: MetricSample[],
   metric: "cpu_percent" | "mem_mb",
 ): MetricChartRow[] {
   const rowsBySecond = new Map<number, MetricChartRow>()

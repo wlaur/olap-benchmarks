@@ -1,15 +1,16 @@
 import { sql } from "kysely"
 
+import type { BenchmarkSuiteId } from "./benchmarks"
 import { getKyselyDb } from "./duckdb"
 import type {
+  BenchmarkOperation,
+  InsertStep,
+  MetricSample,
+  OperationSummary,
   QueriesManifest,
-  TimeSeriesInsertStep,
-  TimeSeriesMetricSample,
-  TimeSeriesOperationSummary,
-  TimeSeriesOperation,
-  TimeSeriesQueryStep,
-  TimeSeriesQuerySummary,
-  TimeSeriesRunSummary,
+  QueryStep,
+  QuerySummary,
+  RunSummary,
 } from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -41,7 +42,10 @@ export async function fetchSystems(): Promise<string[]> {
   return rows.map((row) => row.system)
 }
 
-export async function fetchTimeSeriesRunSummaries(system: string): Promise<TimeSeriesRunSummary[]> {
+export async function fetchRunSummaries(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<RunSummary[]> {
   const db = await getKyselyDb()
 
   return db
@@ -59,7 +63,7 @@ export async function fetchTimeSeriesRunSummaries(system: string): Promise<TimeS
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
-        .where("run.suite", "=", "time_series")
+        .where("run.suite", "=", suite)
         .where("run.operation", "=", "run")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
@@ -108,9 +112,10 @@ export async function fetchTimeSeriesRunSummaries(system: string): Promise<TimeS
     .execute()
 }
 
-export async function fetchTimeSeriesOperationSummaries(
+export async function fetchOperationSummaries(
   system: string,
-): Promise<TimeSeriesOperationSummary[]> {
+  suite: BenchmarkSuiteId,
+): Promise<OperationSummary[]> {
   const db = await getKyselyDb()
 
   return db
@@ -129,7 +134,7 @@ export async function fetchTimeSeriesOperationSummaries(
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
-        .where("run.suite", "=", "time_series")
+        .where("run.suite", "=", suite)
         .where("run.operation", "in", ["populate", "run"])
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
@@ -140,7 +145,7 @@ export async function fetchTimeSeriesOperationSummaries(
       eb.ref("latest_runs.run_id").as("run_id"),
       eb.ref("latest_runs.db").as("db"),
       eb.ref("latest_runs.db_version").as("db_version"),
-      sql<TimeSeriesOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
+      sql<BenchmarkOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
       sql<string>`strftime(${eb.ref("latest_runs.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
         "started_at",
       ),
@@ -157,9 +162,10 @@ export async function fetchTimeSeriesOperationSummaries(
     .execute()
 }
 
-export async function fetchTimeSeriesQuerySummaries(
+export async function fetchQuerySummaries(
   system: string,
-): Promise<TimeSeriesQuerySummary[]> {
+  suite: BenchmarkSuiteId,
+): Promise<QuerySummary[]> {
   const db = await getKyselyDb()
 
   return db
@@ -174,7 +180,7 @@ export async function fetchTimeSeriesQuerySummaries(
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
-        .where("run.suite", "=", "time_series")
+        .where("run.suite", "=", suite)
         .where("run.operation", "=", "run")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
@@ -210,9 +216,10 @@ export async function fetchTimeSeriesQuerySummaries(
     .execute()
 }
 
-export async function fetchTimeSeriesMetricSamples(
+export async function fetchMetricSamples(
   system: string,
-): Promise<TimeSeriesMetricSample[]> {
+  suite: BenchmarkSuiteId,
+): Promise<MetricSample[]> {
   const db = await getKyselyDb()
 
   return db
@@ -231,7 +238,7 @@ export async function fetchTimeSeriesMetricSamples(
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
-        .where("run.suite", "=", "time_series")
+        .where("run.suite", "=", suite)
         .where("run.operation", "in", ["populate", "run"])
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
@@ -243,7 +250,7 @@ export async function fetchTimeSeriesMetricSamples(
       eb.ref("latest_runs.run_id").as("run_id"),
       eb.ref("latest_runs.db").as("db"),
       eb.ref("latest_runs.db_version").as("db_version"),
-      sql<TimeSeriesOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
+      sql<BenchmarkOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
       sql<string>`strftime(${eb.ref("latest_runs.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
         "started_at",
       ),
@@ -270,7 +277,10 @@ export async function fetchTimeSeriesMetricSamples(
     .execute()
 }
 
-export async function fetchTimeSeriesInsertSteps(system: string): Promise<TimeSeriesInsertStep[]> {
+export async function fetchInsertSteps(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<InsertStep[]> {
   const db = await getKyselyDb()
 
   return db
@@ -287,7 +297,7 @@ export async function fetchTimeSeriesInsertSteps(system: string): Promise<TimeSe
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
-        .where("run.suite", "=", "time_series")
+        .where("run.suite", "=", suite)
         .where("run.operation", "=", "populate")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
@@ -327,7 +337,10 @@ export async function fetchTimeSeriesInsertSteps(system: string): Promise<TimeSe
     .execute()
 }
 
-export async function fetchTimeSeriesQuerySteps(system: string): Promise<TimeSeriesQueryStep[]> {
+export async function fetchQuerySteps(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<QueryStep[]> {
   const db = await getKyselyDb()
 
   return db
@@ -343,7 +356,7 @@ export async function fetchTimeSeriesQuerySteps(system: string): Promise<TimeSer
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
-        .where("run.suite", "=", "time_series")
+        .where("run.suite", "=", suite)
         .where("run.operation", "=", "run")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)

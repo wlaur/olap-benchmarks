@@ -10,12 +10,12 @@ import {
   YAxis,
 } from "recharts"
 
-import type { TimeSeriesMetricSample, TimeSeriesOperation } from "../lib/types"
+import type { MetricSample, BenchmarkOperation } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard } from "./layout/Panel"
 import { BodyText, SectionTitle } from "./Typography"
 
-const OPERATIONS: TimeSeriesOperation[] = ["populate", "run"]
+const OPERATIONS: BenchmarkOperation[] = ["populate", "run"]
 
 const METRIC_CONFIGS = [
   {
@@ -42,7 +42,7 @@ type ChartRow = {
 } & Partial<Record<string, number>>
 
 interface MetricsTimeSeriesPanelProps {
-  samples: TimeSeriesMetricSample[]
+  samples: MetricSample[]
   databases: string[]
   databaseColors: Record<string, string>
   loading?: boolean
@@ -55,7 +55,7 @@ export function MetricsTimeSeriesPanel({
   loading = false,
 }: MetricsTimeSeriesPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [selectedOperation, setSelectedOperation] = useState<TimeSeriesOperation>("run")
+  const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("run")
   const includedDatabaseSet = useMemo(() => new Set(databases), [databases])
 
   const filteredSamples = useMemo(
@@ -259,8 +259,8 @@ export function MetricsTimeSeriesPanel({
 }
 
 function buildMetricChartData(
-  samples: TimeSeriesMetricSample[],
-): Record<TimeSeriesOperation, Record<MetricKey, ChartRow[]>> {
+  samples: MetricSample[],
+): Record<BenchmarkOperation, Record<MetricKey, ChartRow[]>> {
   return {
     populate: {
       cpu_percent: buildRowsForMetric(samples, "populate", "cpu_percent"),
@@ -276,8 +276,8 @@ function buildMetricChartData(
 }
 
 function buildRowsForMetric(
-  samples: TimeSeriesMetricSample[],
-  operation: TimeSeriesOperation,
+  samples: MetricSample[],
+  operation: BenchmarkOperation,
   metric: MetricKey,
 ): ChartRow[] {
   const rowsBySecond = new Map<number, ChartRow>()
@@ -294,7 +294,7 @@ function buildRowsForMetric(
   return Array.from(rowsBySecond.values()).sort((left, right) => left.elapsed_s - right.elapsed_s)
 }
 
-function buildXDomains(samples: TimeSeriesMetricSample[]): Record<TimeSeriesOperation, number> {
+function buildXDomains(samples: MetricSample[]): Record<BenchmarkOperation, number> {
   return {
     populate: Math.max(
       1,
@@ -312,8 +312,8 @@ function buildXDomains(samples: TimeSeriesMetricSample[]): Record<TimeSeriesOper
 }
 
 function buildXTicks(
-  domains: Record<TimeSeriesOperation, number>,
-): Record<TimeSeriesOperation, number[]> {
+  domains: Record<BenchmarkOperation, number>,
+): Record<BenchmarkOperation, number[]> {
   return {
     populate: buildEvenElapsedTicks(domains.populate),
     run: buildEvenElapsedTicks(domains.run),
@@ -321,7 +321,7 @@ function buildXTicks(
 }
 
 function buildYScales(
-  samples: TimeSeriesMetricSample[],
+  samples: MetricSample[],
 ): Record<MetricKey, { domain: [number, number]; ticks: number[] }> {
   return {
     cpu_percent: toMetricScale(samples.map((sample) => sample.cpu_percent)),

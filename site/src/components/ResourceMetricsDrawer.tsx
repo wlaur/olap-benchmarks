@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts"
 
-import type { TimeSeriesMetricSample, TimeSeriesQueryStep } from "../lib/types"
+import type { MetricSample, QueryStep } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { Eyebrow, MetaLabel } from "./Typography"
 
@@ -19,8 +19,8 @@ interface ResourceMetricsDrawerProps {
   isOpen: boolean
   onClose: () => void
   selectedQuery: string | null
-  querySteps: TimeSeriesQueryStep[]
-  metricSamples: TimeSeriesMetricSample[]
+  querySteps: QueryStep[]
+  metricSamples: MetricSample[]
   databases: string[]
   databaseColors: Record<string, string>
 }
@@ -282,10 +282,7 @@ function MetricChart({
   )
 }
 
-function buildMetricRows(
-  samples: TimeSeriesMetricSample[],
-  metric: "cpu_percent" | "mem_mb",
-): ChartRow[] {
+function buildMetricRows(samples: MetricSample[], metric: "cpu_percent" | "mem_mb"): ChartRow[] {
   const rowsBySecond = new Map<number, ChartRow>()
 
   for (const sample of samples) {
@@ -346,7 +343,7 @@ function formatElapsedLabel(value: number): string {
 }
 
 export function shouldShowResourceDrawer(
-  querySteps: TimeSeriesQueryStep[],
+  querySteps: QueryStep[],
   selectedQuery: string | null,
   databases: string[],
 ): boolean {
