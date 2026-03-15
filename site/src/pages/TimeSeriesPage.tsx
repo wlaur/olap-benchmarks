@@ -22,6 +22,7 @@ import {
 } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import {
+  getTraceEligibleDatabases,
   ResourceMetricsDrawer,
   RESOURCE_DRAWER_HEIGHT_PX,
   shouldShowResourceDrawer,
@@ -271,6 +272,11 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   const selectedRow = selectedQuery
     ? (queryRows.find((r) => r.query_name === selectedQuery) ?? null)
     : null
+  const traceEligibleDatabases = useMemo(
+    () => getTraceEligibleDatabases(state.querySteps, selectedQuery, includedDatabases),
+    [state.querySteps, selectedQuery, includedDatabases],
+  )
+  const hasTraceDrawer = traceEligibleDatabases.length > 0
 
   const selectedSql = state.queriesManifest?.time_series?.[selectedQuery ?? ""] ?? null
   const isLoading = isSystemLoading || state.loading
@@ -298,8 +304,9 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       return
     }
 
-    const shouldOpen = shouldShowResourceDrawer(state.querySteps, selectedQuery, includedDatabases)
-    setResourceDrawerOpen(shouldOpen)
+    if (!shouldShowResourceDrawer(state.querySteps, selectedQuery, includedDatabases)) {
+      setResourceDrawerOpen(false)
+    }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -548,7 +555,22 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
             {isLoading ? (
               <LegendSkeleton />
             ) : (
-              <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {selectedQuery && hasTraceDrawer && !resourceDrawerOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setResourceDrawerOpen(true)}
+                    className="hover:text-accent-100 inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-inset px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:border-accent-400/40 hover:bg-accent-400/10"
+                  >
+                    Resource traces
+                    <span className="text-xs text-slate-400">
+                      {traceEligibleDatabases.length}{" "}
+                      {traceEligibleDatabases.length === 1 ? "database" : "databases"}
+                    </span>
+                  </button>
+                ) : null}
+                <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
+              </div>
             )}
           </div>
 
@@ -617,7 +639,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         selectedQuery={selectedQuery}
         querySteps={state.querySteps}
         metricSamples={state.metricSamples}
-        databases={includedDatabases}
+        databases={traceEligibleDatabases}
         databaseColors={databaseColors}
       />
 
@@ -745,12 +767,12 @@ function QueryTableSkeleton() {
       <div className="panel-scrollbar min-h-0 overflow-x-scroll overflow-y-hidden">
         <div className={`h-full min-h-0 ${QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS}`}>
           <div className="panel-scrollbar h-full min-h-0 overflow-y-scroll">
-            <div className="grid shrink-0 grid-cols-[32%_34%_12%_10%_12%] gap-0 border-b border-border-default bg-surface-raised/80 px-4 py-3">
+            <div className="grid shrink-0 grid-cols-[30%_26%_12%_16%_16%] gap-0 border-b border-border-default bg-surface-raised/80 px-4 py-3">
               <Skeleton className="h-4 w-20" />
               <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-4 w-12" />
-              <Skeleton className="h-4 w-12" />
               <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-12" />
             </div>
             <div className="space-y-3 p-4">
               <Skeleton className="h-16 w-full rounded-2xl" />

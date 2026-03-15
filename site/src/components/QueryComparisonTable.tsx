@@ -52,7 +52,7 @@ interface HeaderMeta {
   tooltipLabel?: string
 }
 
-export const QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS = "min-w-[54rem]"
+export const QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS = "min-w-[50rem]"
 
 const columnHelper = createColumnHelper<QueryComparisonRow>()
 
@@ -124,16 +124,6 @@ export function QueryComparisonTable({
           />
         ),
       }),
-      columnHelper.accessor("fastest_db", { header: "Fastest" }),
-      columnHelper.accessor("spread_ratio", {
-        header: "Gap",
-        meta: {
-          tooltip:
-            "Slowest median divided by fastest median for this query across the selected databases. 1.0x means a tie. Higher values mean a wider latency gap.",
-          tooltipLabel: "Explain gap",
-        } satisfies HeaderMeta,
-        cell: (info) => formatMultiplier(info.getValue()),
-      }),
       columnHelper.accessor((row) => getBestMedian(row), {
         id: "best_duration",
         header: "Best",
@@ -148,6 +138,16 @@ export function QueryComparisonTable({
           if (bestMedian === null) return "—"
           return formatDurationSeconds(bestMedian)
         },
+      }),
+      columnHelper.accessor("fastest_db", { header: "Fastest" }),
+      columnHelper.accessor("spread_ratio", {
+        header: "Gap",
+        meta: {
+          tooltip:
+            "Slowest median divided by fastest median for this query across the selected databases. 1.0x means a tie. Higher values mean a wider latency gap.",
+          tooltipLabel: "Explain gap",
+        } satisfies HeaderMeta,
+        cell: (info) => formatMultiplier(info.getValue()),
       }),
     ],
     [databases, databaseColors, linearMaxDuration, maxDuration, onScaleModeChange, scaleMode],
@@ -168,11 +168,11 @@ export function QueryComparisonTable({
         <div className="panel-scrollbar h-full min-h-0 overflow-y-scroll">
           <table className="w-full table-fixed text-left text-sm">
             <colgroup>
-              <col className="w-[28%]" />
               <col className="w-[30%]" />
-              <col className="w-[16%]" />
+              <col className="w-[26%]" />
               <col className="w-[12%]" />
-              <col className="w-[14%]" />
+              <col className="w-[16%]" />
+              <col className="w-[16%]" />
             </colgroup>
             <thead className="sticky top-0 z-10 border-b border-border-default bg-surface-raised text-xs tracking-wide text-slate-500 uppercase">
               {table.getHeaderGroups().map((headerGroup) => (
