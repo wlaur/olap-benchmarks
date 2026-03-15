@@ -96,6 +96,30 @@ export interface TimeSeriesMetricSample {
   disk_mb: number
 }
 
+export interface TimeSeriesInsertStep {
+  run_id: number
+  db: string
+  db_version: string
+  table_name: string
+  started_at: string
+  finished_at: string
+  duration_s: number
+  elapsed_start_s: number
+  elapsed_end_s: number
+}
+
+export interface TimeSeriesQueryStep {
+  run_id: number
+  db: string
+  query_name: string
+  iteration: number
+  started_at: string
+  finished_at: string
+  duration_s: number
+  elapsed_start_s: number
+  elapsed_end_s: number
+}
+
 export interface QuerySqlEntry {
   sql: string | null
   db_overrides: Record<string, string>
