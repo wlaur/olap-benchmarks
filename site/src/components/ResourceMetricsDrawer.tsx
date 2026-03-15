@@ -58,27 +58,13 @@ export function ResourceMetricsDrawer({
   const iterationRanges = useMemo(() => {
     if (queryIterations.length === 0) return []
 
-    const byIteration = new Map<number, { minStart: number; maxEnd: number }>()
-    for (const step of queryIterations) {
-      const existing = byIteration.get(step.iteration)
-      if (!existing) {
-        byIteration.set(step.iteration, {
-          minStart: step.elapsed_start_s,
-          maxEnd: step.elapsed_end_s,
-        })
-      } else {
-        existing.minStart = Math.min(existing.minStart, step.elapsed_start_s)
-        existing.maxEnd = Math.max(existing.maxEnd, step.elapsed_end_s)
-      }
-    }
-
-    return Array.from(byIteration.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([iteration, range]) => ({
-        iteration,
-        start: range.minStart,
-        end: range.maxEnd,
+    return queryIterations
+      .map((step) => ({
+        iteration: step.iteration,
+        start: step.elapsed_start_s,
+        end: step.elapsed_end_s,
       }))
+      .sort((a, b) => a.start - b.start)
   }, [queryIterations])
 
   const maxQueryDuration = useMemo(() => {
@@ -88,14 +74,39 @@ export function ResourceMetricsDrawer({
 
   const tooFast = maxQueryDuration < SAMPLING_THRESHOLD_S
 
-  const cpuData = useMemo(() => buildMetricRows(runSamples, "cpu_percent"), [runSamples])
-  const memData = useMemo(() => buildMetricRows(runSamples, "mem_mb"), [runSamples])
+  const queryTimeRange = useMemo(() => {
+    if (iterationRanges.length === 0) return null
+    const minStart = Math.min(...iterationRanges.map((r) => r.start))
+    const maxEnd = Math.max(...iterationRanges.map((r) => r.end))
+    const span = maxEnd - minStart
+    const padding = span * 0.1
+    return { start: Math.max(0, minStart - padding), end: maxEnd + padding }
+  }, [iterationRanges])
 
-  const maxElapsed = useMemo(
-    () => Math.max(1, ...runSamples.map((s) => Math.ceil(s.run_duration_s))),
-    [runSamples],
+  const scopedSamples = useMemo(() => {
+    if (!queryTimeRange) return runSamples
+    return runSamples.filter(
+      (s) => s.elapsed_s >= queryTimeRange.start && s.elapsed_s <= queryTimeRange.end,
+    )
+  }, [runSamples, queryTimeRange])
+
+  const cpuData = useMemo(() => buildMetricRows(scopedSamples, "cpu_percent"), [scopedSamples])
+  const memData = useMemo(() => buildMetricRows(scopedSamples, "mem_mb"), [scopedSamples])
+
+  const maxElapsed = useMemo(() => {
+    if (queryTimeRange) return Math.max(1, Math.ceil(queryTimeRange.end))
+    return Math.max(1, ...runSamples.map((s) => Math.ceil(s.run_duration_s)))
+  }, [runSamples, queryTimeRange])
+
+  const minElapsed = useMemo(() => {
+    if (queryTimeRange) return Math.floor(queryTimeRange.start)
+    return 0
+  }, [queryTimeRange])
+
+  const elapsedTicks = useMemo(
+    () => buildEvenTicks(maxElapsed - minElapsed, minElapsed),
+    [maxElapsed, minElapsed],
   )
-  const elapsedTicks = useMemo(() => buildEvenTicks(maxElapsed), [maxElapsed])
 
   const queryLabel = selectedQuery
     ? selectedQuery.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -147,6 +158,7 @@ export function ResourceMetricsDrawer({
               data={cpuData}
               databases={databases}
               databaseColors={databaseColors}
+              minElapsed={minElapsed}
               maxElapsed={maxElapsed}
               elapsedTicks={elapsedTicks}
               formatter={(v: number) => `${v.toFixed(0)}%`}
@@ -157,6 +169,7 @@ export function ResourceMetricsDrawer({
               data={memData}
               databases={databases}
               databaseColors={databaseColors}
+              minElapsed={minElapsed}
               maxElapsed={maxElapsed}
               elapsedTicks={elapsedTicks}
               formatter={formatMegabytes}
@@ -174,6 +187,7 @@ function MetricChart({
   data,
   databases,
   databaseColors,
+  minElapsed,
   maxElapsed,
   elapsedTicks,
   formatter,
@@ -183,6 +197,7 @@ function MetricChart({
   data: ChartRow[]
   databases: string[]
   databaseColors: Record<string, string>
+  minElapsed: number
   maxElapsed: number
   elapsedTicks: number[]
   formatter: (v: number) => string
@@ -208,27 +223,34 @@ function MetricChart({
           >
             <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
 
-            {iterationRanges.map((range, i) => (
-              <ReferenceArea
-                key={range.iteration}
-                x1={range.start}
-                x2={range.end}
-                fill={ITERATION_COLORS[i % ITERATION_COLORS.length]}
-                fillOpacity={1}
-                label={{
-                  value: `iter ${range.iteration}`,
-                  position: "insideTopLeft",
-                  fill: "#64748b",
-                  fontSize: 9,
-                  offset: 4,
-                }}
-              />
-            ))}
+            {iterationRanges.map((range) => {
+              const widthFraction = (range.end - range.start) / (maxElapsed - minElapsed)
+              return (
+                <ReferenceArea
+                  key={`${range.iteration}-${range.start}`}
+                  x1={range.start}
+                  x2={range.end}
+                  fill={ITERATION_COLORS[range.iteration % ITERATION_COLORS.length]}
+                  fillOpacity={1}
+                  label={
+                    widthFraction > 0.03
+                      ? {
+                          value: `iter ${range.iteration}`,
+                          position: "insideTopLeft",
+                          fill: "#64748b",
+                          fontSize: 9,
+                          offset: 4,
+                        }
+                      : undefined
+                  }
+                />
+              )
+            })}
 
             <XAxis
               type="number"
               dataKey="elapsed_s"
-              domain={[0, maxElapsed]}
+              domain={[minElapsed, maxElapsed]}
               ticks={elapsedTicks}
               tick={{ fill: "#64748b", fontSize: 10 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
@@ -295,13 +317,18 @@ function buildMetricRows(samples: MetricSample[], metric: "cpu_percent" | "mem_m
   return Array.from(rowsBySecond.values()).sort((a, b) => a.elapsed_s - b.elapsed_s)
 }
 
-function buildEvenTicks(maxSeconds: number): number[] {
-  const safeMax = Math.max(1, Math.ceil(maxSeconds))
-  const roughStep = safeMax / 4
-  const step = getNiceStep(roughStep)
+const ELAPSED_STEPS = [
+  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
+]
+
+function buildEvenTicks(spanSeconds: number, offset = 0): number[] {
+  const safeSpan = Math.max(1, Math.ceil(spanSeconds))
+  const target = safeSpan / 5
+  const step = ELAPSED_STEPS.find((s) => s >= target) ?? ELAPSED_STEPS[ELAPSED_STEPS.length - 1]!
+  const start = Math.floor(offset / step) * step
+  const end = offset + safeSpan
   const ticks: number[] = []
-  for (let t = 0; t <= safeMax; t += step) ticks.push(t)
-  if (ticks.length < 2 || ticks[ticks.length - 1] !== safeMax) ticks.push(safeMax)
+  for (let t = start; t <= end; t += step) ticks.push(t)
   return ticks
 }
 
@@ -337,8 +364,8 @@ function formatElapsedLabel(value: number): string {
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${s}s`
+  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
   return `${s}s`
 }
 

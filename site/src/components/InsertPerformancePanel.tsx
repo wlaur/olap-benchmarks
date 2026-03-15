@@ -74,6 +74,7 @@ export function InsertPerformancePanel({
     () => Math.max(0.001, ...filteredSteps.map((s) => s.duration_s)),
     [filteredSteps],
   )
+  const durationTicks = useMemo(() => buildEvenTicks(maxDuration * 1.1), [maxDuration])
 
   if (filteredSteps.length === 0) return null
 
@@ -104,6 +105,7 @@ export function InsertPerformancePanel({
                 <XAxis
                   type="number"
                   domain={[0, maxDuration * 1.1]}
+                  ticks={durationTicks}
                   tick={{ fill: "#64748b", fontSize: 11 }}
                   axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                   tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
@@ -297,13 +299,16 @@ function buildMetricRows(
   return Array.from(rowsBySecond.values()).sort((a, b) => a.elapsed_s - b.elapsed_s)
 }
 
+const ELAPSED_STEPS = [
+  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
+]
+
 function buildEvenTicks(maxSeconds: number): number[] {
   const safeMax = Math.max(1, Math.ceil(maxSeconds))
-  const roughStep = safeMax / 4
-  const step = getNiceStep(roughStep)
+  const target = safeMax / 5
+  const step = ELAPSED_STEPS.find((s) => s >= target) ?? ELAPSED_STEPS[ELAPSED_STEPS.length - 1]!
   const ticks: number[] = []
   for (let t = 0; t <= safeMax; t += step) ticks.push(t)
-  if (ticks.length < 2 || ticks[ticks.length - 1] !== safeMax) ticks.push(safeMax)
   return ticks
 }
 
@@ -339,7 +344,7 @@ function formatElapsedLabel(value: number): string {
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${s}s`
+  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
   return `${s}s`
 }
