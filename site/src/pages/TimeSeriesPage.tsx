@@ -13,14 +13,19 @@ import {
 import { DatabaseLegend } from "../components/DatabaseLegend"
 import { DurationScaleToggle } from "../components/DurationScaleToggle"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
+import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
-import { MetricsTimeSeriesPanel } from "../components/MetricsTimeSeriesPanel"
 import {
   QueryComparisonTable,
   QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS,
   type QueryComparisonRow,
 } from "../components/QueryComparisonTable"
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
+import {
+  ResourceMetricsDrawer,
+  shouldShowResourceDrawer,
+} from "../components/ResourceMetricsDrawer"
+import { RunTimeline } from "../components/RunTimeline"
 import { Skeleton } from "../components/Skeleton"
 import {
   BodyText,
@@ -41,17 +46,21 @@ import {
   type DurationScaleMode,
 } from "../lib/format"
 import {
+  fetchTimeSeriesInsertSteps,
   fetchTimeSeriesMetricSamples,
   fetchTimeSeriesOperationSummaries,
   fetchQueriesManifest,
+  fetchTimeSeriesQuerySteps,
   fetchTimeSeriesQuerySummaries,
   fetchTimeSeriesRunSummaries,
 } from "../lib/queries"
 import type {
   QueriesManifest,
+  TimeSeriesInsertStep,
   TimeSeriesMetricSample,
   TimeSeriesOperation,
   TimeSeriesOperationSummary,
+  TimeSeriesQueryStep,
   TimeSeriesQuerySummary,
   TimeSeriesRunSummary,
 } from "../lib/types"
@@ -79,6 +88,8 @@ interface TimeSeriesPageState {
   operationSummaries: TimeSeriesOperationSummary[]
   metricSamples: TimeSeriesMetricSample[]
   querySummaries: TimeSeriesQuerySummary[]
+  insertSteps: TimeSeriesInsertStep[]
+  querySteps: TimeSeriesQueryStep[]
   queriesManifest: QueriesManifest | null
 }
 
@@ -105,6 +116,8 @@ function createInitialTimeSeriesPageState(): TimeSeriesPageState {
     operationSummaries: [],
     metricSamples: [],
     querySummaries: [],
+    insertSteps: [],
+    querySteps: [],
     queriesManifest: null,
   }
 }
@@ -121,6 +134,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       populate: true,
       run: true,
     })
+  const [resourceDrawerOpen, setResourceDrawerOpen] = useState(false)
   const selection = useSelectionState()
   const { selectedQuery, setSelectedQuery } = selection
 
@@ -141,10 +155,20 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       fetchTimeSeriesOperationSummaries(system),
       fetchTimeSeriesMetricSamples(system),
       fetchTimeSeriesQuerySummaries(system),
+      fetchTimeSeriesInsertSteps(system),
+      fetchTimeSeriesQuerySteps(system),
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
-        ([runSummaries, operationSummaries, metricSamples, querySummaries, queriesManifest]) => {
+        ([
+          runSummaries,
+          operationSummaries,
+          metricSamples,
+          querySummaries,
+          insertSteps,
+          querySteps,
+          queriesManifest,
+        ]) => {
           if (cancelled) return
 
           startTransition(() => {
@@ -155,6 +179,8 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
               operationSummaries,
               metricSamples,
               querySummaries,
+              insertSteps,
+              querySteps,
               queriesManifest,
             })
           })
@@ -171,6 +197,8 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
             operationSummaries: [],
             metricSamples: [],
             querySummaries: [],
+            insertSteps: [],
+            querySteps: [],
             queriesManifest: null,
           })
         })
@@ -264,7 +292,13 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   }
 
   useEffect(() => {
-    if (selectedQuery === null) return
+    if (selectedQuery === null) {
+      setResourceDrawerOpen(false)
+      return
+    }
+
+    const shouldOpen = shouldShowResourceDrawer(state.querySteps, selectedQuery, includedDatabases)
+    setResourceDrawerOpen(shouldOpen)
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -277,7 +311,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [selectedQuery, setSelectedQuery])
+  }, [selectedQuery, setSelectedQuery, state.querySteps, includedDatabases])
 
   if (!isLoading && state.error) {
     return (
@@ -482,12 +516,24 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         </PanelCard>
       </div>
 
-      <MetricsTimeSeriesPanel
-        samples={state.metricSamples}
-        databases={includedDatabases}
-        databaseColors={databaseColors}
-        loading={isLoading}
-      />
+      {!isLoading && state.insertSteps.length > 0 ? (
+        <InsertPerformancePanel
+          insertSteps={state.insertSteps}
+          metricSamples={state.metricSamples}
+          databases={includedDatabases}
+          databaseColors={databaseColors}
+        />
+      ) : null}
+
+      {!isLoading && state.querySteps.length > 0 ? (
+        <RunTimeline
+          querySteps={state.querySteps}
+          databases={includedDatabases}
+          databaseColors={databaseColors}
+          onSelectQuery={(queryName) => setSelectedQuery(queryName)}
+          selectedQuery={selectedQuery}
+        />
+      ) : null}
 
       <div className={TIME_SERIES_BOTTOM_GRID_CLASS}>
         <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
@@ -563,6 +609,18 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
           )}
         </section>
       </div>
+
+      <ResourceMetricsDrawer
+        isOpen={resourceDrawerOpen}
+        onClose={() => setResourceDrawerOpen(false)}
+        selectedQuery={selectedQuery}
+        querySteps={state.querySteps}
+        metricSamples={state.metricSamples}
+        databases={includedDatabases}
+        databaseColors={databaseColors}
+      />
+
+      {resourceDrawerOpen ? <div className="h-[340px] shrink-0" /> : null}
     </section>
   )
 }
