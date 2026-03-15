@@ -23,6 +23,7 @@ import {
 import { QueryDetailPanel } from "../components/QueryDetailPanel"
 import {
   ResourceMetricsDrawer,
+  RESOURCE_DRAWER_HEIGHT_PX,
   shouldShowResourceDrawer,
 } from "../components/ResourceMetricsDrawer"
 import { RunTimeline } from "../components/RunTimeline"
@@ -620,7 +621,9 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         databaseColors={databaseColors}
       />
 
-      {resourceDrawerOpen ? <div className="h-[340px] shrink-0" /> : null}
+      {resourceDrawerOpen ? (
+        <div className="shrink-0" style={{ height: RESOURCE_DRAWER_HEIGHT_PX }} />
+      ) : null}
     </section>
   )
 }
