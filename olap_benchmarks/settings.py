@@ -20,7 +20,7 @@ DatabaseName = Literal[
 ]
 
 SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb"]
-Operation = Literal["populate", "run"]
+Operation = Literal["populate", "select", "mutate"]
 Revision = Annotated[str, "Results database revision"]
 
 type DatabaseArg = DatabaseName | Literal["all"]

@@ -126,7 +126,7 @@ def _check_input_data(suite_name: SuiteName) -> None:
 def benchmark(
     db: DatabaseArg,
     suite: SuiteArg,
-    operation: Literal["run", "populate", "both"] = "both",
+    operation: Literal["populate", "select", "mutate", "all"] = "all",
     revision: Revision = "default",
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically."""
@@ -148,9 +148,13 @@ def benchmark(
                 _start_db(db_instance)
 
                 try:
-                    if operation == "both":
+                    if operation == "all":
                         db_instance.benchmark(suite_name, "populate")
-                        db_instance.benchmark(suite_name, "run")
+                        db_instance.benchmark(suite_name, "select")
+                        try:
+                            db_instance.benchmark(suite_name, "mutate")
+                        except NotImplementedError:
+                            _LOGGER.info(f"Skipping mutate for {suite_name} on {db_name} (not supported)")
                     else:
                         db_instance.benchmark(suite_name, operation)
                 finally:

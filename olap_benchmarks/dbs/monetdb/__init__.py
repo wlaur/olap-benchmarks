@@ -188,6 +188,9 @@ class MonetDB(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        raise NotImplementedError
+
     @property
     def time_series(self) -> MonetDBTimeSeries:
         return MonetDBTimeSeries(db=self)
