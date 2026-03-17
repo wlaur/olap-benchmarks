@@ -150,11 +150,8 @@ def benchmark(
                 try:
                     if operation == "all":
                         db_instance.benchmark(suite_name, "populate")
+                        db_instance.benchmark(suite_name, "mutate")
                         db_instance.benchmark(suite_name, "select")
-                        try:
-                            db_instance.benchmark(suite_name, "mutate")
-                        except NotImplementedError:
-                            _LOGGER.info(f"Skipping mutate for {suite_name} on {db_name} (not supported)")
                     else:
                         db_instance.benchmark(suite_name, operation)
                 finally:
