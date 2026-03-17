@@ -220,6 +220,21 @@ class DuckDB(Database):
         con.execute(sql)
         con.commit()
 
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        con = get_duckdb_connection(self.connect())
+        con.register("delete_keys", keys)
+
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM delete_keys)"
+
+        con.execute(sql)
+        con.commit()
+
     @property
     def clickbench(self) -> DuckDBClickbench:
         return DuckDBClickbench(db=self)

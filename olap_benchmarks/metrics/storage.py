@@ -19,7 +19,7 @@ from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdou
 _LOGGER = logging.getLogger(__name__)
 
 RunStatus = Literal["running", "completed", "failed", "aborted"]
-StepType = Literal["phase", "query"]
+StepType = Literal["phase", "query", "mutation"]
 
 MessageType = Literal[
     "insert_run",

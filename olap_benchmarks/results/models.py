@@ -70,7 +70,7 @@ class RunStep(Base):
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
 
     __table_args__ = (
-        CheckConstraint("step_type in ('phase', 'query')", name="ck_run_step_type"),
+        CheckConstraint("step_type in ('phase', 'query', 'mutation')", name="ck_run_step_type"),
         CheckConstraint("status in ('running', 'completed', 'failed', 'aborted')", name="ck_run_step_status"),
         Index("idx_run_step_query", "step_type", "query_name", "iteration"),
     )

@@ -76,7 +76,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def run(self) -> None:
+    def select(self) -> None:
         t0 = perf_counter()
 
         # NOTE: clickbench query files should not be formatted, need to have one query per line

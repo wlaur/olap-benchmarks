@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from ..suites.time_series.config import TimeSeries
 
 _LOGGER = logging.getLogger(__name__)
-LiteralStepType = Literal["phase", "query"]
+LiteralStepType = Literal["phase", "query", "mutation"]
 
 
 def _status_from_exception(exc: BaseException) -> RunStatus:
@@ -204,6 +204,62 @@ class Database(BaseModel, ABC):
             metadata=metadata,
         )
 
+    def start_mutation_step(self, query_name: str, iteration: int, table_name: str | None = None) -> int:
+        return self._start_step(
+            step_type="mutation",
+            step_name="mutation",
+            query_name=query_name,
+            iteration=iteration,
+            table_name=table_name,
+        )
+
+    def finish_mutation_step(
+        self,
+        step_id: int,
+        status: RunStatus,
+        row_count: int | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        duration_ms: float | None = None,
+    ) -> None:
+        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
+
+        self._finish_step(
+            step_id=step_id,
+            status=status,
+            row_count=row_count,
+            error_type=error_type,
+            error_message=error_message,
+            metadata=metadata,
+        )
+
+    @contextmanager
+    def mutation_context(
+        self,
+        query_name: str,
+        iteration: int,
+        table_name: str | None = None,
+    ) -> Iterator[None]:
+        step_id = self.start_mutation_step(query_name=query_name, iteration=iteration, table_name=table_name)
+        try:
+            t0 = perf_counter()
+            yield
+            duration_seconds = perf_counter() - t0
+        except BaseException as exc:
+            self.finish_mutation_step(
+                step_id=step_id,
+                status=_status_from_exception(exc),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+
+        self.finish_mutation_step(
+            step_id=step_id,
+            status="completed",
+            duration_ms=1_000 * duration_seconds,
+        )
+
     def execute_query_iteration(
         self,
         query_name: str,
@@ -335,6 +391,9 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
 
+    @abstractmethod
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None: ...
+
     @property
     def rtabench(self) -> RTABench[Any]:
         from ..suites.rtabench.config import RTABench
@@ -376,8 +435,10 @@ class Database(BaseModel, ABC):
         match operation:
             case "populate":
                 benchmark_func = benchmark.populate
-            case "run":
-                benchmark_func = benchmark.run
+            case "select":
+                benchmark_func = benchmark.select
+            case "mutate":
+                benchmark_func = benchmark.mutate
             case _:
                 raise ValueError(f"Invalid operation '{operation}'")
 
