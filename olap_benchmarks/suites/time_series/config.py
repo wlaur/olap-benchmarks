@@ -584,6 +584,14 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 return size
         return None
 
+    def _get_table_column_order(self, table_name: TableName) -> list[str]:
+        size = self._get_mutate_dataset_size(table_name)
+        if size is not None:
+            n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+            spec = build_time_series_generation_spec(n_rows, n_cols, seed=1)
+            return ["time", *spec.column_order]
+        return ["time", "id", "value"]
+
     def _generate_insert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
         size = self._get_mutate_dataset_size(step.table)
 
@@ -591,7 +599,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             _rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
             df = generate_time_series_data(step.row_count, n_cols, seed=seed)
             start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
-            return df.with_columns(
+            return df.select(self._get_table_column_order(step.table)).with_columns(
                 pl.datetime_range(
                     start_time,
                     start_time + timedelta(minutes=step.row_count - 1),
@@ -641,7 +649,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 [start + timedelta(minutes=int(o)) for o in offsets],
                 dtype=pl.Datetime("ms"),
             )
-            return df.with_columns(times)
+            return df.select(self._get_table_column_order(step.table)).with_columns(times)
 
         _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
         wide_n_rows = _wide_rows
