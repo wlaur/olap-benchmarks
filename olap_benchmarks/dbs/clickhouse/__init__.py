@@ -207,6 +207,9 @@ class Clickhouse(Database):
 
                 raise
 
+    def _settle_mutations(self, table: TableName) -> None:
+        self.run_sql(f"optimize table {table} final")
+
     def _get_order_by_columns(
         self,
         df: pl.DataFrame | pl.LazyFrame,
@@ -381,6 +384,7 @@ class Clickhouse(Database):
 
             delete_sql = f"delete from {table} where {where_clause}"
             self.run_sql(delete_sql)
+            self._settle_mutations(table)
 
             sql = f"""
                 insert into {table}
@@ -407,6 +411,7 @@ class Clickhouse(Database):
             )
             delete_sql = f"delete from {table} where {where_clause}"
             self.run_sql(delete_sql)
+            self._settle_mutations(table)
         finally:
             self._cleanup_temporary_parquet(temp_parquet_path)
 
