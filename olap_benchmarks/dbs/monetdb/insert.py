@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
 from time import perf_counter
@@ -26,6 +27,7 @@ from .utils import (
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 500_000
+SQL_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 WIDE_COLUMN_GROUP_SIZE = 10
 
 
@@ -280,6 +282,35 @@ def insert(
             batch_size,
             lazy_write,
         )
+
+
+def delete(table: TableName, connection: Connection, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+    t0 = perf_counter()
+    primary_keys = [primary_key] if isinstance(primary_key, str) else list(primary_key)
+
+    def _format_literal(val: object) -> str:
+        if isinstance(val, datetime):
+            return f"'{val:{SQL_TIMESTAMP_FORMAT}}'"
+        if isinstance(val, str):
+            return f"'{val}'"
+        return str(val)
+
+    if len(primary_keys) == 1:
+        pk = primary_keys[0]
+        literals = ", ".join(_format_literal(v) for v in keys.get_column(pk).to_list())
+        delete_sql = f'DELETE FROM "{table}" WHERE "{pk}" IN ({literals})'
+    else:
+        rows: list[str] = []
+        for row in keys.iter_rows():
+            parts = ", ".join(_format_literal(val) for val in row)
+            rows.append(f"({parts})")
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+        delete_sql = f'DELETE FROM "{table}" WHERE ({pk_cols}) IN (VALUES {", ".join(rows)})'
+
+    connection.execute(text(delete_sql))
+    connection.commit()
+
+    _LOGGER.info(f"Deleted from table {table} using {keys.shape[0]:_} key rows in {perf_counter() - t0:_.2f} seconds")
 
 
 def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_key: str | list[str]) -> None:
