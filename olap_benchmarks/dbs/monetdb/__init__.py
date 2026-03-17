@@ -9,6 +9,7 @@ from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
 from .. import Database
+from . import insert as _insert_mod
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import (
     DEFAULT_LAZY_WRITE,
@@ -18,7 +19,6 @@ from .insert import (
     insert,
     upsert,
 )
-from .insert import delete as monetdb_delete
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import get_pymonetdb_connection
 
@@ -190,7 +190,7 @@ class MonetDB(Database):
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        return monetdb_delete(table, self.connect(), primary_key=primary_key, keys=keys)
+        return _insert_mod.delete(table, self.connect(), primary_key=primary_key, keys=keys)
 
     @property
     def time_series(self) -> MonetDBTimeSeries:
