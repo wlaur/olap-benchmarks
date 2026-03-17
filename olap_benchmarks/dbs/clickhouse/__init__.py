@@ -392,6 +392,24 @@ class Clickhouse(Database):
         finally:
             self._cleanup_temporary_parquet(temp_parquet_path)
 
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        temp_parquet_path, input_file_string = self._write_temporary_parquet(keys, temp_dir, None)
+
+        try:
+            where_clause = " and ".join(
+                f"{col} in (select distinct {col} from file('{input_file_string}', parquet))" for col in primary_keys
+            )
+            delete_sql = f"delete from {table} where {where_clause}"
+            self.run_sql(delete_sql)
+        finally:
+            self._cleanup_temporary_parquet(temp_parquet_path)
+
     @property
     def rtabench(self) -> ClickHouseRTABench:
         return ClickHouseRTABench(db=self)

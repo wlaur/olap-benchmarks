@@ -338,6 +338,9 @@ class TimescaleDB(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
 
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        raise NotImplementedError
+
     @property
     def rtabench(self) -> TimescaleRTABench:
         return TimescaleRTABench(db=self)

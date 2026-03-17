@@ -46,6 +46,9 @@ class DummyDatabase(Database):
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError
 
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        raise NotImplementedError
+
 
 class CountingDatabase(DummyDatabase):
     row_counts: dict[str, int] = {}
@@ -75,7 +78,7 @@ class DummySuite(BenchmarkSuite[CountingDatabase]):
     def populate(self) -> None:
         raise NotImplementedError
 
-    def run(self) -> None:
+    def select(self) -> None:
         raise NotImplementedError
 
 

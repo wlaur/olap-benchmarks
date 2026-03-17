@@ -42,6 +42,32 @@ TIME_SERIES_EAV_TABLE_NAME: TableName = "data_wide_eav"
 
 assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
+MutateAction = Literal["insert", "upsert", "delete"]
+
+MUTATE_ROW_COUNTS = [1, 100, 10_000]
+MUTATE_ACTIONS: list[MutateAction] = ["insert", "upsert", "delete"]
+MUTATE_TABLES: list[TableName] = ["data_tall", "data_wide", "data_large", "data_wide_eav"]
+MUTATE_ITERATIONS = 3
+
+
+@dataclass(frozen=True)
+class MutateStep:
+    action: MutateAction
+    table: TableName
+    row_count: int
+
+    @property
+    def name(self) -> str:
+        return f"{self.action}_{self.table}_{self.row_count}"
+
+
+TIME_SERIES_MUTATE_STEPS: list[MutateStep] = [
+    MutateStep(action=action, table=table, row_count=row_count)
+    for action in MUTATE_ACTIONS
+    for table in MUTATE_TABLES
+    for row_count in MUTATE_ROW_COUNTS
+]
+
 
 @dataclass(frozen=True)
 class TimeSeriesColumnCounts:
@@ -518,7 +544,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def run(self) -> None:
+    def select(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
             if not self.include_query(query_name):
@@ -544,5 +570,162 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
         _LOGGER.info(
             f"Executed {len(TIME_SERIES_QUERY_NAMES):_} queries "
+            f"(with repetitions) in {perf_counter() - t0:_.2f} seconds"
+        )
+
+    def _get_mutate_primary_key(self, table_name: TableName) -> str | list[str]:
+        if table_name == TIME_SERIES_EAV_TABLE_NAME:
+            return ["time", "id"]
+        return "time"
+
+    def _get_mutate_dataset_size(self, table_name: TableName) -> DatasetSize | None:
+        for size in TIME_SERIES_DATASET_SIZES:
+            if get_time_series_table_name(size) == table_name:
+                return size
+        return None
+
+    def _generate_insert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        size = self._get_mutate_dataset_size(step.table)
+
+        if size is not None:
+            _rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+            df = generate_time_series_data(step.row_count, n_cols, seed=seed)
+            start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
+            return df.with_columns(
+                pl.datetime_range(
+                    start_time,
+                    start_time + timedelta(minutes=step.row_count - 1),
+                    interval="1m",
+                    eager=True,
+                    time_unit="ms",
+                ).alias("time")
+            )
+
+        _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
+        wide_df = generate_time_series_data(step.row_count, wide_cols, seed=seed)
+        start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
+        wide_df = wide_df.with_columns(
+            pl.datetime_range(
+                start_time,
+                start_time + timedelta(minutes=step.row_count - 1),
+                interval="1m",
+                eager=True,
+                time_unit="ms",
+            ).alias("time")
+        )
+        value_columns = [c for c in wide_df.columns if c != "time"]
+        id_lookup = pl.DataFrame(
+            {
+                "metric_name": value_columns,
+                "id": [get_eav_metric_id(c, wide_cols) for c in value_columns],
+            }
+        )
+        return (
+            wide_df.unpivot(on=value_columns, index="time", variable_name="metric_name", value_name="value")
+            .join(id_lookup, on="metric_name", how="inner")
+            .select("time", pl.col("id").cast(pl.Int32), pl.col("value").cast(pl.Float32))
+        )
+
+    def _generate_upsert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        size = self._get_mutate_dataset_size(step.table)
+
+        if size is not None:
+            n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+            df = generate_time_series_data(step.row_count, n_cols, seed=seed + 1000)
+            rng = np.random.default_rng(seed)
+            end = datetime(2025, 1, 1)
+            start = end - timedelta(minutes=n_rows - 1)
+            offsets = sorted(rng.choice(n_rows, size=step.row_count, replace=False))
+            times = pl.Series(
+                "time",
+                [start + timedelta(minutes=int(o)) for o in offsets],
+                dtype=pl.Datetime("ms"),
+            )
+            return df.with_columns(times)
+
+        _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
+        wide_n_rows = _wide_rows
+        upsert_df = generate_time_series_data(step.row_count, wide_cols, seed=seed + 1000)
+        rng = np.random.default_rng(seed)
+        end = datetime(2025, 1, 1)
+        start = end - timedelta(minutes=wide_n_rows - 1)
+        offsets = sorted(rng.choice(wide_n_rows, size=step.row_count, replace=False))
+        times = pl.Series(
+            "time",
+            [start + timedelta(minutes=int(o)) for o in offsets],
+            dtype=pl.Datetime("ms"),
+        )
+        upsert_df = upsert_df.with_columns(times)
+        value_columns = [c for c in upsert_df.columns if c != "time"]
+        id_lookup = pl.DataFrame(
+            {
+                "metric_name": value_columns,
+                "id": [get_eav_metric_id(c, wide_cols) for c in value_columns],
+            }
+        )
+        return (
+            upsert_df.unpivot(on=value_columns, index="time", variable_name="metric_name", value_name="value")
+            .join(id_lookup, on="metric_name", how="inner")
+            .select("time", pl.col("id").cast(pl.Int32), pl.col("value").cast(pl.Float32))
+        )
+
+    def _generate_delete_keys(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        size = self._get_mutate_dataset_size(step.table)
+
+        if size is not None:
+            n_rows, _n_cols = TIME_SERIES_DATASET_SIZES[size]
+        else:
+            n_rows = TIME_SERIES_DATASET_SIZES["wide"][0]
+
+        rng = np.random.default_rng(seed)
+        end = datetime(2025, 1, 1)
+        start = end - timedelta(minutes=n_rows - 1)
+        offsets = sorted(rng.choice(n_rows, size=step.row_count, replace=False))
+        times = pl.Series(
+            "time",
+            [start + timedelta(minutes=int(o)) for o in offsets],
+            dtype=pl.Datetime("ms"),
+        )
+
+        if step.table == TIME_SERIES_EAV_TABLE_NAME:
+            _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
+            ids = rng.integers(1, wide_cols + 1, size=step.row_count)
+            return pl.DataFrame({"time": times, "id": pl.Series("id", ids, dtype=pl.Int32)})
+
+        return pl.DataFrame({"time": times})
+
+    def mutate(self) -> None:
+        t0 = perf_counter()
+
+        for step_idx, step in enumerate(TIME_SERIES_MUTATE_STEPS):
+            for iteration in range(1, MUTATE_ITERATIONS + 1):
+                seed = step_idx * 1000 + iteration
+
+                with self.db.mutation_context(
+                    query_name=step.name,
+                    iteration=iteration,
+                    table_name=step.table,
+                ):
+                    match step.action:
+                        case "insert":
+                            df = self._generate_insert_data(step, seed)
+                            pk = self._get_mutate_primary_key(step.table)
+                            self.db.insert(df, step.table, primary_key=pk if isinstance(pk, list) else None)
+                        case "upsert":
+                            df = self._generate_upsert_data(step, seed)
+                            pk = self._get_mutate_primary_key(step.table)
+                            self.db.upsert(df, step.table, primary_key=pk)
+                        case "delete":
+                            keys = self._generate_delete_keys(step, seed)
+                            pk = self._get_mutate_primary_key(step.table)
+                            self.db.delete(step.table, primary_key=pk, keys=keys)
+
+                _LOGGER.info(
+                    f"Executed {step.name} ({step_idx + 1:_}/{len(TIME_SERIES_MUTATE_STEPS):_}) "
+                    f"iteration {iteration:_}/{MUTATE_ITERATIONS:_}"
+                )
+
+        _LOGGER.info(
+            f"Executed {len(TIME_SERIES_MUTATE_STEPS):_} mutation steps "
             f"(with repetitions) in {perf_counter() - t0:_.2f} seconds"
         )

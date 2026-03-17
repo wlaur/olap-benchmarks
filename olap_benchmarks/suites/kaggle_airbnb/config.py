@@ -146,7 +146,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def run(self) -> None:
+    def select(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(KAGGLE_AIRBNB_QUERY_NAMES.items()):
             if not self.include_query(query_name):
