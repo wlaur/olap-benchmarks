@@ -3,7 +3,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from shutil import rmtree
-from time import sleep
+from time import perf_counter, sleep
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -265,6 +265,18 @@ class Clickhouse(Database):
 
         return subdir
 
+    def _wait_for_parquet_readable(self, input_file: str, timeout_seconds: float = 10.0) -> None:
+        deadline = perf_counter() + timeout_seconds
+
+        while perf_counter() < deadline:
+            try:
+                cast(Any, self.get_client()).command(f"DESCRIBE file('{input_file}', Parquet)")
+                return
+            except Exception:
+                sleep(0.1)
+
+        raise TimeoutError(f"Timed out after {timeout_seconds:.0f}s waiting for ClickHouse to read {input_file}")
+
     def _cleanup_temporary_parquet(self, p: Path) -> None:
         if p.is_dir():
             rmtree(p)
@@ -291,6 +303,7 @@ class Clickhouse(Database):
             temp_parquet_path = self._write_partitioned_parquet(temp_dir, df, partitions)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix() + "/*.parquet"
 
+        self._wait_for_parquet_readable(input_file_string)
         return temp_parquet_path, input_file_string
 
     def insert(
@@ -300,7 +313,6 @@ class Clickhouse(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
         partitions: int | None = None,
-        wait_ms: float | None = 500,
     ) -> None:
         if not_null is None:
             not_null = []
@@ -315,9 +327,6 @@ class Clickhouse(Database):
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
-        # TODO: unless we wait here, the Parquet file will be read as incomplete by Clickhouse
-        if wait_ms is not None:
-            sleep(wait_ms / 1000)
         try:
             exists_result = cast(Any, client).query_df(f"EXISTS TABLE {table}")
             table_exists = bool(exists_result["result"][0])
