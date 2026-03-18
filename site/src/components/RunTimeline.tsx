@@ -12,6 +12,8 @@ interface RunTimelineProps {
   databaseColors: Record<string, string>
   onSelectQuery?: (queryName: string) => void
   selectedQuery?: string | null
+  title?: string
+  description?: string
 }
 
 interface TimelineSegment {
@@ -58,6 +60,8 @@ export function RunTimeline({
   databaseColors,
   onSelectQuery,
   selectedQuery,
+  title = "Run timeline",
+  description = "Full query execution timeline per database. Each segment represents one query iteration. Click to inspect.",
 }: RunTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -127,11 +131,8 @@ export function RunTimeline({
     <PanelCard>
       <PanelHeader>
         <div>
-          <SectionTitle as="h3">Run timeline</SectionTitle>
-          <BodyText className="mt-1">
-            Full query execution timeline per database. Each segment represents one query iteration.
-            Click to inspect.
-          </BodyText>
+          <SectionTitle as="h3">{title}</SectionTitle>
+          <BodyText className="mt-1">{description}</BodyText>
         </div>
         <DatabaseLegend databases={databases} databaseColors={databaseColors} />
       </PanelHeader>

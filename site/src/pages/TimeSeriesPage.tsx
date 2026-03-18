@@ -50,6 +50,8 @@ import {
 import {
   fetchInsertSteps,
   fetchMetricSamples,
+  fetchMutateSteps,
+  fetchMutateSummaries,
   fetchOperationSummaries,
   fetchQueriesManifest,
   fetchQuerySteps,
@@ -90,8 +92,10 @@ interface TimeSeriesPageState {
   operationSummaries: OperationSummary[]
   metricSamples: MetricSample[]
   querySummaries: QuerySummary[]
+  mutateSummaries: QuerySummary[]
   insertSteps: InsertStep[]
   querySteps: QueryStep[]
+  mutateSteps: QueryStep[]
   queriesManifest: QueriesManifest | null
 }
 
@@ -100,10 +104,12 @@ interface OverviewChartRow {
   db_version: string
   fill?: string
   populate_duration_s: number
-  run_duration_s: number
+  select_duration_s: number
+  mutate_duration_s: number
   total_duration_s: number
   populate_chart_duration_s: number
-  run_chart_duration_s: number
+  select_chart_duration_s: number
+  mutate_chart_duration_s: number
 }
 
 type OverviewOperationVisibility = Record<BenchmarkOperation, boolean>
@@ -118,8 +124,10 @@ function createInitialTimeSeriesPageState(): TimeSeriesPageState {
     operationSummaries: [],
     metricSamples: [],
     querySummaries: [],
+    mutateSummaries: [],
     insertSteps: [],
     querySteps: [],
+    mutateSteps: [],
     queriesManifest: null,
   }
 }
@@ -131,10 +139,12 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("log")
   const [queryTableScaleMode, setQueryTableScaleMode] = useState<DurationScaleMode>("log")
+  const [mutateTableScaleMode, setMutateTableScaleMode] = useState<DurationScaleMode>("log")
   const [overviewOperationVisibility, setOverviewOperationVisibility] =
     useState<OverviewOperationVisibility>({
       populate: true,
-      run: true,
+      select: true,
+      mutate: true,
     })
   const [resourceDrawerOpen, setResourceDrawerOpen] = useState(false)
   const selection = useSelectionState()
@@ -157,8 +167,10 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       fetchOperationSummaries(system, "time_series"),
       fetchMetricSamples(system, "time_series"),
       fetchQuerySummaries(system, "time_series"),
+      fetchMutateSummaries(system, "time_series"),
       fetchInsertSteps(system, "time_series"),
       fetchQuerySteps(system, "time_series"),
+      fetchMutateSteps(system, "time_series"),
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
@@ -167,8 +179,10 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
           operationSummaries,
           metricSamples,
           querySummaries,
+          mutateSummaries,
           insertSteps,
           querySteps,
+          mutateSteps,
           queriesManifest,
         ]) => {
           if (cancelled) return
@@ -181,8 +195,10 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
               operationSummaries,
               metricSamples,
               querySummaries,
+              mutateSummaries,
               insertSteps,
               querySteps,
+              mutateSteps,
               queriesManifest,
             })
           })
@@ -199,8 +215,10 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
             operationSummaries: [],
             metricSamples: [],
             querySummaries: [],
+            mutateSummaries: [],
             insertSteps: [],
             querySteps: [],
+            mutateSteps: [],
             queriesManifest: null,
           })
         })
@@ -239,6 +257,9 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   const filteredQuerySummaries = state.querySummaries.filter((row) =>
     includedDatabaseSet.has(row.db),
   )
+  const filteredMutateSummaries = state.mutateSummaries.filter((row) =>
+    includedDatabaseSet.has(row.db),
+  )
   const filteredOperationSummaries = state.operationSummaries.filter((run) =>
     includedDatabaseSet.has(run.db),
   )
@@ -246,8 +267,18 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   const databaseColors = getDatabaseColors(databases)
 
   const queryRows = buildQueryComparisonRows(filteredQuerySummaries, includedDatabases)
+  const mutateRows = buildQueryComparisonRows(filteredMutateSummaries, includedDatabases)
 
   const globalMaxDuration = queryRows.reduce((max, row) => {
+    for (const val of Object.values(row.by_database)) {
+      if (val !== null && val > max) {
+        max = val
+      }
+    }
+    return max
+  }, LOG_FLOOR)
+
+  const mutateMaxDuration = mutateRows.reduce((max, row) => {
     for (const val of Object.values(row.by_database)) {
       if (val !== null && val > max) {
         max = val
@@ -373,10 +404,9 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
             <div>
               <SectionTitle as="h3">Aggregate overview</SectionTitle>
               <BodyText className="mt-1">
-                Latest completed populate and run durations per database. Toggle either phase on or
-                off, then switch between a zero-based log view and linear scale before diving into
-                per-query detail. Each database keeps one color family: muted for populate, stronger
-                for run.
+                Latest completed populate, select, and mutate durations per database. Toggle any
+                phase on or off, then switch between a zero-based log view and linear scale before
+                diving into per-query detail.
               </BodyText>
             </div>
             {isLoading ? (
@@ -387,7 +417,8 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                   {(
                     [
                       ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
-                      ["run", "Run", "rgba(148, 163, 184, 1)"],
+                      ["mutate", "Mutate", "rgba(168, 85, 247, 0.85)"],
+                      ["select", "Select", "rgba(148, 163, 184, 1)"],
                     ] as const
                   ).map(([operation, label, chipColor]) => {
                     const isActive = overviewOperationVisibility[operation]
@@ -428,7 +459,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
               <OverviewChartSkeleton />
             ) : !hasVisibleOverviewSegments ? (
               <div className="flex h-full min-h-28 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 text-center text-sm text-slate-500">
-                Enable populate or run to display overview bars for the selected databases.
+                Enable at least one phase to display overview bars for the selected databases.
               </div>
             ) : (
               <ResponsiveContainer
@@ -466,13 +497,14 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                     itemStyle={{ color: "#e2e8f0" }}
                     formatter={(_value, name, item) => {
                       const row = item.payload as OverviewChartRow
+                      const duration =
+                        name === "Populate"
+                          ? row.populate_duration_s
+                          : name === "Select"
+                            ? row.select_duration_s
+                            : row.mutate_duration_s
 
-                      return [
-                        formatDurationSeconds(
-                          name === "Populate" ? row.populate_duration_s : row.run_duration_s,
-                        ),
-                        name ?? "",
-                      ] as const
+                      return [formatDurationSeconds(duration), name ?? ""] as const
                     }}
                     labelFormatter={(label, payload) => {
                       const row = payload?.[0]?.payload as OverviewChartRow | undefined
@@ -480,8 +512,11 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
 
                       const labelText =
                         typeof label === "string" || typeof label === "number" ? String(label) : ""
+                      const visibleCount = Object.values(overviewOperationVisibility).filter(
+                        Boolean,
+                      ).length
 
-                      return overviewOperationVisibility.populate && overviewOperationVisibility.run
+                      return visibleCount > 1
                         ? `${labelText} · total ${formatDurationSeconds(row.total_duration_s)}`
                         : `${labelText} · ${formatDurationSeconds(row.total_duration_s)}`
                     }}
@@ -490,7 +525,11 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                     dataKey="populate_chart_duration_s"
                     stackId="total"
                     hide={!overviewOperationVisibility.populate}
-                    radius={overviewOperationVisibility.run ? [0, 0, 10, 10] : [10, 10, 10, 10]}
+                    radius={
+                      overviewOperationVisibility.mutate || overviewOperationVisibility.select
+                        ? [0, 0, 10, 10]
+                        : [10, 10, 10, 10]
+                    }
                     name="Populate"
                     shape={(props) => (
                       <Rectangle
@@ -503,13 +542,37 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                     )}
                   />
                   <Bar
-                    dataKey="run_chart_duration_s"
+                    dataKey="mutate_chart_duration_s"
                     stackId="total"
-                    hide={!overviewOperationVisibility.run}
+                    hide={!overviewOperationVisibility.mutate}
                     radius={
-                      overviewOperationVisibility.populate ? [10, 10, 0, 0] : [10, 10, 10, 10]
+                      overviewOperationVisibility.select
+                        ? [0, 0, 0, 0]
+                        : overviewOperationVisibility.populate
+                          ? [10, 10, 0, 0]
+                          : [10, 10, 10, 10]
                     }
-                    name="Run"
+                    name="Mutate"
+                    shape={(props) => (
+                      <Rectangle
+                        {...props}
+                        fill={withAlpha(
+                          (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
+                          0.7,
+                        )}
+                      />
+                    )}
+                  />
+                  <Bar
+                    dataKey="select_chart_duration_s"
+                    stackId="total"
+                    hide={!overviewOperationVisibility.select}
+                    radius={
+                      overviewOperationVisibility.populate || overviewOperationVisibility.mutate
+                        ? [10, 10, 0, 0]
+                        : [10, 10, 10, 10]
+                    }
+                    name="Select"
                     shape={(props) => (
                       <Rectangle
                         {...props}
@@ -540,6 +603,8 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
           databaseColors={databaseColors}
           onSelectQuery={(queryName) => setSelectedQuery(queryName)}
           selectedQuery={selectedQuery}
+          title="Select timeline"
+          description="Full select query execution timeline per database. Each segment represents one query iteration. Click to inspect."
         />
       ) : null}
 
@@ -547,7 +612,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
           <div className="flex min-h-[5.5rem] shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
             <div>
-              <SectionTitle as="h3">Query latency comparison</SectionTitle>
+              <SectionTitle as="h3">Select latency comparison</SectionTitle>
               <BodyText className="mt-1">
                 Click a row to inspect its latency spread and SQL.
               </BodyText>
@@ -634,6 +699,43 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
           )}
         </section>
       </div>
+
+      {!isLoading && state.mutateSteps.length > 0 ? (
+        <RunTimeline
+          querySteps={state.mutateSteps}
+          databases={includedDatabases}
+          databaseColors={databaseColors}
+          title="Mutate timeline"
+          description="Insert, upsert, and delete mutation execution timeline per database. Each segment represents one mutation iteration."
+        />
+      ) : null}
+
+      {!isLoading && mutateRows.length > 0 ? (
+        <PanelCard>
+          <div className="flex min-h-[5.5rem] shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
+            <div>
+              <SectionTitle as="h3">Mutation latency comparison</SectionTitle>
+              <BodyText className="mt-1">
+                Median latency per mutation step across databases.
+              </BodyText>
+            </div>
+            <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
+          </div>
+
+          <div className={TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS}>
+            <QueryComparisonTable
+              rows={mutateRows}
+              databases={includedDatabases}
+              databaseColors={databaseColors}
+              selection={selection}
+              maxDuration={mutateMaxDuration}
+              scaleMode={mutateTableScaleMode}
+              onScaleModeChange={setMutateTableScaleMode}
+              containerClassName={TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}
+            />
+          </div>
+        </PanelCard>
+      ) : null}
 
       <ResourceMetricsDrawer
         isOpen={resourceDrawerOpen}
@@ -829,7 +931,8 @@ function buildOverviewChartData(
       db: string
       db_version: string
       populate_duration_s: number
-      run_duration_s: number
+      select_duration_s: number
+      mutate_duration_s: number
     }
   >()
 
@@ -838,14 +941,17 @@ function buildOverviewChartData(
       db: summary.db,
       db_version: summary.db_version,
       populate_duration_s: 0,
-      run_duration_s: 0,
+      select_duration_s: 0,
+      mutate_duration_s: 0,
     }
 
     existing.db_version = summary.db_version
     if (summary.operation === "populate") {
       existing.populate_duration_s = summary.run_duration_s
-    } else {
-      existing.run_duration_s = summary.run_duration_s
+    } else if (summary.operation === "select") {
+      existing.select_duration_s = summary.run_duration_s
+    } else if (summary.operation === "mutate") {
+      existing.mutate_duration_s = summary.run_duration_s
     }
 
     summariesByDatabase.set(summary.db, existing)
@@ -853,20 +959,25 @@ function buildOverviewChartData(
 
   return Array.from(summariesByDatabase.values())
     .map((entry) => {
-      const visiblePopulateDuration = visibleOperations.populate ? entry.populate_duration_s : 0
-      const visibleRunDuration = visibleOperations.run ? entry.run_duration_s : 0
-      const totalDuration = visiblePopulateDuration + visibleRunDuration
-      const populateTop = scaleDurationForChart(visiblePopulateDuration, scaleMode)
+      const visiblePopulate = visibleOperations.populate ? entry.populate_duration_s : 0
+      const visibleSelect = visibleOperations.select ? entry.select_duration_s : 0
+      const visibleMutate = visibleOperations.mutate ? entry.mutate_duration_s : 0
+      const totalDuration = visiblePopulate + visibleSelect + visibleMutate
+
+      const populateTop = scaleDurationForChart(visiblePopulate, scaleMode)
+      const populateMutateTop = scaleDurationForChart(visiblePopulate + visibleMutate, scaleMode)
       const totalTop = scaleDurationForChart(totalDuration, scaleMode)
 
       return {
         db: entry.db,
         db_version: entry.db_version,
         populate_duration_s: entry.populate_duration_s,
-        run_duration_s: entry.run_duration_s,
+        select_duration_s: entry.select_duration_s,
+        mutate_duration_s: entry.mutate_duration_s,
         total_duration_s: totalDuration,
         populate_chart_duration_s: populateTop,
-        run_chart_duration_s: Math.max(0, totalTop - populateTop),
+        mutate_chart_duration_s: Math.max(0, populateMutateTop - populateTop),
+        select_chart_duration_s: Math.max(0, totalTop - populateMutateTop),
       }
     })
     .sort(
