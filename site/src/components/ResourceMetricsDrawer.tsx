@@ -87,7 +87,9 @@ export function ResourceMetricsDrawer({
 }: ResourceMetricsDrawerProps) {
   const runSamples = useMemo(
     () =>
-      metricSamples.filter((sample) => sample.operation === "run" && databases.includes(sample.db)),
+      metricSamples.filter(
+        (sample) => sample.operation === "select" && databases.includes(sample.db),
+      ),
     [metricSamples, databases],
   )
 
