@@ -149,6 +149,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
   const [resourceDrawerOpen, setResourceDrawerOpen] = useState(false)
   const selection = useSelectionState()
   const { selectedQuery, setSelectedQuery } = selection
+  const mutateSelection = useSelectionState()
 
   useEffect(() => {
     if (isSystemLoading || system === null) {
@@ -302,6 +303,9 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
 
   const selectedRow = selectedQuery
     ? (queryRows.find((r) => r.query_name === selectedQuery) ?? null)
+    : null
+  const selectedMutateRow = mutateSelection.selectedQuery
+    ? (mutateRows.find((r) => r.query_name === mutateSelection.selectedQuery) ?? null)
     : null
   const traceEligibleDatabases = useMemo(
     () => getTraceEligibleDatabases(state.querySteps, selectedQuery, includedDatabases),
@@ -711,30 +715,67 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       ) : null}
 
       {!isLoading && mutateRows.length > 0 ? (
-        <PanelCard>
-          <div className="flex min-h-[5.5rem] shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
-            <div>
-              <SectionTitle as="h3">Mutation latency comparison</SectionTitle>
-              <BodyText className="mt-1">
-                Median latency per mutation step across databases.
-              </BodyText>
+        <div className={TIME_SERIES_BOTTOM_GRID_CLASS}>
+          <section className={TIME_SERIES_QUERY_SECTION_CLASS}>
+            <div className="flex min-h-[5.5rem] shrink-0 items-start justify-between gap-4 border-b border-border-default px-5 py-4">
+              <div>
+                <SectionTitle as="h3">Mutation latency comparison</SectionTitle>
+                <BodyText className="mt-1">Click a row to inspect its latency spread.</BodyText>
+              </div>
+              <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
             </div>
-            <DatabaseLegend databases={includedDatabases} databaseColors={databaseColors} />
-          </div>
 
-          <div className={TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS}>
-            <QueryComparisonTable
-              rows={mutateRows}
-              databases={includedDatabases}
-              databaseColors={databaseColors}
-              selection={selection}
-              maxDuration={mutateMaxDuration}
-              scaleMode={mutateTableScaleMode}
-              onScaleModeChange={setMutateTableScaleMode}
-              containerClassName={TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}
-            />
-          </div>
-        </PanelCard>
+            <div className={TIME_SERIES_QUERY_TABLE_WRAPPER_CLASS}>
+              <QueryComparisonTable
+                rows={mutateRows}
+                databases={includedDatabases}
+                databaseColors={databaseColors}
+                selection={mutateSelection}
+                maxDuration={mutateMaxDuration}
+                scaleMode={mutateTableScaleMode}
+                onScaleModeChange={setMutateTableScaleMode}
+                containerClassName={TIME_SERIES_QUERY_TABLE_CONTAINER_CLASS}
+              />
+            </div>
+          </section>
+
+          <section className={TIME_SERIES_DETAIL_SECTION_CLASS}>
+            {selectedMutateRow ? (
+              <QueryDetailPanel
+                row={selectedMutateRow}
+                databases={includedDatabases}
+                databaseColors={databaseColors}
+                sql={null}
+                onClose={() => mutateSelection.setSelectedQuery(null)}
+              />
+            ) : (
+              <div className="flex h-full min-h-0 flex-col justify-between rounded-2xl bg-surface-raised p-5">
+                <div>
+                  <Eyebrow>Inspector</Eyebrow>
+                  <FeatureTitle as="h3" className="mt-3">
+                    Pick a mutation row
+                  </FeatureTitle>
+                  <BodyText className="mt-3 max-w-md leading-6">
+                    Select any mutation to inspect its latency spread across the included databases.
+                  </BodyText>
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="rounded-xl border border-border-default bg-surface-inset px-4 py-3">
+                    <MetaLabel>Rows available</MetaLabel>
+                    <p className="mt-2 text-lg font-semibold text-slate-100">{mutateRows.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-border-default bg-surface-inset px-4 py-3">
+                    <MetaLabel>Active databases</MetaLabel>
+                    <p className="mt-2 text-lg font-semibold text-slate-100">
+                      {includedDatabases.length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
       ) : null}
 
       <ResourceMetricsDrawer
