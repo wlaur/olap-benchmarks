@@ -2,6 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import connectorx
@@ -335,11 +336,81 @@ class TimescaleDB(Database):
         finally:
             temp_file.unlink()
 
+    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path) -> None:
+        raw_conn = con.connection.dbapi_connection
+        assert raw_conn is not None
+        cursor = raw_conn.cursor()
+        with open(csv_path) as f:
+            cursor.copy_expert(f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)", f)
+
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        raise NotImplementedError
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        for pk in primary_keys:
+            if pk not in df.columns:
+                raise ValueError(f"Primary key column '{pk}' not found in DataFrame columns")
+
+        con = self.connect()
+
+        # TimescaleDB hypertables don't support unique constraints unless they include
+        # the partitioning column, so ON CONFLICT won't work. Use delete-then-insert.
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+
+        staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
+        con.execute(text(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"))
+
+        temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
+        temp_file = temp_dir / f"{table}_upsert_{uuid.uuid4().hex}.csv"
+
+        try:
+            df.write_csv(temp_file)
+            self._copy_csv_to_table(con, staging_table, temp_file)
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+        con.execute(text("SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"))
+        con.execute(text(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"))
+
+        all_columns = ", ".join(f'"{col}"' for col in df.columns)
+        con.execute(text(f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}"))
+
+        con.execute(text(f"DROP TABLE {staging_table}"))
+        con.commit()
+
+        _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        raise NotImplementedError
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        con = self.connect()
+
+        staging_table = f"_staging_del_{table}_{uuid.uuid4().hex[:8]}"
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+
+        con.execute(text(f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"))
+
+        temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
+        temp_file = temp_dir / f"{table}_delete_{uuid.uuid4().hex}.csv"
+
+        try:
+            keys.select(primary_keys).write_csv(temp_file)
+            self._copy_csv_to_table(con, staging_table, temp_file)
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+        con.execute(text("SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"))
+        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
+        con.execute(text(sql))
+        con.execute(text(f"DROP TABLE {staging_table}"))
+        con.commit()
+
+        _LOGGER.info(f"Deleted rows from {table} by primary key")
 
     @property
     def rtabench(self) -> TimescaleRTABench:
