@@ -64,7 +64,7 @@ export async function fetchRunSummaries(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "=", "run")
+        .where("run.operation", "=", "select")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),
@@ -135,7 +135,7 @@ export async function fetchOperationSummaries(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "in", ["populate", "run"])
+        .where("run.operation", "in", ["populate", "select", "mutate"])
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),
@@ -181,7 +181,7 @@ export async function fetchQuerySummaries(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "=", "run")
+        .where("run.operation", "=", "select")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),
@@ -239,7 +239,7 @@ export async function fetchMetricSamples(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "in", ["populate", "run"])
+        .where("run.operation", "in", ["populate", "select", "mutate"])
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),
@@ -357,7 +357,7 @@ export async function fetchQuerySteps(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "=", "run")
+        .where("run.operation", "=", "select")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),
@@ -387,6 +387,119 @@ export async function fetchQuerySteps(
     ])
     .where("latest_runs.run_rank", "=", 1)
     .where("run_step.step_type", "=", "query")
+    .where("run_step.status", "=", "completed")
+    .where("run_step.finished_at", "is not", null)
+    .where("run_step.query_name", "is not", null)
+    .where("run_step.iteration", "is not", null)
+    .orderBy("latest_runs.db")
+    .orderBy("run_step.started_at")
+    .execute()
+}
+
+export async function fetchMutateSummaries(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<QuerySummary[]> {
+  const db = await getKyselyDb()
+
+  return db
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          sql<number>`row_number() over (
+            partition by ${eb.ref("run.db")}
+            order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
+          )`.as("run_rank"),
+        ])
+        .where("run.suite", "=", suite)
+        .where("run.operation", "=", "mutate")
+        .where("run.status", "=", "completed")
+        .where("run.finished_at", "is not", null)
+        .where("run.system", "=", system),
+    )
+    .selectFrom("run_step")
+    .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
+    .select((eb) => [
+      eb.ref("run_step.query_name").$notNull().as("query_name"),
+      eb.ref("latest_runs.db").as("db"),
+      sql<number>`median(
+          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
+        )`.as("median_duration_s"),
+      sql<number>`avg(
+          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
+        )`.as("avg_duration_s"),
+      sql<number>`min(
+          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
+        )`.as("min_duration_s"),
+      sql<number>`max(
+          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
+        )`.as("max_duration_s"),
+      sql<number>`cast(count(*) as integer)`.as("iterations"),
+    ])
+    .where("latest_runs.run_rank", "=", 1)
+    .where("run_step.step_type", "=", "mutation")
+    .where("run_step.status", "=", "completed")
+    .where("run_step.finished_at", "is not", null)
+    .where("run_step.query_name", "is not", null)
+    .groupBy(["run_step.query_name", "latest_runs.db"])
+    .orderBy("run_step.query_name")
+    .orderBy("latest_runs.db")
+    .execute()
+}
+
+export async function fetchMutateSteps(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<QueryStep[]> {
+  const db = await getKyselyDb()
+
+  return db
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.started_at").as("run_started_at"),
+          sql<number>`row_number() over (
+            partition by ${eb.ref("run.db")}
+            order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
+          )`.as("run_rank"),
+        ])
+        .where("run.suite", "=", suite)
+        .where("run.operation", "=", "mutate")
+        .where("run.status", "=", "completed")
+        .where("run.finished_at", "is not", null)
+        .where("run.system", "=", system),
+    )
+    .selectFrom("run_step")
+    .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
+    .select((eb) => [
+      eb.ref("latest_runs.run_id").as("run_id"),
+      eb.ref("latest_runs.db").as("db"),
+      eb.ref("run_step.query_name").$notNull().as("query_name"),
+      eb.ref("run_step.iteration").$notNull().as("iteration"),
+      sql<string>`strftime(${eb.ref("run_step.started_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
+        "started_at",
+      ),
+      sql<string>`strftime(${eb.ref("run_step.finished_at")}, ${ISO_TIMESTAMP_FORMAT})`.as(
+        "finished_at",
+      ),
+      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))`.as(
+        "duration_s",
+      ),
+      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.started_at")} - ${eb.ref("latest_runs.run_started_at")}))`.as(
+        "elapsed_start_s",
+      ),
+      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("latest_runs.run_started_at")}))`.as(
+        "elapsed_end_s",
+      ),
+    ])
+    .where("latest_runs.run_rank", "=", 1)
+    .where("run_step.step_type", "=", "mutation")
     .where("run_step.status", "=", "completed")
     .where("run_step.finished_at", "is not", null)
     .where("run_step.query_name", "is not", null)

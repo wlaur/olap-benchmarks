@@ -15,7 +15,7 @@ import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard } from "./layout/Panel"
 import { BodyText, SectionTitle } from "./Typography"
 
-const OPERATIONS: BenchmarkOperation[] = ["populate", "run"]
+const OPERATIONS: BenchmarkOperation[] = ["populate", "select", "mutate"]
 
 const METRIC_CONFIGS = [
   {
@@ -55,7 +55,7 @@ export function MetricsTimeSeriesPanel({
   loading = false,
 }: MetricsTimeSeriesPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("run")
+  const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
   const includedDatabaseSet = useMemo(() => new Set(databases), [databases])
 
   const filteredSamples = useMemo(
@@ -267,10 +267,15 @@ function buildMetricChartData(
       mem_mb: buildRowsForMetric(samples, "populate", "mem_mb"),
       disk_mb: buildRowsForMetric(samples, "populate", "disk_mb"),
     },
-    run: {
-      cpu_percent: buildRowsForMetric(samples, "run", "cpu_percent"),
-      mem_mb: buildRowsForMetric(samples, "run", "mem_mb"),
-      disk_mb: buildRowsForMetric(samples, "run", "disk_mb"),
+    select: {
+      cpu_percent: buildRowsForMetric(samples, "select", "cpu_percent"),
+      mem_mb: buildRowsForMetric(samples, "select", "mem_mb"),
+      disk_mb: buildRowsForMetric(samples, "select", "disk_mb"),
+    },
+    mutate: {
+      cpu_percent: buildRowsForMetric(samples, "mutate", "cpu_percent"),
+      mem_mb: buildRowsForMetric(samples, "mutate", "mem_mb"),
+      disk_mb: buildRowsForMetric(samples, "mutate", "disk_mb"),
     },
   }
 }
@@ -302,10 +307,16 @@ function buildXDomains(samples: MetricSample[]): Record<BenchmarkOperation, numb
         .filter((sample) => sample.operation === "populate")
         .map((sample) => Math.ceil(sample.run_duration_s)),
     ),
-    run: Math.max(
+    select: Math.max(
       1,
       ...samples
-        .filter((sample) => sample.operation === "run")
+        .filter((sample) => sample.operation === "select")
+        .map((sample) => Math.ceil(sample.run_duration_s)),
+    ),
+    mutate: Math.max(
+      1,
+      ...samples
+        .filter((sample) => sample.operation === "mutate")
         .map((sample) => Math.ceil(sample.run_duration_s)),
     ),
   }
@@ -316,7 +327,8 @@ function buildXTicks(
 ): Record<BenchmarkOperation, number[]> {
   return {
     populate: buildEvenElapsedTicks(domains.populate),
-    run: buildEvenElapsedTicks(domains.run),
+    select: buildEvenElapsedTicks(domains.select),
+    mutate: buildEvenElapsedTicks(domains.mutate),
   }
 }
 
