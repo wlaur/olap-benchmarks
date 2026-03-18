@@ -377,15 +377,13 @@ function SvgContent({
 }
 
 function buildTimelineData(steps: QueryStep[], databases: string[]) {
-  const segmentsByDb = new Map<string, TimelineSegment[]>()
+  const rawByDb = new Map<string, TimelineSegment[]>()
   const queryNameSet = new Set<string>()
-  let maxElapsed = 0
 
   for (const step of steps) {
     queryNameSet.add(step.query_name)
-    if (step.elapsed_end_s > maxElapsed) maxElapsed = step.elapsed_end_s
 
-    const dbSegments = segmentsByDb.get(step.db) ?? []
+    const dbSegments = rawByDb.get(step.db) ?? []
     dbSegments.push({
       db: step.db,
       query_name: step.query_name,
@@ -394,14 +392,22 @@ function buildTimelineData(steps: QueryStep[], databases: string[]) {
       end_s: step.elapsed_end_s,
       duration_s: step.duration_s,
     })
-    segmentsByDb.set(step.db, dbSegments)
+    rawByDb.set(step.db, dbSegments)
   }
 
-  for (const [db, segs] of segmentsByDb) {
-    segmentsByDb.set(
-      db,
-      segs.sort((a, b) => a.start_s - b.start_s),
-    )
+  const segmentsByDb = new Map<string, TimelineSegment[]>()
+  let maxElapsed = 0
+
+  for (const [db, segs] of rawByDb) {
+    segs.sort((a, b) => a.start_s - b.start_s)
+    let cursor = 0
+    const packed = segs.map((seg) => {
+      const packedSeg = { ...seg, start_s: cursor, end_s: cursor + seg.duration_s }
+      cursor = packedSeg.end_s
+      return packedSeg
+    })
+    if (cursor > maxElapsed) maxElapsed = cursor
+    segmentsByDb.set(db, packed)
   }
 
   for (const db of databases) {

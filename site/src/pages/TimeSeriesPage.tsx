@@ -137,6 +137,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
     ...createInitialTimeSeriesPageState(),
   })
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
+  const [includeEav, setIncludeEav] = useState(true)
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("log")
   const [queryTableScaleMode, setQueryTableScaleMode] = useState<DurationScaleMode>("log")
   const [mutateTableScaleMode, setMutateTableScaleMode] = useState<DurationScaleMode>("log")
@@ -255,17 +256,24 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
 
   const includedDatabases = selectedDatabases.length > 0 ? selectedDatabases : databases
   const includedDatabaseSet = new Set(includedDatabases)
-  const filteredQuerySummaries = state.querySummaries.filter((row) =>
-    includedDatabaseSet.has(row.db),
+  const filteredQuerySummaries = state.querySummaries.filter(
+    (row) => includedDatabaseSet.has(row.db) && (includeEav || !isEavQueryName(row.query_name)),
   )
-  const filteredMutateSummaries = state.mutateSummaries.filter((row) =>
-    includedDatabaseSet.has(row.db),
+  const filteredMutateSummaries = state.mutateSummaries.filter(
+    (row) => includedDatabaseSet.has(row.db) && (includeEav || !isEavQueryName(row.query_name)),
   )
   const filteredOperationSummaries = state.operationSummaries.filter((run) =>
     includedDatabaseSet.has(run.db),
   )
 
   const databaseColors = getDatabaseColors(databases)
+
+  const filteredQuerySteps = includeEav
+    ? state.querySteps
+    : state.querySteps.filter((s) => !isEavQueryName(s.query_name))
+  const filteredMutateSteps = includeEav
+    ? state.mutateSteps
+    : state.mutateSteps.filter((s) => !isEavQueryName(s.query_name))
 
   const queryRows = buildQueryComparisonRows(filteredQuerySummaries, includedDatabases)
   const mutateRows = buildQueryComparisonRows(filteredMutateSummaries, includedDatabases)
@@ -308,8 +316,8 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
     ? (mutateRows.find((r) => r.query_name === mutateSelection.selectedQuery) ?? null)
     : null
   const traceEligibleDatabases = useMemo(
-    () => getTraceEligibleDatabases(state.querySteps, selectedQuery, includedDatabases),
-    [state.querySteps, selectedQuery, includedDatabases],
+    () => getTraceEligibleDatabases(filteredQuerySteps, selectedQuery, includedDatabases),
+    [filteredQuerySteps, selectedQuery, includedDatabases],
   )
   const hasTraceDrawer = traceEligibleDatabases.length > 0
 
@@ -339,7 +347,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
       return
     }
 
-    if (!shouldShowResourceDrawer(state.querySteps, selectedQuery, includedDatabases)) {
+    if (!shouldShowResourceDrawer(filteredQuerySteps, selectedQuery, includedDatabases)) {
       setResourceDrawerOpen(false)
     }
 
@@ -354,7 +362,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [selectedQuery, setSelectedQuery, state.querySteps, includedDatabases])
+  }, [selectedQuery, setSelectedQuery, filteredQuerySteps, includedDatabases])
 
   if (!isLoading && state.error) {
     return (
@@ -400,6 +408,28 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
                 onToggleDatabase={toggleDatabase}
               />
             )}
+          </div>
+
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setIncludeEav((v) => !v)}
+              className={
+                includeEav
+                  ? "inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-inset px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600"
+                  : "inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:border-amber-400/50"
+              }
+            >
+              <span
+                className="size-2 rounded-full"
+                style={{
+                  backgroundColor: includeEav
+                    ? "rgba(148, 163, 184, 0.6)"
+                    : "rgba(245, 158, 11, 0.8)",
+                }}
+              />
+              {includeEav ? "EAV tables included" : "EAV tables excluded"}
+            </button>
           </div>
         </PanelCard>
 
@@ -600,9 +630,9 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         />
       ) : null}
 
-      {!isLoading && state.querySteps.length > 0 ? (
+      {!isLoading && filteredQuerySteps.length > 0 ? (
         <RunTimeline
-          querySteps={state.querySteps}
+          querySteps={filteredQuerySteps}
           databases={includedDatabases}
           databaseColors={databaseColors}
           onSelectQuery={(queryName) => setSelectedQuery(queryName)}
@@ -704,11 +734,13 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         </section>
       </div>
 
-      {!isLoading && state.mutateSteps.length > 0 ? (
+      {!isLoading && filteredMutateSteps.length > 0 ? (
         <RunTimeline
-          querySteps={state.mutateSteps}
+          querySteps={filteredMutateSteps}
           databases={includedDatabases}
           databaseColors={databaseColors}
+          onSelectQuery={(queryName) => mutateSelection.setSelectedQuery(queryName)}
+          selectedQuery={mutateSelection.selectedQuery}
           title="Mutate timeline"
           description="Insert, upsert, and delete mutation execution timeline per database. Each segment represents one mutation iteration."
         />
@@ -782,7 +814,7 @@ export function TimeSeriesPage({ system, isSystemLoading = false }: TimeSeriesPa
         isOpen={resourceDrawerOpen}
         onClose={() => setResourceDrawerOpen(false)}
         selectedQuery={selectedQuery}
-        querySteps={state.querySteps}
+        querySteps={filteredQuerySteps}
         metricSamples={state.metricSamples}
         databases={traceEligibleDatabases}
         databaseColors={databaseColors}
@@ -1089,4 +1121,8 @@ function compareTimeSeriesQueryNames(left: string, right: string): number {
   if (labelDelta !== 0) return labelDelta
 
   return left.localeCompare(right)
+}
+
+function isEavQueryName(queryName: string): boolean {
+  return queryName.startsWith("eav_") || queryName.includes("_eav_")
 }
