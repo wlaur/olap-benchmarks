@@ -11,6 +11,7 @@ import {
   fetchQuerySteps,
   fetchQuerySummaries,
   fetchRunSummaries,
+  fetchStepMetricAvailability,
 } from "../lib/queries"
 import type { SuiteConfig } from "../lib/suiteConfig"
 import type {
@@ -21,6 +22,7 @@ import type {
   QueryStep,
   QuerySummary,
   RunSummary,
+  StepMetricAvailability,
 } from "../lib/types"
 
 export interface SuiteDataState {
@@ -34,6 +36,7 @@ export interface SuiteDataState {
   insertSteps: InsertStep[]
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
+  stepMetricAvailability: StepMetricAvailability[]
   queriesManifest: QueriesManifest | null
 }
 
@@ -49,6 +52,7 @@ function createInitialState(): SuiteDataState {
     insertSteps: [],
     querySteps: [],
     mutateSteps: [],
+    stepMetricAvailability: [],
     queriesManifest: null,
   }
 }
@@ -103,6 +107,7 @@ export function useSuiteData(
       fetchInsertSteps(system, suite),
       fetchQuerySteps(system, suite),
       hasMutate ? fetchMutateSteps(system, suite) : Promise.resolve([] as QueryStep[]),
+      fetchStepMetricAvailability(system, suite),
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
@@ -115,6 +120,7 @@ export function useSuiteData(
           insertSteps,
           querySteps,
           mutateSteps,
+          stepMetricAvailability,
           queriesManifest,
         ]) => {
           if (cancelled) return
@@ -131,6 +137,7 @@ export function useSuiteData(
               insertSteps,
               querySteps,
               mutateSteps,
+              stepMetricAvailability,
               queriesManifest,
             })
           })
@@ -151,6 +158,7 @@ export function useSuiteData(
             insertSteps: [],
             querySteps: [],
             mutateSteps: [],
+            stepMetricAvailability: [],
             queriesManifest: null,
           })
         })

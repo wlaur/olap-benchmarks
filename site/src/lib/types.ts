@@ -120,6 +120,11 @@ export interface QueryStep {
   elapsed_end_s: number
 }
 
+export interface StepMetricAvailability {
+  operation: BenchmarkOperation
+  step_name: string
+}
+
 export interface QuerySqlEntry {
   sql: string | null
   db_overrides: Record<string, string>

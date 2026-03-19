@@ -11,6 +11,7 @@ import type {
   QueryStep,
   QuerySummary,
   RunSummary,
+  StepMetricAvailability,
 } from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -507,4 +508,67 @@ export async function fetchMutateSteps(
     .orderBy("latest_runs.db")
     .orderBy("run_step.started_at")
     .execute()
+}
+
+export async function fetchStepMetricAvailability(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<StepMetricAvailability[]> {
+  const db = await getKyselyDb()
+
+  const rows = await sql<StepMetricAvailability>`
+    WITH latest_runs AS (
+      SELECT
+        run.id AS run_id,
+        run.db,
+        run.operation,
+        row_number() OVER (
+          PARTITION BY run.db, run.operation
+          ORDER BY run.finished_at DESC, run.id DESC
+        ) AS run_rank
+      FROM run
+      WHERE run.suite = ${suite}
+        AND run.system = ${system}
+        AND run.status = 'completed'
+        AND run.finished_at IS NOT NULL
+        AND run.operation IN ('populate', 'mutate', 'select')
+    ),
+    step_windows AS (
+      SELECT
+        lr.operation,
+        CASE WHEN rs.step_type = 'phase' THEN rs.table_name ELSE rs.query_name END AS step_name,
+        lr.run_id,
+        MIN(rs.started_at) AS window_start,
+        MAX(rs.finished_at) AS window_end
+      FROM run_step rs
+      INNER JOIN latest_runs lr ON lr.run_id = rs.run_id
+      WHERE lr.run_rank = 1
+        AND rs.status = 'completed'
+        AND rs.finished_at IS NOT NULL
+        AND (
+          (rs.step_type = 'phase' AND rs.step_name = 'insert')
+          OR rs.step_type = 'query'
+          OR rs.step_type = 'mutation'
+        )
+      GROUP BY lr.operation, CASE WHEN rs.step_type = 'phase' THEN rs.table_name ELSE rs.query_name END, lr.run_id
+    ),
+    per_db_counts AS (
+      SELECT
+        sw.operation,
+        sw.step_name,
+        count(rm.run_id) AS sample_count
+      FROM step_windows sw
+      LEFT JOIN run_metric rm
+        ON rm.run_id = sw.run_id
+        AND rm.time >= sw.window_start
+        AND rm.time <= sw.window_end
+      GROUP BY sw.operation, sw.step_name, sw.run_id
+    )
+    SELECT operation, step_name
+    FROM per_db_counts
+    GROUP BY operation, step_name
+    HAVING bool_or(sample_count >= 2)
+  `.execute(db)
+
+  return rows.rows
 }
