@@ -218,7 +218,7 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
     [zoom],
   )
 
-  const ticks = useMemo(() => buildTimeTicks(viewStart, viewEnd), [viewStart, viewEnd])
+  const tickInfo = useMemo(() => buildTimeTicks(viewStart, viewEnd), [viewStart, viewEnd])
 
   if (spans.length === 0) {
     return (
@@ -267,7 +267,7 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
         style={{ willChange: "transform" }}
       >
         {/* Time axis ticks */}
-        {ticks.map((t) => {
+        {tickInfo.ticks.map((t) => {
           const x = (t - viewStart) * scale
           return (
             <g key={t}>
@@ -285,7 +285,7 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
                 textAnchor="middle"
                 className="fill-slate-500 text-[10px]"
               >
-                {formatElapsedCompact(t)}
+                {formatAxisTick(t, tickInfo.stepS)}
               </text>
             </g>
           )
@@ -324,7 +324,9 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
           <div className="mb-1 font-medium">{getSpanLabel(tooltip.span)}</div>
           <div className="space-y-0.5 text-slate-400">
             <div>Duration: {formatDurationSeconds(tooltip.span.duration_s)}</div>
-            <div>Start: {formatElapsedCompact(tooltip.span.elapsed_start_s)}</div>
+            <div>
+              Start: {formatElapsedTooltip(tooltip.span.elapsed_start_s, tooltip.span.duration_s)}
+            </div>
             {tooltip.span.depth !== "operation" ? (
               <div className="capitalize">Operation: {tooltip.span.operation}</div>
             ) : null}
@@ -427,9 +429,41 @@ function formatElapsedCompact(seconds: number): string {
   return s > 0 ? `${m}m${s}s` : `${m}m`
 }
 
-function buildTimeTicks(startS: number, endS: number): number[] {
+function formatElapsedTooltip(seconds: number, spanDurationS: number): string {
+  if (spanDurationS >= 1) return formatElapsedCompact(seconds)
+  if (seconds <= 0) return "0s"
+  if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`
+  if (seconds < 60) return `${seconds.toFixed(3)}s`
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60)
+    const s = (seconds % 60).toFixed(3).padStart(6, "0")
+    return `${m}m ${s}s`
+  }
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = (seconds % 60).toFixed(3).padStart(6, "0")
+  return `${h}h ${String(m).padStart(2, "0")}m ${s}s`
+}
+
+function formatAxisTick(seconds: number, stepS: number): string {
+  if (stepS >= 10) return formatElapsedCompact(seconds)
+  if (seconds <= 0) return "0s"
+  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
+  if (seconds < 60) return `${seconds.toFixed(3)}s`
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60)
+    const s = (seconds % 60).toFixed(3).padStart(6, "0")
+    return `${m}m ${s}s`
+  }
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = (seconds % 60).toFixed(3).padStart(6, "0")
+  return `${h}h ${String(m).padStart(2, "0")}m ${s}s`
+}
+
+function buildTimeTicks(startS: number, endS: number): { ticks: number[]; stepS: number } {
   const duration = endS - startS
-  if (duration <= 0) return [startS]
+  if (duration <= 0) return { ticks: [startS], stepS: 1 }
   const steps = [
     0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600,
     900, 1800, 3600,
@@ -440,5 +474,5 @@ function buildTimeTicks(startS: number, endS: number): number[] {
   const firstTick = Math.ceil(startS / step) * step
   const ticks: number[] = []
   for (let t = firstTick; t <= endS; t += step) ticks.push(Number(t.toPrecision(10)))
-  return ticks
+  return { ticks, stepS: step }
 }
