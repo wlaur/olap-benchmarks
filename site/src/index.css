@@ -9,10 +9,10 @@
   --color-border-subtle: rgba(148, 163, 184, 0.06);
   --color-border-default: rgba(148, 163, 184, 0.12);
 
-  --color-accent-200: #c0d0ff;
-  --color-accent-300: #9bb2f0;
-  --color-accent-400: #6c8eef;
-  --color-accent-500: #4a6edb;
+  --color-accent-200: #d6e6ff;
+  --color-accent-300: #9fc5ff;
+  --color-accent-400: #5a97ff;
+  --color-accent-500: #2f6fde;
 }
 
 @layer base {

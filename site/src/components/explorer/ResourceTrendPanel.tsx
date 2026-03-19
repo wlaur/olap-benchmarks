@@ -27,7 +27,7 @@ import type {
 } from "../../lib/types"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
-import { BodyText, SectionTitle } from "../Typography"
+import { BodyText, MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
   suiteConfig: SuiteConfig
@@ -42,6 +42,12 @@ interface ResourceTrendPanelProps {
 interface StepOption {
   label: string
   value: string
+}
+
+interface StepTimeWindow {
+  start_s: number
+  end_s: number
+  duration_s: number
 }
 
 type MetricKey = "cpu_percent" | "mem_mb" | "disk_mb"
@@ -68,6 +74,9 @@ const METRIC_CONFIGS: ReadonlyArray<{
   { key: "disk_mb", label: "Disk", formatter: formatMegabytes, scaleBuilder: toMemoryScale },
 ]
 
+const MAX_COLLAPSED_STEP_OPTIONS = 12
+const MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS = 8
+
 export function ResourceTrendPanel({
   suiteConfig,
   metricSamples,
@@ -80,21 +89,51 @@ export function ResourceTrendPanel({
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
+  const [showAllSteps, setShowAllSteps] = useState(false)
+  const [showAllUnavailableSteps, setShowAllUnavailableSteps] = useState(false)
 
   const databaseColors = getDatabaseColors(databases)
 
   const availableStepKeys = useMemo(
-    () => new Set(stepMetricAvailability.map((s) => `${s.operation}:${s.step_name}`)),
-    [stepMetricAvailability],
+    () =>
+      new Set(
+        stepMetricAvailability
+          .filter((entry) => databases.includes(entry.db))
+          .map((entry) => `${entry.operation}:${entry.db}:${entry.step_name}`),
+      ),
+    [stepMetricAvailability, databases],
+  )
+
+  const allStepOptions = useMemo(
+    () => getStepOptions(selectedOperation, insertSteps, querySteps, mutateSteps, databases),
+    [selectedOperation, insertSteps, querySteps, mutateSteps, databases],
   )
 
   const stepOptions = useMemo(
     () =>
-      getStepOptions(selectedOperation, insertSteps, querySteps, mutateSteps).filter((step) =>
-        availableStepKeys.has(`${selectedOperation}:${step.value}`),
+      allStepOptions.filter((step) =>
+        databases.some((db) => availableStepKeys.has(`${selectedOperation}:${db}:${step.value}`)),
       ),
-    [selectedOperation, insertSteps, querySteps, mutateSteps, availableStepKeys],
+    [allStepOptions, selectedOperation, databases, availableStepKeys],
   )
+
+  const unavailableStepOptions = useMemo(
+    () =>
+      allStepOptions.filter(
+        (step) =>
+          !databases.some((db) =>
+            availableStepKeys.has(`${selectedOperation}:${db}:${step.value}`),
+          ),
+      ),
+    [allStepOptions, selectedOperation, databases, availableStepKeys],
+  )
+
+  const visibleStepOptions = showAllSteps
+    ? stepOptions
+    : stepOptions.slice(0, MAX_COLLAPSED_STEP_OPTIONS)
+  const visibleUnavailableStepOptions = showAllUnavailableSteps
+    ? unavailableStepOptions
+    : unavailableStepOptions.slice(0, MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS)
 
   const resolvedStep =
     selectedStep && stepOptions.some((s) => s.value === selectedStep)
@@ -104,15 +143,22 @@ export function ResourceTrendPanel({
   const stepTimeWindows = useMemo(
     () =>
       resolvedStep
-        ? getStepTimeWindows(selectedOperation, resolvedStep, insertSteps, querySteps, mutateSteps)
-        : new Map<string, { start_s: number; end_s: number }>(),
-    [selectedOperation, resolvedStep, insertSteps, querySteps, mutateSteps],
+        ? getStepTimeWindows(
+            selectedOperation,
+            resolvedStep,
+            insertSteps,
+            querySteps,
+            mutateSteps,
+            databases,
+          )
+        : new Map<string, StepTimeWindow>(),
+    [selectedOperation, resolvedStep, insertSteps, querySteps, mutateSteps, databases],
   )
 
   const stepDurations = useMemo(() => {
     const durations = new Map<string, number>()
     for (const [db, window] of stepTimeWindows) {
-      durations.set(db, window.end_s - window.start_s)
+      durations.set(db, window.duration_s)
     }
     return durations
   }, [stepTimeWindows])
@@ -124,6 +170,15 @@ export function ResourceTrendPanel({
     if (isTooFast || !resolvedStep) return { cpu_percent: [], mem_mb: [], disk_mb: [] }
     return buildTrendChartData(metricSamples, selectedOperation, stepTimeWindows)
   }, [metricSamples, selectedOperation, stepTimeWindows, isTooFast, resolvedStep])
+
+  const maxElapsed = useMemo(
+    () =>
+      Math.max(
+        0,
+        ...METRIC_CONFIGS.flatMap((metric) => chartData[metric.key].map((row) => row.elapsed_s)),
+      ),
+    [chartData],
+  )
 
   const hasSufficientData =
     !isTooFast &&
@@ -160,8 +215,8 @@ export function ResourceTrendPanel({
         </div>
       ) : (
         <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-3">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+            <div className="min-w-0 space-y-3">
               <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
                 {availableOperations.map((operation) => (
                   <button
@@ -170,6 +225,8 @@ export function ResourceTrendPanel({
                     onClick={() => {
                       setSelectedOperation(operation)
                       setSelectedStep(null)
+                      setShowAllSteps(false)
+                      setShowAllUnavailableSteps(false)
                     }}
                     className={
                       selectedOperation === operation
@@ -183,27 +240,81 @@ export function ResourceTrendPanel({
               </div>
 
               {stepOptions.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {stepOptions.map((step) => (
+                <div className="space-y-2">
+                  <div
+                    className={`panel-scrollbar overflow-y-auto pr-1 ${
+                      showAllSteps ? "max-h-56" : "max-h-28"
+                    }`}
+                  >
+                    <div className="flex flex-wrap gap-1.5">
+                      {visibleStepOptions.map((step) => (
+                        <button
+                          key={step.value}
+                          type="button"
+                          onClick={() => setSelectedStep(step.value)}
+                          className={
+                            resolvedStep === step.value
+                              ? "rounded-full bg-accent-400/10 px-2.5 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
+                              : "rounded-full border border-border-default px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+                          }
+                        >
+                          {step.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {stepOptions.length > MAX_COLLAPSED_STEP_OPTIONS ? (
                     <button
-                      key={step.value}
                       type="button"
-                      onClick={() => setSelectedStep(step.value)}
-                      className={
-                        resolvedStep === step.value
-                          ? "rounded-full bg-accent-400/10 px-2.5 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
-                          : "rounded-full border border-border-default px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                      }
+                      onClick={() => setShowAllSteps((current) => !current)}
+                      className="rounded-full border border-border-default bg-surface-primary/55 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
                     >
-                      {step.label}
+                      {showAllSteps
+                        ? "Show fewer steps"
+                        : `Show ${stepOptions.length - visibleStepOptions.length} more steps`}
                     </button>
-                  ))}
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">No steps found for this operation.</p>
               )}
             </div>
-            <DatabaseLegend databases={databases} databaseColors={databaseColors} />
+            <div className="flex min-w-0 flex-col gap-2 xl:items-end">
+              <DatabaseLegend databases={databases} databaseColors={databaseColors} />
+              {unavailableStepOptions.length > 0 ? (
+                <div className="flex max-w-full min-w-0 flex-col gap-1.5 xl:max-w-[22rem] xl:items-end">
+                  <MetaLabel>No Metrics</MetaLabel>
+                  <div
+                    className={`panel-scrollbar overflow-y-auto pr-1 ${
+                      showAllUnavailableSteps ? "max-h-52" : "max-h-28"
+                    }`}
+                  >
+                    <div className="flex flex-wrap gap-1.5 xl:justify-end">
+                      {visibleUnavailableStepOptions.map((step) => (
+                        <span
+                          key={step.value}
+                          className="rounded-full border border-dashed border-border-default bg-surface-primary/45 px-2.5 py-1 text-xs font-medium text-slate-500"
+                          aria-disabled="true"
+                        >
+                          {step.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  {unavailableStepOptions.length > MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllUnavailableSteps((current) => !current)}
+                      className="self-start rounded-full border border-border-default bg-surface-primary/55 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100 xl:self-end"
+                    >
+                      {showAllUnavailableSteps
+                        ? "Show fewer unavailable"
+                        : `Show ${unavailableStepOptions.length - visibleUnavailableStepOptions.length} more unavailable`}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {resolvedStep === null ? (
@@ -227,7 +338,7 @@ export function ResourceTrendPanel({
                   databaseColors={databaseColors}
                   formatter={metric.formatter}
                   scaleBuilder={metric.scaleBuilder}
-                  maxElapsed={maxDuration}
+                  maxElapsed={maxElapsed}
                 />
               ))}
             </div>
@@ -346,20 +457,29 @@ function getStepOptions(
   insertSteps: InsertStep[],
   querySteps: QueryStep[],
   mutateSteps: QueryStep[],
+  databases: string[],
 ): StepOption[] {
+  const includedDatabases = new Set(databases)
+
   if (operation === "populate") {
-    const tableNames = new Set(insertSteps.map((s) => s.table_name))
+    const tableNames = new Set(
+      insertSteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.table_name),
+    )
     return Array.from(tableNames)
       .sort()
       .map((name) => ({ label: name, value: name }))
   }
   if (operation === "mutate") {
-    const queryNames = new Set(mutateSteps.map((s) => s.query_name))
+    const queryNames = new Set(
+      mutateSteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
+    )
     return Array.from(queryNames)
       .sort()
       .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
   }
-  const queryNames = new Set(querySteps.map((s) => s.query_name))
+  const queryNames = new Set(
+    querySteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
+  )
   return Array.from(queryNames)
     .sort()
     .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
@@ -371,33 +491,23 @@ function getStepTimeWindows(
   insertSteps: InsertStep[],
   querySteps: QueryStep[],
   mutateSteps: QueryStep[],
-): Map<string, { start_s: number; end_s: number }> {
-  const windows = new Map<string, { start_s: number; end_s: number }>()
+  databases: string[],
+): Map<string, StepTimeWindow> {
+  const includedDatabases = new Set(databases)
+  const windows = new Map<string, StepTimeWindow>()
 
   if (operation === "populate") {
     for (const step of insertSteps) {
-      if (step.table_name !== stepValue) continue
-      const existing = windows.get(step.db)
-      if (!existing) {
-        windows.set(step.db, { start_s: step.elapsed_start_s, end_s: step.elapsed_end_s })
-      } else {
-        existing.start_s = Math.min(existing.start_s, step.elapsed_start_s)
-        existing.end_s = Math.max(existing.end_s, step.elapsed_end_s)
-      }
+      if (step.table_name !== stepValue || !includedDatabases.has(step.db)) continue
+      setLongestWindow(windows, step.db, step.elapsed_start_s, step.elapsed_end_s, step.duration_s)
     }
     return windows
   }
 
   const steps = operation === "mutate" ? mutateSteps : querySteps
   for (const step of steps) {
-    if (step.query_name !== stepValue) continue
-    const existing = windows.get(step.db)
-    if (!existing) {
-      windows.set(step.db, { start_s: step.elapsed_start_s, end_s: step.elapsed_end_s })
-    } else {
-      existing.start_s = Math.min(existing.start_s, step.elapsed_start_s)
-      existing.end_s = Math.max(existing.end_s, step.elapsed_end_s)
-    }
+    if (step.query_name !== stepValue || !includedDatabases.has(step.db)) continue
+    setLongestWindow(windows, step.db, step.elapsed_start_s, step.elapsed_end_s, step.duration_s)
   }
   return windows
 }
@@ -405,7 +515,7 @@ function getStepTimeWindows(
 function buildTrendChartData(
   metricSamples: MetricSample[],
   operation: BenchmarkOperation,
-  stepTimeWindows: Map<string, { start_s: number; end_s: number }>,
+  stepTimeWindows: Map<string, StepTimeWindow>,
 ): Record<MetricKey, ChartRow[]> {
   const result: Record<MetricKey, Map<number, ChartRow>> = {
     cpu_percent: new Map(),
@@ -473,6 +583,21 @@ function buildEvenElapsedTicks(maxSeconds: number): number[] {
   for (let t = 0; t <= safeMax; t += step) ticks.push(t)
   return ticks
 }
+
+function setLongestWindow(
+  windows: Map<string, StepTimeWindow>,
+  db: string,
+  start_s: number,
+  end_s: number,
+  duration_s: number,
+) {
+  const nextWindow = { start_s, end_s, duration_s }
+  const existing = windows.get(db)
+  if (!existing || duration_s > existing.duration_s) {
+    windows.set(db, nextWindow)
+  }
+}
+
 function toTitleCase(value: string): string {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }

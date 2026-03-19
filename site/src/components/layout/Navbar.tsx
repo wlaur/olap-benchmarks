@@ -11,11 +11,11 @@ interface NavbarProps {
 }
 
 const activeNavClass =
-  "bg-accent-400/10 text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.5)]"
+  "bg-[linear-gradient(180deg,rgba(33,48,78,0.96),rgba(21,31,52,0.96))] text-slate-50 shadow-[inset_0_0_0_1px_rgba(114,168,255,0.42),0_12px_28px_rgba(19,45,94,0.28)]"
 const inactiveNavClass =
-  "bg-surface-raised text-slate-400 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)]"
+  "bg-surface-raised/88 text-slate-400 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:bg-surface-raised hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(120,154,214,0.18)]"
 const inactiveNavTextClass =
-  "bg-surface-raised text-slate-300 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)]"
+  "bg-surface-raised/88 text-slate-300 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:bg-surface-raised hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(120,154,214,0.18)]"
 
 export function Navbar({
   systems,
