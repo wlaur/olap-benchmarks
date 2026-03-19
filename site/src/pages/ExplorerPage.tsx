@@ -96,7 +96,6 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           querySteps={filteredQuerySteps}
           mutateSteps={filteredMutateSteps}
           databases={includedDatabases}
-          stepMetricAvailability={state.stepMetricAvailability}
         />
       ) : null}
     </section>

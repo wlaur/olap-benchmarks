@@ -244,7 +244,7 @@ export function QueryDetailPanel({
               </button>
             ))}
           </div>
-          <div className="panel-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="panel-scrollbar min-h-0 flex-1 overflow-hidden">
             <SqlCodeView code={activeSql ?? "No SQL available"} />
           </div>
         </div>
