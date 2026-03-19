@@ -4,6 +4,7 @@ import { formatDurationSeconds } from "../lib/format"
 import type { QueryStep } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard, PanelHeader } from "./layout/Panel"
+import { Skeleton } from "./Skeleton"
 import { BodyText, SectionTitle } from "./Typography"
 
 interface RunTimelineProps {
@@ -14,6 +15,7 @@ interface RunTimelineProps {
   selectedQuery?: string | null
   title?: string
   description?: string
+  loading?: boolean
 }
 
 interface TimelineSegment {
@@ -62,6 +64,7 @@ export function RunTimeline({
   selectedQuery,
   title = "Run timeline",
   description = "Full query execution timeline per database. Each segment represents one query iteration. Click to inspect.",
+  loading = false,
 }: RunTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -121,6 +124,60 @@ export function RunTimeline({
   const handleSegmentLeave = useCallback(() => {
     setTooltip(null)
   }, [])
+
+  if (loading) {
+    return (
+      <PanelCard>
+        <PanelHeader>
+          <div>
+            <SectionTitle as="h3">{title}</SectionTitle>
+            <BodyText className="mt-1">{description}</BodyText>
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-16 rounded-full" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+        </PanelHeader>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <Skeleton className="h-6 w-18 rounded-full" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+          <Skeleton className="h-6 w-16 rounded-full" />
+          <Skeleton className="h-6 w-24 rounded-full" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+
+        <div className="relative mt-4 rounded-xl bg-surface-inset p-4">
+          <div className="grid gap-3">
+            <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-4">
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-8 w-full rounded-xl" />
+            </div>
+            <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-4">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-8 w-full rounded-xl" />
+            </div>
+            <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-4">
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-8 w-full rounded-xl" />
+            </div>
+            <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-4">
+              <Skeleton className="h-4 w-18" />
+              <Skeleton className="h-8 w-full rounded-xl" />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-between">
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-8" />
+          </div>
+        </div>
+      </PanelCard>
+    )
+  }
 
   if (filteredSteps.length === 0) return null
 

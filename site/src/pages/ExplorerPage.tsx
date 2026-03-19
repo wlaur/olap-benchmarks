@@ -34,6 +34,9 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
 
   const databaseColors = getDatabaseColors(databases)
+  const showInsertPerformancePanel = isLoading || state.insertSteps.length > 0
+  const showFlameGraphPanel = isLoading || system !== null
+  const showResourceTrendPanel = isLoading || state.metricSamples.length > 0
 
   if (!isLoading && state.error) {
     return (
@@ -67,12 +70,13 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
         onToggleDatabase={toggleDatabase}
       />
 
-      {!isLoading && state.insertSteps.length > 0 ? (
+      {showInsertPerformancePanel ? (
         <InsertPerformancePanel
           insertSteps={state.insertSteps}
           metricSamples={state.metricSamples}
           databases={includedDatabases}
           databaseColors={databaseColors}
+          isLoading={isLoading}
         />
       ) : null}
 
@@ -89,16 +93,17 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
         isLoading={isLoading}
       />
 
-      {!isLoading && system ? (
+      {showFlameGraphPanel ? (
         <FlameGraphPanel
           system={system}
           suite={suiteId}
           databases={includedDatabases}
           metricSamples={state.metricSamples}
+          isLoading={isLoading}
         />
       ) : null}
 
-      {!isLoading && state.metricSamples.length > 0 ? (
+      {showResourceTrendPanel ? (
         <ResourceTrendPanel
           suiteConfig={suiteConfig}
           metricSamples={state.metricSamples}
@@ -106,6 +111,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           querySteps={filteredQuerySteps}
           mutateSteps={filteredMutateSteps}
           databases={includedDatabases}
+          isLoading={isLoading}
         />
       ) : null}
     </section>
