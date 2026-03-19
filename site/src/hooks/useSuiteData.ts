@@ -63,8 +63,6 @@ export interface UseSuiteDataResult {
   selectedDatabases: string[]
   setSelectedDatabases: React.Dispatch<React.SetStateAction<string[]>>
   includedDatabases: string[]
-  includeEav: boolean
-  setIncludeEav: React.Dispatch<React.SetStateAction<boolean>>
   filteredQuerySummaries: QuerySummary[]
   filteredMutateSummaries: QuerySummary[]
   filteredOperationSummaries: OperationSummary[]
@@ -82,7 +80,6 @@ export function useSuiteData(
 ): UseSuiteDataResult {
   const [state, setState] = useState<SuiteDataState>(createInitialState)
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
-  const [includeEav, setIncludeEav] = useState(true)
 
   useEffect(() => {
     if (isSystemLoading || system === null) {
@@ -195,24 +192,18 @@ export function useSuiteData(
   const includedDatabases = selectedDatabases.length > 0 ? selectedDatabases : databases
   const includedDatabaseSet = new Set(includedDatabases)
 
-  const filteredQuerySummaries = state.querySummaries.filter(
-    (row) =>
-      includedDatabaseSet.has(row.db) && (includeEav || !suiteConfig.isEavQuery(row.query_name)),
+  const filteredQuerySummaries = state.querySummaries.filter((row) =>
+    includedDatabaseSet.has(row.db),
   )
-  const filteredMutateSummaries = state.mutateSummaries.filter(
-    (row) =>
-      includedDatabaseSet.has(row.db) && (includeEav || !suiteConfig.isEavQuery(row.query_name)),
+  const filteredMutateSummaries = state.mutateSummaries.filter((row) =>
+    includedDatabaseSet.has(row.db),
   )
   const filteredOperationSummaries = state.operationSummaries.filter((run) =>
     includedDatabaseSet.has(run.db),
   )
 
-  const filteredQuerySteps = includeEav
-    ? state.querySteps
-    : state.querySteps.filter((s) => !suiteConfig.isEavQuery(s.query_name))
-  const filteredMutateSteps = includeEav
-    ? state.mutateSteps
-    : state.mutateSteps.filter((s) => !suiteConfig.isEavQuery(s.query_name))
+  const filteredQuerySteps = state.querySteps
+  const filteredMutateSteps = state.mutateSteps
 
   const isLoading = isSystemLoading || state.loading
 
@@ -232,8 +223,6 @@ export function useSuiteData(
     selectedDatabases,
     setSelectedDatabases,
     includedDatabases,
-    includeEav,
-    setIncludeEav,
     filteredQuerySummaries,
     filteredMutateSummaries,
     filteredOperationSummaries,

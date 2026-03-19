@@ -321,11 +321,6 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
             con.execute(text(statement))
         _LOGGER.info("Indexed data_large")
 
-        statement = "CREATE INDEX data_wide_eav_id_time_index ON data_wide_eav (id, time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_wide_eav")
-
         con.commit()
 
     def populate(self, restart: bool = True) -> None:
