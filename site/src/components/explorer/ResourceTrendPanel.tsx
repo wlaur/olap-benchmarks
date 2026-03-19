@@ -30,6 +30,7 @@ interface ResourceTrendPanelProps {
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
   databases: string[]
+  isLoading?: boolean
 }
 
 interface StepOption {
@@ -82,6 +83,7 @@ export function ResourceTrendPanel({
   querySteps,
   mutateSteps,
   databases,
+  isLoading = false,
 }: ResourceTrendPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
@@ -185,7 +187,7 @@ export function ResourceTrendPanel({
         <button
           type="button"
           onClick={() => setIsExpanded((current) => !current)}
-          disabled={!hasData}
+          disabled={isLoading || !hasData}
           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
         >
           {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
@@ -193,7 +195,11 @@ export function ResourceTrendPanel({
         </button>
       </div>
 
-      {!isExpanded ? null : !hasData ? (
+      {!isExpanded ? null : isLoading ? (
+        <div className="mt-4 rounded-2xl border border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+          Loading resource metrics...
+        </div>
+      ) : !hasData ? (
         <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
           No resource metrics were recorded for the selected databases.
         </div>

@@ -81,6 +81,7 @@ export function OperationTab({
   const hasTraceDrawer = traceEligibleDatabases.length > 0
 
   const selectedSql = queriesManifest?.[suiteConfig.id]?.[selectedQuery ?? ""] ?? null
+  const showTimeline = isLoading || querySteps.length > 0
 
   const timelineTitle = operation === "mutate" ? "Mutate timeline" : "Select timeline"
   const timelineDescription =
@@ -113,7 +114,7 @@ export function OperationTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {!isLoading && querySteps.length > 0 ? (
+      {showTimeline ? (
         <RunTimeline
           querySteps={querySteps}
           databases={includedDatabases}
@@ -122,6 +123,7 @@ export function OperationTab({
           selectedQuery={selectedQuery}
           title={timelineTitle}
           description={timelineDescription}
+          loading={isLoading}
         />
       ) : null}
 

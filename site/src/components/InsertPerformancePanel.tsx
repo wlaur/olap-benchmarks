@@ -30,6 +30,7 @@ import type { InsertStep, MetricSample } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
+import { Skeleton } from "./Skeleton"
 import { BodyText, SectionTitle } from "./Typography"
 
 interface InsertPerformancePanelProps {
@@ -37,6 +38,7 @@ interface InsertPerformancePanelProps {
   metricSamples: MetricSample[]
   databases: string[]
   databaseColors: Record<string, string>
+  isLoading?: boolean
 }
 
 interface InsertBarRow {
@@ -53,6 +55,7 @@ export function InsertPerformancePanel({
   metricSamples,
   databases,
   databaseColors,
+  isLoading = false,
 }: InsertPerformancePanelProps) {
   const [insertScaleMode, setInsertScaleMode] = useState<DurationScaleMode>("linear")
 
@@ -98,6 +101,47 @@ export function InsertPerformancePanel({
     () => getDurationAxisTicks(maxDuration, insertScaleMode),
     [maxDuration, insertScaleMode],
   )
+
+  if (isLoading) {
+    return (
+      <PanelCard>
+        <PanelHeader>
+          <div>
+            <SectionTitle as="h3">Insert performance</SectionTitle>
+            <BodyText className="mt-1">
+              Per-table insert durations from the latest populate run, with resource utilization
+              during the populate phase.
+            </BodyText>
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-16 rounded-full" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+        </PanelHeader>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <ChartFrame>
+            <div className="mb-3 flex items-center justify-between">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-8 w-24 rounded-full" />
+            </div>
+            <div className="flex h-[280px] items-end gap-3 px-3 pt-4">
+              <Skeleton className="h-[32%] flex-1 rounded-xl" />
+              <Skeleton className="h-[58%] flex-1 rounded-xl" />
+              <Skeleton className="h-[44%] flex-1 rounded-xl" />
+              <Skeleton className="h-[72%] flex-1 rounded-xl" />
+            </div>
+          </ChartFrame>
+
+          <div className="flex flex-col gap-3">
+            <InsertMetricChartSkeleton label="CPU during populate" />
+            <InsertMetricChartSkeleton label="Memory during populate" />
+          </div>
+        </div>
+      </PanelCard>
+    )
+  }
 
   if (filteredSteps.length === 0) return null
 
@@ -208,6 +252,20 @@ export function InsertPerformancePanel({
         )}
       </div>
     </PanelCard>
+  )
+}
+
+function InsertMetricChartSkeleton({ label }: { label: string }) {
+  return (
+    <ChartFrame>
+      <p className="mb-2 text-sm font-medium text-slate-200">{label}</p>
+      <div className="flex h-32 items-end gap-2">
+        <Skeleton className="h-[42%] flex-1 rounded-lg" />
+        <Skeleton className="h-[78%] flex-1 rounded-lg" />
+        <Skeleton className="h-[55%] flex-1 rounded-lg" />
+        <Skeleton className="h-[68%] flex-1 rounded-lg" />
+      </div>
+    </ChartFrame>
   )
 }
 
