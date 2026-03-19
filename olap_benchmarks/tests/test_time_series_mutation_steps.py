@@ -77,7 +77,7 @@ def _fake_delete_keys(self: TimeSeries[Any], step: MutateStep, seed: int) -> pl.
     return pl.DataFrame({"time": [datetime(2025, 1, 1)]})
 
 
-@pytest.mark.parametrize("disabled_step", ["insert_data_large_1", "insert_data_wide_eav_1"])
+@pytest.mark.parametrize("disabled_step", ["insert_data_large_1", "insert_data_wide_1"])
 def test_time_series_mutate_skips_disabled_steps(
     monkeypatch: pytest.MonkeyPatch,
     disabled_step: str,
@@ -95,7 +95,7 @@ def test_time_series_mutate_skips_disabled_steps(
         "olap_benchmarks.suites.time_series.config.TIME_SERIES_MUTATE_STEPS",
         [
             MutateStep(action="insert", table="data_large", row_count=1),
-            MutateStep(action="insert", table="data_wide_eav", row_count=1),
+            MutateStep(action="insert", table="data_wide", row_count=1),
             MutateStep(action="delete", table="data_tall", row_count=1),
         ],
     )
@@ -112,6 +112,6 @@ def test_time_series_mutate_skips_disabled_steps(
     assert db.deleted_tables == ["data_tall"]
 
     if disabled_step == "insert_data_large_1":
-        assert db.inserted_tables == ["data_wide_eav"]
+        assert db.inserted_tables == ["data_wide"]
     else:
         assert db.inserted_tables == ["data_large"]

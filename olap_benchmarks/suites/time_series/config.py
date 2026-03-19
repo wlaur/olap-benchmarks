@@ -37,16 +37,13 @@ TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "large": (4_000_000, 1_500),
 }
 
-TIME_SERIES_EAV_TABLE_NAME: TableName = "data_wide_eav"
-
-
 assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
 MutateAction = Literal["insert", "upsert", "delete"]
 
 MUTATE_ROW_COUNTS = [1, 100, 10_000]
 MUTATE_ACTIONS: list[MutateAction] = ["insert", "upsert", "delete"]
-MUTATE_TABLES: list[TableName] = ["data_tall", "data_wide", "data_large", "data_wide_eav"]
+MUTATE_TABLES: list[TableName] = ["data_tall", "data_wide", "data_large"]
 MUTATE_ITERATIONS = 3
 
 
@@ -91,25 +88,18 @@ def get_time_series_column_counts(n_cols: int) -> TimeSeriesColumnCounts:
 
 
 def get_time_series_schemas() -> Mapping[TableName, Mapping[str, pl.DataType | type[pl.DataType]]]:
-    schemas = {
+    return {
         get_time_series_table_name(size): pl.read_parquet_schema(get_dataset_path(size))
         for size in TIME_SERIES_DATASET_SIZES
     }
-    schemas[TIME_SERIES_EAV_TABLE_NAME] = pl.read_parquet_schema(get_eav_dataset_path())
-    return schemas
 
 
 def get_time_series_input_files() -> dict[TableName, Path]:
-    files = {get_time_series_table_name(size): get_dataset_path(size) for size in TIME_SERIES_DATASET_SIZES}
-    files[TIME_SERIES_EAV_TABLE_NAME] = get_eav_dataset_path()
-    return files
+    return {get_time_series_table_name(size): get_dataset_path(size) for size in TIME_SERIES_DATASET_SIZES}
 
 
 def get_time_series_expected_row_counts() -> dict[TableName, int]:
-    counts = {get_time_series_table_name(size): rows for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items()}
-    wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
-    counts[TIME_SERIES_EAV_TABLE_NAME] = wide_rows * wide_cols
-    return counts
+    return {get_time_series_table_name(size): rows for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items()}
 
 
 @dataclass(frozen=True)
@@ -407,49 +397,6 @@ def get_dataset_path(size: DatasetSize) -> Path:
     return SETTINGS.input_data_directory / "time_series" / f"{get_time_series_table_name(size)}.parquet"
 
 
-def get_eav_dataset_path() -> Path:
-    return SETTINGS.input_data_directory / "time_series" / f"{TIME_SERIES_EAV_TABLE_NAME}.parquet"
-
-
-def get_eav_metric_id(column_name: str, n_cols: int) -> int:
-    prefix, raw_index = column_name.rsplit("_", 1)
-    index = int(raw_index)
-    counts = get_time_series_column_counts(n_cols)
-
-    if prefix == "binary":
-        return index
-    if prefix == "ratio":
-        return counts.binary + index
-    if prefix == "deviation":
-        return counts.binary + counts.ratio + index
-    if prefix == "process":
-        return counts.binary + counts.ratio + counts.deviation + index
-
-    raise ValueError(f"Unknown time-series column prefix for EAV conversion: {column_name}")
-
-
-def convert_wide_to_eav(source_path: Path, target_path: Path, n_cols: int) -> None:
-    value_columns = [column for column in pl.read_parquet(source_path, n_rows=0).columns if column != "time"]
-
-    id_lookup = pl.DataFrame(
-        {
-            "metric_name": value_columns,
-            "id": [get_eav_metric_id(column, n_cols) for column in value_columns],
-        }
-    )
-
-    eav = (
-        pl.scan_parquet(source_path)
-        .with_columns([pl.col(column).cast(pl.Float32).alias(column) for column in value_columns])
-        .unpivot(on=value_columns, index="time", variable_name="metric_name", value_name="value")
-        .join(id_lookup.lazy(), on="metric_name", how="inner")
-        .select("time", pl.col("id").cast(pl.Int32), pl.col("value").cast(pl.Float32))
-    )
-
-    eav.sink_parquet(target_path)
-    _LOGGER.info(f"Wrote EAV dataset {target_path.name}")
-
-
 def prepare_data(overwrite: bool = False) -> None:
     output_directory = SETTINGS.input_data_directory / "time_series"
     output_directory.mkdir(exist_ok=True, parents=True)
@@ -461,16 +408,6 @@ def prepare_data(overwrite: bool = False) -> None:
             _LOGGER.info(f"Reusing dataset {fpath.name}")
         else:
             write_time_series_dataset(fpath, rows, cols)
-
-        if size != "wide":
-            continue
-
-        eav_path = get_eav_dataset_path()
-        if eav_path.is_file() and not overwrite:
-            _LOGGER.info(f"Reusing dataset {eav_path.name}")
-            continue
-
-        convert_wide_to_eav(fpath, eav_path, cols)
 
 
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
@@ -496,8 +433,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return None
 
     def get_not_null(self, table_name: TableName) -> str | list[str] | None:
-        if table_name == TIME_SERIES_EAV_TABLE_NAME:
-            return ["time", "id"]
+        _ = table_name
         return "time"
 
     @property
@@ -586,8 +522,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         )
 
     def _get_mutate_primary_key(self, table_name: TableName) -> str | list[str]:
-        if table_name == TIME_SERIES_EAV_TABLE_NAME:
-            return ["time", "id"]
+        _ = table_name
         return "time"
 
     def _get_mutate_dataset_size(self, table_name: TableName) -> DatasetSize | None:
@@ -598,33 +533,22 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
     def _get_table_column_order(self, table_name: TableName) -> list[str]:
         size = self._get_mutate_dataset_size(table_name)
-        if size is not None:
-            n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
-            spec = build_time_series_generation_spec(n_rows, n_cols, seed=1)
-            return ["time", *spec.column_order]
-        return ["time", "id", "value"]
+        if size is None:
+            raise ValueError(f"Unsupported time-series table: {table_name}")
+
+        n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+        spec = build_time_series_generation_spec(n_rows, n_cols, seed=1)
+        return ["time", *spec.column_order]
 
     def _generate_insert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
         size = self._get_mutate_dataset_size(step.table)
+        if size is None:
+            raise ValueError(f"Unsupported time-series table: {step.table}")
 
-        if size is not None:
-            _rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
-            df = generate_time_series_data(step.row_count, n_cols, seed=seed)
-            start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
-            return df.select(self._get_table_column_order(step.table)).with_columns(
-                pl.datetime_range(
-                    start_time,
-                    start_time + timedelta(minutes=step.row_count - 1),
-                    interval="1m",
-                    eager=True,
-                    time_unit="ms",
-                ).alias("time")
-            )
-
-        _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
-        wide_df = generate_time_series_data(step.row_count, wide_cols, seed=seed)
+        _rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+        df = generate_time_series_data(step.row_count, n_cols, seed=seed)
         start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
-        wide_df = wide_df.with_columns(
+        return df.select(self._get_table_column_order(step.table)).with_columns(
             pl.datetime_range(
                 start_time,
                 start_time + timedelta(minutes=step.row_count - 1),
@@ -633,69 +557,31 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 time_unit="ms",
             ).alias("time")
         )
-        value_columns = [c for c in wide_df.columns if c != "time"]
-        id_lookup = pl.DataFrame(
-            {
-                "metric_name": value_columns,
-                "id": [get_eav_metric_id(c, wide_cols) for c in value_columns],
-            }
-        )
-        return (
-            wide_df.unpivot(on=value_columns, index="time", variable_name="metric_name", value_name="value")
-            .join(id_lookup, on="metric_name", how="inner")
-            .select("time", pl.col("id").cast(pl.Int32), pl.col("value").cast(pl.Float32))
-        )
 
     def _generate_upsert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
         size = self._get_mutate_dataset_size(step.table)
+        if size is None:
+            raise ValueError(f"Unsupported time-series table: {step.table}")
 
-        if size is not None:
-            n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
-            df = generate_time_series_data(step.row_count, n_cols, seed=seed + 1000)
-            rng = np.random.default_rng(seed)
-            end = datetime(2025, 1, 1)
-            start = end - timedelta(minutes=n_rows - 1)
-            offsets = sorted(rng.choice(n_rows, size=step.row_count, replace=False))
-            times = pl.Series(
-                "time",
-                [start + timedelta(minutes=int(o)) for o in offsets],
-                dtype=pl.Datetime("ms"),
-            )
-            return df.select(self._get_table_column_order(step.table)).with_columns(times)
-
-        _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
-        wide_n_rows = _wide_rows
-        upsert_df = generate_time_series_data(step.row_count, wide_cols, seed=seed + 1000)
+        n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+        df = generate_time_series_data(step.row_count, n_cols, seed=seed + 1000)
         rng = np.random.default_rng(seed)
         end = datetime(2025, 1, 1)
-        start = end - timedelta(minutes=wide_n_rows - 1)
-        offsets = sorted(rng.choice(wide_n_rows, size=step.row_count, replace=False))
+        start = end - timedelta(minutes=n_rows - 1)
+        offsets = sorted(rng.choice(n_rows, size=step.row_count, replace=False))
         times = pl.Series(
             "time",
             [start + timedelta(minutes=int(o)) for o in offsets],
             dtype=pl.Datetime("ms"),
         )
-        upsert_df = upsert_df.with_columns(times)
-        value_columns = [c for c in upsert_df.columns if c != "time"]
-        id_lookup = pl.DataFrame(
-            {
-                "metric_name": value_columns,
-                "id": [get_eav_metric_id(c, wide_cols) for c in value_columns],
-            }
-        )
-        return (
-            upsert_df.unpivot(on=value_columns, index="time", variable_name="metric_name", value_name="value")
-            .join(id_lookup, on="metric_name", how="inner")
-            .select("time", pl.col("id").cast(pl.Int32), pl.col("value").cast(pl.Float32))
-        )
+        return df.select(self._get_table_column_order(step.table)).with_columns(times)
 
     def _generate_delete_keys(self, step: MutateStep, seed: int) -> pl.DataFrame:
         size = self._get_mutate_dataset_size(step.table)
+        if size is None:
+            raise ValueError(f"Unsupported time-series table: {step.table}")
 
-        if size is not None:
-            n_rows, _n_cols = TIME_SERIES_DATASET_SIZES[size]
-        else:
-            n_rows = TIME_SERIES_DATASET_SIZES["wide"][0]
+        n_rows, _n_cols = TIME_SERIES_DATASET_SIZES[size]
 
         rng = np.random.default_rng(seed)
         end = datetime(2025, 1, 1)
@@ -706,12 +592,6 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             [start + timedelta(minutes=int(o)) for o in offsets],
             dtype=pl.Datetime("ms"),
         )
-
-        if step.table == TIME_SERIES_EAV_TABLE_NAME:
-            _wide_rows, wide_cols = TIME_SERIES_DATASET_SIZES["wide"]
-            ids = rng.integers(1, wide_cols + 1, size=step.row_count)
-            return pl.DataFrame({"time": times, "id": pl.Series("id", ids, dtype=pl.Int32)})
-
         return pl.DataFrame({"time": times})
 
     def mutate(self) -> None:

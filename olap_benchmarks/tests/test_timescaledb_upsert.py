@@ -39,7 +39,6 @@ def test_timescaledb_time_series_primary_keys_match_mutation_keys() -> None:
     assert suite.get_primary_key("data_tall") == "time"
     assert suite.get_primary_key("data_wide") == "time"
     assert suite.get_primary_key("data_large") == "time"
-    assert suite.get_primary_key("data_wide_eav") == ["time", "id"]
 
 
 def test_timescaledb_upsert_uses_on_conflict_instead_of_delete_insert(
