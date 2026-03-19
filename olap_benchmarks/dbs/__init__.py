@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from multiprocessing import Queue
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Any, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args
 
 import polars as pl
 from pydantic import BaseModel
@@ -46,6 +46,7 @@ class Database(BaseModel, ABC):
     version: str
 
     connection_string: str
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
 
     context: QueryContext | None = None
     _current_suite: SuiteName | None = None
@@ -232,6 +233,9 @@ class Database(BaseModel, ABC):
             error_message=error_message,
             metadata=metadata,
         )
+
+    def is_mutation_step_enabled(self, suite: SuiteName, step_name: str) -> bool:
+        return step_name not in self.DISABLED_MUTATION_STEPS.get(suite, frozenset())
 
     @contextmanager
     def mutation_context(

@@ -9,7 +9,7 @@ import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import REPO_ROOT, SETTINGS, DatabaseName, TableName
+from ...settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries, get_time_series_input_files
@@ -158,6 +158,14 @@ class TimescaleDB(Database):
     version: str = VERSION
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
+        "time_series": frozenset(
+            {
+                "insert_data_large_10000",
+                "insert_data_wide_eav_10000",
+            }
+        )
+    }
 
     @property
     def start(self) -> str:
