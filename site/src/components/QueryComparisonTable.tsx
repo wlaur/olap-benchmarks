@@ -163,7 +163,12 @@ export function QueryComparisonTable({
   })
 
   return (
-    <div className={cn("panel-scrollbar overflow-x-scroll overflow-y-hidden", containerClassName)}>
+    <div
+      className={cn(
+        "panel-scrollbar h-full min-h-0 overflow-x-scroll overflow-y-hidden",
+        containerClassName,
+      )}
+    >
       <div className={cn("h-full min-h-0", QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS)}>
         <div className="panel-scrollbar h-full min-h-0 overflow-y-scroll">
           <table className="w-full table-fixed text-left text-sm">
