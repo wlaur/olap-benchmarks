@@ -18,7 +18,13 @@ import {
   toMetricScale,
 } from "../../lib/metricFormat"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
-import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
+import type {
+  BenchmarkOperation,
+  InsertStep,
+  MetricSample,
+  QueryStep,
+  StepMetricAvailability,
+} from "../../lib/types"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
 import { BodyText, SectionTitle } from "../Typography"
@@ -30,6 +36,7 @@ interface ResourceTrendPanelProps {
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
   databases: string[]
+  stepMetricAvailability: StepMetricAvailability[]
 }
 
 interface StepOption {
@@ -68,6 +75,7 @@ export function ResourceTrendPanel({
   querySteps,
   mutateSteps,
   databases,
+  stepMetricAvailability,
 }: ResourceTrendPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
@@ -75,9 +83,17 @@ export function ResourceTrendPanel({
 
   const databaseColors = getDatabaseColors(databases)
 
+  const availableStepKeys = useMemo(
+    () => new Set(stepMetricAvailability.map((s) => `${s.operation}:${s.step_name}`)),
+    [stepMetricAvailability],
+  )
+
   const stepOptions = useMemo(
-    () => getStepOptions(selectedOperation, insertSteps, querySteps, mutateSteps),
-    [selectedOperation, insertSteps, querySteps, mutateSteps],
+    () =>
+      getStepOptions(selectedOperation, insertSteps, querySteps, mutateSteps).filter((step) =>
+        availableStepKeys.has(`${selectedOperation}:${step.value}`),
+      ),
+    [selectedOperation, insertSteps, querySteps, mutateSteps, availableStepKeys],
   )
 
   const resolvedStep =
@@ -397,14 +413,28 @@ function buildTrendChartData(
     disk_mb: new Map(),
   }
 
+  // Find the first metric sample elapsed_s per database within the window
+  // so we can normalize each database's timeline to start at 0.
+  const firstSampleElapsed = new Map<string, number>()
   for (const sample of metricSamples) {
     if (sample.operation !== operation) continue
     const window = stepTimeWindows.get(sample.db)
     if (!window) continue
+    if (sample.elapsed_s < window.start_s || sample.elapsed_s > window.end_s) continue
+    const existing = firstSampleElapsed.get(sample.db)
+    if (existing === undefined || sample.elapsed_s < existing) {
+      firstSampleElapsed.set(sample.db, sample.elapsed_s)
+    }
+  }
 
+  for (const sample of metricSamples) {
+    if (sample.operation !== operation) continue
+    const window = stepTimeWindows.get(sample.db)
+    if (!window) continue
     if (sample.elapsed_s < window.start_s || sample.elapsed_s > window.end_s) continue
 
-    const normalizedElapsed = Math.max(0, Math.round(sample.elapsed_s - window.start_s))
+    const dbOffset = firstSampleElapsed.get(sample.db) ?? window.start_s
+    const normalizedElapsed = Math.max(0, Math.round(sample.elapsed_s - dbOffset))
 
     for (const metricConfig of METRIC_CONFIGS) {
       const map = result[metricConfig.key]
