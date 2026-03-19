@@ -8,6 +8,7 @@ import { formatCpuPercent, formatMegabytes } from "../../lib/metricFormat"
 import { fetchFlameSpans } from "../../lib/queries"
 import type { FlameSpan, MetricSample } from "../../lib/types"
 import { PanelCard } from "../layout/Panel"
+import { SqlCodeView } from "../SqlCodeView"
 import { BodyText, MetaLabel, SectionTitle } from "../Typography"
 import { FlameGraph } from "./FlameGraph"
 
@@ -205,9 +206,9 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
             ) : null}
           </p>
           {span.query_sql ? (
-            <pre className="panel-scrollbar mt-2 max-h-24 overflow-auto rounded-lg bg-surface-inset p-2 text-[11px] leading-relaxed text-slate-400">
-              {span.query_sql}
-            </pre>
+            <div className="panel-scrollbar mt-2 max-h-56 overflow-auto rounded-lg border border-border-default bg-surface-inset">
+              <SqlCodeView code={span.query_sql} />
+            </div>
           ) : null}
         </div>
 

@@ -73,6 +73,10 @@ export function RunTimeline({
   const [svgWidth, setSvgWidth] = useState(0)
 
   useLayoutEffect(() => {
+    if (loading) {
+      setSvgWidth(0)
+      return
+    }
     const svg = svgRef.current
     if (!svg) return
     const observer = new ResizeObserver((entries) => {
@@ -83,7 +87,7 @@ export function RunTimeline({
     observer.observe(svg)
     setSvgWidth(svg.getBoundingClientRect().width)
     return () => observer.disconnect()
-  }, [])
+  }, [loading])
 
   const filteredSteps = useMemo(
     () => querySteps.filter((s) => databases.includes(s.db)),
@@ -333,6 +337,7 @@ function SvgContent({
   const chartLeft = LABEL_WIDTH
   const chartWidth = svgWidth - chartLeft - PADDING_RIGHT
   const ticks = buildElapsedTicks(maxElapsed)
+  const hasSelection = selectedQuery !== null
 
   const toX = (seconds: number) => chartLeft + chartWidth * (seconds / maxElapsed)
   const toW = (seconds: number) => chartWidth * (seconds / maxElapsed)
@@ -370,6 +375,12 @@ function SvgContent({
       {databases.map((db, dbIndex) => {
         const y = PADDING_TOP + dbIndex * (ROW_HEIGHT + ROW_GAP)
         const segments = segmentsByDb.get(db) ?? []
+        const orderedSegments = hasSelection
+          ? [...segments].sort(
+              (a, b) =>
+                Number(a.query_name === selectedQuery) - Number(b.query_name === selectedQuery),
+            )
+          : segments
 
         return (
           <g key={db}>
@@ -398,9 +409,10 @@ function SvgContent({
               {db}
             </text>
 
-            {segments.map((seg, segIdx) => {
+            {orderedSegments.map((seg, segIdx) => {
               const colors = queryColorMap[seg.query_name]
               const isSelected = selectedQuery === seg.query_name
+              const isDimmed = hasSelection && !isSelected
               const fill = colors
                 ? isSelected
                   ? colors[1]
@@ -419,6 +431,9 @@ function SvgContent({
                   height={ROW_HEIGHT - 4}
                   rx={3}
                   fill={fill}
+                  opacity={isDimmed ? 0.22 : 1}
+                  stroke={isSelected ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0)"}
+                  strokeWidth={isSelected ? 1.5 : 0}
                   className="cursor-pointer transition-opacity hover:opacity-80"
                   onClick={() => onSegmentClick(seg.query_name)}
                   onMouseEnter={(e) => onSegmentEnter(seg, e)}
