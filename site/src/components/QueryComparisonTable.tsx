@@ -174,7 +174,7 @@ export function QueryComparisonTable({
               <col className="w-[16%]" />
               <col className="w-[16%]" />
             </colgroup>
-            <thead className="sticky top-0 z-10 border-b border-border-default bg-surface-raised text-xs tracking-wide text-slate-500 uppercase">
+            <thead className="sticky top-0 z-10 border-b border-border-default bg-surface-raised text-xs tracking-wide text-slate-500">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {

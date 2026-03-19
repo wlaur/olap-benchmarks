@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   Bar,
   BarChart,
@@ -12,9 +12,23 @@ import {
   YAxis,
 } from "recharts"
 
-import { formatDurationSeconds } from "../lib/format"
+import {
+  formatDurationAxisTick,
+  formatDurationSeconds,
+  getDurationAxisDomain,
+  getDurationAxisTicks,
+  scaleDurationForChart,
+  type DurationScaleMode,
+} from "../lib/format"
+import {
+  formatCpuPercent,
+  formatMegabytes,
+  toMemoryScale,
+  toMetricScale,
+} from "../lib/metricFormat"
 import type { InsertStep, MetricSample } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
+import { DurationScaleToggle } from "./DurationScaleToggle"
 import { ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
 import { BodyText, SectionTitle } from "./Typography"
 
@@ -40,14 +54,16 @@ export function InsertPerformancePanel({
   databases,
   databaseColors,
 }: InsertPerformancePanelProps) {
+  const [insertScaleMode, setInsertScaleMode] = useState<DurationScaleMode>("linear")
+
   const filteredSteps = useMemo(
     () => insertSteps.filter((step) => databases.includes(step.db)),
     [insertSteps, databases],
   )
 
   const barData = useMemo(
-    () => buildInsertBarData(filteredSteps, databases),
-    [filteredSteps, databases],
+    () => buildInsertBarData(filteredSteps, databases, insertScaleMode),
+    [filteredSteps, databases, insertScaleMode],
   )
 
   const populateSamples = useMemo(
@@ -74,7 +90,14 @@ export function InsertPerformancePanel({
     () => Math.max(0.001, ...filteredSteps.map((s) => s.duration_s)),
     [filteredSteps],
   )
-  const durationTicks = useMemo(() => buildEvenTicks(maxDuration * 1.1), [maxDuration])
+  const insertAxisDomain = useMemo(
+    () => getDurationAxisDomain(maxDuration, insertScaleMode),
+    [maxDuration, insertScaleMode],
+  )
+  const insertAxisTicks = useMemo(
+    () => getDurationAxisTicks(maxDuration, insertScaleMode),
+    [maxDuration, insertScaleMode],
+  )
 
   if (filteredSteps.length === 0) return null
 
@@ -93,7 +116,10 @@ export function InsertPerformancePanel({
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <ChartFrame>
-          <p className="mb-3 text-sm font-medium text-slate-200">Insert duration by table</p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-200">Insert duration by table</p>
+            <DurationScaleToggle mode={insertScaleMode} onChange={setInsertScaleMode} compact />
+          </div>
           <div style={{ height: Math.max(160, barData.length * 48 + 40) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -104,12 +130,12 @@ export function InsertPerformancePanel({
                 <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" horizontal={false} />
                 <XAxis
                   type="number"
-                  domain={[0, maxDuration * 1.1]}
-                  ticks={durationTicks}
+                  domain={insertAxisDomain}
+                  ticks={insertAxisTicks}
                   tick={{ fill: "#64748b", fontSize: 11 }}
                   axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                   tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-                  tickFormatter={(v: number) => formatDurationSeconds(v)}
+                  tickFormatter={(v: number) => formatDurationAxisTick(v, insertScaleMode)}
                 />
                 <YAxis
                   type="category"
@@ -127,7 +153,12 @@ export function InsertPerformancePanel({
                     color: "#e2e8f0",
                   }}
                   labelStyle={{ color: "#e2e8f0" }}
-                  formatter={(value) => formatDurationSeconds(Number(value ?? 0))}
+                  formatter={(value, name, item) => {
+                    const row = item.payload as InsertBarRow
+                    const rawKey = `${String(name)}_raw`
+                    const rawValue = rawKey in row ? Number(row[rawKey]) : Number(value ?? 0)
+                    return formatDurationSeconds(rawValue)
+                  }}
                   cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
                 />
                 {databases.map((db) => (
@@ -138,7 +169,6 @@ export function InsertPerformancePanel({
                     fill={databaseColors[db] ?? "#94a3b8"}
                     radius={[0, 4, 4, 0]}
                     barSize={8}
-                    isAnimationActive={false}
                   />
                 ))}
               </BarChart>
@@ -146,28 +176,36 @@ export function InsertPerformancePanel({
           </div>
         </ChartFrame>
 
-        <div className="flex flex-col gap-3">
-          <MetricMiniChart
-            label="CPU during populate"
-            data={cpuChartData}
-            databases={databases}
-            databaseColors={databaseColors}
-            maxElapsed={maxElapsed}
-            elapsedTicks={elapsedTicks}
-            formatter={(v: number) => `${v.toFixed(0)}%`}
-            syncId="insert-metrics"
-          />
-          <MetricMiniChart
-            label="Memory during populate"
-            data={memChartData}
-            databases={databases}
-            databaseColors={databaseColors}
-            maxElapsed={maxElapsed}
-            elapsedTicks={elapsedTicks}
-            formatter={formatMegabytes}
-            syncId="insert-metrics"
-          />
-        </div>
+        {populateSamples.length <= 1 ? (
+          <div className="flex items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+            No resource metrics were recorded during populate.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <MetricMiniChart
+              label="CPU during populate"
+              data={cpuChartData}
+              databases={databases}
+              databaseColors={databaseColors}
+              maxElapsed={maxElapsed}
+              elapsedTicks={elapsedTicks}
+              formatter={formatCpuPercent}
+              scaleBuilder={toMetricScale}
+              syncId="insert-metrics"
+            />
+            <MetricMiniChart
+              label="Memory during populate"
+              data={memChartData}
+              databases={databases}
+              databaseColors={databaseColors}
+              maxElapsed={maxElapsed}
+              elapsedTicks={elapsedTicks}
+              formatter={formatMegabytes}
+              scaleBuilder={toMemoryScale}
+              syncId="insert-metrics"
+            />
+          </div>
+        )}
       </div>
     </PanelCard>
   )
@@ -181,6 +219,7 @@ function MetricMiniChart({
   maxElapsed,
   elapsedTicks,
   formatter,
+  scaleBuilder,
   syncId,
 }: {
   label: string
@@ -190,11 +229,16 @@ function MetricMiniChart({
   maxElapsed: number
   elapsedTicks: number[]
   formatter: (v: number) => string
+  scaleBuilder: (maxValue: number) => {
+    domain: [number, number]
+    ticks: number[]
+    formatter?: (v: number) => string
+  }
   syncId: string
 }) {
   const values = data.flatMap((row) => databases.map((db) => (row[db] as number | undefined) ?? 0))
   const maxVal = Math.max(1, ...values)
-  const yScale = toMetricScale(maxVal)
+  const yScale = scaleBuilder(maxVal)
 
   return (
     <ChartFrame>
@@ -224,7 +268,7 @@ function MetricMiniChart({
               tick={{ fill: "#64748b", fontSize: 10 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={formatter}
+              tickFormatter={yScale.formatter ?? formatter}
             />
             <Tooltip
               contentStyle={{
@@ -263,21 +307,32 @@ function MetricMiniChart({
   )
 }
 
-function buildInsertBarData(steps: InsertStep[], databases: string[]): InsertBarRow[] {
+function buildInsertBarData(
+  steps: InsertStep[],
+  databases: string[],
+  scaleMode: DurationScaleMode,
+): InsertBarRow[] {
   const byTable = new Map<string, InsertBarRow>()
 
   for (const step of steps) {
     const existing = byTable.get(step.table_name) ?? { table_name: step.table_name }
-    existing[step.db] = step.duration_s
+    existing[step.db] = scaleDurationForChart(step.duration_s, scaleMode)
+    existing[`${step.db}_raw`] = step.duration_s
     byTable.set(step.table_name, existing)
   }
 
   return Array.from(byTable.values()).sort((a, b) => {
     const aMax = Math.max(
-      ...databases.map((db) => (typeof a[db] === "number" ? (a[db] as number) : 0)),
+      ...databases.map((db) => {
+        const raw = a[`${db}_raw`]
+        return typeof raw === "number" ? raw : 0
+      }),
     )
     const bMax = Math.max(
-      ...databases.map((db) => (typeof b[db] === "number" ? (b[db] as number) : 0)),
+      ...databases.map((db) => {
+        const raw = b[`${db}_raw`]
+        return typeof raw === "number" ? raw : 0
+      }),
     )
     return bMax - aMax
   })
@@ -310,33 +365,6 @@ function buildEvenTicks(maxSeconds: number): number[] {
   const ticks: number[] = []
   for (let t = 0; t <= safeMax; t += step) ticks.push(t)
   return ticks
-}
-
-function toMetricScale(maxValue: number): { domain: [number, number]; ticks: number[] } {
-  const roughStep = maxValue <= 0 ? 1 : maxValue / 4
-  const step = getNiceStep(roughStep)
-  const roundedMax = maxValue <= 0 ? step : Math.ceil(maxValue / step) * step
-  const ticks: number[] = []
-  for (let t = 0; t <= roundedMax; t += step) ticks.push(t)
-  return { domain: [0, roundedMax], ticks }
-}
-
-function getNiceStep(value: number): number {
-  const exponent = Math.floor(Math.log10(Math.max(value, 1)))
-  const magnitude = 10 ** exponent
-  const normalized = value / magnitude
-  if (normalized <= 1) return magnitude
-  if (normalized <= 2) return 2 * magnitude
-  if (normalized <= 5) return 5 * magnitude
-  return 10 * magnitude
-}
-
-function formatMegabytes(value: number): string {
-  if (value >= 1024) {
-    const gb = value / 1024
-    return `${gb >= 10 ? gb.toFixed(0) : gb.toFixed(1)} GB`
-  }
-  return `${value.toFixed(0)} MB`
 }
 
 function formatElapsedLabel(value: number): string {

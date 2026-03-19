@@ -135,7 +135,7 @@ export async function fetchOperationSummaries(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "in", ["populate", "select", "mutate"])
+        .where("run.operation", "in", ["populate", "mutate", "select"])
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),
@@ -239,7 +239,7 @@ export async function fetchMetricSamples(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
-        .where("run.operation", "in", ["populate", "select", "mutate"])
+        .where("run.operation", "in", ["populate", "mutate", "select"])
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null)
         .where("run.system", "=", system),

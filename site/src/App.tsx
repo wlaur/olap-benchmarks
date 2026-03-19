@@ -1,32 +1,31 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom"
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
 
+import { SuiteSelector } from "./components/filters/SuiteSelector"
 import { Navbar } from "./components/layout/Navbar"
 import { useSystem } from "./features/system/SystemContext"
-import {
-  benchmarkDefinitions,
-  defaultBenchmarkId,
-  getBenchmarkDefinition,
-  type BenchmarkSuiteId,
-} from "./lib/benchmarks"
-import { BenchmarkPlaceholderPage } from "./pages/BenchmarkPlaceholderPage"
+import { defaultBenchmarkId, type BenchmarkSuiteId } from "./lib/benchmarks"
+import { ExplorerPage } from "./pages/ExplorerPage"
 import { HomePage } from "./pages/HomePage"
-import { TimeSeriesPage } from "./pages/TimeSeriesPage"
 
-function BenchmarkRoute({
+function ExplorerRoute({
   selectedSystem,
   isSystemLoading,
 }: {
   selectedSystem: string | null
   isSystemLoading: boolean
 }) {
-  const { benchmarkId: rawId } = useParams<{ benchmarkId: string }>()
-  const benchmark = getBenchmarkDefinition((rawId ?? defaultBenchmarkId) as BenchmarkSuiteId)
+  const { suiteId: rawId } = useParams<{ suiteId: string }>()
+  const navigate = useNavigate()
+  const suiteId = (rawId ?? defaultBenchmarkId) as BenchmarkSuiteId
 
-  if (benchmark.id === "time_series") {
-    return <TimeSeriesPage system={selectedSystem} isSystemLoading={isSystemLoading} />
-  }
-
-  return <BenchmarkPlaceholderPage benchmark={benchmark} system={selectedSystem} />
+  return (
+    <>
+      <div className="mb-4 flex items-center gap-3">
+        <SuiteSelector selected={suiteId} onChange={(next) => navigate(`/explorer/${next}`)} />
+      </div>
+      <ExplorerPage system={selectedSystem} suiteId={suiteId} isSystemLoading={isSystemLoading} />
+    </>
+  )
 }
 
 export function App() {
@@ -34,7 +33,6 @@ export function App() {
 
   const navbar = (
     <Navbar
-      benchmarks={benchmarkDefinitions}
       systems={systems}
       selectedSystem={selectedSystem}
       onSelectSystem={setSelectedSystem}
@@ -50,17 +48,15 @@ export function App() {
           path="/"
           element={
             <main className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-7xl px-4">
+              <div className="mx-auto w-full max-w-4xl px-4">
                 <HomePage />
               </div>
             </main>
           }
         />
         <Route
-          path="/benchmarks/:benchmarkId"
-          element={
-            <BenchmarkMain selectedSystem={selectedSystem} loading={loading} error={error} />
-          }
+          path="/explorer/:suiteId"
+          element={<ExplorerMain selectedSystem={selectedSystem} loading={loading} error={error} />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -68,23 +64,23 @@ export function App() {
   )
 }
 
-interface BenchmarkMainProps {
+interface ExplorerMainProps {
   selectedSystem: string | null
   loading: boolean
   error: string | null
 }
 
-function BenchmarkMain({ selectedSystem, loading, error }: BenchmarkMainProps) {
+function ExplorerMain({ selectedSystem, loading, error }: ExplorerMainProps) {
   const content = error ? (
     <p className="text-sm text-red-300">Failed to load systems: {error}</p>
   ) : !selectedSystem ? (
     loading ? (
-      <BenchmarkRoute selectedSystem={selectedSystem} isSystemLoading />
+      <ExplorerRoute selectedSystem={selectedSystem} isSystemLoading />
     ) : (
       <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
     )
   ) : (
-    <BenchmarkRoute selectedSystem={selectedSystem} isSystemLoading={loading} />
+    <ExplorerRoute selectedSystem={selectedSystem} isSystemLoading={loading} />
   )
 
   return (
