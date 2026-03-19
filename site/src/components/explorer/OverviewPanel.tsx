@@ -47,8 +47,6 @@ interface OverviewPanelProps {
   includedDatabases: string[]
   operationSummaries: OperationSummary[]
   isLoading: boolean
-  includeEav: boolean
-  onToggleEav: () => void
   onSelectAll: () => void
   onToggleDatabase: (database: string) => void
 }
@@ -65,8 +63,6 @@ export function OverviewPanel({
   includedDatabases,
   operationSummaries,
   isLoading,
-  includeEav,
-  onToggleEav,
   onSelectAll,
   onToggleDatabase,
 }: OverviewPanelProps) {
@@ -134,30 +130,6 @@ export function OverviewPanel({
             />
           )}
         </div>
-
-        {suiteConfig.hasEavToggle ? (
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={onToggleEav}
-              className={
-                includeEav
-                  ? "inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-inset px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600"
-                  : "inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:border-amber-400/50"
-              }
-            >
-              <span
-                className="size-2 rounded-full"
-                style={{
-                  backgroundColor: includeEav
-                    ? "rgba(148, 163, 184, 0.6)"
-                    : "rgba(245, 158, 11, 0.8)",
-                }}
-              />
-              {includeEav ? "EAV tables included" : "EAV tables excluded"}
-            </button>
-          </div>
-        ) : null}
       </PanelCard>
 
       <PanelCard className={TOP_CARD_MIN_HEIGHT_CLASS}>

@@ -12,7 +12,7 @@ from sqlalchemy import Connection, create_engine, text
 from ...settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import TIME_SERIES_EAV_TABLE_NAME, TimeSeries, get_time_series_input_files
+from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
 from ..postgres import generate_create_table_sql, table_exists
 
@@ -96,7 +96,6 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         "data_tall": "tall_post_insert.sql",
         "data_wide": "wide_post_insert.sql",
         "data_large": "large_post_insert.sql",
-        "data_wide_eav": "wide_eav_post_insert.sql",
     }
 
     # wide columnar tables can exceed PostgreSQL's max tuple size for compressed rows
@@ -104,8 +103,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     SKIP_COMPRESS: ClassVar[set[str]] = {"data_large", "data_wide"}
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
-        if table_name == TIME_SERIES_EAV_TABLE_NAME:
-            return ["time", "id"]
+        _ = table_name
         return "time"
 
     def compress_tables(self) -> None:
@@ -181,7 +179,6 @@ class TimescaleDB(Database):
         "time_series": frozenset(
             {
                 "insert_data_large_10000",
-                "insert_data_wide_eav_10000",
             }
         )
     }

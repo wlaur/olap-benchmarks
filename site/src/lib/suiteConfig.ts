@@ -11,8 +11,6 @@ export interface SuiteConfig {
   id: BenchmarkSuiteId
   label: string
   operations: BenchmarkOperation[]
-  hasEavToggle: boolean
-  isEavQuery: (queryName: string) => boolean
   parseQueryName: (queryName: string) => ParsedQueryName
   compareQueryNames: (left: string, right: string) => number
 }
@@ -43,7 +41,6 @@ function parseTimeSeriesQueryName(queryName: string): ParsedQueryName {
 }
 
 function formatTimeSeriesTableFamily(value: string): string {
-  if (value === "eav") return "EAV"
   if (value === "wide") return "Wide"
   if (value === "tall") return "Tall"
   if (value === "large") return "Large"
@@ -66,10 +63,6 @@ function compareTimeSeriesQueryNames(left: string, right: string): number {
   return left.localeCompare(right)
 }
 
-function isTimeSeriesEavQuery(queryName: string): boolean {
-  return queryName.startsWith("eav_") || queryName.includes("_eav_")
-}
-
 function parseGenericQueryName(queryName: string): ParsedQueryName {
   return {
     queryId: "00",
@@ -82,16 +75,10 @@ function compareGenericQueryNames(left: string, right: string): number {
   return left.localeCompare(right)
 }
 
-function noEav(): boolean {
-  return false
-}
-
 const TIME_SERIES_CONFIG: SuiteConfig = {
   id: "time_series",
   label: "Time Series",
   operations: ["populate", "mutate", "select"],
-  hasEavToggle: true,
-  isEavQuery: isTimeSeriesEavQuery,
   parseQueryName: parseTimeSeriesQueryName,
   compareQueryNames: compareTimeSeriesQueryNames,
 }
@@ -100,8 +87,6 @@ const RTABENCH_CONFIG: SuiteConfig = {
   id: "rtabench",
   label: "RTABench",
   operations: ["populate", "select"],
-  hasEavToggle: false,
-  isEavQuery: noEav,
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
 }
@@ -110,8 +95,6 @@ const CLICKBENCH_CONFIG: SuiteConfig = {
   id: "clickbench",
   label: "ClickBench",
   operations: ["populate", "select"],
-  hasEavToggle: false,
-  isEavQuery: noEav,
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
 }
@@ -120,8 +103,6 @@ const KAGGLE_AIRBNB_CONFIG: SuiteConfig = {
   id: "kaggle_airbnb",
   label: "Kaggle Airbnb",
   operations: ["populate", "select"],
-  hasEavToggle: false,
-  isEavQuery: noEav,
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
 }

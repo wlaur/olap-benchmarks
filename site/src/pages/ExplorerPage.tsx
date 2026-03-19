@@ -23,8 +23,6 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     databases,
     includedDatabases,
     setSelectedDatabases,
-    includeEav,
-    setIncludeEav,
     filteredQuerySummaries,
     filteredMutateSummaries,
     filteredOperationSummaries,
@@ -64,8 +62,6 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
         includedDatabases={includedDatabases}
         operationSummaries={filteredOperationSummaries}
         isLoading={isLoading}
-        includeEav={includeEav}
-        onToggleEav={() => setIncludeEav((v) => !v)}
         onSelectAll={() => setSelectedDatabases(databases)}
         onToggleDatabase={toggleDatabase}
       />
