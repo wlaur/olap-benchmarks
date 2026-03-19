@@ -12,7 +12,7 @@ from sqlalchemy import Connection, create_engine, text
 from ...settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import TimeSeries, get_time_series_input_files
+from ...suites.time_series.config import TIME_SERIES_EAV_TABLE_NAME, TimeSeries, get_time_series_input_files
 from .. import Database
 from ..postgres import generate_create_table_sql, table_exists
 
@@ -90,6 +90,11 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     # wide columnar tables can exceed PostgreSQL's max tuple size for compressed rows
     # on TimescaleDB 2.25.0 / PG 18.
     SKIP_COMPRESS: ClassVar[set[str]] = {"data_large", "data_wide"}
+
+    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
+        if table_name == TIME_SERIES_EAV_TABLE_NAME:
+            return ["time", "id"]
+        return "time"
 
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
@@ -362,9 +367,6 @@ class TimescaleDB(Database):
                 raise ValueError(f"Primary key column '{pk}' not found in DataFrame columns")
 
         con = self.connect()
-
-        # TimescaleDB hypertables don't support unique constraints unless they include
-        # the partitioning column, so ON CONFLICT won't work. Use delete-then-insert.
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
@@ -380,10 +382,18 @@ class TimescaleDB(Database):
             temp_file.unlink(missing_ok=True)
 
         con.execute(text("SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"))
-        con.execute(text(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"))
-
         all_columns = ", ".join(f'"{col}"' for col in df.columns)
-        con.execute(text(f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}"))
+        non_key_columns = [col for col in df.columns if col not in primary_keys]
+
+        if non_key_columns:
+            set_clause = ", ".join(f'"{col}" = EXCLUDED."{col}"' for col in non_key_columns)
+            on_conflict_clause = f"ON CONFLICT ({pk_cols}) DO UPDATE SET {set_clause}"
+        else:
+            on_conflict_clause = f"ON CONFLICT ({pk_cols}) DO NOTHING"
+
+        con.execute(
+            text(f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table} {on_conflict_clause}")
+        )
 
         con.execute(text(f"DROP TABLE {staging_table}"))
         con.commit()
