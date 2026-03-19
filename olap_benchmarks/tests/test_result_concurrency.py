@@ -3,12 +3,17 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
+from datetime import datetime
 from multiprocessing import Queue
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..metrics.storage import Storage, WriterMessage, start_writer_process
+from ..results import get_results_engine
+from ..results.models import QueryExecution
 from ..settings import setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,3 +63,31 @@ def test_result_concurrency(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, npr
     assert last is not None
 
     writer.close()
+
+
+def test_writer_persists_query_execution_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLAP_BENCHMARKS_RESULTS_DIRECTORY", str(tmp_path))
+
+    writer = start_writer_process()
+    storage = Storage(writer.queue, writer.result_queue)
+
+    storage.insert_query_execution(
+        run_id=123,
+        run_step_id=456,
+        query="select 1",
+        start_time=datetime(2026, 1, 1, 12, 0, 0),
+        end_time=datetime(2026, 1, 1, 12, 0, 1),
+    )
+    writer.close()
+
+    engine = get_results_engine(read_only=False, db_path=tmp_path / "default.db")
+
+    try:
+        with Session(engine) as session:
+            rows = session.scalars(select(QueryExecution)).all()
+            assert len(rows) == 1
+            assert rows[0].run_id == 123
+            assert rows[0].run_step_id == 456
+            assert rows[0].query == "select 1"
+    finally:
+        engine.dispose()
