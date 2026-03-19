@@ -1,5 +1,6 @@
 import re
 from collections.abc import Mapping
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any, cast
 
 import numpy as np
@@ -14,6 +15,7 @@ from sqlalchemy import (
     MetaData,
     Table,
 )
+from sqlalchemy.schema import CreateTable
 from sqlalchemy.types import UserDefinedType
 
 from ...settings import SETTINGS, TableName
@@ -274,7 +276,16 @@ def create_table(
         prefixes=["local", "temporary"] if temporary else None,
     )
 
-    metadata.create_all(connection, tables=[tbl], checkfirst=False)
+    recorder = connection.info.get("olap_query_recorder")
+    create_query = str(CreateTable(tbl).compile(connection))
+
+    if callable(recorder):
+        query_context = cast(AbstractContextManager[None], recorder(create_query))
+        with query_context:
+            metadata.create_all(connection, tables=[tbl], checkfirst=False)
+    else:
+        with nullcontext():
+            metadata.create_all(connection, tables=[tbl], checkfirst=False)
 
     if commit:
         connection.commit()

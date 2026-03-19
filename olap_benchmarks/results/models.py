@@ -14,6 +14,7 @@ class Base(DeclarativeBase):
 run_id_sequence = Sequence("seq_run")
 run_step_id_sequence = Sequence("seq_run_step")
 run_metric_id_sequence = Sequence("seq_run_metric")
+query_execution_id_sequence = Sequence("seq_query_execution")
 debug_id_sequence = Sequence("seq_debug")
 
 
@@ -92,6 +93,29 @@ class RunMetric(Base):
     disk_mb: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (Index("idx_run_metric_run_time", "run_id", "time"),)
+
+
+class QueryExecution(Base):
+    __tablename__ = "query_execution"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        query_execution_id_sequence,
+        server_default=query_execution_id_sequence.next_value(),
+        primary_key=True,
+    )
+    # DuckDB currently rejects updates to referenced rows, even when the PK is unchanged.
+    # Keep this as indexed scalar columns and enforce parent/child cleanup in application code.
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    run_step_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index("idx_query_execution_run_start_time", "run_id", "start_time"),
+        Index("idx_query_execution_step_start_time", "run_step_id", "start_time"),
+    )
 
 
 class DebugEntry(Base):

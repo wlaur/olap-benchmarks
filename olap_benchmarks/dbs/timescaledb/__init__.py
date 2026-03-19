@@ -28,7 +28,9 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
     def compress_tables(self) -> None:
         conn = self.db.connect()
 
-        result = conn.execute(text("SELECT show_chunks('order_events')"))
+        statement = "SELECT show_chunks('order_events')"
+        with self.db.record_query_execution(statement):
+            result = conn.execute(text(statement))
         chunks = [row[0] for row in result.fetchall()]
 
         if not chunks:
@@ -38,15 +40,21 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
 
         for idx, chunk in enumerate(chunks):
             _LOGGER.info(f"Compressing chunk {idx + 1:_}/{len(chunks):_}: {chunk}")
-            conn.execute(text(f"select compress_chunk('{chunk}'::regclass)"))
+            statement = f"select compress_chunk('{chunk}'::regclass)"
+            with self.db.record_query_execution(statement):
+                conn.execute(text(statement))
 
         conn.commit()
 
         con = self.db.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze orders"))
+        statement = "vacuum freeze analyze orders"
+        with self.db.record_query_execution(statement):
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
 
         con = self.db.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze order_events"))
+        statement = "vacuum freeze analyze order_events"
+        with self.db.record_query_execution(statement):
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -62,12 +70,16 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
     def compress_table(self) -> None:
         con = self.db.connect()
 
-        con.execute(text("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"))
+        statement = "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
 
         con.commit()
 
         con = self.db.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("vacuum freeze analyze hits"))
+        statement = "vacuum freeze analyze hits"
+        with self.db.record_query_execution(statement):
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -102,14 +114,16 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
                 _LOGGER.warning(f"Skipping compression for {table_name} (exceeds PG max tuple size)")
             else:
                 con = self.db.connect(reconnect=True)
-                con.execute(
-                    text(f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i")
-                )
+                statement = f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"
+                with self.db.record_query_execution(statement):
+                    con.execute(text(statement))
                 con.commit()
                 _LOGGER.info(f"Compressed table {table_name}")
 
             con = self.db.connect(reconnect=True)
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(f"vacuum freeze analyze {table_name}"))
+            statement = f"vacuum freeze analyze {table_name}"
+            with self.db.record_query_execution(statement):
+                con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
 
             _LOGGER.info(f"Vacuumed table {table_name}")
 
@@ -194,7 +208,7 @@ class TimescaleDB(Database):
             return self._connection
 
         engine = create_engine(self.connection_string)
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -226,7 +240,9 @@ class TimescaleDB(Database):
     ) -> pl.DataFrame:
         # escape literal ":" to avoid SQLAlchemy interpreting bind params
         # bind params are not supported in this method
-        result = self.connect().execute(text(query.strip().removesuffix(";").replace(":", r"\:")))
+        sql = query.strip().removesuffix(";").replace(":", r"\:")
+        with self.record_query_execution(query):
+            result = self.connect().execute(text(sql))
 
         columns = result.keys()
         rows = result.fetchall()
@@ -248,12 +264,13 @@ class TimescaleDB(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        df = cast(
-            pl.DataFrame,
-            cast(Any, connectorx).read_sql(
-                TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
-            ),
-        )
+        with self.record_query_execution(query):
+            df = cast(
+                pl.DataFrame,
+                cast(Any, connectorx).read_sql(
+                    TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
+                ),
+            )
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -269,7 +286,12 @@ class TimescaleDB(Database):
         # avoid doing this for complex queries with small result sizes
         # not clear if postgres actually does this, could check source if this is important to know
         # engine="adbc" is slower that "connectorx"
-        df = pl.read_database_uri(query.strip().removesuffix(";"), TIMESCALEDB_CONNECTION_STRING, engine="connectorx")
+        with self.record_query_execution(query):
+            df = pl.read_database_uri(
+                query.strip().removesuffix(";"),
+                TIMESCALEDB_CONNECTION_STRING,
+                engine="connectorx",
+            )
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -286,7 +308,8 @@ class TimescaleDB(Database):
         con = self.connect()
 
         create_sql = generate_create_table_sql(table, schema, primary_key, not_null)
-        con.execute(text(create_sql))
+        with self.record_query_execution(create_sql):
+            con.execute(text(create_sql))
         con.commit()
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
@@ -343,9 +366,11 @@ class TimescaleDB(Database):
             "50000",
             "--skip-header",
         ]
+        copy_sql = f"COPY {table} FROM '{temp_file_str}' WITH (FORMAT csv, HEADER true)"
 
         try:
-            subprocess.run(command, capture_output=True, text=True, check=True)
+            with self.record_query_execution(copy_sql):
+                subprocess.run(command, capture_output=True, text=True, check=True)
         finally:
             temp_file.unlink()
 
@@ -353,8 +378,9 @@ class TimescaleDB(Database):
         raw_conn = con.connection.dbapi_connection
         assert raw_conn is not None
         cursor = raw_conn.cursor()
-        with open(csv_path) as f:
-            cursor.copy_expert(f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)", f)
+        copy_sql = f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)"
+        with open(csv_path) as f, self.record_query_execution(copy_sql):
+            cursor.copy_expert(copy_sql, f)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
@@ -370,7 +396,9 @@ class TimescaleDB(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
-        con.execute(text(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"))
+        statement = f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
 
         temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
         temp_file = temp_dir / f"{table}_upsert_{uuid.uuid4().hex}.csv"
@@ -381,7 +409,9 @@ class TimescaleDB(Database):
         finally:
             temp_file.unlink(missing_ok=True)
 
-        con.execute(text("SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"))
+        statement = "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
         all_columns = ", ".join(f'"{col}"' for col in df.columns)
         non_key_columns = [col for col in df.columns if col not in primary_keys]
 
@@ -391,11 +421,15 @@ class TimescaleDB(Database):
         else:
             on_conflict_clause = f"ON CONFLICT ({pk_cols}) DO NOTHING"
 
-        con.execute(
-            text(f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table} {on_conflict_clause}")
+        statement = (
+            f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table} {on_conflict_clause}"
         )
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
 
-        con.execute(text(f"DROP TABLE {staging_table}"))
+        statement = f"DROP TABLE {staging_table}"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
         con.commit()
 
         _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
@@ -411,7 +445,9 @@ class TimescaleDB(Database):
         staging_table = f"_staging_del_{table}_{uuid.uuid4().hex[:8]}"
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
-        con.execute(text(f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"))
+        statement = f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
 
         temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
         temp_file = temp_dir / f"{table}_delete_{uuid.uuid4().hex}.csv"
@@ -422,10 +458,15 @@ class TimescaleDB(Database):
         finally:
             temp_file.unlink(missing_ok=True)
 
-        con.execute(text("SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"))
+        statement = "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
         sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
-        con.execute(text(sql))
-        con.execute(text(f"DROP TABLE {staging_table}"))
+        with self.record_query_execution(sql):
+            con.execute(text(sql))
+        statement = f"DROP TABLE {staging_table}"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
         con.commit()
 
         _LOGGER.info(f"Deleted rows from {table} by primary key")

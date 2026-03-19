@@ -89,14 +89,15 @@ class DuckDB(Database):
         patch_duckdb_sqlalchemy_compat()
         connection_string = f"duckdb:///{self.database_directory.as_posix()}/duck.db"
         engine = create_engine(connection_string)
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
     def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:
         con = get_duckdb_connection(self.connect())
-        con.execute(query)
-        df = con.pl()
+        with self.record_query_execution(query):
+            con.execute(query)
+            df = con.pl()
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -149,7 +150,8 @@ class DuckDB(Database):
 
             pk_clause = f", primary key ({', '.join(f'"{pk}"' for pk in primary_keys)})" if primary_keys else ""
             ddl = f"create table {table} (\n  " + ",\n  ".join(col_defs) + pk_clause + "\n)"
-            con.execute(ddl)
+            with self.record_query_execution(ddl):
+                con.execute(ddl)
 
         if isinstance(df, pl.LazyFrame):
             if in_memory:
@@ -160,21 +162,27 @@ class DuckDB(Database):
             _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
 
             try:
-                con.execute(f"insert into {table} select * from '{fpath.as_posix()}'")
+                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
+                with self.record_query_execution(sql):
+                    con.execute(sql)
             finally:
                 fpath.unlink()
         elif in_memory:
             con.register("source", df)
             _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-            con.execute(f"insert into {table} select * from source")
+            sql = f"insert into {table} select * from source"
+            with self.record_query_execution(sql):
+                con.execute(sql)
         else:
             fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
             df.write_parquet(fpath)
             _LOGGER.info(f"Inserting from Parquet dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
             try:
-                con.execute(f"insert into {table} select * from '{fpath.as_posix()}'")
+                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
+                with self.record_query_execution(sql):
+                    con.execute(sql)
             finally:
                 fpath.unlink()
 
@@ -203,7 +211,8 @@ class DuckDB(Database):
                 select * from source
                 on conflict ({conflict_target}) do nothing
             """
-            con.execute(sql)
+            with self.record_query_execution(sql):
+                con.execute(sql)
             con.commit()
             return
 
@@ -217,7 +226,8 @@ class DuckDB(Database):
             on conflict ({conflict_target}) do update set {set_clause}
         """
 
-        con.execute(sql)
+        with self.record_query_execution(sql):
+            con.execute(sql)
         con.commit()
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
@@ -232,7 +242,8 @@ class DuckDB(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
         sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM delete_keys)"
 
-        con.execute(sql)
+        with self.record_query_execution(sql):
+            con.execute(sql)
         con.commit()
 
     @property

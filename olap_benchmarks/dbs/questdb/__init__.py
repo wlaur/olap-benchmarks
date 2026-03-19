@@ -55,12 +55,12 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
         with self.db.phase_context("insert", table_name="hits"):
             con = self.db.connect()
 
-            con.execute(
-                text(f"""
-                    insert into hits
-                    select * from read_parquet('{fpath.name}')
-                """)
-            )
+            statement = f"""
+                insert into hits
+                select * from read_parquet('{fpath.name}')
+            """
+            with self.db.record_query_execution(statement):
+                con.execute(text(statement))
             con.commit()
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
@@ -103,7 +103,7 @@ class QuestDB(Database):
             return self._connection
 
         engine = create_engine(self.connection_string, pool_reset_on_return=None)
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -114,13 +114,16 @@ class QuestDB(Database):
         method: Literal["connectorx", "python"] = "connectorx",
     ) -> pl.DataFrame:
         if method == "python":
-            df = pl.DataFrame(
-                self.connect().execute(text(query.strip().removesuffix(";"))).fetchall(), infer_schema_length=None
-            )
+            with self.record_query_execution(query):
+                df = pl.DataFrame(
+                    self.connect().execute(text(query.strip().removesuffix(";"))).fetchall(),
+                    infer_schema_length=None,
+                )
 
         elif method == "connectorx":
             uri = "redshift" + self.connection_string.removeprefix("questdb")
-            df = pl.read_database_uri(query, uri)
+            with self.record_query_execution(query):
+                df = pl.read_database_uri(query, uri)
 
         else:
             raise ValueError(f"Unknown method:'{method}'")
@@ -262,7 +265,8 @@ class QuestDB(Database):
         try:
             con = self.connect()
 
-            tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
+            with self.record_query_execution("show tables"):
+                tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
 
             if table in tables:
                 initial_count = self.get_count(table)
@@ -278,7 +282,8 @@ class QuestDB(Database):
                     )
                     """
 
-            con.execute(text(statement))
+            with self.record_query_execution(statement):
+                con.execute(text(statement))
             con.commit()
             self.wait_until_count(table, initial_count + len(df))
 
@@ -304,7 +309,8 @@ class QuestDB(Database):
 
         try:
             con = self.connect()
-            tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
+            with self.record_query_execution("show tables"):
+                tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
 
             if table in tables:
                 initial_count = self.get_count(table)
@@ -320,7 +326,8 @@ class QuestDB(Database):
                     )
                     """
 
-            con.execute(text(statement))
+            with self.record_query_execution(statement):
+                con.execute(text(statement))
             con.commit()
             self.wait_until_count(table, initial_count + row_count)
 

@@ -143,7 +143,7 @@ class Clickhouse(Database):
             return self._connection
 
         engine = create_engine(self.connection_string)
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -163,7 +163,8 @@ class Clickhouse(Database):
         query = query.strip().removesuffix(";")
 
         # query_arrow converts datetime to epoch second
-        df = cast(pl.DataFrame, cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query)))
+        with self.record_query_execution(query):
+            df = cast(pl.DataFrame, cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query)))
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -194,7 +195,8 @@ class Clickhouse(Database):
         retries = 10
         for retry in range(retries):
             try:
-                cast(Any, self.get_client()).command(statement, settings=settings)
+                with self.record_query_execution(statement):
+                    cast(Any, self.get_client()).command(statement, settings=settings)
                 return
             except Exception as e:
                 if "error code 1001" in str(e):
@@ -275,7 +277,9 @@ class Clickhouse(Database):
 
         while perf_counter() < deadline:
             try:
-                cast(Any, self.get_client()).command(f"DESCRIBE file('{input_file}', Parquet)")
+                statement = f"DESCRIBE file('{input_file}', Parquet)"
+                with self.record_query_execution(statement):
+                    cast(Any, self.get_client()).command(statement)
                 return
             except Exception:
                 sleep(0.1)

@@ -2,6 +2,7 @@ import logging
 import shutil
 import uuid
 from collections.abc import Mapping
+from contextlib import AbstractContextManager, nullcontext
 from time import perf_counter
 from typing import Any, Literal, Protocol, cast
 
@@ -27,6 +28,15 @@ SchemaMethod = Literal["infer", "fetch"]
 DEFAULT_SCHEMA_METHOD: SchemaMethod = "infer"
 
 
+def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
+    recorder = connection.info.get("olap_query_recorder")
+
+    if callable(recorder):
+        return cast(AbstractContextManager[None], recorder(query))
+
+    return nullcontext()
+
+
 class _MonetCursor(Protocol):
     description: list[Description] | None
 
@@ -46,9 +56,10 @@ def _description_values(d: Description) -> tuple[str, str, int | None, int | Non
 
 
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
-    result = connection.execute(text(query.strip().removesuffix(";")))
-    columns = list(result.keys())
-    rows = result.fetchall()
+    with _record_query_execution(connection, query):
+        result = connection.execute(text(query.strip().removesuffix(";")))
+        columns = list(result.keys())
+        rows = result.fetchall()
 
     if not rows:
         return pl.DataFrame({col: [] for col in columns})
@@ -63,7 +74,8 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     con = get_pymonetdb_connection(connection)
     c = cast(_MonetCursor, con.cursor())
-    c.execute(query)
+    with _record_query_execution(connection, query):
+        c.execute(query)
 
     description = c.description
     assert description is not None
@@ -81,7 +93,9 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     t0 = perf_counter()
     con = get_pymonetdb_connection(connection)
     c = cast(_MonetCursor, con.cursor())
-    c.execute(f"PREPARE {query}")
+    prepare_query = f"PREPARE {query}"
+    with _record_query_execution(connection, prepare_query):
+        c.execute(prepare_query)
 
     description = c.description
     assert description is not None
@@ -89,7 +103,8 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     # could also keep the prepared statement since we'll execute it shortly,
     # probably not worth the extra complexity though
-    c.execute("DEALLOCATE ALL")
+    with _record_query_execution(connection, "DEALLOCATE ALL"):
+        c.execute("DEALLOCATE ALL")
 
     schema: dict[str, pl.DataType | type[pl.DataType]] = {}
     for col in description:
@@ -144,10 +159,12 @@ def fetch_binary(
     query = query.strip().removesuffix(";")
 
     try:
-        cast(Any, con).execute(
+        copy_query = (
             f"copy {query} into little endian binary {files_clause} "
             f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
         )
+        with _record_query_execution(connection, copy_query):
+            cast(Any, con).execute(copy_query)
 
         columns: dict[str, pl.Series] = {}
 

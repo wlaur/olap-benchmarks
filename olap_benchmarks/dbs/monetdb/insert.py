@@ -2,7 +2,7 @@ import logging
 import shutil
 import uuid
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -49,6 +49,15 @@ class MonetDBInsertKwargs(TypedDict, total=False):
     lazy_write: LazyWrite
 
 
+def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
+    recorder = connection.info.get("olap_query_recorder")
+
+    if callable(recorder):
+        return cast(AbstractContextManager[None], recorder(query))
+
+    return nullcontext()
+
+
 def _raise_insert_error(table: TableName, columns: Sequence[str], exc: Exception) -> None:
     col_indexes = dict(enumerate(columns))
     raise ValueError(f"Could not insert binary data for '{table}', columns:\n{col_indexes}\n") from exc
@@ -75,11 +84,13 @@ def _copy_binary_files(
     con = get_pymonetdb_connection(connection)
     path_prefix = "" if MONETDB_SETTINGS.client_file_transfer else "/"
     files_clause = ", ".join(f"'{path_prefix}{subdir}/{path.name}'" for path in column_files)
-
-    cast(Any, con).execute(
+    copy_query = (
         f"copy little endian binary into {table} from {files_clause} "
         f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
     )
+
+    with _record_query_execution(connection, copy_query):
+        cast(Any, con).execute(copy_query)
 
     if commit:
         con.commit()
@@ -307,7 +318,8 @@ def delete(table: TableName, connection: Connection, primary_key: str | list[str
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
         delete_sql = f'DELETE FROM "{table}" WHERE ({pk_cols}) IN (VALUES {", ".join(rows)})'
 
-    connection.execute(text(delete_sql))
+    with _record_query_execution(connection, delete_sql):
+        connection.execute(text(delete_sql))
     connection.commit()
 
     _LOGGER.info(f"Deleted from table {table} using {keys.shape[0]:_} key rows in {perf_counter() - t0:_.2f} seconds")
@@ -349,7 +361,8 @@ def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_k
             insert ({insert_cols}) values ({insert_values})
     """)
 
-    connection.execute(text(merge_statement))
+    with _record_query_execution(connection, merge_statement):
+        connection.execute(text(merge_statement))
     connection.commit()
 
     _LOGGER.info(

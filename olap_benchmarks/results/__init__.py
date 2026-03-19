@@ -18,7 +18,7 @@ from alembic import command
 
 from ..settings import REPO_ROOT, SETTINGS, Revision
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
-from .models import Run, RunMetric, RunStep
+from .models import QueryExecution, Run, RunMetric, RunStep
 from .schema import ensure_results_schema
 
 
@@ -128,6 +128,7 @@ def publish(revision: Revision = "default") -> Path:
                 "run": int(session.scalar(select(func.count()).select_from(Run)) or 0),
                 "run_step": int(session.scalar(select(func.count()).select_from(RunStep)) or 0),
                 "run_metric": int(session.scalar(select(func.count()).select_from(RunMetric)) or 0),
+                "query_execution": int(session.scalar(select(func.count()).select_from(QueryExecution)) or 0),
             }
     finally:
         engine.dispose()
@@ -248,6 +249,7 @@ def delete_runs(run_ids: list[int], revision: Revision = "default", db_path: Pat
     try:
         with Session(engine) as session:
             count = len(run_ids)
+            session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
             session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
             session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
             session.execute(delete(Run).where(Run.id.in_(run_ids)))
@@ -273,6 +275,7 @@ def delete_runs_by_status(status: str, revision: Revision = "default", db_path: 
             if not run_ids:
                 return 0
 
+            session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
             session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
             session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
             session.execute(delete(Run).where(Run.id.in_(run_ids)))

@@ -15,7 +15,7 @@ from ..results import (
     migrate_results,
     rename_database,
 )
-from ..results.models import Run, RunMetric, RunStep
+from ..results.models import QueryExecution, Run, RunMetric, RunStep
 from ..results.schema import ensure_results_schema
 
 
@@ -61,6 +61,15 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
                     cpu_percent=0.0,
                     mem_mb=0,
                     disk_mb=0,
+                )
+            )
+            session.add(
+                QueryExecution(
+                    run_id=run.id,
+                    run_step_id=None,
+                    query="select 1",
+                    start_time=datetime.now(),
+                    end_time=datetime.now(),
                 )
             )
             session.commit()
@@ -235,11 +244,14 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
 
         with Session(engine) as session:
             failed_run = _insert_run(session, suite="time_series", db="timescaledb")
+            failed_run_id = failed_run.id
             failed_run.status = "failed"
             failed_run.finished_at = datetime.now()
 
             running_run = _insert_run(session, suite="time_series", db="monetdb")
+            running_run_id = running_run.id
             completed_run = _insert_run(session, suite="clickbench", db="duckdb")
+            completed_run_id = completed_run.id
             completed_run.status = "completed"
             completed_run.finished_at = datetime.now()
 
@@ -271,6 +283,27 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
                     RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
                     RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
                     RunMetric(run_id=completed_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
+                    QueryExecution(
+                        run_id=failed_run_id,
+                        run_step_id=None,
+                        query="select 1",
+                        start_time=datetime.now(),
+                        end_time=datetime.now(),
+                    ),
+                    QueryExecution(
+                        run_id=running_run_id,
+                        run_step_id=None,
+                        query="select 2",
+                        start_time=datetime.now(),
+                        end_time=datetime.now(),
+                    ),
+                    QueryExecution(
+                        run_id=completed_run_id,
+                        run_step_id=None,
+                        query="select 3",
+                        start_time=datetime.now(),
+                        end_time=datetime.now(),
+                    ),
                 ]
             )
             session.commit()
@@ -287,6 +320,9 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
 
             remaining_metric_run_ids = session.scalars(select(RunMetric.run_id).order_by(RunMetric.id)).all()
             assert len(remaining_metric_run_ids) == 1
+
+            remaining_query_run_ids = session.scalars(select(QueryExecution.run_id).order_by(QueryExecution.id)).all()
+            assert remaining_query_run_ids == [completed_run_id]
     finally:
         engine.dispose()
 
@@ -301,8 +337,10 @@ def test_delete_runs_by_status_orphaned_deletes_running_runs_only(tmp_path: Path
 
         with Session(engine) as session:
             running_run = _insert_run(session, suite="time_series", db="timescaledb")
+            running_run_id = running_run.id
 
             failed_run = _insert_run(session, suite="time_series", db="monetdb")
+            failed_run_id = failed_run.id
             failed_run.status = "failed"
             failed_run.finished_at = datetime.now()
 
@@ -325,6 +363,20 @@ def test_delete_runs_by_status_orphaned_deletes_running_runs_only(tmp_path: Path
                     ),
                     RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
                     RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
+                    QueryExecution(
+                        run_id=running_run_id,
+                        run_step_id=None,
+                        query="select 1",
+                        start_time=datetime.now(),
+                        end_time=datetime.now(),
+                    ),
+                    QueryExecution(
+                        run_id=failed_run_id,
+                        run_step_id=None,
+                        query="select 2",
+                        start_time=datetime.now(),
+                        end_time=datetime.now(),
+                    ),
                 ]
             )
             session.commit()
@@ -341,5 +393,8 @@ def test_delete_runs_by_status_orphaned_deletes_running_runs_only(tmp_path: Path
 
             remaining_metric_run_ids = session.scalars(select(RunMetric.run_id).order_by(RunMetric.id)).all()
             assert len(remaining_metric_run_ids) == 1
+
+            remaining_query_run_ids = session.scalars(select(QueryExecution.run_id).order_by(QueryExecution.id)).all()
+            assert remaining_query_run_ids == [failed_run_id]
     finally:
         engine.dispose()
