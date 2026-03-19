@@ -19,7 +19,7 @@ export function DurationScaleToggle({ mode, onChange, compact = false }: Duratio
 
   return (
     <div className={containerClassName}>
-      {(["log", "linear"] as const).map((option) => (
+      {(["linear", "log"] as const).map((option) => (
         <button
           key={option}
           onClick={() => onChange(option)}

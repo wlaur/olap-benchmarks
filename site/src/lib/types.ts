@@ -79,7 +79,7 @@ export interface QuerySummary {
   iterations: number
 }
 
-export type BenchmarkOperation = "populate" | "select" | "mutate"
+export type BenchmarkOperation = "populate" | "mutate" | "select"
 
 export interface MetricSample {
   run_id: number
