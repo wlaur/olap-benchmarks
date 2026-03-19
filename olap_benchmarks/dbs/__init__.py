@@ -30,9 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 LiteralStepType = Literal["phase", "query", "mutation"]
 
 
-def _status_from_exception(exc: BaseException) -> RunStatus:
-    if isinstance(exc, KeyboardInterrupt):
-        return "aborted"
+def _status_from_exception() -> RunStatus:
     return "failed"
 
 
@@ -154,7 +152,7 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self._finish_step(
                 step_id=step_id,
-                status=_status_from_exception(exc),
+                status=_status_from_exception(),
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -252,7 +250,7 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self.finish_mutation_step(
                 step_id=step_id,
-                status=_status_from_exception(exc),
+                status=_status_from_exception(),
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -282,7 +280,7 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self.finish_query_step(
                 step_id=step_id,
-                status=_status_from_exception(exc),
+                status=_status_from_exception(),
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -480,7 +478,7 @@ class Database(BaseModel, ABC):
             with self.phase_context(operation):
                 benchmark_func()
         except BaseException as exc:
-            status = _status_from_exception(exc)
+            status = _status_from_exception()
             error_type = type(exc).__name__
             error_message = str(exc)
             raise

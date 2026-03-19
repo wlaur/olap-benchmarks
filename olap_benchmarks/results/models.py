@@ -38,7 +38,7 @@ class Run(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
-        CheckConstraint("status in ('running', 'completed', 'failed', 'aborted')", name="ck_run_status"),
+        CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
         Index("idx_run_suite_db_operation", "suite", "db", "operation"),
         Index("idx_run_status_started_at", "status", "started_at"),
     )
@@ -71,7 +71,7 @@ class RunStep(Base):
 
     __table_args__ = (
         CheckConstraint("step_type in ('phase', 'query', 'mutation')", name="ck_run_step_type"),
-        CheckConstraint("status in ('running', 'completed', 'failed', 'aborted')", name="ck_run_step_status"),
+        CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_step_status"),
         Index("idx_run_step_query", "step_type", "query_name", "iteration"),
     )
 

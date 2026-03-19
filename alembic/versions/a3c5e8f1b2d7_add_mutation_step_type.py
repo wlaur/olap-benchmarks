@@ -40,7 +40,7 @@ def upgrade() -> None:
             error_message TEXT,
             metadata JSON,
             CHECK (step_type in ('phase', 'query', 'mutation')),
-            CHECK (status in ('running', 'completed', 'failed', 'aborted'))
+            CHECK (status in ('running', 'completed', 'failed'))
         );
         INSERT INTO run_step SELECT * FROM run_step_new;
         DROP TABLE run_step_new;
@@ -72,7 +72,7 @@ def downgrade() -> None:
             error_message TEXT,
             metadata JSON,
             CHECK (step_type in ('phase', 'query')),
-            CHECK (status in ('running', 'completed', 'failed', 'aborted'))
+            CHECK (status in ('running', 'completed', 'failed'))
         );
         INSERT INTO run_step SELECT * FROM run_step_new;
         DROP TABLE run_step_new;
