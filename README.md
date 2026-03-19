@@ -57,3 +57,9 @@ Apply migrations to an explicit database path:
 ```bash
 uv run --group dev alembic -x db=/absolute/path/to/results.db upgrade head
 ```
+
+## TODO
+
+- Additional step for time series suite with mutate+select
+    - Concurrently: insert one row as quickly as possible to large table + run a small number of selects against this table (multiple clients)
+    - Simulates actual workloads (single writer + multiple readers)
