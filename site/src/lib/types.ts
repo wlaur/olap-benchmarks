@@ -132,3 +132,17 @@ export interface QuerySqlEntry {
 }
 
 export type QueriesManifest = Record<string, Record<string, QuerySqlEntry>>
+
+export interface FlameSpan {
+  id: string
+  db: string
+  operation: BenchmarkOperation
+  step_name: string
+  query_name: string | null
+  query_sql: string | null
+  iteration: number | null
+  elapsed_start_s: number
+  elapsed_end_s: number
+  duration_s: number
+  depth: "operation" | "step" | "query"
+}
