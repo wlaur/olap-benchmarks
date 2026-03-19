@@ -28,11 +28,11 @@ import { InspectorSkeleton, LegendSkeleton, QueryTableSkeleton } from "./Explore
 const BOTTOM_GRID_CLASS =
   "grid min-w-0 gap-4 xl:min-h-[44rem] xl:flex-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.95fr)]"
 const QUERY_SECTION_CLASS =
-  "flex min-h-[26rem] min-w-0 flex-col rounded-2xl bg-surface-raised xl:min-h-0"
+  "flex min-h-[26rem] min-w-0 flex-col rounded-2xl bg-surface-raised xl:max-h-[44rem] xl:min-h-0"
 const QUERY_TABLE_WRAPPER_CLASS =
-  "min-h-[24rem] min-w-0 flex-1 p-5 pt-4 md:min-h-[30rem] xl:min-h-0"
+  "min-h-[24rem] min-w-0 flex-1 overflow-hidden p-5 pt-4 md:min-h-[30rem] xl:min-h-0"
 const QUERY_TABLE_CONTAINER_CLASS =
-  "h-[24rem] min-h-[24rem] min-w-0 md:h-[30rem] md:min-h-[30rem] xl:h-full xl:min-h-0"
+  "h-[24rem] min-h-[24rem] min-w-0 md:h-[30rem] md:min-h-[30rem] xl:h-full xl:max-h-full xl:min-h-0"
 const DETAIL_SECTION_CLASS = "min-h-[28rem] xl:min-h-0"
 
 interface OperationTabProps {
