@@ -45,7 +45,7 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(), nullable=True),
         sa.Column("error_type", sa.String(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
-        sa.CheckConstraint("status in ('running', 'completed', 'failed', 'aborted')", name="ck_run_status"),
+        sa.CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("idx_run_status_started_at", "run", ["status", "started_at"], unique=False)
@@ -78,7 +78,7 @@ def upgrade() -> None:
         sa.Column("error_type", sa.String(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("metadata", sa.JSON(), nullable=True),
-        sa.CheckConstraint("status in ('running', 'completed', 'failed', 'aborted')", name="ck_run_step_status"),
+        sa.CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_step_status"),
         sa.CheckConstraint("step_type in ('phase', 'query')", name="ck_run_step_type"),
         sa.PrimaryKeyConstraint("id"),
     )

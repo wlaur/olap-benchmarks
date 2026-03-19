@@ -241,8 +241,8 @@ def list_runs(
         engine.dispose()
 
 
-def delete_runs(run_ids: list[int], revision: Revision = "default") -> int:
-    db_path = _require_revision(revision)
+def delete_runs(run_ids: list[int], revision: Revision = "default", db_path: Path | None = None) -> int:
+    db_path = db_path or _require_revision(revision)
     engine = get_results_engine(read_only=False, db_path=db_path)
 
     try:
@@ -257,13 +257,18 @@ def delete_runs(run_ids: list[int], revision: Revision = "default") -> int:
         engine.dispose()
 
 
-def delete_runs_by_status(status: str, revision: Revision = "default") -> int:
-    db_path = _require_revision(revision)
+def delete_runs_by_status(status: str, revision: Revision = "default", db_path: Path | None = None) -> int:
+    db_path = db_path or _require_revision(revision)
     engine = get_results_engine(read_only=False, db_path=db_path)
 
     try:
         with Session(engine) as session:
-            run_ids = list(session.scalars(select(Run.id).where(Run.status == status)).all())
+            if status == "failed":
+                run_ids = list(session.scalars(select(Run.id).where(Run.status.in_(("failed", "running")))).all())
+            elif status == "orphaned":
+                run_ids = list(session.scalars(select(Run.id).where(Run.status == "running")).all())
+            else:
+                raise ValueError(f"Unsupported delete status: {status}")
 
             if not run_ids:
                 return 0
@@ -310,7 +315,7 @@ def rename_database(
         engine.dispose()
 
 
-def abort_running_runs(
+def mark_running_runs_failed(
     revision: Revision = "default",
     db_path: Path | None = None,
     error_type: str = "KeyboardInterrupt",
@@ -333,7 +338,7 @@ def abort_running_runs(
                 .where(RunStep.status == "running")
                 .values(
                     finished_at=finished_at,
-                    status="aborted",
+                    status="failed",
                     error_type=error_type,
                     error_message=error_message,
                 )
@@ -344,7 +349,7 @@ def abort_running_runs(
                 .where(Run.status == "running")
                 .values(
                     finished_at=finished_at,
-                    status="aborted",
+                    status="failed",
                     error_type=error_type,
                     error_message=error_message,
                 )

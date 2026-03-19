@@ -8,17 +8,21 @@ from setproctitle import setproctitle
 
 from .metrics.storage import start_writer_process
 from .results import (
-    abort_running_runs,
+    config as show_config,
+)
+from .results import (
     delete_runs,
     delete_runs_by_status,
     list_revisions,
     list_runs,
+    mark_running_runs_failed,
     migrate_results,
     query_results,
     rename_database,
 )
-from .results import config as show_config
-from .results import publish as publish_results
+from .results import (
+    publish as publish_results,
+)
 from .settings import (
     MAIN_PROCESS_TITLE,
     SETTINGS,
@@ -162,9 +166,9 @@ def benchmark(
     finally:
         writer.close()
         if interrupted:
-            aborted_runs = abort_running_runs(revision=revision)
-            if aborted_runs:
-                _LOGGER.warning(f"Marked {aborted_runs} interrupted run(s) as aborted")
+            failed_runs = mark_running_runs_failed(revision=revision)
+            if failed_runs:
+                _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
 
 
 @app.command
@@ -209,8 +213,8 @@ def _confirm_delete(description: str, force: bool = False) -> None:
 
 
 def _validate_delete_status(status: str) -> None:
-    if status not in {"failed", "aborted"}:
-        raise SystemExit("`results delete --status` only supports 'failed' or 'aborted'.")
+    if status not in {"failed", "orphaned"}:
+        raise SystemExit("`results delete --status` only supports 'failed' or 'orphaned'.")
 
 
 @results_app.command
@@ -243,7 +247,7 @@ def delete_cmd(
     revision: Revision = "default",
     force: bool = False,
 ) -> None:
-    """Delete runs (and their steps/metrics) by run ID or status (e.g. 'failed', 'aborted')."""
+    """Delete runs (and their steps/metrics) by run ID or status (e.g. 'failed', 'orphaned')."""
     if run_id and status:
         raise SystemExit("Specify either --run-id or --status, not both.")
     if not run_id and not status:
@@ -255,7 +259,8 @@ def delete_cmd(
     else:
         assert status is not None
         _validate_delete_status(status)
-        _confirm_delete(f"delete all '{status}' run(s)", force=force)
+        description = "delete all failed and orphaned run(s)" if status == "failed" else "delete all orphaned run(s)"
+        _confirm_delete(description, force=force)
         count = delete_runs_by_status(status, revision=revision)
 
     print(f"Deleted {count} run(s) and their associated steps and metrics.")
