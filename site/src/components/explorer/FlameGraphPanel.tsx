@@ -12,10 +12,11 @@ import { BodyText, MetaLabel, SectionTitle } from "../Typography"
 import { FlameGraph } from "./FlameGraph"
 
 interface FlameGraphPanelProps {
-  system: string
+  system: string | null
   suite: BenchmarkSuiteId
   databases: string[]
   metricSamples: MetricSample[]
+  isLoading?: boolean
 }
 
 interface SpanMetrics {
@@ -25,7 +26,13 @@ interface SpanMetrics {
   sampleCount: number
 }
 
-export function FlameGraphPanel({ system, suite, databases, metricSamples }: FlameGraphPanelProps) {
+export function FlameGraphPanel({
+  system,
+  suite,
+  databases,
+  metricSamples,
+  isLoading = false,
+}: FlameGraphPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedDb, setSelectedDb] = useState<string | null>(null)
   const [spans, setSpans] = useState<FlameSpan[]>([])
@@ -36,6 +43,11 @@ export function FlameGraphPanel({ system, suite, databases, metricSamples }: Fla
     selectedDb && databases.includes(selectedDb) ? selectedDb : (databases[0] ?? null)
 
   useEffect(() => {
+    if (isLoading || system === null) {
+      setIsLoadingSpans(false)
+      setSpans([])
+      return
+    }
     if (!resolvedDb) {
       setSpans([])
       return
@@ -60,7 +72,7 @@ export function FlameGraphPanel({ system, suite, databases, metricSamples }: Fla
     return () => {
       cancelled = true
     }
-  }, [system, suite, resolvedDb, isExpanded])
+  }, [isLoading, system, suite, resolvedDb, isExpanded])
 
   const spanMetrics = useMemo((): SpanMetrics | null => {
     if (!selectedSpan || !resolvedDb) return null
@@ -120,7 +132,7 @@ export function FlameGraphPanel({ system, suite, databases, metricSamples }: Fla
         <button
           type="button"
           onClick={() => setIsExpanded((c) => !c)}
-          disabled={databases.length === 0}
+          disabled={isLoading || databases.length === 0}
           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
         >
           {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
@@ -138,7 +150,11 @@ export function FlameGraphPanel({ system, suite, databases, metricSamples }: Fla
             />
           </div>
 
-          {isLoadingSpans ? (
+          {isLoading ? (
+            <div className="flex h-32 items-center justify-center text-sm text-slate-500">
+              Loading execution data...
+            </div>
+          ) : isLoadingSpans ? (
             <div className="flex h-32 items-center justify-center text-sm text-slate-500">
               Loading execution data...
             </div>
