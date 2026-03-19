@@ -121,6 +121,7 @@ export interface QueryStep {
 }
 
 export interface StepMetricAvailability {
+  db: string
   operation: BenchmarkOperation
   step_name: string
 }

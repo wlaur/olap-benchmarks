@@ -48,7 +48,7 @@ export function OperationTabs({
               onClick={() => setActiveTab(tab)}
               className={
                 resolvedTab === tab
-                  ? "rounded-full bg-accent-400/10 px-4 py-2 text-sm font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
+                  ? "rounded-full bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.28)]"
                   : "rounded-full px-4 py-2 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
               }
             >
