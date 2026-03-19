@@ -516,61 +516,93 @@ export async function fetchStepMetricAvailability(
 ): Promise<StepMetricAvailability[]> {
   const db = await getKyselyDb()
 
-  const rows = await sql<StepMetricAvailability>`
-    WITH latest_runs AS (
-      SELECT
-        run.id AS run_id,
-        run.db,
-        run.operation,
-        row_number() OVER (
-          PARTITION BY run.db, run.operation
-          ORDER BY run.finished_at DESC, run.id DESC
-        ) AS run_rank
-      FROM run
-      WHERE run.suite = ${suite}
-        AND run.system = ${system}
-        AND run.status = 'completed'
-        AND run.finished_at IS NOT NULL
-        AND run.operation IN ('populate', 'mutate', 'select')
-    ),
-    step_windows AS (
-      SELECT
-        lr.operation,
-        CASE WHEN rs.step_type = 'phase' THEN rs.table_name ELSE rs.query_name END AS step_name,
-        lr.run_id,
-        MIN(rs.started_at) AS window_start,
-        MAX(rs.finished_at) AS window_end
-      FROM run_step rs
-      INNER JOIN latest_runs lr ON lr.run_id = rs.run_id
-      WHERE lr.run_rank = 1
-        AND rs.status = 'completed'
-        AND rs.finished_at IS NOT NULL
-        AND (
-          (rs.step_type = 'phase' AND rs.step_name = 'insert')
-          OR rs.step_type = 'query'
-          OR rs.step_type = 'mutation'
-        )
-      GROUP BY lr.operation, CASE WHEN rs.step_type = 'phase' THEN rs.table_name ELSE rs.query_name END, lr.run_id
-    ),
-    per_db_counts AS (
-      SELECT
-        lr.db,
-        sw.operation,
-        sw.step_name,
-        count(rm.run_id) AS sample_count
-      FROM step_windows sw
-      INNER JOIN latest_runs lr
-        ON lr.run_id = sw.run_id
-      LEFT JOIN run_metric rm
-        ON rm.run_id = sw.run_id
-        AND rm.time >= sw.window_start
-        AND rm.time <= sw.window_end
-      GROUP BY lr.db, sw.operation, sw.step_name, sw.run_id
+  return db
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.operation").as("operation"),
+          sql<number>`row_number() over (
+            partition by ${eb.ref("run.db")}, ${eb.ref("run.operation")}
+            order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
+          )`.as("run_rank"),
+        ])
+        .where("run.suite", "=", suite)
+        .where("run.system", "=", system)
+        .where("run.status", "=", "completed")
+        .where("run.finished_at", "is not", null)
+        .where("run.operation", "in", ["populate", "mutate", "select"]),
     )
-    SELECT db, operation, step_name
-    FROM per_db_counts
-    WHERE sample_count >= 2
-  `.execute(db)
+    .with("step_windows", (qb) => {
+      const insertWindows = qb
+        .selectFrom("run_step")
+        .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
+        .select((eb) => [
+          eb.ref("latest_runs.db").as("db"),
+          eb.ref("latest_runs.operation").$castTo<BenchmarkOperation>().as("operation"),
+          eb.ref("run_step.table_name").$notNull().as("step_name"),
+          eb.ref("latest_runs.run_id").as("run_id"),
+          eb.fn.min("run_step.started_at").as("window_start"),
+          eb.fn.max("run_step.finished_at").$notNull().as("window_end"),
+        ])
+        .where("latest_runs.run_rank", "=", 1)
+        .where("run_step.status", "=", "completed")
+        .where("run_step.finished_at", "is not", null)
+        .where("run_step.step_type", "=", "phase")
+        .where("run_step.step_name", "=", "insert")
+        .where("run_step.table_name", "is not", null)
+        .groupBy([
+          "latest_runs.db",
+          "latest_runs.operation",
+          "run_step.table_name",
+          "latest_runs.run_id",
+        ])
 
-  return rows.rows
+      const queryAndMutationWindows = qb
+        .selectFrom("run_step")
+        .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
+        .select((eb) => [
+          eb.ref("latest_runs.db").as("db"),
+          eb.ref("latest_runs.operation").$castTo<BenchmarkOperation>().as("operation"),
+          eb.ref("run_step.query_name").$notNull().as("step_name"),
+          eb.ref("latest_runs.run_id").as("run_id"),
+          eb.fn.min("run_step.started_at").as("window_start"),
+          eb.fn.max("run_step.finished_at").$notNull().as("window_end"),
+        ])
+        .where("latest_runs.run_rank", "=", 1)
+        .where("run_step.status", "=", "completed")
+        .where("run_step.finished_at", "is not", null)
+        .where("run_step.step_type", "in", ["query", "mutation"])
+        .where("run_step.query_name", "is not", null)
+        .groupBy([
+          "latest_runs.db",
+          "latest_runs.operation",
+          "run_step.query_name",
+          "latest_runs.run_id",
+        ])
+
+      return insertWindows.unionAll(queryAndMutationWindows)
+    })
+    .selectFrom("step_windows")
+    .leftJoin("run_metric", (join) =>
+      join
+        .onRef("run_metric.run_id", "=", "step_windows.run_id")
+        .onRef("run_metric.time", ">=", "step_windows.window_start")
+        .onRef("run_metric.time", "<=", "step_windows.window_end"),
+    )
+    .select((eb) => [
+      eb.ref("step_windows.db").as("db"),
+      eb.ref("step_windows.operation").as("operation"),
+      eb.ref("step_windows.step_name").as("step_name"),
+    ])
+    .groupBy([
+      "step_windows.db",
+      "step_windows.operation",
+      "step_windows.step_name",
+      "step_windows.run_id",
+    ])
+    .having((eb) => eb.fn.count<number>("run_metric.run_id"), ">=", 2)
+    .execute()
 }
