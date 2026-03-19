@@ -190,11 +190,11 @@ class Clickhouse(Database):
         )
         return set(df.get_column("table_name").to_list())
 
-    def run_sql(self, statement: str) -> None:
+    def run_sql(self, statement: str, settings: dict[str, Any] | None = None) -> None:
         retries = 10
         for retry in range(retries):
             try:
-                cast(Any, self.get_client()).command(statement)
+                cast(Any, self.get_client()).command(statement, settings=settings)
                 return
             except Exception as e:
                 if "error code 1001" in str(e):
@@ -207,8 +207,13 @@ class Clickhouse(Database):
 
                 raise
 
-    def _settle_mutations(self, table: TableName) -> None:
-        self.run_sql(f"optimize table {table} final")
+    def _build_key_filter(self, input_file_string: str, primary_keys: list[str]) -> str:
+        if len(primary_keys) == 1:
+            col = primary_keys[0]
+            return f"{col} in (select distinct {col} from file('{input_file_string}', parquet))"
+
+        key_tuple = ", ".join(primary_keys)
+        return f"({key_tuple}) in (select distinct {key_tuple} from file('{input_file_string}', parquet))"
 
     def _get_order_by_columns(
         self,
@@ -387,13 +392,9 @@ class Clickhouse(Database):
         try:
             pk_list = [primary_key] if isinstance(primary_key, str) else primary_key
 
-            where_clause = " and ".join(
-                f"{col} in (select distinct {col} from file('{input_file_string}', parquet))" for col in pk_list
-            )
-
+            where_clause = self._build_key_filter(input_file_string, pk_list)
             delete_sql = f"delete from {table} where {where_clause}"
-            self.run_sql(delete_sql)
-            self._settle_mutations(table)
+            self.run_sql(delete_sql, settings={"mutations_sync": 1})
 
             sql = f"""
                 insert into {table}
@@ -415,12 +416,9 @@ class Clickhouse(Database):
         temp_parquet_path, input_file_string = self._write_temporary_parquet(keys, temp_dir, None)
 
         try:
-            where_clause = " and ".join(
-                f"{col} in (select distinct {col} from file('{input_file_string}', parquet))" for col in primary_keys
-            )
+            where_clause = self._build_key_filter(input_file_string, primary_keys)
             delete_sql = f"delete from {table} where {where_clause}"
-            self.run_sql(delete_sql)
-            self._settle_mutations(table)
+            self.run_sql(delete_sql, settings={"mutations_sync": 1})
         finally:
             self._cleanup_temporary_parquet(temp_parquet_path)
 
