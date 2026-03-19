@@ -476,6 +476,18 @@ def prepare_data(overwrite: bool = False) -> None:
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "time_series"
 
+    def get_mutate_steps(self) -> tuple[list[MutateStep], list[MutateStep]]:
+        enabled_steps: list[MutateStep] = []
+        skipped_steps: list[MutateStep] = []
+
+        for step in TIME_SERIES_MUTATE_STEPS:
+            if self.db.is_mutation_step_enabled(self.name, step.name):
+                enabled_steps.append(step)
+            else:
+                skipped_steps.append(step)
+
+        return enabled_steps, skipped_steps
+
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
         return get_time_series_expected_row_counts()
 
@@ -704,8 +716,17 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
     def mutate(self) -> None:
         t0 = perf_counter()
+        steps, skipped_steps = self.get_mutate_steps()
 
-        for step_idx, step in enumerate(TIME_SERIES_MUTATE_STEPS):
+        if skipped_steps:
+            skipped_names = ", ".join(step.name for step in skipped_steps)
+            _LOGGER.info(f"Skipping {len(skipped_steps):_} mutation steps for {self.db.name}: {skipped_names}")
+
+        if not steps:
+            _LOGGER.info(f"No mutation steps enabled for {self.name} on {self.db.name}")
+            return
+
+        for step_idx, step in enumerate(steps):
             for iteration in range(1, MUTATE_ITERATIONS + 1):
                 seed = step_idx * 1000 + iteration
 
@@ -729,11 +750,8 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                             self.db.delete(step.table, primary_key=pk, keys=keys)
 
                 _LOGGER.info(
-                    f"Executed {step.name} ({step_idx + 1:_}/{len(TIME_SERIES_MUTATE_STEPS):_}) "
+                    f"Executed {step.name} ({step_idx + 1:_}/{len(steps):_}) "
                     f"iteration {iteration:_}/{MUTATE_ITERATIONS:_}"
                 )
 
-        _LOGGER.info(
-            f"Executed {len(TIME_SERIES_MUTATE_STEPS):_} mutation steps "
-            f"(with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+        _LOGGER.info(f"Executed {len(steps):_} mutation steps (with repetitions) in {perf_counter() - t0:_.2f} seconds")
