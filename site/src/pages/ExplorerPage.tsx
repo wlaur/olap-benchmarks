@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 
+import { FlameGraphPanel } from "../components/explorer/FlameGraphPanel"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
@@ -87,6 +88,15 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
         queriesManifest={state.queriesManifest}
         isLoading={isLoading}
       />
+
+      {!isLoading && system ? (
+        <FlameGraphPanel
+          system={system}
+          suite={suiteId}
+          databases={includedDatabases}
+          metricSamples={state.metricSamples}
+        />
+      ) : null}
 
       {!isLoading && state.metricSamples.length > 0 ? (
         <ResourceTrendPanel
