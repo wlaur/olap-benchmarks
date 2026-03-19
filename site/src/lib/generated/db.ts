@@ -94,9 +94,25 @@ export type RunStepSelectable = Selectable<RunStep>
 
 export type RunStepUpdateable = Updateable<RunStep>
 
+export type QueryExecution = {
+  id: Generated<number>
+  run_id: number
+  run_step_id: number
+  query: string
+  start_time: ColumnType<Date, Date | string, Date | string>
+  end_time: ColumnType<Date, Date | string, Date | string>
+}
+
+export type QueryExecutionInsertable = Insertable<QueryExecution>
+
+export type QueryExecutionSelectable = Selectable<QueryExecution>
+
+export type QueryExecutionUpdateable = Updateable<QueryExecution>
+
 export interface DB {
   alembic_version: AlembicVersion
   debug: Debug
+  query_execution: QueryExecution
   run: Run
   run_metric: RunMetric
   run_step: RunStep
