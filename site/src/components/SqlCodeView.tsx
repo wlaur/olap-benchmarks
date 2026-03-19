@@ -18,13 +18,11 @@ const sqlViewerTheme = EditorView.theme(
     },
     ".cm-editor": {
       backgroundColor: "transparent",
+      height: "100%",
       minHeight: "100%",
-      minWidth: "100%",
-      width: "100%",
     },
     ".cm-content": {
       padding: "1rem",
-      minWidth: "100%",
       fontFamily:
         "ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace",
       lineHeight: "1.65",
@@ -37,6 +35,8 @@ const sqlViewerTheme = EditorView.theme(
       border: "none",
       backgroundColor: "transparent",
       color: "#475569",
+      position: "relative",
+      left: "auto",
     },
     ".cm-activeLine, .cm-activeLineGutter": {
       backgroundColor: "transparent",
@@ -48,7 +48,7 @@ const sqlViewerTheme = EditorView.theme(
       padding: "0 0.75rem 0 1rem",
     },
     ".cm-scroller": {
-      overflow: "visible",
+      overflow: "auto",
     },
   },
   { dark: true },
@@ -86,6 +86,10 @@ export function SqlCodeView({ code }: SqlCodeViewProps) {
   }, [code])
 
   return (
-    <div ref={hostRef} aria-label="SQL query viewer" className="sql-code-view h-full min-h-0" />
+    <div
+      ref={hostRef}
+      aria-label="SQL query viewer"
+      className="sql-code-view h-full min-h-0 w-full"
+    />
   )
 }
