@@ -10,28 +10,43 @@ import {
   YAxis,
 } from "recharts"
 
+import {
+  formatCpuPercent,
+  formatMegabytes,
+  toMemoryScale,
+  toMetricScale,
+} from "../lib/metricFormat"
 import type { MetricSample, BenchmarkOperation } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard } from "./layout/Panel"
 import { BodyText, SectionTitle } from "./Typography"
 
-const OPERATIONS: BenchmarkOperation[] = ["populate", "select", "mutate"]
+const OPERATIONS: BenchmarkOperation[] = ["populate", "mutate", "select"]
+
+type ScaleBuilder = (maxValue: number) => {
+  domain: [number, number]
+  ticks: number[]
+  formatter?: (v: number) => string
+}
 
 const METRIC_CONFIGS = [
   {
     key: "cpu_percent",
     label: "CPU",
-    formatter: (value: number) => `${value.toFixed(0)}%`,
+    formatter: formatCpuPercent,
+    scaleBuilder: toMetricScale as ScaleBuilder,
   },
   {
     key: "mem_mb",
     label: "Memory",
     formatter: formatMegabytes,
+    scaleBuilder: toMemoryScale as ScaleBuilder,
   },
   {
     key: "disk_mb",
     label: "Disk",
     formatter: formatMegabytes,
+    scaleBuilder: toMemoryScale as ScaleBuilder,
   },
 ] as const
 
@@ -164,7 +179,7 @@ export function MetricsTimeSeriesPanel({
             </div>
           </div>
 
-          {selectedOperationSamples.length === 0 ? (
+          {selectedOperationSamples.length <= 1 ? (
             <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
               No {selectedOperation} resource metrics were recorded for the selected databases.
             </div>
@@ -208,7 +223,7 @@ export function MetricsTimeSeriesPanel({
                           tick={{ fill: "#64748b", fontSize: 11 }}
                           axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                           tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-                          tickFormatter={metric.formatter}
+                          tickFormatter={yScales[metric.key].formatter ?? metric.formatter}
                         />
                         <Tooltip
                           contentStyle={{
@@ -334,38 +349,15 @@ function buildXTicks(
 
 function buildYScales(
   samples: MetricSample[],
-): Record<MetricKey, { domain: [number, number]; ticks: number[] }> {
+): Record<
+  MetricKey,
+  { domain: [number, number]; ticks: number[]; formatter?: (v: number) => string }
+> {
   return {
-    cpu_percent: toMetricScale(samples.map((sample) => sample.cpu_percent)),
-    mem_mb: toMetricScale(samples.map((sample) => sample.mem_mb)),
-    disk_mb: toMetricScale(samples.map((sample) => sample.disk_mb)),
+    cpu_percent: toMetricScale(Math.max(0, ...samples.map((s) => s.cpu_percent))),
+    mem_mb: toMemoryScale(Math.max(0, ...samples.map((s) => s.mem_mb))),
+    disk_mb: toMemoryScale(Math.max(0, ...samples.map((s) => s.disk_mb))),
   }
-}
-
-function toMetricScale(values: number[]): { domain: [number, number]; ticks: number[] } {
-  const maxValue = Math.max(0, ...values)
-  const roughStep = maxValue <= 0 ? 1 : maxValue / 4
-  const step = getNiceStep(roughStep)
-  const roundedMax = maxValue <= 0 ? step : Math.ceil(maxValue / step) * step
-  const ticks: number[] = []
-
-  for (let tick = 0; tick <= roundedMax; tick += step) {
-    ticks.push(tick)
-  }
-
-  return {
-    domain: [0, roundedMax],
-    ticks,
-  }
-}
-
-function formatMegabytes(value: number): string {
-  if (value >= 1024) {
-    const gbValue = value / 1024
-    return `${gbValue >= 10 ? gbValue.toFixed(0) : gbValue.toFixed(1)} GB`
-  }
-
-  return `${value.toFixed(0)} MB`
 }
 
 function formatElapsedLabel(value: number): string {

@@ -47,7 +47,7 @@ export function QueryDetailPanel({
   const hasTabs = sql !== null && (sql.sql !== null || overrideKeys.length > 0)
   const defaultTab = sql?.sql !== null ? "common" : (overrideKeys[0] ?? "common")
   const [activeTab, setActiveTab] = useState(defaultTab)
-  const [chartScaleMode, setChartScaleMode] = useState<DurationScaleMode>("log")
+  const [chartScaleMode, setChartScaleMode] = useState<DurationScaleMode>("linear")
 
   useEffect(() => {
     setActiveTab(defaultTab)

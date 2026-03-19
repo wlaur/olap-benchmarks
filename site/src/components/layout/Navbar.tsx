@@ -1,11 +1,9 @@
-import { Home } from "lucide-react"
-import { NavLink } from "react-router-dom"
+import { FlaskConical, Home } from "lucide-react"
+import { NavLink, useLocation } from "react-router-dom"
 
-import type { BenchmarkDefinition } from "../../lib/benchmarks"
 import { SystemSelector, SystemSelectorSkeleton } from "../filters/SystemSelector"
 
 interface NavbarProps {
-  benchmarks: BenchmarkDefinition[]
   systems: string[]
   selectedSystem: string | null
   onSelectSystem: (system: string) => void
@@ -20,12 +18,14 @@ const inactiveNavTextClass =
   "bg-surface-raised text-slate-300 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)]"
 
 export function Navbar({
-  benchmarks,
   systems,
   selectedSystem,
   onSelectSystem,
   isSystemLoading = false,
 }: NavbarProps) {
+  const location = useLocation()
+  const isExplorerActive = location.pathname.startsWith("/explorer")
+
   return (
     <header className="border-b border-border-default bg-surface-primary/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-3">
@@ -35,22 +35,10 @@ export function Navbar({
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="h-9 w-9" />
               <h1 className="text-xl font-semibold text-slate-50 max-sm:hidden">OLAP Benchmarks</h1>
             </NavLink>
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition min-[1060px]:hidden ${
-                  isActive ? activeNavClass : inactiveNavClass
-                }`
-              }
-              title="Home"
-            >
-              <Home size={16} />
-            </NavLink>
           </div>
 
-          <div className="hidden min-w-0 flex-1 py-1 min-[1060px]:block">
-            <nav className="flex min-w-full items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-center py-1">
+            <nav className="flex items-center gap-2">
               <NavLink
                 to="/"
                 end
@@ -63,19 +51,15 @@ export function Navbar({
               >
                 <Home size={18} />
               </NavLink>
-              {benchmarks.map((benchmark) => (
-                <NavLink
-                  key={benchmark.id}
-                  to={`/benchmarks/${benchmark.id}`}
-                  className={({ isActive }) =>
-                    `inline-flex h-11 shrink-0 items-center rounded-full px-4 text-sm transition ${
-                      isActive ? activeNavClass : inactiveNavTextClass
-                    }`
-                  }
-                >
-                  {benchmark.navLabel}
-                </NavLink>
-              ))}
+              <NavLink
+                to="/explorer/time_series"
+                className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm transition ${
+                  isExplorerActive ? activeNavClass : inactiveNavTextClass
+                }`}
+              >
+                <FlaskConical size={16} strokeWidth={1.8} />
+                Explorer
+              </NavLink>
             </nav>
           </div>
 
@@ -93,24 +77,6 @@ export function Navbar({
               <p className="text-sm text-slate-500">No completed systems found.</p>
             )}
           </div>
-        </div>
-
-        <div className="mt-2 min-[1060px]:hidden">
-          <nav className="flex flex-wrap items-center gap-2">
-            {benchmarks.map((benchmark) => (
-              <NavLink
-                key={benchmark.id}
-                to={`/benchmarks/${benchmark.id}`}
-                className={({ isActive }) =>
-                  `inline-flex h-9 shrink-0 items-center rounded-full px-3 text-xs transition ${
-                    isActive ? activeNavClass : inactiveNavTextClass
-                  }`
-                }
-              >
-                {benchmark.navLabel}
-              </NavLink>
-            ))}
-          </nav>
         </div>
       </div>
     </header>

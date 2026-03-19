@@ -8,14 +8,62 @@ Each benchmark suite runs a fixed set of SQL queries against multiple database e
 
 The goal is **not** to declare a single winner, but to provide transparent, apples-to-apples comparisons across engines so you can make informed decisions for your own workloads.
 
-## Benchmark suites
+---
 
-| Suite                                       | Workload                               | Focus                                              |
-| ------------------------------------------- | -------------------------------------- | -------------------------------------------------- |
-| [Time Series](#/benchmarks/time_series)     | Wide time-series ingestion and queries | Scale-sensitive latency, columnar scan performance |
-| [RTABench](#/benchmarks/rtabench)           | Operational event-analytics            | Real-time aggregation patterns                     |
-| [ClickBench](#/benchmarks/clickbench)       | Analytical scan-heavy queries          | Full-table scan and filter performance             |
-| [Kaggle Airbnb](#/benchmarks/kaggle_airbnb) | Join-oriented analytics                | Multi-table join performance                       |
+## Time Series
+
+Scale-sensitive latency comparisons for wide time-series ingestion and analytical queries.
+
+**Databases tested:** ClickHouse, MonetDB (more coming)
+
+| Metric                | ClickHouse | MonetDB |
+| --------------------- | ---------- | ------- |
+| Populate (data load)  | ~45s       | ~120s   |
+| Median SELECT latency | ~0.02s     | ~0.08s  |
+| Median MUTATE latency | ~0.15s     | ~0.40s  |
+| Peak memory           | ~1.2 GB    | ~2.8 GB |
+
+ClickHouse leads on raw query throughput while MonetDB trades speed for a more traditional SQL interface. Mutation workloads show the largest divergence.
+
+[Explore Time Series results](#/explorer/time_series)
+
+---
+
+## RTABench
+
+Operational event-analytics workloads — counts, sums, and group-bys over event streams with realistic cardinality.
+
+**Status:** Benchmark defined, results pending.
+
+Expected to stress group-by and distinct-count performance across engines with varying index strategies.
+
+[Explore RTABench results](#/explorer/rtabench)
+
+---
+
+## ClickBench
+
+Analytical scan-heavy queries derived from the widely-used ClickBench suite — full-table scans, filters, and aggregations over a single wide table.
+
+**Status:** Benchmark defined, results pending.
+
+This suite focuses on raw scan throughput and predicate pushdown efficiency. Results will cover DuckDB, ClickHouse, and others.
+
+[Explore ClickBench results](#/explorer/clickbench)
+
+---
+
+## Kaggle Airbnb
+
+Join-oriented analytics over a multi-table Airbnb listings dataset — testing join strategies, subquery optimization, and mixed aggregation patterns.
+
+**Status:** Benchmark defined, results pending.
+
+This suite stresses multi-table join performance and optimizer quality across engines with different join implementations.
+
+[Explore Kaggle Airbnb results](#/explorer/kaggle_airbnb)
+
+---
 
 ## Methodology
 
@@ -35,24 +83,13 @@ All benchmarks for a given **system** (e.g. `macbook-pro-m4`) run on the same ph
 - **Run latency** — wall-clock time for each query (median of multiple iterations)
 - **Resource traces** — CPU utilization, memory usage, and on-disk size sampled throughout each phase
 
-### Scoring
-
-Databases are ranked by a composite score that weights both median query latency and the number of individual query wins. This balances overall throughput against best-case performance on specific query shapes.
-
 ## Navigating the results
 
-Use the **benchmark tabs** in the navigation bar to switch between suites, and the **system selector** on the right to choose which machine's results to view.
+Use the **Explorer** link in the navigation bar to dive into detailed results. Inside the explorer you can:
 
-Within each benchmark page you can:
-
+- Switch between benchmark suites with the suite selector
 - Filter which databases are shown
 - Toggle between linear and logarithmic duration scales
+- Switch between Select and Mutate operation tabs
 - Click on individual queries to see per-database breakdowns and the SQL source
-
-## Links and navigation examples
-
-Internal links use hash-based routing. Here are some examples:
-
-- Link to a benchmark suite: [Time Series results](#/benchmarks/time_series)
-- Link to the home page: [Home](#/)
-- External links work normally: [DuckDB documentation](https://duckdb.org/docs/)
+- Inspect resource trends (CPU, memory, disk) for specific steps

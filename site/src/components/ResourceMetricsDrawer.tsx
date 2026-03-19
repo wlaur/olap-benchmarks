@@ -11,6 +11,12 @@ import {
   YAxis,
 } from "recharts"
 
+import {
+  formatCpuPercent,
+  formatMegabytes,
+  toMemoryScale,
+  toMetricScale,
+} from "../lib/metricFormat"
 import type { MetricSample, QueryStep } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { Eyebrow, MetaLabel } from "./Typography"
@@ -230,7 +236,7 @@ export function ResourceMetricsDrawer({
           </div>
         </div>
 
-        {runSamples.length === 0 ? (
+        {runSamples.length <= 1 ? (
           <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
             No resource metrics available for the run phase.
           </div>
@@ -241,7 +247,8 @@ export function ResourceMetricsDrawer({
               timelines={databaseTimelines}
               metric="cpu_percent"
               databaseColors={databaseColors}
-              formatter={(v: number) => `${v.toFixed(0)}%`}
+              formatter={formatCpuPercent}
+              scaleBuilder={toMetricScale}
             />
             <MetricChart
               label="Memory"
@@ -249,6 +256,7 @@ export function ResourceMetricsDrawer({
               metric="mem_mb"
               databaseColors={databaseColors}
               formatter={formatMegabytes}
+              scaleBuilder={toMemoryScale}
             />
             <MetricChart
               label="Disk"
@@ -256,6 +264,7 @@ export function ResourceMetricsDrawer({
               metric="disk_mb"
               databaseColors={databaseColors}
               formatter={formatMegabytes}
+              scaleBuilder={toMemoryScale}
             />
           </div>
         )}
@@ -270,16 +279,22 @@ function MetricChart({
   metric,
   databaseColors,
   formatter,
+  scaleBuilder,
 }: {
   label: string
   timelines: DatabaseTimeline[]
   metric: "cpu_percent" | "mem_mb" | "disk_mb"
   databaseColors: Record<string, string>
   formatter: (v: number) => string
+  scaleBuilder: (maxValue: number) => {
+    domain: [number, number]
+    ticks: number[]
+    formatter?: (v: number) => string
+  }
 }) {
   const values = timelines.flatMap((timeline) => timeline.samples.map((sample) => sample[metric]))
   const maxVal = Math.max(1, ...values)
-  const yScale = toMetricScale(maxVal)
+  const yScale = scaleBuilder(maxVal)
 
   return (
     <div className="rounded-xl border border-border-default bg-surface-inset p-3">
@@ -355,7 +370,7 @@ function MetricChart({
                       tick={{ fill: "#64748b", fontSize: 10 }}
                       axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                       tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-                      tickFormatter={formatter}
+                      tickFormatter={yScale.formatter ?? formatter}
                     />
                     <Tooltip
                       contentStyle={{
@@ -441,33 +456,6 @@ function buildEvenTicks(minSeconds: number, maxSeconds: number): number[] {
   const lastTick = ticks.at(-1)
   if (lastTick !== maxSeconds) ticks.push(maxSeconds)
   return ticks
-}
-
-function toMetricScale(maxValue: number): { domain: [number, number]; ticks: number[] } {
-  const roughStep = maxValue <= 0 ? 1 : maxValue / 4
-  const step = getNiceStep(roughStep)
-  const roundedMax = maxValue <= 0 ? step : Math.ceil(maxValue / step) * step
-  const ticks: number[] = []
-  for (let t = 0; t <= roundedMax; t += step) ticks.push(t)
-  return { domain: [0, roundedMax], ticks }
-}
-
-function getNiceStep(value: number): number {
-  const exponent = Math.floor(Math.log10(Math.max(value, 1)))
-  const magnitude = 10 ** exponent
-  const normalized = value / magnitude
-  if (normalized <= 1) return magnitude
-  if (normalized <= 2) return 2 * magnitude
-  if (normalized <= 5) return 5 * magnitude
-  return 10 * magnitude
-}
-
-function formatMegabytes(value: number): string {
-  if (value >= 1024) {
-    const gb = value / 1024
-    return `${gb >= 10 ? gb.toFixed(0) : gb.toFixed(1)} GB`
-  }
-  return `${value.toFixed(0)} MB`
 }
 
 function formatElapsedLabel(value: number): string {
