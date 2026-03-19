@@ -554,20 +554,22 @@ export async function fetchStepMetricAvailability(
     ),
     per_db_counts AS (
       SELECT
+        lr.db,
         sw.operation,
         sw.step_name,
         count(rm.run_id) AS sample_count
       FROM step_windows sw
+      INNER JOIN latest_runs lr
+        ON lr.run_id = sw.run_id
       LEFT JOIN run_metric rm
         ON rm.run_id = sw.run_id
         AND rm.time >= sw.window_start
         AND rm.time <= sw.window_end
-      GROUP BY sw.operation, sw.step_name, sw.run_id
+      GROUP BY lr.db, sw.operation, sw.step_name, sw.run_id
     )
-    SELECT operation, step_name
+    SELECT db, operation, step_name
     FROM per_db_counts
-    GROUP BY operation, step_name
-    HAVING bool_or(sample_count >= 2)
+    WHERE sample_count >= 2
   `.execute(db)
 
   return rows.rows

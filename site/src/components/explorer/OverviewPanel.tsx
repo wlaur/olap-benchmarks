@@ -184,7 +184,7 @@ export function OverviewPanel({
                       onClick={() => toggleOverviewOperation(operation)}
                       className={
                         isActive
-                          ? "inline-flex items-center gap-2 rounded-full bg-accent-400/10 px-3 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
+                          ? "inline-flex items-center gap-2 rounded-full bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.28)]"
                           : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
                       }
                     >
