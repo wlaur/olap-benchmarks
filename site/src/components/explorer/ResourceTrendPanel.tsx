@@ -558,19 +558,21 @@ function getAvailableStepWindows(
   }
 
   return new Map(
-    Array.from(available.entries()).map(([stepValue, windowsByDb]) => [
-      stepValue,
-      new Map(
-        Array.from(windowsByDb.entries()).map(([db, window]) => [
-          db,
-          {
-            start_s: window.start_s,
-            end_s: window.end_s,
-            duration_s: window.duration_s,
-          },
-        ]),
-      ),
-    ]),
+    Array.from(available.entries())
+      .filter(([, windowsByDb]) => windowsByDb.size >= (databases.length > 1 ? 2 : 1))
+      .map(([stepValue, windowsByDb]) => [
+        stepValue,
+        new Map(
+          Array.from(windowsByDb.entries()).map(([db, window]) => [
+            db,
+            {
+              start_s: window.start_s,
+              end_s: window.end_s,
+              duration_s: window.duration_s,
+            },
+          ]),
+        ),
+      ]),
   )
 }
 

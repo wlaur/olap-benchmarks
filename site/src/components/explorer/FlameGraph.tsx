@@ -88,6 +88,13 @@ function getSpanLabel(span: FlameSpan): string {
   return span.query_sql ? truncateSql(span.query_sql, 80) : (span.query_name ?? span.step_name)
 }
 
+function getSpanBarLabel(span: FlameSpan): string {
+  if (span.depth === "step" && span.query_name === null && span.step_name === span.operation) {
+    return ""
+  }
+  return getSpanLabel(span)
+}
+
 function truncateSql(sql: string, maxLen: number): string {
   const cleaned = sql.replace(/\s+/g, " ").trim()
   return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen)}...`
@@ -403,7 +410,7 @@ const FlameRow = memo(function FlameRow({
                 dominantBaseline="central"
                 className="pointer-events-none fill-slate-200 text-[11px]"
               >
-                {clipText(getSpanLabel(span), w - 10)}
+                {clipText(getSpanBarLabel(span), w - 10)}
               </text>
             ) : null}
           </g>
