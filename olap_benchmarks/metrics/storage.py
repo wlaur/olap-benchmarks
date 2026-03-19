@@ -12,7 +12,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ..results import get_results_engine
-from ..results.models import DebugEntry, Run, RunMetric, RunStep
+from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep
 from ..results.schema import ensure_results_schema
 from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
@@ -25,6 +25,7 @@ MessageType = Literal[
     "insert_run",
     "finish_run",
     "insert_metric",
+    "insert_query_execution",
     "start_step",
     "finish_step",
     "debug",
@@ -92,6 +93,17 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                         cpu_percent=cast(float, msg["args"][2]),
                         mem_mb=cast(int, msg["args"][3]),
                         disk_mb=cast(int, msg["args"][4]),
+                    )
+                    session.add(row)
+                    session.commit()
+
+                case "insert_query_execution":
+                    row = QueryExecution(
+                        run_id=cast(int, msg["args"][0]),
+                        run_step_id=cast(int | None, msg["args"][1]),
+                        query=cast(str, msg["args"][2]),
+                        start_time=cast(datetime, msg["args"][3]),
+                        end_time=cast(datetime, msg["args"][4]),
                     )
                     session.add(row)
                     session.commit()
@@ -243,6 +255,16 @@ class Storage:
 
     def insert_metric(self, run_id: int, time: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:
         self.put("insert_metric", [run_id, time, cpu_percent, mem_mb, disk_mb])
+
+    def insert_query_execution(
+        self,
+        run_id: int,
+        query: str,
+        start_time: datetime,
+        end_time: datetime,
+        run_step_id: int | None = None,
+    ) -> None:
+        self.put("insert_query_execution", [run_id, run_step_id, query, start_time, end_time])
 
     def debug(self, content: str | None = None) -> int:
         if content is None:

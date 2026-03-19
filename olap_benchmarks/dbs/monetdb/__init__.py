@@ -122,7 +122,7 @@ class MonetDB(Database):
             pool_reset_on_return=None,
         )
 
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -174,10 +174,12 @@ class MonetDB(Database):
         not_null: str | list[str] | None = None,
         lazy_write: LazyWrite = DEFAULT_LAZY_WRITE,
     ) -> None:
-        result = self.connect().execute(
-            text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
-            {"table_name": table},
-        )
+        statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
+        with self.record_query_execution(statement):
+            result = self.connect().execute(
+                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
+                {"table_name": table},
+            )
         exists = bool(result.scalar())
 
         try:

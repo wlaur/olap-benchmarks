@@ -52,6 +52,7 @@ class Database(BaseModel, ABC):
     _connection: Connection | None = None
     _result_storage: Storage | None = None
     _run_id: int | None = None
+    _active_step_ids: list[int] = []
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
@@ -91,6 +92,12 @@ class Database(BaseModel, ABC):
             raise ValueError("self._run_id is not set")
 
         return self._run_id
+
+    @property
+    def active_step_id(self) -> int | None:
+        if not self._active_step_ids:
+            return None
+        return self._active_step_ids[-1]
 
     @property
     @abstractmethod
@@ -143,9 +150,51 @@ class Database(BaseModel, ABC):
             metadata=metadata,
         )
 
+    def _push_active_step(self, step_id: int) -> None:
+        self._active_step_ids.append(step_id)
+
+    def _pop_active_step(self, step_id: int) -> None:
+        if not self._active_step_ids:
+            return
+
+        if self._active_step_ids[-1] == step_id:
+            self._active_step_ids.pop()
+            return
+
+        self._active_step_ids = [
+            active_step_id for active_step_id in self._active_step_ids if active_step_id != step_id
+        ]
+
+    def bind_query_recorder(self, connection: Connection) -> Connection:
+        connection.info["olap_query_recorder"] = self.record_query_execution
+        return connection
+
+    @contextmanager
+    def record_query_execution(self, query: str) -> Iterator[None]:
+        stripped_query = query.strip()
+
+        if not stripped_query or self._result_storage is None or self._run_id is None:
+            yield
+            return
+
+        started_at = datetime.now(UTC).replace(tzinfo=None)
+
+        try:
+            yield
+        finally:
+            finished_at = datetime.now(UTC).replace(tzinfo=None)
+            self.result_storage.insert_query_execution(
+                run_id=self.run_id,
+                run_step_id=self.active_step_id,
+                query=stripped_query,
+                start_time=started_at,
+                end_time=finished_at,
+            )
+
     @contextmanager
     def phase_context(self, phase_name: str, table_name: str | None = None) -> Iterator[None]:
         step_id = self._start_step("phase", phase_name, table_name=table_name)
+        self._push_active_step(step_id)
 
         try:
             yield
@@ -157,6 +206,8 @@ class Database(BaseModel, ABC):
                 error_message=str(exc),
             )
             raise
+        finally:
+            self._pop_active_step(step_id)
 
         self._finish_step(step_id=step_id, status="completed")
 
@@ -243,6 +294,7 @@ class Database(BaseModel, ABC):
         table_name: str | None = None,
     ) -> Iterator[None]:
         step_id = self.start_mutation_step(query_name=query_name, iteration=iteration, table_name=table_name)
+        self._push_active_step(step_id)
         try:
             t0 = perf_counter()
             yield
@@ -255,6 +307,8 @@ class Database(BaseModel, ABC):
                 error_message=str(exc),
             )
             raise
+        finally:
+            self._pop_active_step(step_id)
 
         self.finish_mutation_step(
             step_id=step_id,
@@ -270,6 +324,7 @@ class Database(BaseModel, ABC):
         fetch_kwargs: Mapping[str, Any] | None = None,
     ) -> tuple[pl.DataFrame, float]:
         step_id = self.start_query_step(query_name=query_name, iteration=iteration)
+        self._push_active_step(step_id)
 
         kwargs = dict(fetch_kwargs or {})
 
@@ -285,6 +340,8 @@ class Database(BaseModel, ABC):
                 error_message=str(exc),
             )
             raise
+        finally:
+            self._pop_active_step(step_id)
 
         self.finish_query_step(
             step_id=step_id,
@@ -319,7 +376,8 @@ class Database(BaseModel, ABC):
             # ensure the connection used when initializing the schema is not reused
             # if we use e.g. alter database, it's important that subsequent queries use a new connection
             con = self.connect(reconnect=True)
-            con.execute(text(stmt))
+            with self.record_query_execution(stmt):
+                con.execute(text(stmt))
             con.commit()
 
     def initialize_schema(self, suite: SuiteName) -> None:
@@ -429,6 +487,7 @@ class Database(BaseModel, ABC):
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
         self._current_suite = suite
+        self._active_step_ids = []
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:

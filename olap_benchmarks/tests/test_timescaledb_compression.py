@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,9 @@ class FakeTimescaleDB:
 
     def connect(self, reconnect: bool = False) -> FakeConnection:
         return self.connection
+
+    def record_query_execution(self, _query: str) -> object:
+        return nullcontext()
 
 
 def test_timescaledb_time_series_compression_skips_too_wide_tables(
