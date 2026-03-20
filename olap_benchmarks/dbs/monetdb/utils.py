@@ -1,19 +1,21 @@
 import re
 from collections.abc import Mapping
-from typing import cast
+from contextlib import AbstractContextManager, nullcontext
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
-import pymonetdb  # type: ignore[import-untyped]
+import pymonetdb
 from pydantic import BaseModel
 from pymonetdb import Connection as MonetDBConnection
-from pymonetdb.sql.cursors import Description  # type: ignore[import-untyped]
+from pymonetdb.sql.cursors import Description
 from sqlalchemy import (
     Column,
     Connection,
     MetaData,
     Table,
 )
+from sqlalchemy.schema import CreateTable
 from sqlalchemy.types import UserDefinedType
 
 from ...settings import SETTINGS, TableName
@@ -94,29 +96,29 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
 }
 
 
-POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], type] = {
-    pl.Int8: np.int8,
-    pl.Int16: np.int16,
-    pl.Int32: np.int32,
-    pl.Int64: np.int64,
-    pl.UInt8: np.uint8,
-    pl.UInt16: np.uint16,
-    pl.UInt32: np.uint32,
-    pl.UInt64: np.uint64,
-    pl.Float32: np.float32,
-    pl.Float64: np.float64,
-    pl.Boolean: np.uint8,
+POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], np.dtype[Any]] = {
+    pl.Int8: np.dtype(np.int8),
+    pl.Int16: np.dtype(np.int16),
+    pl.Int32: np.dtype(np.int32),
+    pl.Int64: np.dtype(np.int64),
+    pl.UInt8: np.dtype(np.uint8),
+    pl.UInt16: np.dtype(np.uint16),
+    pl.UInt32: np.dtype(np.uint32),
+    pl.UInt64: np.dtype(np.uint64),
+    pl.Float32: np.dtype(np.float32),
+    pl.Float64: np.dtype(np.float64),
+    pl.Boolean: np.dtype(np.uint8),
 }
 
 
 MONETDB_TEMPORARY_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
 
 
-class MonetDBType(UserDefinedType):
+class MonetDBType(UserDefinedType[Any]):
     def __init__(self, type_name: str) -> None:
         self.type_name = type_name
 
-    def get_col_spec(self, **kwargs) -> str:  # noqa: ANN003
+    def get_col_spec(self, **kwargs: object) -> str:
         return self.type_name
 
 
@@ -129,10 +131,15 @@ class SchemaMeta(BaseModel):
 
 
 def get_schema_meta(description: Description) -> SchemaMeta:
-    meta = SchemaMeta(precision=description.precision, scale=description.scale)
+    desc = cast(Any, description)
+    meta = SchemaMeta(
+        precision=cast(int | None, desc.precision),
+        scale=cast(int | None, desc.scale),
+    )
 
-    if description.type_code == "varchar" and description.internal_size > 0:
-        meta.size = description.internal_size
+    internal_size = cast(int, desc.internal_size)
+    if cast(str, desc.type_code) == "varchar" and internal_size > 0:
+        meta.size = internal_size
 
     return meta
 
@@ -199,8 +206,9 @@ def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
     MONETDB_TEMPORARY_DIRECTORY.mkdir(exist_ok=True, parents=True)
 
     transfer_handler = pymonetdb.SafeDirectoryHandler(MONETDB_TEMPORARY_DIRECTORY)
-    connection.set_downloader(transfer_handler)
-    connection.set_uploader(transfer_handler)
+    connection_any = cast(Any, connection)
+    connection_any.set_downloader(transfer_handler)
+    connection_any.set_uploader(transfer_handler)
 
 
 def get_pymonetdb_connection(connection: Connection) -> MonetDBConnection:
@@ -230,7 +238,7 @@ def get_table(
     if metadata is None:
         metadata = MetaData()
 
-    columns: list[Column] = []
+    columns: list[Column[Any]] = []
 
     for name, dtype in schema.items():
         # SQLAlchemy does not have all types that exist in MonetDB (e.g. tinyint)
@@ -268,7 +276,16 @@ def create_table(
         prefixes=["local", "temporary"] if temporary else None,
     )
 
-    metadata.create_all(connection, tables=[tbl], checkfirst=False)
+    recorder = connection.info.get("olap_query_recorder")
+    create_query = str(CreateTable(tbl).compile(connection))
+
+    if callable(recorder):
+        query_context = cast(AbstractContextManager[None], recorder(create_query))
+        with query_context:
+            metadata.create_all(connection, tables=[tbl], checkfirst=False)
+    else:
+        with nullcontext():
+            metadata.create_all(connection, tables=[tbl], checkfirst=False)
 
     if commit:
         connection.commit()

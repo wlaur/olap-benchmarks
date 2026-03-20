@@ -18,4 +18,4 @@ class Settings(BaseSettings):
     )
 
 
-SETTINGS = Settings()  # type: ignore[call-arg]
+SETTINGS = Settings.model_validate({})

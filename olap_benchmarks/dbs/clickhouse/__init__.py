@@ -3,8 +3,8 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from shutil import rmtree
-from time import sleep
-from typing import Any, Literal, cast
+from time import perf_counter, sleep
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import clickhouse_connect
@@ -14,7 +14,7 @@ import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
@@ -22,7 +22,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "25.8.4.13"
+VERSION = "26.1.1.912"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
@@ -65,24 +65,25 @@ def get_clickhouse_type(dtype: pl.DataType | type[pl.DataType], nullable: bool =
 def get_clickhouse_client() -> ClickhouseClient:
     parsed_sqlalchemy_connection_string = urlparse(CLICKHOUSE_CONNECTION_STRING)
 
-    return clickhouse_connect.get_client(
-        host=parsed_sqlalchemy_connection_string.hostname,
-        port=parsed_sqlalchemy_connection_string.port or 18123,
-        username=parsed_sqlalchemy_connection_string.username,
-        password=parsed_sqlalchemy_connection_string.password or "no-password",
-        database="default",
+    return cast(
+        ClickhouseClient,
+        cast(Any, clickhouse_connect).get_client(
+            host=parsed_sqlalchemy_connection_string.hostname,
+            port=parsed_sqlalchemy_connection_string.port or 18123,
+            username=parsed_sqlalchemy_connection_string.username,
+            password=parsed_sqlalchemy_connection_string.password or "no-password",
+            database="default",
+        ),
     )
 
 
-class ClickHouseRTABench(RTABench):
+class ClickHouseRTABench(RTABench["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         return {"time_columns": ["hour", "day"]}
 
 
-class ClickhouseClickbench(Clickbench):
-    db: "Clickhouse"
-
+class ClickhouseClickbench(Clickbench["Clickhouse"]):
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # same number of partitions as the official clickbench insert
@@ -92,24 +93,24 @@ class ClickhouseClickbench(Clickbench):
         # not 100% clear if this is necessary, but seems to force cleaning up inactive parts
         self.db.run_sql("optimize table hits")
 
-    def populate_clickbench(self, restart: bool = True) -> None:
+    def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("optimize"):
+        with self.db.phase_context("optimize"):
             self.optimize_clickbench_table()
 
         if restart:
             self.db.restart_event()
 
 
-class ClickhouseTimeseries(TimeSeries):
+class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["time", "max(time)"]}
+        return {"time_columns": ["time", "time_", "max(time)"]}
 
 
 class Clickhouse(Database):
-    name: Literal["clickhouse"] = "clickhouse"
+    name: DatabaseName = "clickhouse"
     version: str = VERSION
 
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
@@ -118,12 +119,11 @@ class Clickhouse(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "clickhouse").mkdir(exist_ok=True)
         (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 18123:8123 -p 19000:9000",
-            f"-v {SETTINGS.database_directory.as_posix()}/clickhouse:/var/lib/clickhouse",
+            f"-v {self.database_directory.as_posix()}:/var/lib/clickhouse",
             f"-v {SETTINGS.temporary_directory.as_posix()}/clickhouse/data:/var/lib/clickhouse/user_files",
             # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
             "-e CLICKHOUSE_DB=default",
@@ -143,7 +143,7 @@ class Clickhouse(Database):
             return self._connection
 
         engine = create_engine(self.connection_string)
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -163,10 +163,11 @@ class Clickhouse(Database):
         query = query.strip().removesuffix(";")
 
         # query_arrow converts datetime to epoch second
-        df = cast(pl.DataFrame, pl.from_arrow(self.get_client().query_arrow(query)))
+        with self.record_query_execution(query):
+            df = cast(pl.DataFrame, cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query)))
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(cast(pl.Schema, schema))
 
         if time_columns is None:
             time_columns = []
@@ -183,11 +184,19 @@ class Clickhouse(Database):
 
         return df
 
-    def run_sql(self, statement: str) -> None:
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select name as table_name from system.tables where database = currentDatabase()",
+            schema={"table_name": pl.String},
+        )
+        return set(df.get_column("table_name").to_list())
+
+    def run_sql(self, statement: str, settings: dict[str, Any] | None = None) -> None:
         retries = 10
         for retry in range(retries):
             try:
-                self.get_client().command(statement)
+                with self.record_query_execution(statement):
+                    cast(Any, self.get_client()).command(statement, settings=settings)
                 return
             except Exception as e:
                 if "error code 1001" in str(e):
@@ -200,9 +209,17 @@ class Clickhouse(Database):
 
                 raise
 
+    def _build_key_filter(self, input_file_string: str, primary_keys: list[str]) -> str:
+        if len(primary_keys) == 1:
+            col = primary_keys[0]
+            return f"{col} in (select distinct {col} from file('{input_file_string}', parquet))"
+
+        key_tuple = ", ".join(primary_keys)
+        return f"({key_tuple}) in (select distinct {key_tuple} from file('{input_file_string}', parquet))"
+
     def _get_order_by_columns(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         primary_key: str | list[str] | None,
         not_null: list[str],
     ) -> str | None:
@@ -215,7 +232,8 @@ class Clickhouse(Database):
             else:
                 order_by = None
         elif primary_key is None:
-            order_by = df.columns[0]
+            columns = df.columns if isinstance(df, pl.DataFrame) else list(df.collect_schema().names())
+            order_by = columns[0]
         elif isinstance(primary_key, str):
             order_by = primary_key
         else:
@@ -223,11 +241,16 @@ class Clickhouse(Database):
 
         return order_by
 
-    def _write_single_parquet(self, parent: Path, df: pl.DataFrame) -> Path:
+    def _write_single_parquet(self, parent: Path, df: pl.DataFrame | pl.LazyFrame) -> Path:
         temp_file = parent / f"{uuid.uuid4().hex}.parquet"
-        df.write_parquet(temp_file)
 
-        _LOGGER.info(f"Wrote single Parquet file with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+        if isinstance(df, pl.LazyFrame):
+            df.sink_parquet(temp_file)
+            _LOGGER.info("Wrote single Parquet file via sink_parquet")
+        else:
+            df.write_parquet(temp_file)
+            _LOGGER.info(f"Wrote single Parquet file with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+
         return temp_file
 
     def _write_partitioned_parquet(self, parent: Path, df: pl.DataFrame, partitions: int) -> Path:
@@ -249,6 +272,20 @@ class Clickhouse(Database):
 
         return subdir
 
+    def _wait_for_parquet_readable(self, input_file: str, timeout_seconds: float = 10.0) -> None:
+        deadline = perf_counter() + timeout_seconds
+
+        while perf_counter() < deadline:
+            try:
+                statement = f"DESCRIBE file('{input_file}', Parquet)"
+                with self.record_query_execution(statement):
+                    cast(Any, self.get_client()).command(statement)
+                return
+            except Exception:
+                sleep(0.1)
+
+        raise TimeoutError(f"Timed out after {timeout_seconds:.0f}s waiting for ClickHouse to read {input_file}")
+
     def _cleanup_temporary_parquet(self, p: Path) -> None:
         if p.is_dir():
             rmtree(p)
@@ -257,27 +294,34 @@ class Clickhouse(Database):
         else:
             raise RuntimeError(f"Invalid value for {p = }")
 
-    def _write_temporary_parquet(self, df: pl.DataFrame, temp_dir: Path, partitions: int | None) -> tuple[Path, str]:
+    def _write_temporary_parquet(
+        self, df: pl.DataFrame | pl.LazyFrame, temp_dir: Path, partitions: int | None
+    ) -> tuple[Path, str]:
         # inserting very large Parquet files in a single chunk causes OOM-related issues,
         # e.g. for Clickbench (7.4 GB Parquet)
         # better to insert as partitioned files instead (using wildcard file('*.parquet'))
+        if partitions is not None and isinstance(df, pl.LazyFrame):
+            _LOGGER.warning("Partitioned insert not supported for LazyFrame, collecting first")
+            df = df.collect()
+
         if partitions is None:
             temp_parquet_path = self._write_single_parquet(temp_dir, df)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix()
         else:
+            assert isinstance(df, pl.DataFrame)
             temp_parquet_path = self._write_partitioned_parquet(temp_dir, df, partitions)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix() + "/*.parquet"
 
+        self._wait_for_parquet_readable(input_file_string)
         return temp_parquet_path, input_file_string
 
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
         partitions: int | None = None,
-        wait_ms: float | None = 500,
     ) -> None:
         if not_null is None:
             not_null = []
@@ -285,28 +329,28 @@ class Clickhouse(Database):
         if isinstance(not_null, str):
             not_null = [not_null]
 
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
+        columns = list(schema.names())
+
         client = self.get_client()
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
-        # TODO: unless we wait here, the Parquet file will be read as incomplete by Clickhouse
-        if wait_ms is not None:
-            sleep(wait_ms / 1000)
         try:
-            exists_result = client.query_df(f"EXISTS TABLE {table}")
+            exists_result = cast(Any, client).query_df(f"EXISTS TABLE {table}")
             table_exists = bool(exists_result["result"][0])
 
             if not table_exists:
                 columns_def: list[str] = []
-                for name, dtype in df.schema.items():
+                for name, dtype in schema.items():
                     sql_type = get_clickhouse_type(dtype, nullable=name not in not_null)
 
                     columns_def.append(f"`{name}` {sql_type}")
 
-                column_list = ", ".join(f"`{col}`" for col in df.columns if col != "time")
+                column_list = ", ".join(f"`{col}`" for col in columns if col != "time")
 
                 # time is read as epoch integer by default
-                time_col_def = "toDateTime(time) AS time," if "time" in df.columns else ""
+                time_col_def = "toDateTime(time) AS time," if "time" in columns else ""
 
                 order_by = self._get_order_by_columns(df, primary_key, not_null)
                 order_by_clause = f"order by ({order_by})" if order_by is not None else ""
@@ -352,12 +396,9 @@ class Clickhouse(Database):
         try:
             pk_list = [primary_key] if isinstance(primary_key, str) else primary_key
 
-            where_clause = " and ".join(
-                f"{col} in (select distinct {col} from file('{input_file_string}', parquet))" for col in pk_list
-            )
-
+            where_clause = self._build_key_filter(input_file_string, pk_list)
             delete_sql = f"delete from {table} where {where_clause}"
-            self.run_sql(delete_sql)
+            self.run_sql(delete_sql, settings={"mutations_sync": 1})
 
             sql = f"""
                 insert into {table}
@@ -366,6 +407,22 @@ class Clickhouse(Database):
 
             self.run_sql(sql)
 
+        finally:
+            self._cleanup_temporary_parquet(temp_parquet_path)
+
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        temp_parquet_path, input_file_string = self._write_temporary_parquet(keys, temp_dir, None)
+
+        try:
+            where_clause = self._build_key_filter(input_file_string, primary_keys)
+            delete_sql = f"delete from {table} where {where_clause}"
+            self.run_sql(delete_sql, settings={"mutations_sync": 1})
         finally:
             self._cleanup_temporary_parquet(temp_parquet_path)
 

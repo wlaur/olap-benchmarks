@@ -2,11 +2,13 @@ import logging
 import shutil
 import uuid
 from collections.abc import Mapping
+from contextlib import AbstractContextManager, nullcontext
 from time import perf_counter
-from typing import Literal
+from typing import Any, Literal, Protocol, cast
 
 import polars as pl
-from sqlalchemy import Connection
+from pymonetdb.sql.cursors import Description
+from sqlalchemy import Connection, text
 
 from .binary import read_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
@@ -26,22 +28,43 @@ SchemaMethod = Literal["infer", "fetch"]
 DEFAULT_SCHEMA_METHOD: SchemaMethod = "infer"
 
 
+def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
+    recorder = connection.info.get("olap_query_recorder")
+
+    if callable(recorder):
+        return cast(AbstractContextManager[None], recorder(query))
+
+    return nullcontext()
+
+
+class _MonetCursor(Protocol):
+    description: list[Description] | None
+
+    def execute(self, operation: str, parameters: dict[Any, Any] | None = None) -> int | None: ...
+
+    def fetchall(self) -> list[tuple[Any, ...]]: ...
+
+
+def _description_values(d: Description) -> tuple[str, str, int | None, int | None]:
+    description = cast(Any, d)
+    return (
+        cast(str, description.name),
+        cast(str, description.type_code),
+        cast(int | None, description.precision),
+        cast(int | None, description.scale),
+    )
+
+
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
-    con = get_pymonetdb_connection(connection)
-    c = con.cursor()
-    c.execute(query)
+    with _record_query_execution(connection, query):
+        result = connection.execute(text(query.strip().removesuffix(";")))
+        columns = list(result.keys())
+        rows = result.fetchall()
 
-    # TODO: bug with pymonetdb where the initial 100 rows are fetched using normal and the rest with binary
-    # the behavior is not identical for JSON columns (binary fetch does not call json.loads)
-    ret = c.fetchall()
+    if not rows:
+        return pl.DataFrame({col: [] for col in columns})
 
-    description = c.description
-    assert description is not None
-    schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
-
-    df = pl.DataFrame(ret, schema, orient="row")
-
-    return df
+    return pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
 
 def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
@@ -50,12 +73,16 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     query = get_limit_query(query)
 
     con = get_pymonetdb_connection(connection)
-    c = con.cursor()
-    c.execute(query)
+    c = cast(_MonetCursor, con.cursor())
+    with _record_query_execution(connection, query):
+        c.execute(query)
 
     description = c.description
     assert description is not None
-    ret = {n.name: (get_polars_type(n.type_code, n.precision, n.scale), get_schema_meta(n)) for n in description}
+    ret: dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]] = {}
+    for col in description:
+        name, type_code, precision, scale = _description_values(col)
+        ret[name] = (get_polars_type(type_code, precision, scale), get_schema_meta(col))
 
     _LOGGER.info(f"Fetched schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} ms")
 
@@ -65,8 +92,10 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataType | type[pl.DataType], SchemaMeta]]:
     t0 = perf_counter()
     con = get_pymonetdb_connection(connection)
-    c = con.cursor()
-    c.execute(f"PREPARE {query}")
+    c = cast(_MonetCursor, con.cursor())
+    prepare_query = f"PREPARE {query}"
+    with _record_query_execution(connection, prepare_query):
+        c.execute(prepare_query)
 
     description = c.description
     assert description is not None
@@ -74,13 +103,18 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     # could also keep the prepared statement since we'll execute it shortly,
     # probably not worth the extra complexity though
-    c.execute("DEALLOCATE ALL")
+    with _record_query_execution(connection, "DEALLOCATE ALL"):
+        c.execute("DEALLOCATE ALL")
 
-    schema = {n.name: get_polars_type(n.type_code, n.precision, n.scale) for n in description}
+    schema: dict[str, pl.DataType | type[pl.DataType]] = {}
+    for col in description:
+        name, type_code, precision, scale = _description_values(col)
+        schema[name] = get_polars_type(type_code, precision, scale)
 
     df = pl.DataFrame(ret, schema, orient="row")
 
-    ret = {n["column"]: (get_polars_type(n["type"]), SchemaMeta()) for n in df.to_dicts()}
+    inferred_rows = df.to_dicts()
+    ret = {cast(str, row["column"]): (get_polars_type(cast(str, row["type"])), SchemaMeta()) for row in inferred_rows}
 
     _LOGGER.info(f"Inferred schema with {len(ret):_} columns in {1_000 * (perf_counter() - t0):.2f} ms")
 
@@ -125,10 +159,12 @@ def fetch_binary(
     query = query.strip().removesuffix(";")
 
     try:
-        con.execute(
+        copy_query = (
             f"copy {query} into little endian binary {files_clause} "
             f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
         )
+        with _record_query_execution(connection, copy_query):
+            cast(Any, con).execute(copy_query)
 
         columns: dict[str, pl.Series] = {}
 

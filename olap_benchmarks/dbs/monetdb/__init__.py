@@ -1,17 +1,26 @@
 import logging
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
 from .. import Database
+from . import insert as _insert_mod
 from .fetch import fetch_binary, fetch_pymonetdb
-from .insert import insert, upsert
+from .insert import (
+    DEFAULT_LAZY_WRITE,
+    ColumnGroupWrite,
+    LazyWrite,
+    MonetDBInsertKwargs,
+    insert,
+    upsert,
+)
 from .settings import SETTINGS as MONETDB_SETTINGS
+from .utils import get_pymonetdb_connection
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,19 +38,28 @@ if LOCAL_IMAGE:
     # TODO: fails with "#main-thread: log_read_types_file: ERROR: unknown type in log file 'mbr'"
     # when starting a db created with Mar2025-SP1
     # (this is an unreleased version, will probably be fixed before SP2 is released)
-    VERSION = "Mar2025-11"
-    DOCKER_IMAGE = f"monetdb-local:{VERSION}"
+    _version = "Mar2025-11"
+    _docker_image = f"monetdb-local:{_version}"
 else:
-    VERSION = "Dec2025"
-    DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
+    _version = "Dec2025-SP1"
+    _docker_image = f"monetdb/monetdb:{_version}"
+
+VERSION = _version
+DOCKER_IMAGE = _docker_image
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
 
-class MonetDBTimeSeries(TimeSeries):
-    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
-        # terrible insert performance if primary key or not null constraints are used for eav tables
-        return None if "_eav" in table_name else "time"
+class MonetDBTimeSeries(TimeSeries["MonetDB"]):
+    def insert_table(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        table_name: TableName,
+        primary_key: str | list[str] | None,
+        not_null: str | list[str] | None,
+    ) -> None:
+        kwargs: MonetDBInsertKwargs = {"lazy_write": ColumnGroupWrite(group_size=10)}
+        self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **kwargs)
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
@@ -53,7 +71,7 @@ class MonetDBTimeSeries(TimeSeries):
         return {"method": "pymonetdb"}
 
 
-class MonetDBKaggleAirbnb(KaggleAirbnb):
+class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.context is not None
@@ -69,19 +87,18 @@ class MonetDBKaggleAirbnb(KaggleAirbnb):
 
 
 class MonetDB(Database):
-    name: Literal["monetdb"] = "monetdb"
+    name: DatabaseName = "monetdb"
     version: str = VERSION
 
     connection_string: str = MONETDB_CONNECTION_STRING
 
     @property
     def start(self) -> str:
-        (SETTINGS.database_directory / "monetdb").mkdir(exist_ok=True)
         (SETTINGS.temporary_directory / "monetdb/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 50000:50000",
-            f"-v {SETTINGS.database_directory.as_posix()}/monetdb:/var/monetdb5/dbfarm",
+            f"-v {self.database_directory.as_posix()}:/var/monetdb5/dbfarm",
             f"-v {SETTINGS.temporary_directory.as_posix()}/monetdb/data:/data"
             if not MONETDB_SETTINGS.client_file_transfer
             else "",
@@ -105,7 +122,7 @@ class MonetDB(Database):
             pool_reset_on_return=None,
         )
 
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -122,27 +139,65 @@ class MonetDB(Database):
         if method == "binary":
             return fetch_binary(query, self.connect(), schema)
         elif method == "pymonetdb":
-            return fetch_pymonetdb(query, self.connect())
+            df = fetch_pymonetdb(query, self.connect())
         else:
             raise ValueError(f"Invalid method: '{method}'")
 
+        if schema is not None:
+            df = df.cast(cast(pl.Schema, schema))
+
+        return df
+
+    def rollback(self) -> None:
+        if self._connection is None:
+            return
+
+        # MonetDB reads and writes may use the raw DBAPI cursor directly, bypassing
+        # SQLAlchemy's transaction bookkeeping. Clear both SQLAlchemy's view and the
+        # underlying MonetDB transaction state.
+        super().rollback()
+        get_pymonetdb_connection(self._connection).rollback()
+
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select name as table_name from sys.tables where system = false",
+            schema={"table_name": pl.String},
+            method="pymonetdb",
+        )
+        return set(df.get_column("table_name").to_list())
+
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        lazy_write: LazyWrite = DEFAULT_LAZY_WRITE,
     ) -> None:
-        result = self.connect().execute(
-            text("SELECT count(*) FROM sys.tables WHERE name = :table_name"), {"table_name": table}
-        )
+        statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
+        with self.record_query_execution(statement):
+            result = self.connect().execute(
+                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
+                {"table_name": table},
+            )
         exists = bool(result.scalar())
 
-        return insert(df, table, self.connect(), primary_key, not_null, create=not exists)
+        try:
+            return insert(df, table, self.connect(), primary_key, not_null, create=not exists, lazy_write=lazy_write)
+        except Exception:
+            self.rollback()
+            raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        return _insert_mod.delete(table, self.connect(), primary_key=primary_key, keys=keys)
+
     @property
     def time_series(self) -> MonetDBTimeSeries:
         return MonetDBTimeSeries(db=self)
+
+    @property
+    def kaggle_airbnb(self) -> MonetDBKaggleAirbnb:
+        return MonetDBKaggleAirbnb(db=self)

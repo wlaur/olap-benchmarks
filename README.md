@@ -17,3 +17,49 @@ Install the necessary Python dependencies
 ```bash
 uv sync
 ```
+
+Install zsh completions once:
+
+```bash
+uv run olap --install-completion --shell zsh && exec zsh
+```
+
+Run it again if the CLI structure changes and you want the generated completions refreshed.
+
+## Results schema migrations
+
+Install dev dependencies (includes Alembic):
+
+```bash
+uv sync --group dev
+```
+
+Create a new migration from SQLAlchemy models:
+
+```bash
+uv run --group dev alembic revision --autogenerate -m "describe_change"
+```
+
+Apply migrations to the default results database from `.env`:
+
+```bash
+uv run --group dev alembic upgrade head
+```
+
+Apply migrations to a named results revision through the app CLI:
+
+```bash
+uv run olap results migrate --revision default
+```
+
+Apply migrations to an explicit database path:
+
+```bash
+uv run --group dev alembic -x db=/absolute/path/to/results.db upgrade head
+```
+
+## TODO
+
+- Additional step for time series suite with mutate+select
+    - Concurrently: insert one row as quickly as possible to large table + run a small number of selects against this table (multiple clients)
+    - Simulates actual workloads (single writer + multiple readers)

@@ -7,7 +7,22 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.11
+    rev: v0.15.5
     hooks:
       - id: ruff-format
       - id: ruff-check
+
+  - repo: local
+    hooks:
+      - id: oxfmt
+        name: oxfmt
+        language: system
+        entry: sh -c 'cd site && ./node_modules/.bin/oxfmt --write src/ vite.config.ts'
+        files: ^site/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: oxlint
+        name: oxlint
+        language: system
+        entry: sh -c 'cd site && ./node_modules/.bin/oxlint .'
+        files: ^site/.*\.(ts|tsx)$
+        pass_filenames: false

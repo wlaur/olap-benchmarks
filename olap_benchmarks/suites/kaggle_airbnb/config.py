@@ -1,10 +1,11 @@
 import logging
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
 import polars as pl
 
-from ...settings import REPO_ROOT, SETTINGS
+from ...dbs import Database
+from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ KAGGLE_AIRBNB_QUERY_NAMES = {
 }
 
 
-def convert_kaggle_airbnb_data_to_parquet() -> None:
+def prepare_data() -> None:
     data_dir = SETTINGS.input_data_directory / "kaggle_airbnb"
     # download and unzip *.csv.zip files from
     # https://www.kaggle.com/datasets/konradb/inside-airbnb-usa (subdirectory Austin)
@@ -92,24 +93,37 @@ def convert_kaggle_airbnb_data_to_parquet() -> None:
     assert all((data_dir / f"{n}.parquet").is_file() for n in KAGGLE_AIRBNB_TABLES)
 
 
-class KaggleAirbnb(BenchmarkSuite):
-    name: Literal["kaggle_airbnb"] = "kaggle_airbnb"
+class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
+    name: SuiteName = "kaggle_airbnb"
+
+    def expected_table_row_counts(self) -> dict[TableName, int]:
+        return {
+            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+            for table_name in KAGGLE_AIRBNB_TABLES
+        }
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         self.db.initialize_schema("kaggle_airbnb")
 
         for table_name in KAGGLE_AIRBNB_TABLES:
-            df = pl.read_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+            df = pl.scan_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
 
-            with self.db.event_context(f"insert_{table_name}"):
+            with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all kaggle_airbnb tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...
@@ -132,7 +146,7 @@ class KaggleAirbnb(BenchmarkSuite):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def run(self) -> None:
+    def select(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(KAGGLE_AIRBNB_QUERY_NAMES.items()):
             if not self.include_query(query_name):
@@ -142,10 +156,12 @@ class KaggleAirbnb(BenchmarkSuite):
                 query = self.load_kaggle_airbnb_query(query_name)
 
                 for it in range(1, iterations + 1):
-                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.db.fetch(query, **self.fetch_kwargs)
-                        t = perf_counter() - t1
+                    df, t = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=it,
+                        query=query,
+                        fetch_kwargs=self.fetch_kwargs,
+                    )
 
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(KAGGLE_AIRBNB_QUERY_NAMES):_}) "

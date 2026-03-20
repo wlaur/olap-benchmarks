@@ -3,12 +3,13 @@ import logging
 import os
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 import polars as pl
 
-from ...settings import REPO_ROOT, SETTINGS
+from ...dbs import Database
+from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 
 RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
@@ -113,11 +114,11 @@ async def download_rtabench_data_async(output_directory: Path) -> None:
     urls = [f"https://rtadatasets.timescale.com/{name}.csv.gz" for name in RTABENCH_SCHEMAS]
 
     async with httpx.AsyncClient() as client:
-        tasks = []
+        tasks: list[asyncio.Task[None]] = []
         for url in urls:
             filename = url.split("/")[-1]
             dest_path = output_directory / filename
-            tasks.append(download_file(client, url, dest_path))
+            tasks.append(asyncio.create_task(download_file(client, url, dest_path)))
 
         await asyncio.gather(*tasks)
 
@@ -132,8 +133,8 @@ def convert_rtabench_data_to_parquet(data_dir: Path) -> None:
         _LOGGER.info(f"Converted {fname} to Parquet")
 
 
-def download_rtabench_data() -> None:
-    output_directory = REPO_ROOT / "data/input/rtabench"
+def prepare_data() -> None:
+    output_directory = SETTINGS.input_data_directory / "rtabench"
     output_directory.mkdir(exist_ok=True, parents=True)
 
     asyncio.run(download_rtabench_data_async(output_directory))
@@ -143,24 +144,37 @@ def download_rtabench_data() -> None:
     convert_rtabench_data_to_parquet(output_directory)
 
 
-class RTABench(BenchmarkSuite):
-    name: Literal["rtabench"] = "rtabench"
+class RTABench[DBT: Database](BenchmarkSuite[DBT]):
+    name: SuiteName = "rtabench"
+
+    def expected_table_row_counts(self) -> dict[TableName, int]:
+        return {
+            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+            for table_name in RTABENCH_SCHEMAS
+        }
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
     def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
         self.db.initialize_schema("rtabench")
 
         for table_name in RTABENCH_SCHEMAS:
-            df = pl.read_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+            df = pl.scan_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
-            with self.db.event_context(f"insert_{table_name}"):
+            with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all rtabench tables for {self.name}")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
 
         # restart db to ensure data is not kept in-memory by the db, and also
         # ensure that WAL is processed etc...
@@ -178,7 +192,7 @@ class RTABench(BenchmarkSuite):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def run(self) -> None:
+    def select(self) -> None:
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
             if not self.include_query(query_name):
@@ -188,15 +202,17 @@ class RTABench(BenchmarkSuite):
                 query = self.load_rtabench_query(query_name)
 
                 for it in range(1, iterations + 1):
-                    with self.db.event_context(f"query_{query_name}_iteration_{it}"):
-                        t1 = perf_counter()
-                        df = self.db.fetch(query, **self.fetch_kwargs)
-                        t = perf_counter() - t1
+                    df, t = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=it,
+                        query=query,
+                        fetch_kwargs=self.fetch_kwargs,
+                    )
 
                     # time delta t will not match time at end - time at start exactly,
                     # but within a couple of milliseconds
-                    # there is a small overhead when the event is sent to the queue
-                    # (the actual write to result db happens later)
+                    # there is a small overhead when the step result is sent to the queue
+                    # (the actual write to the results db happens later)
                     _LOGGER.info(
                         f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
                         f"iteration {it:_}/{iterations:_} "
