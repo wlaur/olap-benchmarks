@@ -12,8 +12,8 @@ import { useAppStore } from "../../stores/useAppStore"
 
 const GRID_BREAKPOINTS = { lg: 1280, md: 996, sm: 768, xs: 480 }
 const GRID_COLS = { lg: 12, md: 10, sm: 6, xs: 4 }
-const ROW_HEIGHT = 30
-const GRID_MARGIN: [number, number] = [16, 16]
+const ROW_HEIGHT = 28
+const GRID_MARGIN: [number, number] = [10, 10]
 
 const DRAG_CONFIG = { enabled: true, handle: ".widget-drag-handle" } as const
 const RESIZE_CONFIG = { enabled: true } as const
@@ -75,11 +75,11 @@ export function DashboardGrid({ widgets }: DashboardGridProps) {
   return (
     <div ref={containerRef} className="relative w-full">
       {layoutModified ? (
-        <div className="mb-2 flex justify-end px-4">
+        <div className="mb-1.5 flex justify-end px-4">
           <button
             type="button"
             onClick={resetLayouts}
-            className="rounded-full border border-border-default bg-surface-inset px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200"
+            className="rounded-full border border-border-default bg-surface-inset px-2.5 py-0.5 text-[0.65rem] font-medium text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
           >
             Reset layout
           </button>
@@ -104,12 +104,12 @@ export function DashboardGrid({ widgets }: DashboardGridProps) {
           {visibleWidgets.map((widget) => (
             <div
               key={widget.id}
-              className={`group/widget relative overflow-hidden ${isDragging ? "cursor-grabbing" : ""}`}
+              className={`group/widget relative ${isDragging ? "cursor-grabbing" : ""}`}
             >
-              <div className="widget-drag-handle absolute top-2 left-2 z-10 flex cursor-grab items-center justify-center rounded-md bg-surface-inset/80 p-0.5 opacity-0 backdrop-blur transition-opacity group-hover/widget:opacity-100 active:cursor-grabbing">
-                <GripVertical className="size-3.5 text-slate-500" />
+              <div className="widget-drag-handle absolute top-1.5 left-1.5 z-10 flex cursor-grab items-center justify-center rounded bg-surface-inset/80 p-0.5 opacity-0 backdrop-blur transition-opacity group-hover/widget:opacity-100 active:cursor-grabbing">
+                <GripVertical className="size-3 text-slate-400" />
               </div>
-              <div className="panel-scrollbar h-full overflow-auto">{widget.content}</div>
+              <div className="h-full">{widget.content}</div>
             </div>
           ))}
         </ResponsiveGridLayout>

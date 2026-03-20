@@ -31,7 +31,7 @@ import { DatabaseLegend } from "./DatabaseLegend"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
 import { Skeleton } from "./Skeleton"
-import { BodyText, SectionTitle } from "./Typography"
+import { SectionTitle } from "./Typography"
 
 interface InsertPerformancePanelProps {
   insertSteps: InsertStep[]
@@ -104,37 +104,31 @@ export function InsertPerformancePanel({
 
   if (isLoading) {
     return (
-      <PanelCard>
+      <PanelCard className="p-3">
         <PanelHeader>
-          <div>
-            <SectionTitle as="h3">Insert performance</SectionTitle>
-            <BodyText className="mt-1">
-              Per-table insert durations from the latest populate run, with resource utilization
-              during the populate phase.
-            </BodyText>
-          </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-6 w-16 rounded-full" />
-            <Skeleton className="h-6 w-20 rounded-full" />
-            <Skeleton className="h-6 w-20 rounded-full" />
+          <SectionTitle as="h3">Insert performance</SectionTitle>
+          <div className="flex gap-1.5">
+            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-full" />
           </div>
         </PanelHeader>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <ChartFrame>
-            <div className="mb-3 flex items-center justify-between">
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-8 w-24 rounded-full" />
+        <div className="mt-2 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <ChartFrame className="p-2.5">
+            <div className="mb-2 flex items-center justify-between">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-6 w-20 rounded-full" />
             </div>
-            <div className="flex h-[280px] items-end gap-3 px-3 pt-4">
-              <Skeleton className="h-[32%] flex-1 rounded-xl" />
-              <Skeleton className="h-[58%] flex-1 rounded-xl" />
-              <Skeleton className="h-[44%] flex-1 rounded-xl" />
-              <Skeleton className="h-[72%] flex-1 rounded-xl" />
+            <div className="flex h-[220px] items-end gap-2 px-2 pt-3">
+              <Skeleton className="h-[32%] flex-1 rounded-lg" />
+              <Skeleton className="h-[58%] flex-1 rounded-lg" />
+              <Skeleton className="h-[44%] flex-1 rounded-lg" />
+              <Skeleton className="h-[72%] flex-1 rounded-lg" />
             </div>
           </ChartFrame>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <InsertMetricChartSkeleton label="CPU during populate" />
             <InsertMetricChartSkeleton label="Memory during populate" />
           </div>
@@ -146,25 +140,19 @@ export function InsertPerformancePanel({
   if (filteredSteps.length === 0) return null
 
   return (
-    <PanelCard>
+    <PanelCard className="p-3">
       <PanelHeader>
-        <div>
-          <SectionTitle as="h3">Insert performance</SectionTitle>
-          <BodyText className="mt-1">
-            Per-table insert durations from the latest populate run, with resource utilization
-            during the populate phase.
-          </BodyText>
-        </div>
+        <SectionTitle as="h3">Insert performance</SectionTitle>
         <DatabaseLegend databases={databases} databaseColors={databaseColors} />
       </PanelHeader>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <ChartFrame>
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-200">Insert duration by table</p>
+      <div className="mt-2 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <ChartFrame className="p-2.5">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-200">Insert duration by table</p>
             <DurationScaleToggle mode={insertScaleMode} onChange={setInsertScaleMode} compact />
           </div>
-          <div style={{ height: Math.max(160, barData.length * 48 + 40) }}>
+          <div style={{ height: Math.max(140, barData.length * 40 + 32) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={barData}
@@ -176,7 +164,7 @@ export function InsertPerformancePanel({
                   type="number"
                   domain={insertAxisDomain}
                   ticks={insertAxisTicks}
-                  tick={{ fill: "#64748b", fontSize: 11 }}
+                  tick={{ fill: "#94a3b8", fontSize: 11 }}
                   axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                   tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
                   tickFormatter={(v: number) => formatDurationAxisTick(v, insertScaleMode)}
@@ -191,7 +179,7 @@ export function InsertPerformancePanel({
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#161a23",
+                    backgroundColor: "#1e2330",
                     border: "1px solid rgba(148, 163, 184, 0.12)",
                     borderRadius: 12,
                     color: "#e2e8f0",
@@ -221,11 +209,11 @@ export function InsertPerformancePanel({
         </ChartFrame>
 
         {populateSamples.length <= 1 ? (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+          <div className="flex items-center justify-center rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-6 text-xs text-slate-500">
             No resource metrics were recorded during populate.
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <MetricMiniChart
               label="CPU during populate"
               data={cpuChartData}
@@ -257,13 +245,13 @@ export function InsertPerformancePanel({
 
 function InsertMetricChartSkeleton({ label }: { label: string }) {
   return (
-    <ChartFrame>
-      <p className="mb-2 text-sm font-medium text-slate-200">{label}</p>
-      <div className="flex h-32 items-end gap-2">
-        <Skeleton className="h-[42%] flex-1 rounded-lg" />
-        <Skeleton className="h-[78%] flex-1 rounded-lg" />
-        <Skeleton className="h-[55%] flex-1 rounded-lg" />
-        <Skeleton className="h-[68%] flex-1 rounded-lg" />
+    <ChartFrame className="p-2.5">
+      <p className="mb-1.5 text-xs font-semibold text-slate-200">{label}</p>
+      <div className="flex h-28 items-end gap-2">
+        <Skeleton className="h-[42%] flex-1 rounded-md" />
+        <Skeleton className="h-[78%] flex-1 rounded-md" />
+        <Skeleton className="h-[55%] flex-1 rounded-md" />
+        <Skeleton className="h-[68%] flex-1 rounded-md" />
       </div>
     </ChartFrame>
   )
@@ -299,9 +287,9 @@ function MetricMiniChart({
   const yScale = scaleBuilder(maxVal)
 
   return (
-    <ChartFrame>
-      <p className="mb-2 text-sm font-medium text-slate-200">{label}</p>
-      <div className="h-32">
+    <ChartFrame className="p-2.5">
+      <p className="mb-1.5 text-xs font-semibold text-slate-200">{label}</p>
+      <div className="h-28">
         <ResponsiveContainer
           width="100%"
           height="100%"
@@ -314,7 +302,7 @@ function MetricMiniChart({
               dataKey="elapsed_s"
               domain={[0, maxElapsed]}
               ticks={elapsedTicks}
-              tick={{ fill: "#64748b", fontSize: 10 }}
+              tick={{ fill: "#94a3b8", fontSize: 10 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={formatElapsedLabel}
@@ -323,14 +311,14 @@ function MetricMiniChart({
               domain={yScale.domain}
               ticks={yScale.ticks}
               width={60}
-              tick={{ fill: "#64748b", fontSize: 10 }}
+              tick={{ fill: "#94a3b8", fontSize: 10 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={yScale.formatter ?? formatter}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#161a23",
+                backgroundColor: "#1e2330",
                 border: "1px solid rgba(148, 163, 184, 0.12)",
                 borderRadius: 12,
                 color: "#e2e8f0",

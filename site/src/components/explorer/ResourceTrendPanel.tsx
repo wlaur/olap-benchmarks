@@ -20,7 +20,7 @@ import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
-import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+import { MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
   suiteConfig: SuiteConfig
@@ -173,28 +173,20 @@ export function ResourceTrendPanel({
   const hasData = metricSamples.length > 0
 
   return (
-    <PanelCard className="h-full">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <SectionTitle as="h3">Resource trends</SectionTitle>
-          <BodyText className="mt-1 max-w-3xl">
-            CPU, memory, and disk usage during a specific step, normalized so each database starts
-            at elapsed 0. Select an operation and step to compare resource profiles.
-          </BodyText>
-        </div>
-      </div>
+    <PanelCard className="h-full p-3">
+      <SectionTitle as="h3">Resource trends</SectionTitle>
 
       {isLoading ? (
-        <div className="mt-4 rounded-2xl border border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
-          Loading resource metrics...
+        <div className="mt-2 rounded-lg border border-border-default bg-surface-inset px-4 py-6 text-xs text-slate-500">
+          Loading resource metrics…
         </div>
       ) : !hasData ? (
-        <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+        <div className="mt-2 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-6 text-xs text-slate-500">
           No resource metrics were recorded for the selected databases.
         </div>
       ) : (
-        <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+        <div className="mt-2 rounded-lg border border-border-default bg-surface-inset p-3">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
             <div className="min-w-0 space-y-3">
               <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
                 {availableOperations.map((operation) => (
@@ -297,17 +289,15 @@ export function ResourceTrendPanel({
           </div>
 
           {resolvedStep === null ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+            <div className="mt-3 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-5 text-xs text-slate-500">
               No steps available for the selected operation.
             </div>
           ) : isTooFast || !hasSufficientData ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
-              Step too fast for resource sampling (under {METRIC_SAMPLE_RATE_S}s). Resource metrics
-              are sampled every {METRIC_SAMPLE_RATE_S} seconds, so steps shorter than this threshold
-              produce no data points.
+            <div className="mt-3 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-5 text-xs text-slate-500">
+              Step too fast for resource sampling (under {METRIC_SAMPLE_RATE_S}s).
             </div>
           ) : (
-            <div className="mt-4 grid gap-3">
+            <div className="mt-3 grid gap-2">
               {METRIC_CONFIGS.map((metric) => (
                 <TrendChart
                   key={metric.key}
@@ -358,9 +348,9 @@ function TrendChart({
   const xTicks = buildEvenElapsedTicks(maxElapsed)
 
   return (
-    <div className="rounded-2xl border border-border-default bg-surface-primary/60 p-3">
-      <p className="mb-3 text-sm font-medium text-slate-200">{label}</p>
-      <div className="h-40">
+    <div className="rounded-lg border border-border-default bg-surface-primary/60 p-2.5">
+      <p className="mb-2 text-xs font-semibold text-slate-200">{label}</p>
+      <div className="h-36">
         <ResponsiveContainer
           width="100%"
           height="100%"
@@ -377,7 +367,7 @@ function TrendChart({
               dataKey="elapsed_s"
               domain={[0, maxElapsed]}
               ticks={xTicks}
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={formatElapsedLabel}
@@ -386,14 +376,14 @@ function TrendChart({
               domain={yDomain}
               ticks={yTicks}
               width={70}
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={tickFormatter}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#161a23",
+                backgroundColor: "#1e2330",
                 border: "1px solid rgba(148, 163, 184, 0.12)",
                 borderRadius: 12,
                 color: "#e2e8f0",

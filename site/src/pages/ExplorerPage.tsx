@@ -1,9 +1,11 @@
 import { useMemo } from "react"
 
+import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
 import { FlameGraphPanel } from "../components/explorer/FlameGraphPanel"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
+import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
 import { DashboardGrid, type WidgetConfig } from "../components/layout/DashboardGrid"
 import { useSuiteData } from "../hooks/useSuiteData"
@@ -69,9 +71,8 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           databases={databases}
           includedDatabases={includedDatabases}
           operationSummaries={filteredOperationSummaries}
+          databaseColors={databaseColors}
           isLoading={isLoading}
-          onSelectAll={() => setSelectedDatabases(databases)}
-          onToggleDatabase={toggleDatabase}
         />
       ),
     },
@@ -138,6 +139,22 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
 
   return (
     <section className="min-h-full w-full pb-4">
+      <div className="mb-3 flex items-center gap-3 px-4">
+        <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
+          Databases
+        </span>
+        {isLoading ? (
+          <FilterChipsSkeleton />
+        ) : (
+          <DatabaseMultiSelect
+            databases={databases}
+            selectedDatabases={includedDatabases}
+            databaseColors={databaseColors}
+            onSelectAll={() => setSelectedDatabases(databases)}
+            onToggleDatabase={toggleDatabase}
+          />
+        )}
+      </div>
       <DashboardGrid widgets={widgets} />
     </section>
   )

@@ -145,7 +145,7 @@ export function QueryDetailPanel({
             <Tooltip
               cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
               contentStyle={{
-                backgroundColor: "#161a23",
+                backgroundColor: "#1e2330",
                 border: "1px solid rgba(148, 163, 184, 0.12)",
                 borderRadius: 12,
                 color: "#e2e8f0",

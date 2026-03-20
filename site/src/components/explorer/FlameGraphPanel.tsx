@@ -9,7 +9,7 @@ import { fetchFlameSpans } from "../../lib/queries"
 import type { FlameSpan, MetricSample } from "../../lib/types"
 import { PanelCard } from "../layout/Panel"
 import { SqlCodeView } from "../SqlCodeView"
-import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+import { MetaLabel, SectionTitle } from "../Typography"
 import { FlameGraph } from "./FlameGraph"
 
 interface FlameGraphPanelProps {
@@ -113,38 +113,28 @@ export function FlameGraphPanel({
   }, [])
 
   return (
-    <PanelCard className="h-full">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <SectionTitle as="h3">Execution flame graph</SectionTitle>
-          <BodyText className="mt-1 max-w-3xl">
-            Timeline of all operations, steps, and queries for a single database. Select a segment
-            to view resource metrics during that window.
-          </BodyText>
-        </div>
+    <PanelCard className="h-full p-3">
+      <div className="flex items-start justify-between gap-3">
+        <SectionTitle as="h3">Flame graph</SectionTitle>
         {databases.length > 0 && !isLoading ? (
           <DatabaseSelector databases={databases} selected={resolvedDb} onChange={setSelectedDb} />
         ) : null}
       </div>
 
-      <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
-        {isLoading ? (
-          <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-            Loading execution data...
-          </div>
-        ) : isLoadingSpans ? (
-          <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-            Loading execution data...
+      <div className="mt-2 rounded-lg border border-border-default bg-surface-inset p-3">
+        {isLoading || isLoadingSpans ? (
+          <div className="flex h-24 items-center justify-center text-xs text-slate-500">
+            Loading execution data…
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <FlameGraph spans={spans} selectedSpan={selectedSpan} onSelectSpan={handleSelectSpan} />
 
-            <div className="min-h-[4.5rem]">
+            <div className="min-h-[3.5rem]">
               {selectedSpan ? (
                 <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
               ) : spans.length > 0 ? (
-                <div className="rounded-xl border border-dashed border-border-default bg-surface-primary/40 px-4 py-3 text-xs text-slate-500">
+                <div className="rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
                   Click a segment to view details and resource metrics.
                 </div>
               ) : null}
@@ -165,38 +155,35 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
   const label = span.depth === "operation" ? span.operation : (span.query_name ?? span.step_name)
 
   return (
-    <div className="rounded-xl border border-border-default bg-surface-primary/60 p-4">
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+    <div className="rounded-lg border border-border-default bg-surface-primary/60 p-3">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
           <MetaLabel>
             {span.depth === "operation" ? "Operation" : span.depth === "step" ? "Step" : "Query"}
           </MetaLabel>
-          <p className="mt-0.5 text-sm font-medium text-slate-200">
+          <p className="mt-0.5 text-xs font-medium text-slate-200">
             {label}
             {span.iteration !== null && span.iteration > 1 ? (
-              <span className="ml-1.5 text-slate-500">#{span.iteration}</span>
+              <span className="ml-1 text-slate-500">#{span.iteration}</span>
             ) : null}
           </p>
           {span.query_sql ? (
-            <div className="panel-scrollbar mt-2 max-h-56 overflow-auto rounded-lg border border-border-default bg-surface-inset">
+            <div className="panel-scrollbar mt-1.5 max-h-40 overflow-auto rounded-md border border-border-default bg-surface-inset">
               <SqlCodeView code={span.query_sql} />
             </div>
           ) : null}
         </div>
 
-        <div className="flex gap-4">
+        <div className="flex gap-3">
           <StatMini label="Duration" value={formatDurationSeconds(span.duration_s)} />
           {metrics ? (
             <>
               <StatMini label="Avg CPU" value={formatCpuPercent(metrics.avgCpu)} />
-              <StatMini label="Avg Memory" value={formatMegabytes(metrics.avgMem)} />
+              <StatMini label="Avg Mem" value={formatMegabytes(metrics.avgMem)} />
               <StatMini label="Avg Disk" value={formatMegabytes(metrics.avgDisk)} />
-              <StatMini label="Samples" value={String(metrics.sampleCount)} />
             </>
           ) : (
-            <span className="self-center text-xs text-slate-500">
-              No resource metrics in this window
-            </span>
+            <span className="self-center text-[0.65rem] text-slate-500">No metrics</span>
           )}
         </div>
       </div>

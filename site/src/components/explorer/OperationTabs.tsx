@@ -38,9 +38,9 @@ export function OperationTabs({
   const resolvedTab = tabs.includes(activeTab) ? activeTab : "select"
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full flex-col">
       {tabs.length > 1 ? (
-        <div className="inline-flex self-start rounded-full border border-border-default bg-surface-raised p-1">
+        <div className="mb-2 grid grid-cols-2 gap-0 rounded-lg border border-border-default bg-surface-inset p-0.5">
           {tabs.map((tab) => (
             <button
               key={tab}
@@ -48,41 +48,43 @@ export function OperationTabs({
               onClick={() => setActiveTab(tab)}
               className={
                 resolvedTab === tab
-                  ? "rounded-full bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.28)]"
-                  : "rounded-full px-4 py-2 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
+                  ? "rounded-md bg-accent-500/15 py-2 text-sm font-semibold text-accent-200 shadow-[inset_0_0_0_1px_rgba(90,151,255,0.25)]"
+                  : "rounded-md py-2 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
               }
             >
-              {tab === "select" ? "Select" : "Mutate"}
+              {tab === "select" ? "Select queries" : "Mutate queries"}
             </button>
           ))}
         </div>
       ) : null}
 
-      {resolvedTab === "select" ? (
-        <OperationTab
-          operation="select"
-          suiteConfig={suiteConfig}
-          querySummaries={querySummaries}
-          querySteps={querySteps}
-          metricSamples={metricSamples}
-          databases={databases}
-          includedDatabases={includedDatabases}
-          queriesManifest={queriesManifest}
-          isLoading={isLoading}
-        />
-      ) : (
-        <OperationTab
-          operation="mutate"
-          suiteConfig={suiteConfig}
-          querySummaries={mutateSummaries}
-          querySteps={mutateSteps}
-          metricSamples={metricSamples}
-          databases={databases}
-          includedDatabases={includedDatabases}
-          queriesManifest={queriesManifest}
-          isLoading={isLoading}
-        />
-      )}
+      <div className="min-h-0 flex-1">
+        {resolvedTab === "select" ? (
+          <OperationTab
+            operation="select"
+            suiteConfig={suiteConfig}
+            querySummaries={querySummaries}
+            querySteps={querySteps}
+            metricSamples={metricSamples}
+            databases={databases}
+            includedDatabases={includedDatabases}
+            queriesManifest={queriesManifest}
+            isLoading={isLoading}
+          />
+        ) : (
+          <OperationTab
+            operation="mutate"
+            suiteConfig={suiteConfig}
+            querySummaries={mutateSummaries}
+            querySteps={mutateSteps}
+            metricSamples={metricSamples}
+            databases={databases}
+            includedDatabases={includedDatabases}
+            queriesManifest={queriesManifest}
+            isLoading={isLoading}
+          />
+        )}
+      </div>
     </div>
   )
 }
