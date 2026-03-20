@@ -13,7 +13,7 @@ import { useAppStore } from "../../stores/useAppStore"
 const GRID_BREAKPOINTS = { lg: 1280, md: 996, sm: 768, xs: 480 }
 const GRID_COLS = { lg: 12, md: 10, sm: 6, xs: 4 }
 const ROW_HEIGHT = 28
-const GRID_MARGIN: [number, number] = [10, 10]
+const GRID_MARGIN: [number, number] = [14, 14]
 
 const DRAG_CONFIG = { enabled: true, handle: ".widget-drag-handle" } as const
 const RESIZE_CONFIG = { enabled: true } as const
