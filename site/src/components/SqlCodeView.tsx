@@ -20,12 +20,14 @@ const sqlViewerTheme = EditorView.theme(
       backgroundColor: "transparent",
       height: "100%",
       minHeight: "100%",
+      maxWidth: "100%",
     },
     ".cm-content": {
       padding: "1rem",
       fontFamily:
         "ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace",
       lineHeight: "1.65",
+      minWidth: "max-content",
     },
     ".cm-focused": {
       outline: "none",
@@ -49,6 +51,9 @@ const sqlViewerTheme = EditorView.theme(
     },
     ".cm-scroller": {
       overflow: "auto",
+      minWidth: 0,
+      maxWidth: "100%",
+      overscrollBehavior: "contain",
     },
   },
   { dark: true },
@@ -89,7 +94,7 @@ export function SqlCodeView({ code }: SqlCodeViewProps) {
     <div
       ref={hostRef}
       aria-label="SQL query viewer"
-      className="sql-code-view h-full min-h-0 w-full"
+      className="panel-scrollbar sql-code-view h-full min-h-0 w-full min-w-0 overflow-auto"
     />
   )
 }

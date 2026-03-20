@@ -22,6 +22,7 @@ import {
 } from "../lib/format"
 import type { QuerySqlEntry } from "../lib/types"
 import { DurationScaleToggle } from "./DurationScaleToggle"
+import { ChartFrame, PanelCard } from "./layout/Panel"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 import { SqlCodeView } from "./SqlCodeView"
 import { BodyText, SectionTitle } from "./Typography"
@@ -93,10 +94,11 @@ export function QueryDetailPanel({
   }))
 
   const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
+  const chartHeight = Math.max(180, chartData.length * 34)
 
   return (
-    <div className="animate-panel-enter flex h-full min-h-0 flex-col gap-4 rounded-2xl bg-surface-raised p-5">
-      <div className="flex items-start justify-between">
+    <PanelCard className="animate-panel-enter flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden rounded-2xl p-5">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div>
           <SectionTitle as="h4">{row.query_label}</SectionTitle>
           <BodyText className="mt-0.5">
@@ -112,111 +114,119 @@ export function QueryDetailPanel({
         </button>
       </div>
 
-      <div className="rounded-xl bg-surface-inset p-4">
+      <ChartFrame className="min-h-0 min-w-0 p-4">
         <div className="mb-4 flex items-center justify-end">
           <DurationScaleToggle mode={chartScaleMode} onChange={setChartScaleMode} />
         </div>
-        <ResponsiveContainer width="100%" height={Math.max(170, chartData.length * 30)}>
-          <BarChart
-            data={visibleChartData}
-            layout="vertical"
-            margin={{ top: 8, right: 20, bottom: 8, left: 8 }}
-          >
-            <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" horizontal={false} />
-            <XAxis
-              type="number"
-              domain={axisDomain}
-              ticks={axisTicks}
-              allowDataOverflow
-              tick={{ fill: "#64748b", fontSize: 11 }}
-              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={(value: number) => formatDurationAxisTick(value, chartScaleMode)}
-            />
-            <YAxis
-              type="category"
-              dataKey="db"
-              width={132}
-              tick={{ fill: "#94a3b8", fontSize: 12 }}
-              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={truncateAxisLabel}
-            />
-            <Tooltip
-              cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
-              contentStyle={{
-                backgroundColor: "#1e2330",
-                border: "1px solid rgba(148, 163, 184, 0.12)",
-                borderRadius: 12,
-                color: "#e2e8f0",
-              }}
-              labelStyle={{ color: "#e2e8f0" }}
-              itemStyle={{ color: "#e2e8f0" }}
-              content={({ active, label, payload }) => {
-                if (!active || !payload || payload.length === 0) return null
-
-                const entry = payload[0]?.payload as
-                  | {
-                      db: string
-                      stats: QueryComparisonRow["stats_by_database"][string]
-                    }
-                  | undefined
-
-                if (!entry?.stats) return null
-
-                return (
-                  <div className="rounded-xl border border-border-default bg-surface-primary/95 px-3 py-2 text-xs text-slate-200 shadow-2xl">
-                    <p className="font-medium text-slate-50">{String(label)}</p>
-                    <p className="mt-1 text-slate-300">
-                      Min {formatDurationSeconds(entry.stats.min_duration_s)}
-                    </p>
-                    <p className="text-accent-300">
-                      Median {formatDurationSeconds(entry.stats.median_duration_s)}
-                    </p>
-                    <p className="text-slate-300">
-                      Max {formatDurationSeconds(entry.stats.max_duration_s)}
-                    </p>
-                    <p className="text-slate-400">
-                      Median / max{" "}
-                      {(entry.stats.max_duration_s / entry.stats.median_duration_s).toFixed(2)}x
-                    </p>
-                    <p className="mt-1 text-slate-500">{entry.stats.iterations} runs</p>
-                  </div>
-                )
-              }}
-            />
-            <Bar
-              dataKey="chart_duration"
-              name="Duration"
-              radius={[0, 6, 6, 0]}
-              shape={(props) => (
-                <Rectangle
-                  {...props}
-                  fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
-                />
-              )}
+        <div className="panel-scrollbar min-h-0 min-w-0 overflow-auto">
+          <div style={{ height: chartHeight }}>
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              initialDimension={{ width: 420, height: chartHeight }}
             >
-              <ErrorBar
-                dataKey="chart_error"
-                width={7}
-                stroke="rgba(30, 41, 59, 0.72)"
-                strokeWidth={4}
-                isAnimationActive
-              />
-              <ErrorBar
-                dataKey="chart_error"
-                width={5}
-                stroke="rgba(108, 142, 239, 0.8)"
-                strokeWidth={2.25}
-                isAnimationActive
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+              <BarChart
+                data={visibleChartData}
+                layout="vertical"
+                margin={{ top: 8, right: 20, bottom: 8, left: 8 }}
+              >
+                <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" horizontal={false} />
+                <XAxis
+                  type="number"
+                  domain={axisDomain}
+                  ticks={axisTicks}
+                  allowDataOverflow
+                  tick={{ fill: "#64748b", fontSize: 11 }}
+                  axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                  tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                  tickFormatter={(value: number) => formatDurationAxisTick(value, chartScaleMode)}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="db"
+                  width={132}
+                  tick={{ fill: "#94a3b8", fontSize: 12 }}
+                  axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                  tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
+                  tickFormatter={truncateAxisLabel}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
+                  contentStyle={{
+                    backgroundColor: "#1e2330",
+                    border: "1px solid rgba(148, 163, 184, 0.12)",
+                    borderRadius: 12,
+                    color: "#e2e8f0",
+                  }}
+                  labelStyle={{ color: "#e2e8f0" }}
+                  itemStyle={{ color: "#e2e8f0" }}
+                  content={({ active, label, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null
+
+                    const entry = payload[0]?.payload as
+                      | {
+                          db: string
+                          stats: QueryComparisonRow["stats_by_database"][string]
+                        }
+                      | undefined
+
+                    if (!entry?.stats) return null
+
+                    return (
+                      <div className="rounded-xl border border-border-default bg-surface-primary/95 px-3 py-2 text-xs text-slate-200 shadow-2xl">
+                        <p className="font-medium text-slate-50">{String(label)}</p>
+                        <p className="mt-1 text-slate-300">
+                          Min {formatDurationSeconds(entry.stats.min_duration_s)}
+                        </p>
+                        <p className="text-accent-300">
+                          Median {formatDurationSeconds(entry.stats.median_duration_s)}
+                        </p>
+                        <p className="text-slate-300">
+                          Max {formatDurationSeconds(entry.stats.max_duration_s)}
+                        </p>
+                        <p className="text-slate-400">
+                          Median / max{" "}
+                          {(entry.stats.max_duration_s / entry.stats.median_duration_s).toFixed(2)}x
+                        </p>
+                        <p className="mt-1 text-slate-500">{entry.stats.iterations} runs</p>
+                      </div>
+                    )
+                  }}
+                />
+                <Bar
+                  dataKey="chart_duration"
+                  name="Duration"
+                  radius={[0, 6, 6, 0]}
+                  shape={(props) => (
+                    <Rectangle
+                      {...props}
+                      fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
+                    />
+                  )}
+                >
+                  <ErrorBar
+                    dataKey="chart_error"
+                    width={7}
+                    stroke="rgba(30, 41, 59, 0.72)"
+                    strokeWidth={4}
+                    isAnimationActive
+                  />
+                  <ErrorBar
+                    dataKey="chart_error"
+                    width={5}
+                    stroke="rgba(108, 142, 239, 0.8)"
+                    strokeWidth={2.25}
+                    isAnimationActive
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </ChartFrame>
 
       {hasTabs ? (
-        <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-border-default bg-surface-inset">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border-default bg-surface-inset">
           <div className="flex shrink-0 gap-1 border-b border-border-default px-4 py-2">
             {sql?.sql !== null ? (
               <button
@@ -244,7 +254,7 @@ export function QueryDetailPanel({
               </button>
             ))}
           </div>
-          <div className="panel-scrollbar min-h-0 flex-1 overflow-hidden">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <SqlCodeView code={activeSql ?? "No SQL available"} />
           </div>
         </div>
@@ -253,7 +263,7 @@ export function QueryDetailPanel({
           No SQL available for this query.
         </div>
       )}
-    </div>
+    </PanelCard>
   )
 }
 

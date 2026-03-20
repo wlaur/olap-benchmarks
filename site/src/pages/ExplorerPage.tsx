@@ -99,7 +99,6 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           mutateSummaries={filteredMutateSummaries}
           querySteps={filteredQuerySteps}
           mutateSteps={filteredMutateSteps}
-          metricSamples={state.metricSamples}
           databases={databases}
           includedDatabases={includedDatabases}
           queriesManifest={state.queriesManifest}
