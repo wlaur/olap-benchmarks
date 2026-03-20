@@ -116,12 +116,3 @@ export function InspectorSkeleton() {
     </div>
   )
 }
-
-export function TabsSkeleton() {
-  return (
-    <div className="flex gap-2">
-      <Skeleton className="h-9 w-20 rounded-full" />
-      <Skeleton className="h-9 w-20 rounded-full" />
-    </div>
-  )
-}

@@ -1,7 +1,9 @@
 import { useState } from "react"
 
+import { cn } from "../../lib/cn"
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
+import { controlButtonClass, controlGroupClass } from "../controls/controlStyles"
 import { OperationTab } from "./OperationTab"
 
 interface OperationTabsProps {
@@ -38,17 +40,13 @@ export function OperationTabs({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {tabs.length > 1 ? (
-        <div className="mb-2 grid shrink-0 grid-cols-2 gap-0 rounded-lg border border-border-default bg-surface-inset p-0.5">
+        <div className={cn("mb-2 grid shrink-0 grid-cols-2", controlGroupClass(true))}>
           {tabs.map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={
-                resolvedTab === tab
-                  ? "rounded-md bg-accent-500/15 py-2 text-sm font-semibold text-accent-200 shadow-[inset_0_0_0_1px_rgba(90,151,255,0.25)]"
-                  : "rounded-md py-2 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
-              }
+              className={controlButtonClass(resolvedTab === tab, "md")}
             >
               {tab === "select" ? "Select queries" : "Mutate queries"}
             </button>

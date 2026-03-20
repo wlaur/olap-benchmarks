@@ -4,7 +4,12 @@ import { cn } from "../../lib/cn"
 
 export function PanelCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-border-default bg-surface-raised p-3", className)}>
+    <div
+      className={cn(
+        "min-h-0 min-w-0 overflow-hidden rounded-xl border border-border-default bg-surface-raised p-3",
+        className,
+      )}
+    >
       {children}
     </div>
   )
@@ -28,7 +33,10 @@ export function ChartFrame({
   const resolvedStyle = height === undefined ? style : { ...style, height }
 
   return (
-    <div className={cn("rounded-lg bg-surface-inset p-3", className)} style={resolvedStyle}>
+    <div
+      className={cn("min-h-0 min-w-0 overflow-hidden rounded-lg bg-surface-inset p-3", className)}
+      style={resolvedStyle}
+    >
       {children}
     </div>
   )

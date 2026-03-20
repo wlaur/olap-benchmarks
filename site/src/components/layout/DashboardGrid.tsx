@@ -1,4 +1,4 @@
-import { GripVertical } from "lucide-react"
+import { Grip } from "lucide-react"
 import {
   type ReactNode,
   useCallback,
@@ -102,7 +102,7 @@ export function DashboardGrid({ widgets }: DashboardGridProps) {
   return (
     <div ref={containerRef} className="relative min-h-0 w-full">
       {layoutModified ? (
-        <div className="mb-1.5 flex justify-end px-4">
+        <div className="mb-1.5 flex justify-end">
           <button
             type="button"
             onClick={resetLayouts}
@@ -131,14 +131,14 @@ export function DashboardGrid({ widgets }: DashboardGridProps) {
           {visibleWidgets.map((widget) => (
             <div
               key={widget.id}
-              className={`group/widget relative h-full min-h-0 min-w-0 ${
+              className={`group/widget relative h-full min-h-0 min-w-0 overflow-hidden ${
                 isDragging ? "cursor-grabbing" : ""
               }`}
             >
-              <div className="widget-drag-handle absolute top-1.5 left-1.5 z-10 flex cursor-grab items-center justify-center rounded bg-surface-inset/80 p-0.5 opacity-0 backdrop-blur transition-opacity group-hover/widget:opacity-100 active:cursor-grabbing">
-                <GripVertical className="size-3 text-slate-400" />
+              <div className="widget-drag-handle absolute top-3 right-3 z-10 flex cursor-grab items-center justify-center rounded-full border border-border-default bg-surface-primary/90 px-2 py-1 text-slate-400 opacity-0 shadow-lg shadow-black/25 backdrop-blur transition-all duration-150 group-focus-within/widget:opacity-100 group-hover/widget:opacity-100 hover:border-slate-600 hover:text-slate-200 active:cursor-grabbing">
+                <Grip className="size-3.5" />
               </div>
-              <div className="h-full min-h-0 min-w-0">{widget.content}</div>
+              <div className="h-full min-h-0 min-w-0 overflow-hidden">{widget.content}</div>
             </div>
           ))}
         </ResponsiveGridLayout>

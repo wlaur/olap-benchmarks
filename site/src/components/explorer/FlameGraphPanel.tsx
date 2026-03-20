@@ -113,24 +113,30 @@ export function FlameGraphPanel({
   }, [])
 
   return (
-    <PanelCard className="h-full p-3">
-      <div className="flex items-start justify-between gap-3">
+    <PanelCard className="flex h-full min-h-0 min-w-0 flex-col p-3">
+      <div className="flex shrink-0 items-start justify-between gap-3">
         <SectionTitle as="h3">Flame graph</SectionTitle>
         {databases.length > 0 && !isLoading ? (
           <DatabaseSelector databases={databases} selected={resolvedDb} onChange={setSelectedDb} />
         ) : null}
       </div>
 
-      <div className="mt-2 rounded-lg border border-border-default bg-surface-inset p-3">
+      <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
         {isLoading || isLoadingSpans ? (
           <div className="flex h-24 items-center justify-center text-xs text-slate-500">
             Loading execution data…
           </div>
         ) : (
-          <div className="space-y-3">
-            <FlameGraph spans={spans} selectedSpan={selectedSpan} onSelectSpan={handleSelectSpan} />
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="panel-scrollbar min-h-0 flex-1 overflow-auto">
+              <FlameGraph
+                spans={spans}
+                selectedSpan={selectedSpan}
+                onSelectSpan={handleSelectSpan}
+              />
+            </div>
 
-            <div className="min-h-[3.5rem]">
+            <div className="min-h-[3.5rem] shrink-0">
               {selectedSpan ? (
                 <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
               ) : spans.length > 0 ? (
