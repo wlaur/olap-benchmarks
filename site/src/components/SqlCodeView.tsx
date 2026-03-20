@@ -21,11 +21,15 @@ function createSqlViewerTheme(wrapLines: boolean, fillHeight: boolean) {
         backgroundColor: "transparent",
         color: "#cbd5e1",
         fontSize: "0.875rem",
+        height: fillHeight ? "100%" : "auto",
+        minHeight: 0,
       },
       ".cm-editor": {
         backgroundColor: "transparent",
+        display: "flex",
+        flexDirection: "column",
         height: fillHeight ? "100%" : "auto",
-        minHeight: fillHeight ? "100%" : "auto",
+        minHeight: 0,
         maxWidth: "100%",
       },
       ".cm-content": {
@@ -56,9 +60,12 @@ function createSqlViewerTheme(wrapLines: boolean, fillHeight: boolean) {
         padding: "0 0.75rem 0 1rem",
       },
       ".cm-scroller": {
+        flex: fillHeight ? "1 1 auto" : "0 1 auto",
+        height: fillHeight ? "100%" : "auto",
         overflowX: wrapLines ? "hidden" : "auto",
         overflowY: "auto",
         minWidth: 0,
+        minHeight: 0,
         maxWidth: "100%",
         overscrollBehavior: "contain",
       },
@@ -110,8 +117,8 @@ export function SqlCodeView({
       aria-label="SQL query viewer"
       className={cn(
         wrapLines
-          ? "panel-scrollbar min-h-0 w-full min-w-0 overflow-x-hidden overflow-y-auto"
-          : "panel-scrollbar min-h-0 w-full min-w-0 overflow-auto",
+          ? "panel-scrollbar min-h-0 w-full min-w-0 overflow-hidden"
+          : "panel-scrollbar min-h-0 w-full min-w-0 overflow-hidden",
         fillHeight ? "h-full" : "h-auto",
         className,
       )}

@@ -15,6 +15,7 @@ interface OperationTabsProps {
   queriesManifest: QueriesManifest | null
   selection: SelectionState
   isLoading: boolean
+  isTimelineLoading: boolean
 }
 
 type TabOperation = "select" | "mutate"
@@ -31,6 +32,7 @@ export function OperationTabs({
   queriesManifest,
   selection,
   isLoading,
+  isTimelineLoading,
 }: OperationTabsProps) {
   const resolvedTab: TabOperation =
     activeOperation === "mutate" && suiteConfig.operations.includes("mutate") ? "mutate" : "select"
@@ -49,6 +51,7 @@ export function OperationTabs({
             queriesManifest={queriesManifest}
             selection={selection}
             isLoading={isLoading}
+            isTimelineLoading={isTimelineLoading}
           />
         ) : (
           <OperationTab
@@ -61,6 +64,7 @@ export function OperationTabs({
             queriesManifest={queriesManifest}
             selection={selection}
             isLoading={isLoading}
+            isTimelineLoading={isTimelineLoading}
           />
         )}
       </div>
