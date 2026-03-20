@@ -1,5 +1,5 @@
 import type { DurationScaleMode } from "../lib/format"
-import { controlButtonClass, controlGroupClass } from "./controls/controlStyles"
+import { ControlGroup, SegmentedButton } from "./controls/Control"
 
 interface DurationScaleToggleProps {
   mode: DurationScaleMode
@@ -9,16 +9,17 @@ interface DurationScaleToggleProps {
 
 export function DurationScaleToggle({ mode, onChange, compact = false }: DurationScaleToggleProps) {
   return (
-    <div className={controlGroupClass(compact)}>
+    <ControlGroup compact={compact}>
       {(["linear", "log"] as const).map((option) => (
-        <button
+        <SegmentedButton
           key={option}
           onClick={() => onChange(option)}
-          className={controlButtonClass(mode === option, compact ? "xs" : "sm")}
+          selected={mode === option}
+          size={compact ? "xs" : "sm"}
         >
           {option === "log" ? "Log" : "Linear"}
-        </button>
+        </SegmentedButton>
       ))}
-    </div>
+    </ControlGroup>
   )
 }

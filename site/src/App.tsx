@@ -1,7 +1,6 @@
 import { useEffect } from "react"
-import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
+import { Navigate, Route, Routes, useParams } from "react-router-dom"
 
-import { SuiteSelector } from "./components/filters/SuiteSelector"
 import { Navbar } from "./components/layout/Navbar"
 import { defaultBenchmarkId, type BenchmarkSuiteId } from "./lib/benchmarks"
 import { ExplorerPage } from "./pages/ExplorerPage"
@@ -16,16 +15,10 @@ function ExplorerRoute({
   isSystemLoading: boolean
 }) {
   const { suiteId: rawId } = useParams<{ suiteId: string }>()
-  const navigate = useNavigate()
   const suiteId = (rawId ?? defaultBenchmarkId) as BenchmarkSuiteId
 
   return (
-    <>
-      <div className="mb-4 flex items-center gap-3">
-        <SuiteSelector selected={suiteId} onChange={(next) => navigate(`/explorer/${next}`)} />
-      </div>
-      <ExplorerPage system={selectedSystem} suiteId={suiteId} isSystemLoading={isSystemLoading} />
-    </>
+    <ExplorerPage system={selectedSystem} suiteId={suiteId} isSystemLoading={isSystemLoading} />
   )
 }
 

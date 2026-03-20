@@ -21,7 +21,7 @@ import {
   type DurationScaleMode,
 } from "../lib/format"
 import type { QuerySqlEntry } from "../lib/types"
-import { controlChipClass } from "./controls/controlStyles"
+import { ControlChip, QuietButton } from "./controls/Control"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { ChartFrame, PanelCard } from "./layout/Panel"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
@@ -107,12 +107,7 @@ export function QueryDetailPanel({
             {formatMultiplier(row.spread_ratio)}
           </BodyText>
         </div>
-        <button
-          onClick={onClose}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-surface-inset hover:text-slate-200"
-        >
-          Close
-        </button>
+        <QuietButton onClick={onClose}>Close</QuietButton>
       </div>
 
       <ChartFrame className="min-h-0 min-w-0 p-4">
@@ -230,21 +225,14 @@ export function QueryDetailPanel({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border-default bg-surface-inset">
           <div className="flex shrink-0 gap-1 border-b border-border-default px-4 py-2">
             {sql?.sql !== null ? (
-              <button
-                className={controlChipClass(activeTab === "common", "sm")}
-                onClick={() => setActiveTab("common")}
-              >
+              <ControlChip selected={activeTab === "common"} onClick={() => setActiveTab("common")}>
                 SQL
-              </button>
+              </ControlChip>
             ) : null}
             {overrideKeys.map((db) => (
-              <button
-                key={db}
-                className={controlChipClass(activeTab === db, "sm")}
-                onClick={() => setActiveTab(db)}
-              >
+              <ControlChip key={db} selected={activeTab === db} onClick={() => setActiveTab(db)}>
                 {db}
-              </button>
+              </ControlChip>
             ))}
           </div>
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden">

@@ -1,9 +1,8 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
-import { cn } from "../lib/cn"
 import { formatDurationSeconds } from "../lib/format"
 import type { QueryStep } from "../lib/types"
-import { controlChipClass, quietActionButtonClass } from "./controls/controlStyles"
+import { ControlChip, QuietButton } from "./controls/Control"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard, PanelHeader } from "./layout/Panel"
 import { Skeleton } from "./Skeleton"
@@ -280,11 +279,12 @@ function QueryLegend({
         const colors = queryColorMap[name]!
         const isSelected = selectedQuery === name
         return (
-          <button
+          <ControlChip
             key={name}
-            type="button"
             onClick={() => onSelectQuery?.(name)}
-            className={cn("gap-1.5", controlChipClass(isSelected, "xs"))}
+            className="gap-1.5"
+            selected={isSelected}
+            size="xs"
             style={{
               boxShadow: isSelected ? `inset 0 0 0 1px ${colors[1]}` : undefined,
             }}
@@ -294,13 +294,13 @@ function QueryLegend({
               style={{ backgroundColor: colors[isSelected ? 1 : 0] }}
             />
             <span className="text-slate-400">{short}</span>
-          </button>
+          </ControlChip>
         )
       })}
       {queryNames.length > LEGEND_COLLAPSED_COUNT ? (
-        <button type="button" onClick={onToggleExpanded} className={quietActionButtonClass("xs")}>
+        <QuietButton size="xs" onClick={onToggleExpanded}>
           {expanded ? "Show less" : `+${hiddenCount} more`}
-        </button>
+        </QuietButton>
       ) : null}
     </div>
   )

@@ -1,12 +1,9 @@
-import { useState } from "react"
-
-import { cn } from "../../lib/cn"
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
-import { controlButtonClass, controlGroupClass } from "../controls/controlStyles"
 import { OperationTab } from "./OperationTab"
 
 interface OperationTabsProps {
+  activeOperation: "select" | "mutate"
   suiteConfig: SuiteConfig
   querySummaries: QuerySummary[]
   mutateSummaries: QuerySummary[]
@@ -21,6 +18,7 @@ interface OperationTabsProps {
 type TabOperation = "select" | "mutate"
 
 export function OperationTabs({
+  activeOperation,
   suiteConfig,
   querySummaries,
   mutateSummaries,
@@ -31,29 +29,11 @@ export function OperationTabs({
   queriesManifest,
   isLoading,
 }: OperationTabsProps) {
-  const hasMutate = suiteConfig.operations.includes("mutate")
-  const tabs: TabOperation[] = hasMutate ? ["mutate", "select"] : ["select"]
-  const [activeTab, setActiveTab] = useState<TabOperation>("select")
-
-  const resolvedTab = tabs.includes(activeTab) ? activeTab : "select"
+  const resolvedTab: TabOperation =
+    activeOperation === "mutate" && suiteConfig.operations.includes("mutate") ? "mutate" : "select"
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {tabs.length > 1 ? (
-        <div className={cn("mb-2 grid shrink-0 grid-cols-2", controlGroupClass(true))}>
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={controlButtonClass(resolvedTab === tab, "md")}
-            >
-              {tab === "select" ? "Select queries" : "Mutate queries"}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       <div className="min-h-0 flex-1">
         {resolvedTab === "select" ? (
           <OperationTab

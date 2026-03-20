@@ -2,6 +2,7 @@ import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "r
 
 import { formatDurationSeconds } from "../../lib/format"
 import type { BenchmarkOperation, FlameSpan } from "../../lib/types"
+import { InlineButton } from "../controls/Control"
 
 interface FlameGraphProps {
   spans: FlameSpan[]
@@ -240,28 +241,20 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
       {/* Breadcrumb / zoom bar */}
       {zoom ? (
         <div className="mb-2 flex items-center gap-1 text-[11px]">
-          <button
-            type="button"
-            onClick={handleResetZoom}
-            className="rounded px-1.5 py-0.5 text-slate-400 transition-colors hover:bg-surface-raised hover:text-slate-200"
-          >
+          <InlineButton size="xs" onClick={handleResetZoom}>
             All
-          </button>
+          </InlineButton>
           {zoom.breadcrumbs.map((crumb, i) => (
             <span key={crumb.id} className="flex items-center gap-1">
               <span className="text-slate-600">/</span>
-              <button
-                type="button"
+              <InlineButton
+                size="xs"
                 onClick={() => handleBreadcrumbClick(i)}
-                className={`rounded px-1.5 py-0.5 transition-colors ${
-                  i === zoom.breadcrumbs.length - 1
-                    ? "font-medium text-slate-200"
-                    : "text-slate-400 hover:bg-surface-raised hover:text-slate-200"
-                }`}
+                active={i === zoom.breadcrumbs.length - 1}
               >
                 {crumb.operation}
                 {crumb.depth === "step" ? ` / ${crumb.query_name ?? crumb.step_name}` : ""}
-              </button>
+              </InlineButton>
             </span>
           ))}
         </div>
