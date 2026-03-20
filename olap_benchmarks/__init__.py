@@ -1,6 +1,6 @@
-try:
-    from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError, version
 
-    __version__ = version(__name__)
+try:
+    __version__ = version("olap_benchmarks")
 except PackageNotFoundError:
-    __version__ = "0.0.dev"
+    __version__ = "0.0.0"

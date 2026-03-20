@@ -3,13 +3,13 @@ import subprocess
 import uuid
 from collections.abc import Mapping
 from textwrap import dedent
-from typing import Literal, cast
+from typing import Any, cast
 
 import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, TableName
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
@@ -17,7 +17,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "18.0"
+VERSION = "18.3"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
@@ -80,30 +80,34 @@ def table_exists(connection: Connection, table: str) -> bool:
     cursor = dbapi_con.cursor()
     cursor.execute("SELECT to_regclass(%s);", (f'public."{table}"',))
     result = cursor.fetchone()
-    return result[0] is not None  # type: ignore[index]
+    return result is not None and result[0] is not None
 
 
-class PostgresRTABench(RTABench):
+class PostgresRTABench(RTABench["Postgres"]):
     def index_tables(self) -> None:
         con = self.db.connect()
 
-        con.execute(text("CREATE INDEX orders_customer_id_index ON orders (customer_id);"))
-        con.execute(text("CREATE INDEX order_events_order_id_index ON order_events (order_id);"))
-        con.execute(text("CREATE INDEX order_events_event_type_index ON order_events (event_type);"))
+        for statement in (
+            "CREATE INDEX orders_customer_id_index ON orders (customer_id);",
+            "CREATE INDEX order_events_order_id_index ON order_events (order_id);",
+            "CREATE INDEX order_events_event_type_index ON order_events (event_type);",
+        ):
+            with self.db.record_query_execution(statement):
+                con.execute(text(statement))
 
         con.commit()
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("index"):
+        with self.db.phase_context("index"):
             self.index_tables()
 
         if restart:
             self.db.restart_event()
 
 
-class PostgresClickbench(Clickbench):
+class PostgresClickbench(Clickbench["Postgres"]):
     def index_table(self) -> None:
         statements = dedent("""
                 CREATE INDEX adveng on hits (advengineid);
@@ -133,27 +137,36 @@ class PostgresClickbench(Clickbench):
             if not n:
                 continue
 
-            con.execute(text(n))
+            with self.db.record_query_execution(n):
+                con.execute(text(n))
 
             _LOGGER.info(f"Executed {n}")
             con.commit()
 
         # not sure if this requires autocommit but just to be sure
         con = self.db.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        statement = "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+        with self.db.record_query_execution(statement):
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
 
-        con.execute(text("CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"))
+        statement = "CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
         con.commit()
         _LOGGER.info("Created index trgm_idx_title")
 
-        con.execute(text("CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"))
+        statement = "CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
         con.commit()
         _LOGGER.info("Created index trgm_idx_url")
 
         _LOGGER.info("Generated indexes for table hits")
 
         con = self.db.connect(reconnect=True)
-        con.execution_options(isolation_level="AUTOCOMMIT").execute(text("VACUUM ANALYZE hits"))
+        statement = "VACUUM ANALYZE hits"
+        with self.db.record_query_execution(statement):
+            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
 
         _LOGGER.info("Ran vacuum analyze for table hits")
 
@@ -273,14 +286,14 @@ class PostgresClickbench(Clickbench):
 
         df = df.select(columns_ordered)
 
-        _LOGGER.info(f"Loaded clickbench dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
+        _LOGGER.info("Loaded clickbench dataset (lazy)")
 
-        with self.db.event_context("insert_hits"):
+        with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
 
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
-        with self.db.event_context("index"):
+        with self.db.phase_context("index"):
             self.index_table()
 
         # restart db to ensure data is not kept in-memory by the db, and also
@@ -289,52 +302,46 @@ class PostgresClickbench(Clickbench):
             self.db.restart_event()
 
 
-class PostgresTimeSeries(TimeSeries):
+class PostgresTimeSeries(TimeSeries["Postgres"]):
     def index_tables(self) -> None:
         con = self.db.connect()
 
-        # too expensive to create normal b-tree index on (id, time) or (time, id), use brin (block range index) instead
-        con.execute(text("CREATE INDEX data_small_eav_index ON data_small_eav using brin(id)"))
-        _LOGGER.info("Indexed data_small_eav")
+        statement = "CREATE INDEX data_tall_time_index ON data_tall (time)"
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
+        _LOGGER.info("Indexed data_tall")
 
-        con.execute(text("CREATE INDEX data_large_eav_index ON data_large_eav using brin(id)"))
-        _LOGGER.info("Indexed data_large_eav")
+        statement = "CREATE INDEX data_wide_time_index ON data_wide (time)"
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
+        _LOGGER.info("Indexed data_wide")
 
-        con.execute(text("CREATE INDEX data_small_wide_index ON data_small_wide (time)"))
-        _LOGGER.info("Indexed data_small_wide")
-
-        con.execute(text("CREATE INDEX data_large_wide_index ON data_large_wide (time)"))
-        _LOGGER.info("Indexed data_large_wide")
+        statement = "CREATE INDEX data_large_time_index ON data_large (time)"
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
+        _LOGGER.info("Indexed data_large")
 
         con.commit()
 
-    def populate_time_series(self, restart: bool = True) -> None:
+    def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
 
-        with self.db.event_context("index"):
+        with self.db.phase_context("index"):
             self.index_tables()
 
         if restart:
             self.db.restart_event()
 
-    def include_query(self, query_name: str) -> bool:
-        # too slow
-        if "latest_time_range" in query_name and "eav" in query_name:
-            _LOGGER.warning(f"Skipping query '{query_name}'")
-            return False
-
-        return True
-
 
 class Postgres(Database):
-    name: Literal["postgres"] = "postgres"
+    name: DatabaseName = "postgres"
     version: str = VERSION
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 
     @property
     def start(self) -> str:
-        host_pgdata = SETTINGS.database_directory / "postgres" / "pgdata"
+        host_pgdata = self.database_directory / "pgdata"
         host_pgdata.mkdir(parents=True, exist_ok=True)
         host_pgdata.chmod(0o777)  # macOS bind-friendly
 
@@ -358,7 +365,7 @@ class Postgres(Database):
             return self._connection
 
         engine = create_engine(self.connection_string)
-        self._connection = engine.connect()
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
@@ -375,6 +382,14 @@ class Postgres(Database):
         # schemas do not match exactly between these (i32 vs i64 for example)
         return self.fetch_python(query, schema)
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select table_name from information_schema.tables "
+            "where table_schema = 'public' and table_type = 'BASE TABLE'",
+            schema={"table_name": pl.String},
+        )
+        return set(df.get_column("table_name").to_list())
+
     def fetch_python(
         self,
         query: str,
@@ -382,20 +397,22 @@ class Postgres(Database):
     ) -> pl.DataFrame:
         # escape literal ":" to avoid SQLAlchemy interpreting bind params
         # bind params are not supported in this method
-        result = self.connect().execute(text(query.strip().removesuffix(";").replace(":", r"\:")))
+        sql = query.strip().removesuffix(";").replace(":", r"\:")
+        with self.record_query_execution(query):
+            result = self.connect().execute(text(sql))
 
         columns = result.keys()
         rows = result.fetchall()
 
         if not rows:
             if schema:
-                return pl.DataFrame(schema=schema)
+                return pl.DataFrame(schema=cast(pl.Schema, schema))
             return pl.DataFrame({col: [] for col in columns})
 
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -404,13 +421,16 @@ class Postgres(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        df = cast(
-            pl.DataFrame,
-            connectorx.read_sql(POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"),
-        )
+        with self.record_query_execution(query):
+            df = cast(
+                pl.DataFrame,
+                cast(Any, connectorx).read_sql(
+                    POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
+                ),
+            )
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -423,10 +443,11 @@ class Postgres(Database):
         # avoid doing this for complex queries with small result sizes
         # not clear if postgres actually does this, could check source if this is important to know
         # engine="adbc" is slower that "connectorx"
-        df = pl.read_database_uri(query.strip().removesuffix(";"), POSTGRES_CONNECTION_STRING, engine="connectorx")
+        with self.record_query_execution(query):
+            df = pl.read_database_uri(query.strip().removesuffix(";"), POSTGRES_CONNECTION_STRING, engine="connectorx")
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
@@ -440,13 +461,14 @@ class Postgres(Database):
         con = self.connect()
 
         create_sql = generate_create_table_sql(table, schema, primary_key, not_null)
-        con.execute(text(create_sql))
+        with self.record_query_execution(create_sql):
+            con.execute(text(create_sql))
         con.commit()
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
@@ -454,17 +476,24 @@ class Postgres(Database):
         # timescale-parallel-copy also works with normal postgres, and should be faster than \copy or similar
         con = self.connect()
 
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
+
         if not table_exists(con, table):
-            self.create_table(df.schema, table, primary_key, not_null)
+            self.create_table(schema, table, primary_key, not_null)
 
         temp_dir = SETTINGS.temporary_directory / "postgres/data"
 
         temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.csv"
         temp_file_str = temp_file.resolve().as_posix()
 
-        df.write_csv(temp_file)
-
-        _LOGGER.info(f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy")
+        if isinstance(df, pl.LazyFrame):
+            df.sink_csv(temp_file)
+            _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
+        else:
+            df.write_csv(temp_file)
+            _LOGGER.info(
+                f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
+            )
 
         db_host = "localhost"
         db_name = "postgres"
@@ -491,13 +520,18 @@ class Postgres(Database):
             "50000",
             "--skip-header",
         ]
+        copy_sql = f"COPY {table} FROM '{temp_file_str}' WITH (FORMAT csv, HEADER true)"
 
         try:
-            subprocess.run(command, capture_output=True, text=True, check=True)
+            with self.record_query_execution(copy_sql):
+                subprocess.run(command, capture_output=True, text=True, check=True)
         finally:
             temp_file.unlink()
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        raise NotImplementedError
+
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         raise NotImplementedError
 
     @property

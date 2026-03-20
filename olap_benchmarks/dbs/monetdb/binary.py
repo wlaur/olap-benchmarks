@@ -1,11 +1,12 @@
 import contextlib
 import json
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
 import pyarrow as pa
+from pyarrow import compute as pa_compute
 
 from .utils import (
     BOOLEAN_NULL,
@@ -49,19 +50,19 @@ TIME_NULL_RECORD = {
 }
 
 
-def decimal_numpy_dtype(precision: int) -> np.dtype:
+def decimal_numpy_dtype(precision: int) -> np.dtype[Any]:
     if 1 <= precision <= 2:
-        return np.int8  # type: ignore[return-value]
+        return np.dtype(np.int8)
     if 3 <= precision <= 4:
-        return np.int16  # type: ignore[return-value]
+        return np.dtype(np.int16)
     if 5 <= precision <= 9:
-        return np.int32  # type: ignore[return-value]
+        return np.dtype(np.int32)
     if 10 <= precision <= 18:
-        return np.int64  # type: ignore[return-value]
+        return np.dtype(np.int64)
     raise ValueError(f"Decimal precision {precision} too large for integer-based encoding (needs 16 bytes)")
 
 
-def numpy_to_polars_int_dtype(np_dtype: np.dtype) -> type[pl.DataType]:
+def numpy_to_polars_int_dtype(np_dtype: np.dtype[Any]) -> type[pl.DataType]:
     if np_dtype == np.int8:
         return pl.Int8
     if np_dtype == np.int16:
@@ -81,9 +82,9 @@ def read_date_column(path: Path) -> pl.Series:
 
     df = pl.DataFrame(
         {
-            "year": records["year"],  # type: ignore[dict-item]
-            "month": records["month"],  # type: ignore[dict-item]
-            "day": records["day"],  # type: ignore[dict-item]
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
         }
     )
 
@@ -92,7 +93,7 @@ def read_date_column(path: Path) -> pl.Series:
     ).get_column("date")
 
 
-def write_date_column(series: pl.Series, path: Path) -> None:
+def serialize_date_column(series: pl.Series) -> bytes:
     null_mask = series.is_null().to_numpy()
     n = len(series)
     data = np.zeros(n, dtype=MONETDB_DATE_RECORD_TYPE)
@@ -119,7 +120,11 @@ def write_date_column(series: pl.Series, path: Path) -> None:
         data["month"][valid_mask] = parts_np[:, 1]
         data["year"][valid_mask] = parts_np[:, 2]
 
-    path.write_bytes(data.tobytes())
+    return data.tobytes()
+
+
+def write_date_column(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_date_column(series))
 
 
 def read_time_column(path: Path) -> pl.Series:
@@ -153,7 +158,7 @@ def read_time_column(path: Path) -> pl.Series:
     return result
 
 
-def write_time_column(series: pl.Series, path: Path) -> None:
+def serialize_time_column(series: pl.Series) -> bytes:
     null_mask = series.is_null().to_numpy()
     n = len(series)
     data = np.zeros(n, dtype=MONETDB_TIME_RECORD_TYPE)
@@ -182,7 +187,11 @@ def write_time_column(series: pl.Series, path: Path) -> None:
         data["hours"][valid_mask] = parts_np[:, 3]
         data["padding"][valid_mask] = 0
 
-    path.write_bytes(data.tobytes())
+    return data.tobytes()
+
+
+def write_time_column(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_time_column(series))
 
 
 def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> pl.Series:
@@ -193,13 +202,13 @@ def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> 
 
     df = pl.DataFrame(
         {
-            "year": records["year"],  # type: ignore[dict-item]
-            "month": records["month"],  # type: ignore[dict-item]
-            "day": records["day"],  # type: ignore[dict-item]
-            "hour": records["hours"],  # type: ignore[dict-item]
-            "minute": records["minutes"],  # type: ignore[dict-item]
-            "second": records["seconds"],  # type: ignore[dict-item]
-            "microsecond": records["ms"],  # type: ignore[dict-item] # NOTE: microsecond, not millisecond
+            "year": records["year"],
+            "month": records["month"],
+            "day": records["day"],
+            "hour": records["hours"],
+            "minute": records["minutes"],
+            "second": records["seconds"],
+            "microsecond": records["ms"],  # NOTE: microsecond, not millisecond
         }
     )
 
@@ -216,7 +225,7 @@ def read_datetime_column(path: Path, dtype: pl.DataType | type[pl.DataType]) -> 
     ).get_column("time")
 
 
-def write_datetime_column(series: pl.Series, path: Path) -> None:
+def serialize_datetime_column(series: pl.Series) -> bytes:
     series = series.cast(pl.Datetime("ms"))
     null_mask = series.is_null().to_numpy()
     n = len(series)
@@ -253,7 +262,11 @@ def write_datetime_column(series: pl.Series, path: Path) -> None:
         data["month"][valid_mask] = parts_np[:, 5]
         data["year"][valid_mask] = parts_np[:, 6]
 
-    path.write_bytes(data.tobytes())
+    return data.tobytes()
+
+
+def write_datetime_column(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_datetime_column(series))
 
 
 def read_string_column(path: Path) -> pl.Series:
@@ -277,11 +290,11 @@ def read_string_column(path: Path) -> pl.Series:
         start = end + 1
 
     decoded_array = pa.array(result, type=pa.binary())
-    string_array = pa.compute.cast(decoded_array, pa.string())
-    return cast(pl.Series, pl.from_arrow(string_array))
+    string_array = cast(Any, pa_compute).cast(decoded_array, pa.string())
+    return cast(pl.Series, cast(Any, pl).from_arrow(string_array))
 
 
-def write_string_column(series: pl.Series, path: Path) -> None:
+def serialize_string_column(series: pl.Series) -> bytes:
     buffer = bytearray()
 
     for val in series:
@@ -291,7 +304,11 @@ def write_string_column(series: pl.Series, path: Path) -> None:
             buffer += val.encode("utf-8")
             buffer += b"\x00"
 
-    path.write_bytes(buffer)
+    return bytes(buffer)
+
+
+def write_string_column(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_string_column(series))
 
 
 def read_json_column_object(path: Path) -> pl.Series:
@@ -305,7 +322,7 @@ def read_json_column_struct(path: Path) -> pl.Series:
     return s.str.json_decode(infer_schema_length=None)
 
 
-def write_json_column(series: pl.Series, path: Path) -> None:
+def serialize_json_column(series: pl.Series) -> bytes:
     if series.dtype == pl.Object:
         series = series.map_elements(str, pl.String).str.replace_all("'", '"')
     elif series.dtype == pl.Struct:
@@ -315,7 +332,11 @@ def write_json_column(series: pl.Series, path: Path) -> None:
     else:
         raise ValueError(f"Invalid dtype for JSON column: {series.dtype} ({series.name=})")
 
-    write_string_column(series, path)
+    return serialize_string_column(series)
+
+
+def write_json_column(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_json_column(series))
 
 
 def read_blob_column(path: Path) -> pl.Series:
@@ -345,7 +366,7 @@ def read_blob_column(path: Path) -> pl.Series:
     return pl.Series(result, dtype=pl.Binary)
 
 
-def write_blob_column(series: pl.Series, path: Path) -> None:
+def serialize_blob_column(series: pl.Series) -> bytes:
     buffer = bytearray()
 
     for val in series:
@@ -356,17 +377,21 @@ def write_blob_column(series: pl.Series, path: Path) -> None:
             buffer += length.to_bytes(8, byteorder="little")
             buffer += val
 
-    path.write_bytes(buffer)
+    return bytes(buffer)
+
+
+def write_blob_column(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_blob_column(series))
 
 
 def read_numeric_column(
-    path: Path, dtype: pl.DataType | type[pl.DataType], np_dtype: np.dtype | None = None
+    path: Path, dtype: pl.DataType | type[pl.DataType], np_dtype: np.dtype[Any] | None = None
 ) -> pl.Series:
     with path.open("rb") as f:
         data = f.read()
 
     if np_dtype is None:
-        np_dtype = cast(np.dtype | None, POLARS_NUMPY_TYPE_MAP.get(dtype))
+        np_dtype = POLARS_NUMPY_TYPE_MAP.get(dtype)
 
         if np_dtype is None:
             raise ValueError(f"Cannot determine corresponding Numpy type for {path}: {dtype}")
@@ -395,7 +420,7 @@ def read_numeric_column(
     return s
 
 
-def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype | None = None) -> None:
+def serialize_numeric_column(series: pl.Series, np_dtype: np.dtype[Any] | None = None) -> bytes:
     values: np.ndarray
 
     if series.dtype == pl.Boolean:
@@ -408,7 +433,7 @@ def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype | Non
 
     else:
         if np_dtype is None:
-            np_dtype = cast(np.dtype | None, POLARS_NUMPY_TYPE_MAP.get(series.dtype))
+            np_dtype = POLARS_NUMPY_TYPE_MAP.get(series.dtype)
 
             if np_dtype is None:
                 raise ValueError(f"Cannot determine corresponding Numpy type for {series.dtype} ({series.name=})")
@@ -421,8 +446,11 @@ def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype | Non
         else:
             raise ValueError(f"Unsupported numeric type: {series.dtype}")
 
-    with path.open("wb") as f:
-        f.write(values.tobytes())
+    return values.tobytes()
+
+
+def write_numeric_column(series: pl.Series, path: Path, np_dtype: np.dtype[Any] | None = None) -> None:
+    path.write_bytes(serialize_numeric_column(series, np_dtype))
 
 
 def read_decimal_column(path: Path, dtype: pl.Decimal | type[pl.Decimal]) -> pl.Series:
@@ -439,14 +467,18 @@ def read_decimal_column(path: Path, dtype: pl.Decimal | type[pl.Decimal]) -> pl.
     return ret
 
 
-def write_decimal_column(series: pl.Series, path: Path, dtype: pl.Decimal) -> None:
+def serialize_decimal_column(series: pl.Series, dtype: pl.Decimal) -> bytes:
     precision = dtype.precision or MONETDB_DEFAULT_DECIMAL_PRECISION
     scale = dtype.scale or MONETDB_DEFAULT_DECIMAL_SCALE
     np_dtype = decimal_numpy_dtype(precision)
 
     scaled_int = (series * 10**scale).cast(pl.Int64)
 
-    write_numeric_column(scaled_int, path, np_dtype=np_dtype)
+    return serialize_numeric_column(scaled_int, np_dtype=np_dtype)
+
+
+def write_decimal_column(series: pl.Series, path: Path, dtype: pl.Decimal) -> None:
+    path.write_bytes(serialize_decimal_column(series, dtype))
 
 
 def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], meta: SchemaMeta) -> pl.Series:
@@ -485,7 +517,7 @@ def read_binary_column_data(path: Path, dtype: pl.DataType | type[pl.DataType], 
             raise ValueError(f"Unsupported Polars dtype for binary import: {dtype}, {meta=}")
 
 
-def write_binary_column_data(series: pl.Series, path: Path) -> None:
+def serialize_binary_column_data(series: pl.Series) -> bytes:
     dtype = series.dtype
 
     match dtype:
@@ -502,20 +534,24 @@ def write_binary_column_data(series: pl.Series, path: Path) -> None:
             | pl.Float64
             | pl.Boolean
         ):
-            write_numeric_column(series, path)
-        case pl.Decimal:
-            write_decimal_column(series, path, dtype)
+            return serialize_numeric_column(series)
+        case pl.Decimal():
+            return serialize_decimal_column(series, dtype)
         case pl.Date:
-            write_date_column(series, path)
+            return serialize_date_column(series)
         case pl.Time:
-            write_time_column(series, path)
+            return serialize_time_column(series)
         case pl.Datetime:
-            write_datetime_column(series, path)
+            return serialize_datetime_column(series)
         case pl.String:
-            write_string_column(series, path)
+            return serialize_string_column(series)
         case pl.Struct | pl.Object:
-            write_json_column(series, path)
+            return serialize_json_column(series)
         case pl.Binary:
-            write_blob_column(series, path)
+            return serialize_blob_column(series)
         case _:
             raise ValueError(f"Unsupported Polars dtype for binary export: {dtype}, {series.name=}")
+
+
+def write_binary_column_data(series: pl.Series, path: Path) -> None:
+    path.write_bytes(serialize_binary_column_data(series))

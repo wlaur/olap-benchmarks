@@ -6,17 +6,17 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from multiprocessing import Queue
 from pathlib import Path
-from queue import Queue
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args
 
 import polars as pl
 from pydantic import BaseModel
 from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
-from ..metrics.storage import EventType, Storage
+from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
 
 if TYPE_CHECKING:
@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from ..suites.time_series.config import TimeSeries
 
 _LOGGER = logging.getLogger(__name__)
+LiteralStepType = Literal["phase", "query", "mutation"]
+
+
+def _status_from_exception() -> RunStatus:
+    return "failed"
 
 
 class QueryContext(BaseModel):
@@ -39,22 +44,39 @@ class Database(BaseModel, ABC):
     version: str
 
     connection_string: str
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
 
     context: QueryContext | None = None
+    _current_suite: SuiteName | None = None
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
-    _benchmark_id: int | None = None
+    _run_id: int | None = None
+    _active_step_ids: list[int] = []
 
-    _queue: Queue | None = None
-    _result_queue: Queue | None = None
+    _queue: Queue[WriterMessage] | None = None
+    _result_queue: Queue[object] | None = None
 
-    def set_queues(self, queue: Queue, result_queue: Queue) -> None:
+    @property
+    def current_suite(self) -> SuiteName:
+        if self._current_suite is None:
+            raise ValueError("current_suite is not set")
+        return self._current_suite
+
+    @property
+    def database_directory(self) -> Path:
+        directory = SETTINGS.database_directory / self.name / self.current_suite
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def set_queues(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self._queue = queue
         self._result_queue = result_queue
 
     def create_result_storage(self) -> Storage:
-        assert self._queue is not None and self._result_queue is not None
+        if self._queue is None or self._result_queue is None:
+            raise ValueError("Result queues are not set")
+
         return Storage(self._queue, self._result_queue)
 
     @property
@@ -65,51 +87,284 @@ class Database(BaseModel, ABC):
         return self._result_storage
 
     @property
-    def benchmark_id(self) -> int:
-        if self._benchmark_id is None:
-            raise ValueError("self._benchmark_id is not set")
+    def run_id(self) -> int:
+        if self._run_id is None:
+            raise ValueError("self._run_id is not set")
 
-        return self._benchmark_id
+        return self._run_id
+
+    @property
+    def active_step_id(self) -> int | None:
+        if not self._active_step_ids:
+            return None
+        return self._active_step_ids[-1]
 
     @property
     @abstractmethod
-    def start(self) -> str: ...
+    def start(self) -> str | None: ...
 
     @property
-    def stop(self) -> str:
+    def stop(self) -> str | None:
         return f"docker stop {self.name}-benchmark"
 
     @property
-    def restart(self) -> str:
+    def restart(self) -> str | None:
         return f"docker restart {self.name}-benchmark"
 
-    def event(self, name: str, type: EventType) -> None:
-        self.result_storage.insert_event(self.benchmark_id, datetime.now(UTC).replace(tzinfo=None), name, type)
-        _LOGGER.info(f"Registered event {name}:{type}")
+    def _start_step(
+        self,
+        step_type: LiteralStepType,
+        step_name: str,
+        query_name: str | None = None,
+        iteration: int | None = None,
+        table_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        return self.result_storage.start_step(
+            run_id=self.run_id,
+            step_type=step_type,
+            step_name=step_name,
+            query_name=query_name,
+            iteration=iteration,
+            table_name=table_name,
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+            metadata=metadata,
+        )
+
+    def _finish_step(
+        self,
+        step_id: int,
+        status: RunStatus,
+        row_count: int | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.result_storage.finish_step(
+            step_id=step_id,
+            finished_at=datetime.now(UTC).replace(tzinfo=None),
+            status=status,
+            row_count=row_count,
+            error_type=error_type,
+            error_message=error_message,
+            metadata=metadata,
+        )
+
+    def _push_active_step(self, step_id: int) -> None:
+        self._active_step_ids.append(step_id)
+
+    def _pop_active_step(self, step_id: int) -> None:
+        if not self._active_step_ids:
+            return
+
+        if self._active_step_ids[-1] == step_id:
+            self._active_step_ids.pop()
+            return
+
+        self._active_step_ids = [
+            active_step_id for active_step_id in self._active_step_ids if active_step_id != step_id
+        ]
+
+    def bind_query_recorder(self, connection: Connection) -> Connection:
+        connection.info["olap_query_recorder"] = self.record_query_execution
+        return connection
+
+    @contextmanager
+    def record_query_execution(self, query: str) -> Iterator[None]:
+        stripped_query = query.strip()
+
+        if not stripped_query or self._result_storage is None or self._run_id is None:
+            yield
+            return
+
+        started_at = datetime.now(UTC).replace(tzinfo=None)
+
+        try:
+            yield
+        finally:
+            finished_at = datetime.now(UTC).replace(tzinfo=None)
+            self.result_storage.insert_query_execution(
+                run_id=self.run_id,
+                run_step_id=self.active_step_id,
+                query=stripped_query,
+                start_time=started_at,
+                end_time=finished_at,
+            )
+
+    @contextmanager
+    def phase_context(self, phase_name: str, table_name: str | None = None) -> Iterator[None]:
+        step_id = self._start_step("phase", phase_name, table_name=table_name)
+        self._push_active_step(step_id)
+
+        try:
+            yield
+        except BaseException as exc:
+            self._finish_step(
+                step_id=step_id,
+                status=_status_from_exception(),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+        finally:
+            self._pop_active_step(step_id)
+
+        self._finish_step(step_id=step_id, status="completed")
 
     @contextmanager
     def event_context(self, name: str) -> Iterator[None]:
-        self.event(name, "start")
-        yield
-        self.event(name, "end")
+        # Backwards-compatible alias for existing suite/database implementations.
+        with self.phase_context(name):
+            yield
 
     @contextmanager
     def query_context(self, suite: SuiteName, query_name: str) -> Iterator[None]:
         self.context = QueryContext(suite=suite, query_name=query_name)
 
-        yield
+        try:
+            yield
+        finally:
+            self.context = None
 
-        self.context = None
+    def start_query_step(self, query_name: str, iteration: int) -> int:
+        return self._start_step(
+            step_type="query",
+            step_name="query",
+            query_name=query_name,
+            iteration=iteration,
+        )
+
+    def finish_query_step(
+        self,
+        step_id: int,
+        status: RunStatus,
+        row_count: int | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        duration_ms: float | None = None,
+    ) -> None:
+        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
+
+        self._finish_step(
+            step_id=step_id,
+            status=status,
+            row_count=row_count,
+            error_type=error_type,
+            error_message=error_message,
+            metadata=metadata,
+        )
+
+    def start_mutation_step(self, query_name: str, iteration: int, table_name: str | None = None) -> int:
+        return self._start_step(
+            step_type="mutation",
+            step_name="mutation",
+            query_name=query_name,
+            iteration=iteration,
+            table_name=table_name,
+        )
+
+    def finish_mutation_step(
+        self,
+        step_id: int,
+        status: RunStatus,
+        row_count: int | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        duration_ms: float | None = None,
+    ) -> None:
+        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
+
+        self._finish_step(
+            step_id=step_id,
+            status=status,
+            row_count=row_count,
+            error_type=error_type,
+            error_message=error_message,
+            metadata=metadata,
+        )
+
+    def is_mutation_step_enabled(self, suite: SuiteName, step_name: str) -> bool:
+        return step_name not in self.DISABLED_MUTATION_STEPS.get(suite, frozenset())
+
+    @contextmanager
+    def mutation_context(
+        self,
+        query_name: str,
+        iteration: int,
+        table_name: str | None = None,
+    ) -> Iterator[None]:
+        step_id = self.start_mutation_step(query_name=query_name, iteration=iteration, table_name=table_name)
+        self._push_active_step(step_id)
+        try:
+            t0 = perf_counter()
+            yield
+            duration_seconds = perf_counter() - t0
+        except BaseException as exc:
+            self.finish_mutation_step(
+                step_id=step_id,
+                status=_status_from_exception(),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+        finally:
+            self._pop_active_step(step_id)
+
+        self.finish_mutation_step(
+            step_id=step_id,
+            status="completed",
+            duration_ms=1_000 * duration_seconds,
+        )
+
+    def execute_query_iteration(
+        self,
+        query_name: str,
+        iteration: int,
+        query: str,
+        fetch_kwargs: Mapping[str, Any] | None = None,
+    ) -> tuple[pl.DataFrame, float]:
+        step_id = self.start_query_step(query_name=query_name, iteration=iteration)
+        self._push_active_step(step_id)
+
+        kwargs = dict(fetch_kwargs or {})
+
+        try:
+            t0 = perf_counter()
+            df = self.fetch(query, **kwargs)
+            duration_seconds = perf_counter() - t0
+        except BaseException as exc:
+            self.finish_query_step(
+                step_id=step_id,
+                status=_status_from_exception(),
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+        finally:
+            self._pop_active_step(step_id)
+
+        self.finish_query_step(
+            step_id=step_id,
+            status="completed",
+            row_count=df.shape[0],
+            duration_ms=1_000 * duration_seconds,
+        )
+
+        return df, duration_seconds
 
     def restart_event(self) -> None:
-        with self.event_context("restart"):
+        cmd = self.restart
+        if cmd is None:
+            return
+
+        with self.phase_context("restart"):
             _LOGGER.info(f"Restarting service {self.name}")
-            os.system(self.restart)
+            os.system(cmd)
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
     def execute_schema_file(self, fpath: Path) -> None:
-        with (fpath).open() as f:
+        with fpath.open() as f:
             statements = f.read()
 
         for stmt in statements.split(";"):
@@ -119,9 +374,10 @@ class Database(BaseModel, ABC):
                 continue
 
             # ensure the connection used when initializing the schema is not reused
-            # if we use e.g. ALTER DATABASE, it's important that subsequent queries use a new connection
+            # if we use e.g. alter database, it's important that subsequent queries use a new connection
             con = self.connect(reconnect=True)
-            con.execute(text(stmt))
+            with self.record_query_execution(stmt):
+                con.execute(text(stmt))
             con.commit()
 
     def initialize_schema(self, suite: SuiteName) -> None:
@@ -131,7 +387,7 @@ class Database(BaseModel, ABC):
             _LOGGER.info(f"Schema definition for {self.name}:{suite} does not exist, skipping...")
             return
 
-        with self.event_context("schema"):
+        with self.phase_context("schema"):
             self.execute_schema_file(fpath)
 
         self.connect(reconnect=True)
@@ -145,34 +401,48 @@ class Database(BaseModel, ABC):
             return
         self._connection.rollback()
 
-    def wait_until_accessible(self, timeout_seconds: float = 900.0, interval_seconds: float = 0.1) -> None:
-        _LOGGER.info(f"Waiting for database {self.name}...")
+    def wait_until_accessible(self, timeout_seconds: float = 120.0, interval_seconds: float = 1.0) -> None:
+        _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
 
         deadline = perf_counter() + timeout_seconds
+        attempts = 0
 
         while perf_counter() < deadline:
+            attempts += 1
             try:
                 self.connect(reconnect=True)
                 self.fetch("select 1")
-                _LOGGER.info(f"Database {self.name} is ready to accept connections")
+                _LOGGER.info(f"Database {self.name} is ready (after {attempts} attempt(s))")
                 return
             except NotImplementedError:
                 raise
             except Exception as e:
-                _LOGGER.debug(f"Database not ready yet: {e}")
+                elapsed = perf_counter() + timeout_seconds - deadline
+                _LOGGER.info(f"Database {self.name} not ready ({elapsed:.0f}s elapsed): {e}")
                 sleep(interval_seconds)
 
-        raise TimeoutError(f"Timed out waiting for database {self.name} to become ready")
+        raise TimeoutError(f"Timed out after {timeout_seconds:.0f}s waiting for database {self.name}")
 
     @abstractmethod
     def fetch(
         self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None
     ) -> pl.DataFrame: ...
 
+    def get_row_count(self, table: TableName) -> int:
+        df = self.fetch(f"select count(*) as row_count from {table}", schema={"row_count": pl.Int64})
+
+        if df.shape != (1, 1):
+            raise RuntimeError(f"Expected a single row-count result for {table}, got shape={df.shape}")
+
+        return int(df.item(0, 0))
+
+    @abstractmethod
+    def get_table_names(self) -> set[TableName]: ...
+
     @abstractmethod
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
@@ -181,40 +451,43 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
 
+    @abstractmethod
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None: ...
+
     @property
-    def rtabench(self) -> RTABench:
+    def rtabench(self) -> RTABench[Any]:
         from ..suites.rtabench.config import RTABench
 
         return RTABench(db=self)
 
     @property
-    def clickbench(self) -> Clickbench:
+    def clickbench(self) -> Clickbench[Any]:
         from ..suites.clickbench.config import Clickbench
 
         return Clickbench(db=self)
 
     @property
-    def time_series(self) -> TimeSeries:
+    def time_series(self) -> TimeSeries[Any]:
         from ..suites.time_series.config import TimeSeries
 
         return TimeSeries(db=self)
 
     @property
-    def kaggle_airbnb(self) -> KaggleAirbnb:
+    def kaggle_airbnb(self) -> KaggleAirbnb[Any]:
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
 
         return KaggleAirbnb(db=self)
 
     @property
-    def benchmarks(self) -> dict[SuiteName, BenchmarkSuite]:
-        return {
-            "rtabench": self.rtabench,
-            "time_series": self.time_series,
-            "clickbench": self.clickbench,
-            "kaggle_airbnb": self.kaggle_airbnb,
-        }
+    def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
+        return cast(
+            "dict[SuiteName, BenchmarkSuite[Any]]",
+            {suite_name: getattr(self, suite_name) for suite_name in get_args(SuiteName)},
+        )
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+        self._current_suite = suite
+        self._active_step_ids = []
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:
@@ -223,34 +496,62 @@ class Database(BaseModel, ABC):
         match operation:
             case "populate":
                 benchmark_func = benchmark.populate
-            case "run":
-                benchmark_func = benchmark.run
+            case "select":
+                benchmark_func = benchmark.select
+            case "mutate":
+                benchmark_func = benchmark.mutate
             case _:
                 raise ValueError(f"Invalid operation '{operation}'")
 
         self._result_storage = self.create_result_storage()
 
-        self._benchmark_id, process, stop_event = start_metric_sampler(
-            suite,
-            self.name,
-            operation,
-            self._result_storage,
-            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
-            notes=f"{self.version} | {SETTINGS.system}",
+        started_at = datetime.now(UTC).replace(tzinfo=None)
+        self._run_id = self.result_storage.insert_run(
+            suite=suite,
+            db=self.name,
+            db_version=self.version,
+            operation=operation,
+            system=SETTINGS.system,
+            started_at=started_at,
         )
+
+        metric_process, stop_event = start_metric_sampler(
+            db=self.name,
+            suite=suite,
+            run_id=self.run_id,
+            storage=self.result_storage,
+            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
+        )
+
+        status: RunStatus = "completed"
+        error_type: str | None = None
+        error_message: str | None = None
 
         t0 = perf_counter()
 
         _LOGGER.info(
-            f"Starting benchmark with ID {self._benchmark_id} (database: {self.name}, suite: {suite}, "
-            f"operation: {operation})"
+            f"Starting benchmark run {self.run_id} (database: {self.name}, suite: {suite}, operation: {operation})"
         )
 
         try:
-            with self.event_context(operation):
+            with self.phase_context(operation):
                 benchmark_func()
+        except BaseException as exc:
+            status = _status_from_exception()
+            error_type = type(exc).__name__
+            error_message = str(exc)
+            raise
         finally:
             stop_event.set()
-            process.join()
+            metric_process.join()
 
-        _LOGGER.info(f"Finished benchmark with ID {self._benchmark_id} in {perf_counter() - t0:_.2f} seconds")
+            finished_at = datetime.now(UTC).replace(tzinfo=None)
+            self.result_storage.finish_run(
+                run_id=self.run_id,
+                finished_at=finished_at,
+                status=status,
+                error_type=error_type,
+                error_message=error_message,
+            )
+
+        _LOGGER.info(f"Finished benchmark run {self.run_id} with status={status} in {perf_counter() - t0:_.2f} seconds")

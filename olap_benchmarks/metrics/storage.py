@@ -1,20 +1,36 @@
+from __future__ import annotations
+
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
-from multiprocessing import Manager, Process
-from multiprocessing.managers import SyncManager
-from queue import Queue
+from multiprocessing import Process, Queue
+from queue import Empty
 from typing import Any, Literal, TypedDict, cast
 
-import duckdb  # type: ignore[import-untyped]
+from sqlalchemy import update
+from sqlalchemy.orm import Session
 
-from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, setup_stdout_logging
+from ..results import get_results_engine
+from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep
+from ..results.schema import ensure_results_schema
+from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
 
-EventType = Literal["start", "end"]
+RunStatus = Literal["running", "completed", "failed"]
+StepType = Literal["phase", "query", "mutation"]
 
-MessageType = Literal["insert_benchmark", "finish_benchmark", "insert_metric", "insert_event", "debug"]
+MessageType = Literal[
+    "insert_run",
+    "finish_run",
+    "insert_metric",
+    "insert_query_execution",
+    "start_step",
+    "finish_step",
+    "debug",
+    "shutdown",
+]
 
 
 class WriterMessage(TypedDict):
@@ -22,117 +38,248 @@ class WriterMessage(TypedDict):
     args: list[Any]
 
 
-def writer_loop(queue: Queue, result_queue: Queue) -> None:
+def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revision: Revision = "default") -> None:
     setup_stdout_logging()
-    db_path = SETTINGS.results_directory / "results.db"
 
-    _LOGGER.info(f"Trying to connect to results database at {db_path}")
-    conn = duckdb.connect(db_path)
-    _LOGGER.info(f"Connected to results database at {db_path}")
+    engine = get_results_engine(read_only=False, revision=revision)
+    ensure_results_schema(engine)
 
-    with (REPO_ROOT / "olap_benchmarks/metrics/schema.sql").open() as f:
-        conn.execute(f.read())
+    with Session(engine) as session:
+        while True:
+            try:
+                msg = queue.get()
+            except EOFError:
+                engine.dispose()
+                return
 
-    while True:
-        try:
-            msg = cast(WriterMessage, queue.get())
-        except EOFError:
+            match msg["type"]:
+                case "debug":
+                    row = DebugEntry(content=cast(str, msg["args"][0]))
+                    session.add(row)
+                    session.commit()
+                    result_queue.put(row.id)
+
+                case "insert_run":
+                    row = Run(
+                        suite=cast(str, msg["args"][0]),
+                        db=cast(str, msg["args"][1]),
+                        db_version=cast(str, msg["args"][2]),
+                        operation=cast(str, msg["args"][3]),
+                        system=cast(str, msg["args"][4]),
+                        status=cast(str, msg["args"][5]),
+                        started_at=cast(datetime, msg["args"][6]),
+                    )
+                    session.add(row)
+                    session.commit()
+                    result_queue.put(row.id)
+
+                case "finish_run":
+                    session.execute(
+                        update(Run)
+                        .where(Run.id == cast(int, msg["args"][4]))
+                        .values(
+                            finished_at=cast(datetime, msg["args"][0]),
+                            status=cast(str, msg["args"][1]),
+                            error_type=cast(str | None, msg["args"][2]),
+                            error_message=cast(str | None, msg["args"][3]),
+                        )
+                    )
+                    session.commit()
+
+                case "insert_metric":
+                    row = RunMetric(
+                        run_id=cast(int, msg["args"][0]),
+                        time=cast(datetime, msg["args"][1]),
+                        cpu_percent=cast(float, msg["args"][2]),
+                        mem_mb=cast(int, msg["args"][3]),
+                        disk_mb=cast(int, msg["args"][4]),
+                    )
+                    session.add(row)
+                    session.commit()
+
+                case "insert_query_execution":
+                    row = QueryExecution(
+                        run_id=cast(int, msg["args"][0]),
+                        run_step_id=cast(int | None, msg["args"][1]),
+                        query=cast(str, msg["args"][2]),
+                        start_time=cast(datetime, msg["args"][3]),
+                        end_time=cast(datetime, msg["args"][4]),
+                    )
+                    session.add(row)
+                    session.commit()
+
+                case "start_step":
+                    row = RunStep(
+                        run_id=cast(int, msg["args"][0]),
+                        step_type=cast(str, msg["args"][1]),
+                        step_name=cast(str, msg["args"][2]),
+                        query_name=cast(str | None, msg["args"][3]),
+                        iteration=cast(int | None, msg["args"][4]),
+                        table_name=cast(str | None, msg["args"][5]),
+                        started_at=cast(datetime, msg["args"][6]),
+                        status=cast(str, msg["args"][7]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][8]),
+                    )
+                    session.add(row)
+                    session.commit()
+                    result_queue.put(row.id)
+
+                case "finish_step":
+                    update_values: dict[str, Any] = {
+                        "finished_at": cast(datetime, msg["args"][0]),
+                        "status": cast(str, msg["args"][1]),
+                        "row_count": cast(int | None, msg["args"][2]),
+                        "error_type": cast(str | None, msg["args"][3]),
+                        "error_message": cast(str | None, msg["args"][4]),
+                    }
+
+                    metadata_value = cast(dict[str, Any] | None, msg["args"][5])
+                    if metadata_value is not None:
+                        update_values["metadata_json"] = metadata_value
+
+                    session.execute(
+                        update(RunStep).where(RunStep.id == cast(int, msg["args"][6])).values(**update_values)
+                    )
+                    session.commit()
+
+                case "shutdown":
+                    session.commit()
+                    result_queue.put("ok")
+                    engine.dispose()
+                    return
+
+                case _:
+                    raise ValueError(f"Unknown message type: {msg['type']}")
+
+
+@dataclass
+class WriterProcessHandle:
+    process: Process
+    queue: Queue[WriterMessage]
+    result_queue: Queue[object]
+    _closed: bool = False
+
+    def close(self, timeout_seconds: float = 10.0) -> None:
+        if self._closed:
             return
 
-        match msg["type"]:
-            case "debug":
-                result = conn.execute(
-                    """
-                    insert into debug (content)
-                    values (?)
-                    returning id
-                    """,
-                    msg["args"],
-                ).fetchone()
+        try:
+            Storage(self.queue, self.result_queue).shutdown(timeout_seconds=timeout_seconds)
+        except Exception as exc:
+            _LOGGER.warning(f"Writer shutdown handshake failed: {exc}")
 
-                result_queue.put(result[0] if result else None)
+        self.process.join(timeout=timeout_seconds)
 
-            case "insert_benchmark":
-                result = conn.execute(
-                    """
-                    insert into benchmark (suite, db, operation, started_at, notes)
-                    values (?, ?, ?, ?, ?)
-                    returning id
-                    """,
-                    msg["args"],
-                ).fetchone()
+        if self.process.is_alive():
+            _LOGGER.warning("Writer process did not exit cleanly, terminating")
+            self.process.terminate()
+            self.process.join(timeout=timeout_seconds)
 
-                result_queue.put(result[0] if result else None)
+        self.queue.close()
+        self.result_queue.close()
 
-            case "finish_benchmark":
-                conn.execute("update benchmark set finished_at = ? where id = ?", msg["args"])
-
-            case "insert_metric":
-                conn.execute(
-                    """
-                    insert into metric (
-                        benchmark_id, time, cpu_percent, mem_mb, disk_mb
-                    )
-                    values (?, ?, ?, ?, ?)
-                    """,
-                    msg["args"],
-                )
-
-            case "insert_event":
-                conn.execute(
-                    """
-                    insert into event (
-                        benchmark_id, time, name, type
-                    )
-                    values (?, ?, ?, ?)
-                    """,
-                    msg["args"],
-                )
-
-            case _:
-                raise ValueError(f"Unknown message type: {msg['type']}")
-
-        _LOGGER.debug(f"Wrote message with type {msg['type']}")
+        self._closed = True
 
 
-def start_writer_process() -> tuple[SyncManager, Queue, Queue]:
-    manager = Manager()
-    queue = manager.Queue()
-    result_queue = manager.Queue()
+def start_writer_process(revision: Revision = "default") -> WriterProcessHandle:
+    queue: Queue[WriterMessage] = Queue()
+    result_queue: Queue[object] = Queue()
 
-    writer_process: Process = Process(target=writer_loop, args=(queue, result_queue))
+    writer_process = Process(target=writer_loop, args=(queue, result_queue, revision), daemon=False)
     writer_process.start()
 
-    # need to return manger also here, if it goes out of scope and is gc'd the queues stop working
-    return manager, queue, result_queue
+    return WriterProcessHandle(process=writer_process, queue=queue, result_queue=result_queue)
 
 
 class Storage:
-    def __init__(self, queue: Queue, result_queue: Queue) -> None:
+    def __init__(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self.queue = queue
         self.result_queue = result_queue
 
     def put(self, type: MessageType, args: list[Any]) -> None:
         self.queue.put({"type": type, "args": args})
 
-    def insert_benchmark(
-        self, suite: SuiteName, db: DatabaseName, operation: Operation, started_at: datetime, notes: str | None = None
+    def insert_run(
+        self,
+        suite: SuiteName,
+        db: DatabaseName,
+        db_version: str,
+        operation: Operation,
+        system: str,
+        started_at: datetime,
     ) -> int:
-        self.put("insert_benchmark", [suite, db, operation, started_at, notes])
-        return self.result_queue.get()
+        self.put("insert_run", [suite, db, db_version, operation, system, "running", started_at])
+        return cast(int, self.result_queue.get())
 
-    def finish_benchmark(self, benchmark_id: int, finished_at: datetime) -> None:
-        self.put("finish_benchmark", [finished_at, benchmark_id])
+    def finish_run(
+        self,
+        run_id: int,
+        finished_at: datetime,
+        status: RunStatus,
+        error_type: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        self.put("finish_run", [finished_at, status, error_type, error_message, run_id])
 
-    def insert_metric(self, benchmark_id: int, time: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:
-        self.put("insert_metric", [benchmark_id, time, cpu_percent, mem_mb, disk_mb])
+    def start_step(
+        self,
+        run_id: int,
+        step_type: StepType,
+        step_name: str,
+        started_at: datetime,
+        query_name: str | None = None,
+        iteration: int | None = None,
+        table_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        self.put(
+            "start_step",
+            [run_id, step_type, step_name, query_name, iteration, table_name, started_at, "running", metadata],
+        )
+        return cast(int, self.result_queue.get())
 
-    def insert_event(self, benchmark_id: int, time: datetime, name: str, type: EventType) -> None:
-        self.put("insert_event", [benchmark_id, time, name, type])
+    def finish_step(
+        self,
+        step_id: int,
+        finished_at: datetime,
+        status: RunStatus,
+        row_count: int | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.put(
+            "finish_step",
+            [finished_at, status, row_count, error_type, error_message, metadata, step_id],
+        )
+
+    def insert_metric(self, run_id: int, time: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:
+        self.put("insert_metric", [run_id, time, cpu_percent, mem_mb, disk_mb])
+
+    def insert_query_execution(
+        self,
+        run_id: int,
+        query: str,
+        start_time: datetime,
+        end_time: datetime,
+        run_step_id: int | None = None,
+    ) -> None:
+        self.put("insert_query_execution", [run_id, run_step_id, query, start_time, end_time])
 
     def debug(self, content: str | None = None) -> int:
         if content is None:
             content = uuid.uuid4().hex
 
         self.put("debug", [content])
-        return self.result_queue.get()
+        return cast(int, self.result_queue.get())
+
+    def shutdown(self, timeout_seconds: float = 10.0) -> None:
+        self.put("shutdown", [])
+
+        try:
+            ack = self.result_queue.get(timeout=timeout_seconds)
+        except Empty as exc:
+            raise TimeoutError("Timed out waiting for writer shutdown acknowledgement") from exc
+
+        if ack != "ok":
+            raise RuntimeError(f"Unexpected writer shutdown acknowledgement: {ack}")

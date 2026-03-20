@@ -196,4 +196,10 @@ cython_debug/
 
 **/temp
 **/data
-**/results
+
+.claude
+
+# Frontend (site/) exceptions
+!site/src/lib/
+!site/public/data/
+!site/dist/

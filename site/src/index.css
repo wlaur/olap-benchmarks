@@ -1,0 +1,110 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-surface-primary: #0f1117;
+  --color-surface-raised: #161a23;
+  --color-surface-inset: #0c0e14;
+
+  --color-border-subtle: rgba(148, 163, 184, 0.06);
+  --color-border-default: rgba(148, 163, 184, 0.12);
+
+  --color-accent-200: #d6e6ff;
+  --color-accent-300: #9fc5ff;
+  --color-accent-400: #5a97ff;
+  --color-accent-500: #2f6fde;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    rgba(22, 26, 35, 0.6) 0%,
+    rgba(40, 48, 64, 0.5) 35%,
+    rgba(22, 26, 35, 0.6) 70%
+  );
+  background-size: 240% 100%;
+  animation: skeleton-shimmer 2.5s linear infinite;
+}
+
+.animate-panel-enter {
+  animation: panel-enter 200ms ease-out;
+}
+
+.panel-scrollbar,
+.panel-scrollbar .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+}
+
+.panel-scrollbar,
+.panel-scrollbar .cm-scroller {
+  scrollbar-gutter: stable;
+}
+
+.panel-scrollbar::-webkit-scrollbar,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.panel-scrollbar::-webkit-scrollbar-track,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-scrollbar::-webkit-scrollbar-thumb,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.panel-scrollbar::-webkit-scrollbar-thumb:hover,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.55);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.panel-scrollbar::-webkit-scrollbar-corner,
+.panel-scrollbar .cm-scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}

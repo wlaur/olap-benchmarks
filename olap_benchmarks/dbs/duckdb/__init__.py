@@ -1,27 +1,26 @@
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from importlib.metadata import version as package_version
+from typing import Any, cast
 
 import polars as pl
-from duckdb import DuckDBPyConnection  # type: ignore[import-untyped]
+from duckdb import DuckDBPyConnection
 from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, TableName
+from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
+from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "1.4.0"
+VERSION = package_version("duckdb")
 
 assert duckdb_version_runtime == VERSION
 
-(SETTINGS.database_directory / "duckdb").mkdir(exist_ok=True)
 (SETTINGS.temporary_directory / "duckdb/data").mkdir(exist_ok=True, parents=True)
-
-DUCKDB_CONNECTION_STRING = f"duckdb:///{SETTINGS.database_directory.as_posix()}/duckdb/duck.db"
 
 
 POLARS_DUCKDB_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
@@ -57,7 +56,7 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
 
 
-class DuckDBClickbench(Clickbench):
+class DuckDBClickbench(Clickbench["DuckDB"]):
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # uses > 40g memory otherwise
@@ -65,46 +64,57 @@ class DuckDBClickbench(Clickbench):
 
 
 class DuckDB(Database):
-    name: Literal["duckdb"] = "duckdb"
+    name: DatabaseName = "duckdb"
     version: str = VERSION
 
-    connection_string: str = DUCKDB_CONNECTION_STRING
+    connection_string: str = ""
 
     # in-process, no docker commands necessary
     @property
-    def start(self) -> str:
-        return ""
+    def start(self) -> None:
+        return None
 
     @property
-    def stop(self) -> str:
-        return ""
+    def stop(self) -> None:
+        return None
 
     @property
-    def restart(self) -> str:
-        return ""
+    def restart(self) -> None:
+        return None
 
     def connect(self, reconnect: bool = False) -> Connection:
-        if self._connection is not None:
+        if self._connection is not None and not reconnect:
             return self._connection
 
-        engine = create_engine(self.connection_string)
-        self._connection = engine.connect()
+        patch_duckdb_sqlalchemy_compat()
+        connection_string = f"duckdb:///{self.database_directory.as_posix()}/duck.db"
+        engine = create_engine(connection_string)
+        self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
 
     def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:
         con = get_duckdb_connection(self.connect())
-        con.execute(query)
-        df = con.pl()
+        with self.record_query_execution(query):
+            con.execute(query)
+            df = con.pl()
 
         if schema is not None:
-            df = df.cast(schema)  # type: ignore[arg-type]
+            df = df.cast(cast(pl.Schema, schema))
 
         return df
 
+    def get_table_names(self) -> set[TableName]:
+        df = self.fetch(
+            "select table_name from information_schema.tables "
+            "where table_schema = 'main' and table_type = 'BASE TABLE'",
+            schema={"table_name": pl.String},
+        )
+        return set(df.get_column("table_name").to_list())
+
     def insert(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
@@ -112,21 +122,26 @@ class DuckDB(Database):
     ) -> None:
         con = get_duckdb_connection(self.connect())
 
-        result = con.execute(
-            f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table.lower()}'"
-        ).fetchone()
+        result = cast(
+            tuple[int] | None,
+            cast(Any, con)
+            .execute(f"SELECT count(*) FROM information_schema.tables WHERE table_name = '{table.lower()}'")
+            .fetchone(),
+        )
 
         assert result is not None
-        table_exists = cast(int, result[0]) > 0
+        table_exists = result[0] > 0
+
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
 
         if not table_exists:
             not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
             primary_keys = [primary_key] if isinstance(primary_key, str) else (primary_key or [])
 
             col_defs: list[str] = []
-            for name, dtype in df.schema.items():
+            for name, dtype in schema.items():
                 duck_type = polars_dtype_to_duckdb(dtype)
-                constraints = []
+                constraints: list[str] = []
                 if name in not_null_cols:
                     constraints.append("not null")
 
@@ -135,20 +150,39 @@ class DuckDB(Database):
 
             pk_clause = f", primary key ({', '.join(f'"{pk}"' for pk in primary_keys)})" if primary_keys else ""
             ddl = f"create table {table} (\n  " + ",\n  ".join(col_defs) + pk_clause + "\n)"
-            con.execute(ddl)
+            with self.record_query_execution(ddl):
+                con.execute(ddl)
 
-        if in_memory:
+        if isinstance(df, pl.LazyFrame):
+            if in_memory:
+                raise ValueError("in_memory=True is not compatible with LazyFrame input")
+
+            fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
+            df.sink_parquet(fpath)
+            _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
+
+            try:
+                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
+                with self.record_query_execution(sql):
+                    con.execute(sql)
+            finally:
+                fpath.unlink()
+        elif in_memory:
             con.register("source", df)
             _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-            con.execute(f"insert into {table} select * from source")
+            sql = f"insert into {table} select * from source"
+            with self.record_query_execution(sql):
+                con.execute(sql)
         else:
             fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
             df.write_parquet(fpath)
             _LOGGER.info(f"Inserting from Parquet dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
             try:
-                con.execute(f"insert into {table} select * from '{fpath.as_posix()}'")
+                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
+                with self.record_query_execution(sql):
+                    con.execute(sql)
             finally:
                 fpath.unlink()
 
@@ -177,7 +211,8 @@ class DuckDB(Database):
                 select * from source
                 on conflict ({conflict_target}) do nothing
             """
-            con.execute(sql)
+            with self.record_query_execution(sql):
+                con.execute(sql)
             con.commit()
             return
 
@@ -191,7 +226,24 @@ class DuckDB(Database):
             on conflict ({conflict_target}) do update set {set_clause}
         """
 
-        con.execute(sql)
+        with self.record_query_execution(sql):
+            con.execute(sql)
+        con.commit()
+
+    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        con = get_duckdb_connection(self.connect())
+        con.register("delete_keys", keys)
+
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM delete_keys)"
+
+        with self.record_query_execution(sql):
+            con.execute(sql)
         con.commit()
 
     @property
