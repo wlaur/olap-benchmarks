@@ -286,8 +286,6 @@ function TableBody({
                   ? "hover:bg-white/[0.03]"
                   : "bg-white/[0.02] hover:bg-white/[0.04]",
             )}
-            onMouseEnter={() => selection.setHoveredQuery(queryName)}
-            onMouseLeave={() => selection.setHoveredQuery(null)}
             onClick={() => selection.toggleSelectedQuery(queryName)}
           >
             {row.getVisibleCells().map((cell) => (

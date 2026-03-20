@@ -10,6 +10,7 @@ from sqlalchemy import Connection
 from ..dbs import Database
 from ..settings import DatabaseName, SuiteName, TableName
 from ..suites import BenchmarkSuite
+from ..suites.time_series.config import TimeSeries
 
 
 class DummyDatabase(Database):
@@ -82,6 +83,14 @@ class DummySuite(BenchmarkSuite[CountingDatabase]):
         raise NotImplementedError
 
 
+def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
+    assert DummySuite.supported_operations == ("populate", "select")
+
+
+def test_time_series_suite_declares_mutate_support() -> None:
+    assert TimeSeries.supported_operations == ("populate", "mutate", "select")
+
+
 def test_database_benchmarks_resolves_all_suites() -> None:
     db = DummyDatabase()
 
@@ -89,6 +98,13 @@ def test_database_benchmarks_resolves_all_suites() -> None:
 
     assert set(benchmarks) == set(get_args(SuiteName))
     assert benchmarks["time_series"].db is db
+
+
+def test_database_benchmark_rejects_unsupported_operation() -> None:
+    db = DummyDatabase()
+
+    with pytest.raises(ValueError, match="does not support operation 'mutate'"):
+        db.benchmark("clickbench", "mutate")
 
 
 def test_suite_should_skip_populate_when_expected_data_exists() -> None:

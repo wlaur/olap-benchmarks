@@ -1,12 +1,23 @@
-import { useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 
 import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
-import { FlameGraphPanel } from "../components/explorer/FlameGraphPanel"
 import { OperationSelector } from "../components/explorer/OperationSelector"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
-import { QueryHeatmapPanel } from "../components/explorer/QueryHeatmapPanel"
-import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
+
+const QueryHeatmapPanel = lazy(() =>
+  import("../components/explorer/QueryHeatmapPanel").then((m) => ({
+    default: m.QueryHeatmapPanel,
+  })),
+)
+const ResourceTrendPanel = lazy(() =>
+  import("../components/explorer/ResourceTrendPanel").then((m) => ({
+    default: m.ResourceTrendPanel,
+  })),
+)
+const FlameGraphPanel = lazy(() =>
+  import("../components/explorer/FlameGraphPanel").then((m) => ({ default: m.FlameGraphPanel })),
+)
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
 import { useSelectionState } from "../hooks/useSelectionState"
@@ -42,7 +53,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     toggleDatabase,
   } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
 
-  const databaseColors = getDatabaseColors(databases)
+  const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
   const showInsertPerformancePanel = isLoading || state.insertSteps.length > 0
   const showFlameGraphPanel = isLoading || system !== null
   const showResourceTrendPanel = isLoading || state.metricSamples.length > 0
@@ -144,49 +155,53 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             isLoading={isLoading}
           />
 
-          <QueryHeatmapPanel
-            suiteConfig={suiteConfig}
-            querySummaries={
-              selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
-            }
-            includedDatabases={includedDatabases}
-            databaseColors={databaseColors}
-            selection={selection}
-            isLoading={isLoading}
-          />
+          <Suspense>
+            <QueryHeatmapPanel
+              suiteConfig={suiteConfig}
+              querySummaries={
+                selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
+              }
+              includedDatabases={includedDatabases}
+              databaseColors={databaseColors}
+              selection={selection}
+              isLoading={isLoading}
+            />
+          </Suspense>
 
           {showResourceTrendPanel || showFlameGraphPanel ? (
-            <div
-              className={cn(
-                "grid items-stretch gap-4",
-                showResourceTrendPanel && showFlameGraphPanel
-                  ? "xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]"
-                  : "grid-cols-1",
-              )}
-            >
-              {showResourceTrendPanel ? (
-                <ResourceTrendPanel
-                  selectedOperation={selectedOperation}
-                  suiteConfig={suiteConfig}
-                  metricSamples={state.metricSamples}
-                  insertSteps={state.insertSteps}
-                  querySteps={filteredQuerySteps}
-                  mutateSteps={filteredMutateSteps}
-                  databases={includedDatabases}
-                  isLoading={isLoading}
-                />
-              ) : null}
+            <Suspense>
+              <div
+                className={cn(
+                  "grid items-stretch gap-4",
+                  showResourceTrendPanel && showFlameGraphPanel
+                    ? "xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]"
+                    : "grid-cols-1",
+                )}
+              >
+                {showResourceTrendPanel ? (
+                  <ResourceTrendPanel
+                    selectedOperation={selectedOperation}
+                    suiteConfig={suiteConfig}
+                    metricSamples={state.metricSamples}
+                    insertSteps={state.insertSteps}
+                    querySteps={filteredQuerySteps}
+                    mutateSteps={filteredMutateSteps}
+                    databases={includedDatabases}
+                    isLoading={isLoading}
+                  />
+                ) : null}
 
-              {showFlameGraphPanel ? (
-                <FlameGraphPanel
-                  system={system}
-                  suite={suiteId}
-                  databases={includedDatabases}
-                  metricSamples={state.metricSamples}
-                  isLoading={isLoading}
-                />
-              ) : null}
-            </div>
+                {showFlameGraphPanel ? (
+                  <FlameGraphPanel
+                    system={system}
+                    suite={suiteId}
+                    databases={includedDatabases}
+                    metricSamples={state.metricSamples}
+                    isLoading={isLoading}
+                  />
+                ) : null}
+              </div>
+            </Suspense>
           ) : null}
         </div>
       </div>
