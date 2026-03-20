@@ -1,9 +1,9 @@
 import { cn } from "../../lib/cn"
-import { BodyText, MetaLabel } from "../Typography"
 
 interface DatabaseMultiSelectProps {
   databases: string[]
   selectedDatabases: string[]
+  databaseColors: Record<string, string>
   onSelectAll: () => void
   onToggleDatabase: (database: string) => void
 }
@@ -11,54 +11,56 @@ interface DatabaseMultiSelectProps {
 export function DatabaseMultiSelect({
   databases,
   selectedDatabases,
+  databaseColors,
   onSelectAll,
   onToggleDatabase,
 }: DatabaseMultiSelectProps) {
   const allSelected = selectedDatabases.length === databases.length
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <MetaLabel>Included Databases</MetaLabel>
-          <BodyText className="mt-1">
-            Filter the comparison, charts, and SQL overrides to the databases you care about.
-          </BodyText>
-        </div>
-        <button
-          type="button"
-          className={cn(
-            "rounded-full border px-3 py-1.5 text-xs font-medium transition",
-            allSelected
-              ? "border-sky-400/30 bg-sky-500/8 text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.18)]"
-              : "border-border-default bg-surface-raised/88 text-slate-300 hover:border-slate-600 hover:bg-surface-raised hover:text-slate-100",
-          )}
-          onClick={onSelectAll}
-        >
-          All
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
+    <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {databases.map((database) => {
           const selected = selectedDatabases.includes(database)
+          const color = databaseColors[database] ?? "#94a3b8"
           return (
             <button
               key={database}
               type="button"
               className={cn(
-                "rounded-full border px-3 py-1.5 text-sm font-medium transition",
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
                 selected
-                  ? "border-sky-400/30 bg-sky-500/8 text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.18)]"
-                  : "border-border-default bg-surface-raised/88 text-slate-300 hover:border-slate-600 hover:bg-surface-raised hover:text-slate-100",
+                  ? "border-transparent text-slate-100"
+                  : "border-border-default bg-surface-inset text-slate-500 hover:text-slate-300",
               )}
+              style={
+                selected
+                  ? { backgroundColor: `${color}20`, boxShadow: `inset 0 0 0 1px ${color}40` }
+                  : undefined
+              }
               onClick={() => onToggleDatabase(database)}
             >
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: selected ? color : "rgba(71, 85, 105, 0.6)" }}
+              />
               {database}
             </button>
           )
         })}
       </div>
+      <button
+        type="button"
+        className={cn(
+          "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition",
+          allSelected
+            ? "border-accent-400/30 bg-accent-500/10 text-accent-200"
+            : "border-border-default text-slate-400 hover:text-slate-200",
+        )}
+        onClick={onSelectAll}
+      >
+        All
+      </button>
     </div>
   )
 }

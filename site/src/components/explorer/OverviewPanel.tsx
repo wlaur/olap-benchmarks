@@ -16,7 +16,6 @@ import {
   type OverviewChartRow,
   type OverviewOperationVisibility,
 } from "../../lib/chartTransforms"
-import { getDatabaseColors } from "../../lib/databaseColors"
 import {
   formatDurationAxisTick,
   formatDurationSeconds,
@@ -27,28 +26,19 @@ import {
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, OperationSummary } from "../../lib/types"
 import { DurationScaleToggle } from "../DurationScaleToggle"
-import { DatabaseMultiSelect } from "../filters/DatabaseMultiSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../layout/Panel"
-import { BodyText, DisplayTitle, Eyebrow, SectionTitle } from "../Typography"
-import {
-  FilterChipsSkeleton,
-  OverviewChartSkeleton,
-  OverviewControlsSkeleton,
-} from "./ExplorerSkeletons"
+import { SectionTitle } from "../Typography"
+import { OverviewChartSkeleton, OverviewControlsSkeleton } from "./ExplorerSkeletons"
 
-const OVERVIEW_CHART_HEIGHT = 220
-const TOP_GRID_CLASS = "grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]"
-const TOP_CARD_MIN_HEIGHT_CLASS = "min-h-[26rem]"
-const OVERVIEW_HEADER_CLASS = "min-h-[8.5rem]"
+const OVERVIEW_CHART_HEIGHT = 200
 
 interface OverviewPanelProps {
   suiteConfig: SuiteConfig
   databases: string[]
   includedDatabases: string[]
   operationSummaries: OperationSummary[]
+  databaseColors: Record<string, string>
   isLoading: boolean
-  onSelectAll: () => void
-  onToggleDatabase: (database: string) => void
 }
 
 const OPERATION_CHIPS: ReadonlyArray<readonly [BenchmarkOperation, string, string]> = [
@@ -62,9 +52,8 @@ export function OverviewPanel({
   databases,
   includedDatabases,
   operationSummaries,
+  databaseColors,
   isLoading,
-  onSelectAll,
-  onToggleDatabase,
 }: OverviewPanelProps) {
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("linear")
   const [operationVisibility, setOperationVisibility] = useState<OverviewOperationVisibility>({
@@ -72,8 +61,6 @@ export function OverviewPanel({
     select: true,
     mutate: true,
   })
-
-  const databaseColors = getDatabaseColors(databases)
 
   const runChartData = buildOverviewChartData(
     operationSummaries,
@@ -107,97 +94,65 @@ export function OverviewPanel({
   const availableChips = OPERATION_CHIPS.filter(([op]) => suiteConfig.operations.includes(op))
 
   return (
-    <div className={TOP_GRID_CLASS}>
-      <PanelCard className={TOP_CARD_MIN_HEIGHT_CLASS}>
-        <div className="space-y-2">
-          <Eyebrow>{suiteConfig.label}</Eyebrow>
-          <DisplayTitle as="h2">Results explorer</DisplayTitle>
-          <BodyText className="max-w-2xl leading-6 text-slate-300">
-            Scope the comparison to the databases you care about, scan the aggregate spread, then
-            drill into query-level behavior and SQL without leaving the screen.
-          </BodyText>
-        </div>
-
-        <div className="mt-5">
-          {isLoading ? (
-            <FilterChipsSkeleton />
-          ) : (
-            <DatabaseMultiSelect
-              databases={databases}
-              selectedDatabases={includedDatabases}
-              onSelectAll={onSelectAll}
-              onToggleDatabase={onToggleDatabase}
-            />
-          )}
-        </div>
-      </PanelCard>
-
-      <PanelCard className={TOP_CARD_MIN_HEIGHT_CLASS}>
-        <PanelHeader className={OVERVIEW_HEADER_CLASS}>
-          <div>
-            <SectionTitle as="h3">Aggregate overview</SectionTitle>
-            <BodyText className="mt-1">
-              Latest completed durations per database. Toggle any phase on or off, then switch
-              between log and linear scale before diving into per-query detail.
-            </BodyText>
+    <PanelCard className="h-full p-3">
+      <PanelHeader>
+        <SectionTitle as="h3">Aggregate overview</SectionTitle>
+        {isLoading ? (
+          <OverviewControlsSkeleton />
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-0.5">
+              {availableChips.map(([operation, label, chipColor]) => {
+                const isActive = operationVisibility[operation]
+                return (
+                  <button
+                    key={operation}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => toggleOverviewOperation(operation)}
+                    className={
+                      isActive
+                        ? "inline-flex items-center gap-1.5 rounded-full bg-white/8 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]"
+                        : "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+                    }
+                  >
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{
+                        backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.6)",
+                      }}
+                    />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
+            <span className="text-[0.65rem] text-slate-400 tabular-nums">
+              {includedDatabases.length}/{databases.length}
+            </span>
           </div>
-          {isLoading ? (
-            <OverviewControlsSkeleton />
-          ) : (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
-                {availableChips.map(([operation, label, chipColor]) => {
-                  const isActive = operationVisibility[operation]
-                  return (
-                    <button
-                      key={operation}
-                      type="button"
-                      aria-pressed={isActive}
-                      onClick={() => toggleOverviewOperation(operation)}
-                      className={
-                        isActive
-                          ? "inline-flex items-center gap-2 rounded-full bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.28)]"
-                          : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                      }
-                    >
-                      <span
-                        className="size-2 rounded-full"
-                        style={{
-                          backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.9)",
-                        }}
-                      />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-              <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
-              <div className="rounded-full border border-border-default bg-surface-inset px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
-                {includedDatabases.length} of {databases.length} databases
-              </div>
-            </div>
-          )}
-        </PanelHeader>
+        )}
+      </PanelHeader>
 
-        <ChartFrame className="mt-4" height={OVERVIEW_CHART_HEIGHT}>
-          {isLoading ? (
-            <OverviewChartSkeleton />
-          ) : !hasVisibleOverviewSegments ? (
-            <div className="flex h-full min-h-28 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 text-center text-sm text-slate-500">
-              Enable at least one phase to display overview bars for the selected databases.
-            </div>
-          ) : (
-            <OverviewBarChart
-              data={runChartData}
-              axisDomain={overviewAxisDomain}
-              axisTicks={overviewAxisTicks}
-              scaleMode={overviewScaleMode}
-              operationVisibility={operationVisibility}
-            />
-          )}
-        </ChartFrame>
-      </PanelCard>
-    </div>
+      <ChartFrame className="mt-2 p-2" height={OVERVIEW_CHART_HEIGHT}>
+        {isLoading ? (
+          <OverviewChartSkeleton />
+        ) : !hasVisibleOverviewSegments ? (
+          <div className="flex h-full items-center justify-center text-xs text-slate-500">
+            Enable at least one phase to display overview bars.
+          </div>
+        ) : (
+          <OverviewBarChart
+            data={runChartData}
+            axisDomain={overviewAxisDomain}
+            axisTicks={overviewAxisTicks}
+            scaleMode={overviewScaleMode}
+            operationVisibility={operationVisibility}
+          />
+        )}
+      </ChartFrame>
+    </PanelCard>
   )
 }
 
@@ -222,18 +177,18 @@ function OverviewBarChart({
       height="100%"
       initialDimension={{ width: 640, height: OVERVIEW_CHART_HEIGHT }}
     >
-      <BarChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
+      <BarChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
         <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
         <XAxis
           dataKey="db"
-          tick={{ fill: "#64748b", fontSize: 11 }}
+          tick={{ fill: "#94a3b8", fontSize: 11 }}
           axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
           tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
         />
         <YAxis
           domain={axisDomain}
           ticks={axisTicks}
-          tick={{ fill: "#64748b", fontSize: 11 }}
+          tick={{ fill: "#94a3b8", fontSize: 10 }}
           axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
           tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
           tickFormatter={(value: number) => formatDurationAxisTick(value, scaleMode)}
@@ -241,9 +196,10 @@ function OverviewBarChart({
         <Tooltip
           cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
           contentStyle={{
-            backgroundColor: "#161a23",
+            backgroundColor: "#1e2330",
             border: "1px solid rgba(148, 163, 184, 0.12)",
-            borderRadius: 12,
+            borderRadius: 10,
+            fontSize: 12,
             color: "#e2e8f0",
           }}
           labelStyle={{ color: "#e2e8f0" }}
@@ -279,7 +235,7 @@ function OverviewBarChart({
         <Bar
           dataKey="populate_chart_duration_s"
           hide={!operationVisibility.populate}
-          radius={[4, 4, 0, 0]}
+          radius={[3, 3, 0, 0]}
           name="Populate"
           shape={(props) => (
             <Rectangle
@@ -294,7 +250,7 @@ function OverviewBarChart({
         <Bar
           dataKey="mutate_chart_duration_s"
           hide={!operationVisibility.mutate}
-          radius={[4, 4, 0, 0]}
+          radius={[3, 3, 0, 0]}
           name="Mutate"
           shape={(props) => (
             <Rectangle
@@ -309,7 +265,7 @@ function OverviewBarChart({
         <Bar
           dataKey="select_chart_duration_s"
           hide={!operationVisibility.select}
-          radius={[4, 4, 0, 0]}
+          radius={[3, 3, 0, 0]}
           name="Select"
           shape={(props) => (
             <Rectangle

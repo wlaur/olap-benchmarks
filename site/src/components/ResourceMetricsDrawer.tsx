@@ -374,7 +374,7 @@ function MetricChart({
                     />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "#161a23",
+                        backgroundColor: "#1e2330",
                         border: "1px solid rgba(148, 163, 184, 0.12)",
                         borderRadius: 12,
                         color: "#e2e8f0",

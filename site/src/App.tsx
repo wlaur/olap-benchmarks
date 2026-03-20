@@ -94,7 +94,7 @@ function ExplorerMain({ selectedSystem, loading, error }: ExplorerMainProps) {
   )
 
   return (
-    <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-6 lg:py-8">
+    <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-4 lg:py-5">
       <div className="flex min-h-0 w-full flex-1 flex-col">{content}</div>
     </main>
   )
