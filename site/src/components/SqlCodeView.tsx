@@ -94,7 +94,7 @@ export function SqlCodeView({ code }: SqlCodeViewProps) {
     <div
       ref={hostRef}
       aria-label="SQL query viewer"
-      className="panel-scrollbar sql-code-view h-full min-h-0 w-full min-w-0 overflow-auto"
+      className="panel-scrollbar h-full min-h-0 w-full min-w-0 overflow-auto"
     />
   )
 }

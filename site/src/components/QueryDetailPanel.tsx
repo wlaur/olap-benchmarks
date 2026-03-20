@@ -21,6 +21,7 @@ import {
   type DurationScaleMode,
 } from "../lib/format"
 import type { QuerySqlEntry } from "../lib/types"
+import { controlChipClass } from "./controls/controlStyles"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { ChartFrame, PanelCard } from "./layout/Panel"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
@@ -230,11 +231,7 @@ export function QueryDetailPanel({
           <div className="flex shrink-0 gap-1 border-b border-border-default px-4 py-2">
             {sql?.sql !== null ? (
               <button
-                className={
-                  activeTab === "common"
-                    ? "rounded-md border border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-300"
-                    : "rounded-md px-3 py-1 text-xs font-medium text-slate-400 hover:text-slate-200"
-                }
+                className={controlChipClass(activeTab === "common", "sm")}
                 onClick={() => setActiveTab("common")}
               >
                 SQL
@@ -243,11 +240,7 @@ export function QueryDetailPanel({
             {overrideKeys.map((db) => (
               <button
                 key={db}
-                className={
-                  activeTab === db
-                    ? "rounded-md border border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-300"
-                    : "rounded-md px-3 py-1 text-xs font-medium text-slate-400 hover:text-slate-200"
-                }
+                className={controlChipClass(activeTab === db, "sm")}
                 onClick={() => setActiveTab(db)}
               >
                 {db}

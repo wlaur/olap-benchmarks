@@ -1,4 +1,5 @@
 import { cn } from "../../lib/cn"
+import { controlChipClass } from "../controls/controlStyles"
 
 interface DatabaseMultiSelectProps {
   databases: string[]
@@ -27,17 +28,8 @@ export function DatabaseMultiSelect({
             <button
               key={database}
               type="button"
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition",
-                selected
-                  ? "border-transparent text-slate-100"
-                  : "border-border-default bg-surface-inset text-slate-500 hover:text-slate-300",
-              )}
-              style={
-                selected
-                  ? { backgroundColor: `${color}20`, boxShadow: `inset 0 0 0 1px ${color}40` }
-                  : undefined
-              }
+              className={cn("gap-1.5", controlChipClass(selected, "sm"))}
+              style={selected ? { boxShadow: `inset 0 0 0 1px ${color}55` } : undefined}
               onClick={() => onToggleDatabase(database)}
             >
               <span
@@ -51,12 +43,7 @@ export function DatabaseMultiSelect({
       </div>
       <button
         type="button"
-        className={cn(
-          "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition",
-          allSelected
-            ? "border-accent-400/30 bg-accent-500/10 text-accent-200"
-            : "border-border-default text-slate-400 hover:text-slate-200",
-        )}
+        className={cn("shrink-0", controlChipClass(allSelected, "sm"))}
         onClick={onSelectAll}
       >
         All

@@ -18,6 +18,12 @@ import {
 } from "../../lib/metricFormat"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
+import {
+  controlButtonClass,
+  controlChipClass,
+  controlGroupClass,
+  quietActionButtonClass,
+} from "../controls/controlStyles"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
 import { MetaLabel, SectionTitle } from "../Typography"
@@ -173,8 +179,10 @@ export function ResourceTrendPanel({
   const hasData = metricSamples.length > 0
 
   return (
-    <PanelCard className="h-full p-3">
-      <SectionTitle as="h3">Resource trends</SectionTitle>
+    <PanelCard className="flex h-full min-h-0 min-w-0 flex-col p-3">
+      <SectionTitle as="h3" className="shrink-0">
+        Resource trends
+      </SectionTitle>
 
       {isLoading ? (
         <div className="mt-2 rounded-lg border border-border-default bg-surface-inset px-4 py-6 text-xs text-slate-500">
@@ -185,10 +193,10 @@ export function ResourceTrendPanel({
           No resource metrics were recorded for the selected databases.
         </div>
       ) : (
-        <div className="mt-2 rounded-lg border border-border-default bg-surface-inset p-3">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
-            <div className="min-w-0 space-y-3">
-              <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
+        <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
+          <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className={controlGroupClass()}>
                 {availableOperations.map((operation) => (
                   <button
                     key={operation}
@@ -199,84 +207,68 @@ export function ResourceTrendPanel({
                       setShowAllSteps(false)
                       setShowAllUnavailableSteps(false)
                     }}
-                    className={
-                      selectedOperation === operation
-                        ? "rounded-full bg-accent-400/10 px-3 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
-                        : "rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                    }
+                    className={controlButtonClass(selectedOperation === operation, "sm")}
                   >
                     {toTitleCase(operation)}
                   </button>
                 ))}
               </div>
-
-              {stepOptions.length > 0 ? (
-                <div className="space-y-2">
-                  <div
-                    className={`panel-scrollbar overflow-y-auto pr-1 ${
-                      showAllSteps ? "max-h-56" : "max-h-28"
-                    }`}
-                  >
-                    <div className="flex flex-wrap gap-1.5">
-                      {visibleStepOptions.map((step) => (
-                        <button
-                          key={step.value}
-                          type="button"
-                          onClick={() => setSelectedStep(step.value)}
-                          className={
-                            resolvedStep === step.value
-                              ? "rounded-full bg-accent-400/10 px-2.5 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
-                              : "rounded-full border border-border-default px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                          }
-                        >
-                          {step.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {stepOptions.length > MAX_COLLAPSED_STEP_OPTIONS ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllSteps((current) => !current)}
-                      className="rounded-full border border-border-default bg-surface-primary/55 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
-                    >
-                      {showAllSteps
-                        ? "Show fewer steps"
-                        : `Show ${stepOptions.length - visibleStepOptions.length} more steps`}
-                    </button>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500">No steps found for this operation.</p>
-              )}
             </div>
-            <div className="flex min-w-0 flex-col gap-2 xl:items-end">
+
+            <div className="min-w-0">
               <DatabaseLegend databases={databases} databaseColors={databaseColors} />
-              {unavailableStepOptions.length > 0 ? (
-                <div className="flex max-w-full min-w-0 flex-col gap-1.5 xl:max-w-[22rem] xl:items-end">
-                  <MetaLabel>No Metrics</MetaLabel>
-                  <div
-                    className={`panel-scrollbar overflow-y-auto pr-1 ${
-                      showAllUnavailableSteps ? "max-h-52" : "max-h-28"
-                    }`}
-                  >
-                    <div className="flex flex-wrap gap-1.5 xl:justify-end">
-                      {visibleUnavailableStepOptions.map((step) => (
-                        <span
-                          key={step.value}
-                          className="rounded-full border border-dashed border-border-default bg-surface-primary/45 px-2.5 py-1 text-xs font-medium text-slate-500"
-                          aria-disabled="true"
-                        >
-                          {step.label}
-                        </span>
-                      ))}
-                    </div>
+            </div>
+          </div>
+
+          {stepOptions.length > 0 ? (
+            <div className="mt-3 shrink-0">
+              <div className="space-y-2">
+                <MetaLabel>Tracked Step</MetaLabel>
+                <div
+                  className={`panel-scrollbar overflow-y-auto pr-1 ${
+                    showAllSteps ? "max-h-56" : "max-h-28"
+                  }`}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleStepOptions.map((step) => (
+                      <button
+                        key={step.value}
+                        type="button"
+                        onClick={() => setSelectedStep(step.value)}
+                        className={controlChipClass(resolvedStep === step.value, "sm")}
+                      >
+                        {step.label}
+                      </button>
+                    ))}
                   </div>
+                </div>
+                {stepOptions.length > MAX_COLLAPSED_STEP_OPTIONS ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllSteps((current) => !current)}
+                    className={quietActionButtonClass("sm")}
+                  >
+                    {showAllSteps
+                      ? "Show fewer steps"
+                      : `Show ${stepOptions.length - visibleStepOptions.length} more steps`}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">No steps found for this operation.</p>
+          )}
+
+          {unavailableStepOptions.length > 0 ? (
+            <div className="mt-3 shrink-0">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <MetaLabel>No Metrics</MetaLabel>
                   {unavailableStepOptions.length > MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS ? (
                     <button
                       type="button"
                       onClick={() => setShowAllUnavailableSteps((current) => !current)}
-                      className="self-start rounded-full border border-border-default bg-surface-primary/55 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100 xl:self-end"
+                      className={quietActionButtonClass("sm")}
                     >
                       {showAllUnavailableSteps
                         ? "Show fewer unavailable"
@@ -284,9 +276,26 @@ export function ResourceTrendPanel({
                     </button>
                   ) : null}
                 </div>
-              ) : null}
+                <div
+                  className={`panel-scrollbar overflow-y-auto pr-1 ${
+                    showAllUnavailableSteps ? "max-h-52" : "max-h-28"
+                  }`}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleUnavailableStepOptions.map((step) => (
+                      <span
+                        key={step.value}
+                        className="rounded-full border border-dashed border-border-default bg-surface-primary/45 px-2.5 py-1 text-xs font-medium text-slate-500"
+                        aria-disabled="true"
+                      >
+                        {step.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {resolvedStep === null ? (
             <div className="mt-3 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-5 text-xs text-slate-500">
@@ -297,19 +306,21 @@ export function ResourceTrendPanel({
               Step too fast for resource sampling (under {METRIC_SAMPLE_RATE_S}s).
             </div>
           ) : (
-            <div className="mt-3 grid gap-2">
-              {METRIC_CONFIGS.map((metric) => (
-                <TrendChart
-                  key={metric.key}
-                  label={metric.label}
-                  data={chartData[metric.key]}
-                  databases={databases}
-                  databaseColors={databaseColors}
-                  formatter={metric.formatter}
-                  scaleBuilder={metric.scaleBuilder}
-                  maxElapsed={maxElapsed}
-                />
-              ))}
+            <div className="panel-scrollbar mt-3 min-h-0 flex-1 overflow-auto pr-1">
+              <div className="grid gap-2">
+                {METRIC_CONFIGS.map((metric) => (
+                  <TrendChart
+                    key={metric.key}
+                    label={metric.label}
+                    data={chartData[metric.key]}
+                    databases={databases}
+                    databaseColors={databaseColors}
+                    formatter={metric.formatter}
+                    scaleBuilder={metric.scaleBuilder}
+                    maxElapsed={maxElapsed}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>

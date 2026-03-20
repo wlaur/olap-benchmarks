@@ -16,6 +16,7 @@ import {
   type OverviewChartRow,
   type OverviewOperationVisibility,
 } from "../../lib/chartTransforms"
+import { cn } from "../../lib/cn"
 import {
   formatDurationAxisTick,
   formatDurationSeconds,
@@ -25,9 +26,10 @@ import {
 } from "../../lib/format"
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, OperationSummary } from "../../lib/types"
+import { controlButtonClass } from "../controls/controlStyles"
 import { DurationScaleToggle } from "../DurationScaleToggle"
 import { ChartFrame, PanelCard, PanelHeader } from "../layout/Panel"
-import { SectionTitle } from "../Typography"
+import { MetaLabel, SectionTitle } from "../Typography"
 import { OverviewChartSkeleton, OverviewControlsSkeleton } from "./ExplorerSkeletons"
 
 const OVERVIEW_CHART_HEIGHT = 200
@@ -44,9 +46,9 @@ interface OverviewPanelProps {
 }
 
 const OPERATION_CHIPS: ReadonlyArray<readonly [BenchmarkOperation, string, string]> = [
-  ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
-  ["mutate", "Mutate", "rgba(168, 85, 247, 0.85)"],
-  ["select", "Select", "rgba(148, 163, 184, 1)"],
+  ["populate", "Populate", "rgba(245, 158, 11, 0.92)"],
+  ["mutate", "Mutate", "rgba(139, 92, 246, 0.94)"],
+  ["select", "Select", "rgba(96, 165, 250, 0.94)"],
 ]
 
 export function OverviewPanel({
@@ -112,13 +114,13 @@ export function OverviewPanel({
 
   return (
     <PanelCard className="h-full p-3">
-      <PanelHeader>
+      <PanelHeader className="flex-col items-start gap-3">
         <SectionTitle as="h3">Aggregate overview</SectionTitle>
         {isLoading ? (
           <OverviewControlsSkeleton />
         ) : (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {availableChips.map(([operation, label, chipColor]) => {
                 const isActive = operationVisibility[operation]
                 return (
@@ -127,16 +129,13 @@ export function OverviewPanel({
                     type="button"
                     aria-pressed={isActive}
                     onClick={() => toggleOverviewOperation(operation)}
-                    className={
-                      isActive
-                        ? "inline-flex items-center gap-1.5 rounded-full bg-white/8 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]"
-                        : "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                    }
+                    className={cn(controlButtonClass(isActive, "md"), "gap-2")}
                   >
                     <span
-                      className="size-1.5 rounded-full"
+                      className="size-2 rounded-full"
                       style={{
-                        backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.6)",
+                        backgroundColor: chipColor,
+                        opacity: isActive ? 1 : 0.55,
                       }}
                     />
                     {label}
@@ -146,9 +145,11 @@ export function OverviewPanel({
             </div>
             <BarModeToggle mode={barMode} onChange={setBarMode} />
             <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
-            <span className="text-[0.65rem] text-slate-400 tabular-nums">
-              {includedDatabases.length}/{databases.length}
-            </span>
+            <MetaLabel className="tracking-normal text-slate-400 normal-case">
+              {includedDatabases.length === databases.length
+                ? `${databases.length} databases shown`
+                : `${includedDatabases.length} of ${databases.length} databases shown`}
+            </MetaLabel>
           </div>
         )}
       </PanelHeader>
@@ -177,26 +178,18 @@ export function OverviewPanel({
 
 function BarModeToggle({ mode, onChange }: { mode: BarMode; onChange: (m: BarMode) => void }) {
   return (
-    <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-0.5">
+    <div className="inline-flex gap-2">
       <button
         type="button"
         onClick={() => onChange("grouped")}
-        className={
-          mode === "grouped"
-            ? "rounded-full bg-white/8 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]"
-            : "rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-        }
+        className={controlButtonClass(mode === "grouped", "md")}
       >
         Grouped
       </button>
       <button
         type="button"
         onClick={() => onChange("stacked")}
-        className={
-          mode === "stacked"
-            ? "rounded-full bg-white/8 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]"
-            : "rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-        }
+        className={controlButtonClass(mode === "stacked", "md")}
       >
         Stacked
       </button>

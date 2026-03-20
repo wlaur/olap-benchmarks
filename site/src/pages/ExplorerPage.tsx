@@ -138,7 +138,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
 
   return (
     <section className="min-h-full w-full pb-4">
-      <div className="mb-3 flex items-center gap-3 px-4">
+      <div className="mb-3 flex items-center gap-3">
         <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
           Databases
         </span>
