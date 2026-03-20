@@ -104,7 +104,7 @@ export function InsertPerformancePanel({
 
   if (isLoading) {
     return (
-      <PanelCard className="p-3">
+      <PanelCard className="h-full p-3">
         <PanelHeader>
           <SectionTitle as="h3">Insert performance</SectionTitle>
           <div className="flex gap-1.5">
@@ -140,7 +140,7 @@ export function InsertPerformancePanel({
   if (filteredSteps.length === 0) return null
 
   return (
-    <PanelCard className="p-3">
+    <PanelCard className="h-full p-3">
       <PanelHeader>
         <SectionTitle as="h3">Insert performance</SectionTitle>
         <DatabaseLegend databases={databases} databaseColors={databaseColors} />

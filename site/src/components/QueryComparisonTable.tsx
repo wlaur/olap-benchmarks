@@ -45,6 +45,7 @@ interface QueryComparisonTableProps {
   scaleMode: DurationScaleMode
   onScaleModeChange: (mode: DurationScaleMode) => void
   containerClassName?: string
+  scrollAreaClassName?: string
 }
 
 interface HeaderMeta {
@@ -79,6 +80,7 @@ export function QueryComparisonTable({
   scaleMode,
   onScaleModeChange,
   containerClassName,
+  scrollAreaClassName,
 }: QueryComparisonTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "query", desc: false }])
   const linearMaxDuration = useMemo(() => {
@@ -165,12 +167,12 @@ export function QueryComparisonTable({
   return (
     <div
       className={cn(
-        "panel-scrollbar h-full min-h-0 overflow-x-scroll overflow-y-hidden",
+        "panel-scrollbar min-h-0 overflow-x-auto overflow-y-hidden",
         containerClassName,
       )}
     >
-      <div className={cn("h-full min-h-0", QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS)}>
-        <div className="panel-scrollbar h-full min-h-0 overflow-y-scroll">
+      <div className={cn("min-h-0", QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS)}>
+        <div className={cn("panel-scrollbar min-h-0 overflow-y-auto", scrollAreaClassName)}>
           <table className="w-full table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[30%]" />
