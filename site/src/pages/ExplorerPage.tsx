@@ -8,9 +8,9 @@ import { OverviewPanel } from "../components/explorer/OverviewPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
-import { DashboardGrid, type WidgetConfig } from "../components/layout/DashboardGrid"
 import { useSuiteData } from "../hooks/useSuiteData"
 import type { BenchmarkSuiteId } from "../lib/benchmarks"
+import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
 import { getSuiteConfig } from "../lib/suiteConfig"
 
@@ -70,86 +70,9 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     )
   }
 
-  const widgets: WidgetConfig[] = [
-    {
-      id: "overview",
-      visible: isLoading || state.operationSummaries.length > 0,
-      content: (
-        <OverviewPanel
-          suiteConfig={suiteConfig}
-          databases={databases}
-          includedDatabases={includedDatabases}
-          operationSummaries={filteredOperationSummaries}
-          databaseColors={databaseColors}
-          isLoading={isLoading}
-        />
-      ),
-    },
-    {
-      id: "insert-performance",
-      visible: showInsertPerformancePanel,
-      content: (
-        <InsertPerformancePanel
-          insertSteps={state.insertSteps}
-          metricSamples={state.metricSamples}
-          databases={includedDatabases}
-          databaseColors={databaseColors}
-          isLoading={isLoading}
-        />
-      ),
-    },
-    {
-      id: "operations",
-      visible: true,
-      content: (
-        <OperationTabs
-          activeOperation={selectedOperation}
-          suiteConfig={suiteConfig}
-          querySummaries={filteredQuerySummaries}
-          mutateSummaries={filteredMutateSummaries}
-          querySteps={filteredQuerySteps}
-          mutateSteps={filteredMutateSteps}
-          databases={databases}
-          includedDatabases={includedDatabases}
-          queriesManifest={state.queriesManifest}
-          isLoading={isLoading}
-        />
-      ),
-    },
-    {
-      id: "flame-graph",
-      visible: showFlameGraphPanel,
-      content: (
-        <FlameGraphPanel
-          system={system}
-          suite={suiteId}
-          databases={includedDatabases}
-          metricSamples={state.metricSamples}
-          isLoading={isLoading}
-        />
-      ),
-    },
-    {
-      id: "resource-trends",
-      visible: showResourceTrendPanel,
-      content: (
-        <ResourceTrendPanel
-          selectedOperation={selectedOperation}
-          suiteConfig={suiteConfig}
-          metricSamples={state.metricSamples}
-          insertSteps={state.insertSteps}
-          querySteps={filteredQuerySteps}
-          mutateSteps={filteredMutateSteps}
-          databases={includedDatabases}
-          isLoading={isLoading}
-        />
-      ),
-    },
-  ]
-
   return (
     <section className="min-h-full w-full pb-4">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
           Databases
         </span>
@@ -164,11 +87,94 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             onToggleDatabase={toggleDatabase}
           />
         )}
-        {hasMutateOperation ? (
-          <OperationSelector operation={selectedOperation} onChange={setSelectedOperation} />
-        ) : null}
       </div>
-      <DashboardGrid widgets={widgets} />
+
+      <div className="space-y-4">
+        <div
+          className={cn(
+            "grid items-stretch gap-4",
+            showInsertPerformancePanel
+              ? "xl:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.5fr)]"
+              : "grid-cols-1",
+          )}
+        >
+          <OverviewPanel
+            suiteConfig={suiteConfig}
+            databases={databases}
+            includedDatabases={includedDatabases}
+            operationSummaries={filteredOperationSummaries}
+            databaseColors={databaseColors}
+            isLoading={isLoading}
+          />
+          {showInsertPerformancePanel ? (
+            <InsertPerformancePanel
+              insertSteps={state.insertSteps}
+              metricSamples={state.metricSamples}
+              databases={includedDatabases}
+              databaseColors={databaseColors}
+              isLoading={isLoading}
+            />
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          {hasMutateOperation ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
+                Query Analysis
+              </span>
+              <OperationSelector operation={selectedOperation} onChange={setSelectedOperation} />
+            </div>
+          ) : null}
+
+          <OperationTabs
+            activeOperation={selectedOperation}
+            suiteConfig={suiteConfig}
+            querySummaries={filteredQuerySummaries}
+            mutateSummaries={filteredMutateSummaries}
+            querySteps={filteredQuerySteps}
+            mutateSteps={filteredMutateSteps}
+            databases={databases}
+            includedDatabases={includedDatabases}
+            queriesManifest={state.queriesManifest}
+            isLoading={isLoading}
+          />
+
+          {showResourceTrendPanel || showFlameGraphPanel ? (
+            <div
+              className={cn(
+                "grid items-stretch gap-4",
+                showResourceTrendPanel && showFlameGraphPanel
+                  ? "xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]"
+                  : "grid-cols-1",
+              )}
+            >
+              {showResourceTrendPanel ? (
+                <ResourceTrendPanel
+                  selectedOperation={selectedOperation}
+                  suiteConfig={suiteConfig}
+                  metricSamples={state.metricSamples}
+                  insertSteps={state.insertSteps}
+                  querySteps={filteredQuerySteps}
+                  mutateSteps={filteredMutateSteps}
+                  databases={includedDatabases}
+                  isLoading={isLoading}
+                />
+              ) : null}
+
+              {showFlameGraphPanel ? (
+                <FlameGraphPanel
+                  system={system}
+                  suite={suiteId}
+                  databases={includedDatabases}
+                  metricSamples={state.metricSamples}
+                  isLoading={isLoading}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
     </section>
   )
 }

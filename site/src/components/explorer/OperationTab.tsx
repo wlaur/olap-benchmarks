@@ -17,6 +17,7 @@ import { InspectorSkeleton, LegendSkeleton, QueryTableSkeleton } from "./Explore
 
 const DETAIL_SPLIT_MIN_WIDTH = 1160
 const QUERY_TABLE_MIN_HEIGHT_CLASS = "min-h-[24rem]"
+const QUERY_TABLE_STACKED_SCROLL_AREA_CLASS = "max-h-[34rem]"
 
 interface OperationTabProps {
   operation: BenchmarkOperation
@@ -147,9 +148,12 @@ export function OperationTab({
                 scaleMode={tableScaleMode}
                 onScaleModeChange={setTableScaleMode}
                 containerClassName={cn(
-                  "h-full min-h-0 min-w-0",
+                  "min-h-0 min-w-0",
                   !isSplitLayout && QUERY_TABLE_MIN_HEIGHT_CLASS,
                 )}
+                scrollAreaClassName={
+                  isSplitLayout ? "h-full min-h-0" : QUERY_TABLE_STACKED_SCROLL_AREA_CLASS
+                }
               />
             )}
           </div>
