@@ -279,9 +279,9 @@ function TableBody({
             key={row.id}
             ref={(el) => setRowRef(queryName, el)}
             className={cn(
-              "cursor-pointer border-b border-border-subtle transition-colors duration-150",
+              "relative cursor-pointer border-b border-border-subtle",
               isSelected
-                ? "bg-accent-500/8 shadow-[inset_2px_0_0_0_rgba(108,142,239,0.5)]"
+                ? "bg-white/[0.04] after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:border after:border-accent-400/50"
                 : isEven
                   ? "hover:bg-white/[0.03]"
                   : "bg-white/[0.02] hover:bg-white/[0.04]",
