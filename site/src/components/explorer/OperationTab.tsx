@@ -30,6 +30,7 @@ interface OperationTabProps {
   queriesManifest: QueriesManifest | null
   selection: SelectionState
   isLoading: boolean
+  isTimelineLoading: boolean
 }
 
 export function OperationTab({
@@ -42,6 +43,7 @@ export function OperationTab({
   queriesManifest,
   selection,
   isLoading,
+  isTimelineLoading,
 }: OperationTabProps) {
   const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
   const { selectedQuery, setSelectedQuery } = selection
@@ -66,7 +68,7 @@ export function OperationTab({
     : null
 
   const selectedSql = queriesManifest?.[suiteConfig.id]?.[selectedQuery ?? ""] ?? null
-  const showTimeline = isLoading || querySteps.length > 0
+  const showTimeline = isTimelineLoading || querySteps.length > 0
   const isSplitLayout = !layoutMounted || deferredLayoutWidth >= DETAIL_SPLIT_MIN_WIDTH
 
   const timelineTitle = operation === "mutate" ? "Mutate timeline" : "Select timeline"
@@ -100,7 +102,7 @@ export function OperationTab({
           selectedQuery={selectedQuery}
           title={timelineTitle}
           description={timelineDescription}
-          loading={isLoading}
+          loading={isTimelineLoading}
         />
       ) : null}
 

@@ -113,7 +113,7 @@ export function FlameGraphPanel({
   }, [])
 
   return (
-    <PanelCard className="flex h-full min-h-0 min-w-0 flex-col p-3">
+    <PanelCard className="flex h-[clamp(28rem,70vh,42rem)] min-h-0 min-w-0 flex-col p-3">
       <div className="flex shrink-0 items-start justify-between gap-3">
         <SectionTitle as="h3">Flame graph</SectionTitle>
         {databases.length > 0 && !isLoading ? (

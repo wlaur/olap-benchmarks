@@ -54,9 +54,10 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
 
   const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
-  const showInsertPerformancePanel = isLoading || state.insertSteps.length > 0
-  const showFlameGraphPanel = isLoading || system !== null
-  const showResourceTrendPanel = isLoading || state.metricSamples.length > 0
+  const deferredLoading = isLoading || state.deferredLoading
+  const showInsertPerformancePanel = deferredLoading || state.insertSteps.length > 0
+  const showFlameGraphPanel = deferredLoading || system !== null
+  const showResourceTrendPanel = deferredLoading || state.metricSamples.length > 0
 
   useEffect(() => {
     if (!hasMutateOperation) {
@@ -126,7 +127,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
               metricSamples={state.metricSamples}
               databases={includedDatabases}
               databaseColors={databaseColors}
-              isLoading={isLoading}
+              isLoading={deferredLoading}
             />
           ) : null}
         </div>
@@ -153,6 +154,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             queriesManifest={state.queriesManifest}
             selection={selection}
             isLoading={isLoading}
+            isTimelineLoading={deferredLoading}
           />
 
           <Suspense>
@@ -187,7 +189,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
                     querySteps={filteredQuerySteps}
                     mutateSteps={filteredMutateSteps}
                     databases={includedDatabases}
-                    isLoading={isLoading}
+                    isLoading={deferredLoading}
                   />
                 ) : null}
 
@@ -197,7 +199,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
                     suite={suiteId}
                     databases={includedDatabases}
                     metricSamples={state.metricSamples}
-                    isLoading={isLoading}
+                    isLoading={deferredLoading}
                   />
                 ) : null}
               </div>
