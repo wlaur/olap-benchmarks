@@ -120,3 +120,8 @@
   border: 1px dashed rgba(90, 151, 255, 0.4);
   border-radius: 1rem;
 }
+
+.react-grid-layout,
+.react-grid-item {
+  min-width: 0;
+}

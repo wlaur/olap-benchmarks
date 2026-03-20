@@ -58,7 +58,7 @@ export function LegendSkeleton() {
   )
 }
 
-const QUERY_TABLE_CONTAINER_CLASS = "h-[32rem]"
+const QUERY_TABLE_CONTAINER_CLASS = "h-full min-h-[24rem]"
 
 export function QueryTableSkeleton() {
   return (

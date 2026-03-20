@@ -1,7 +1,7 @@
 import { useState } from "react"
 
 import type { SuiteConfig } from "../../lib/suiteConfig"
-import type { MetricSample, QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
+import type { QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
 import { OperationTab } from "./OperationTab"
 
 interface OperationTabsProps {
@@ -10,7 +10,6 @@ interface OperationTabsProps {
   mutateSummaries: QuerySummary[]
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
-  metricSamples: MetricSample[]
   databases: string[]
   includedDatabases: string[]
   queriesManifest: QueriesManifest | null
@@ -25,7 +24,6 @@ export function OperationTabs({
   mutateSummaries,
   querySteps,
   mutateSteps,
-  metricSamples,
   databases,
   includedDatabases,
   queriesManifest,
@@ -38,9 +36,9 @@ export function OperationTabs({
   const resolvedTab = tabs.includes(activeTab) ? activeTab : "select"
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {tabs.length > 1 ? (
-        <div className="mb-2 grid grid-cols-2 gap-0 rounded-lg border border-border-default bg-surface-inset p-0.5">
+        <div className="mb-2 grid shrink-0 grid-cols-2 gap-0 rounded-lg border border-border-default bg-surface-inset p-0.5">
           {tabs.map((tab) => (
             <button
               key={tab}
@@ -65,7 +63,6 @@ export function OperationTabs({
             suiteConfig={suiteConfig}
             querySummaries={querySummaries}
             querySteps={querySteps}
-            metricSamples={metricSamples}
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={queriesManifest}
@@ -77,7 +74,6 @@ export function OperationTabs({
             suiteConfig={suiteConfig}
             querySummaries={mutateSummaries}
             querySteps={mutateSteps}
-            metricSamples={metricSamples}
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={queriesManifest}

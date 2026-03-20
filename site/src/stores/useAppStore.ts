@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware"
 
 import { fetchSystems } from "../lib/queries"
 
-const LAYOUT_VERSION = 5
+const LAYOUT_VERSION = 6
 
 interface SystemSlice {
   systems: string[]
@@ -27,32 +27,32 @@ type AppStore = SystemSlice & LayoutSlice
 
 export const DEFAULT_LAYOUTS: ResponsiveLayouts = {
   lg: [
-    { i: "overview", x: 0, y: 0, w: 5, h: 11, minH: 8 },
-    { i: "insert-performance", x: 5, y: 0, w: 7, h: 11, minH: 8 },
-    { i: "operations", x: 0, y: 11, w: 12, h: 18, minH: 10 },
-    { i: "flame-graph", x: 0, y: 29, w: 6, h: 21, minH: 6 },
-    { i: "resource-trends", x: 6, y: 29, w: 6, h: 21, minH: 8 },
+    { i: "overview", x: 0, y: 0, w: 4, h: 10, minH: 8 },
+    { i: "insert-performance", x: 4, y: 0, w: 8, h: 12, minH: 9 },
+    { i: "operations", x: 0, y: 12, w: 12, h: 24, minH: 16 },
+    { i: "resource-trends", x: 0, y: 36, w: 7, h: 18, minH: 10 },
+    { i: "flame-graph", x: 7, y: 36, w: 5, h: 18, minH: 10 },
   ],
   md: [
-    { i: "overview", x: 0, y: 0, w: 5, h: 11, minH: 8 },
-    { i: "insert-performance", x: 5, y: 0, w: 5, h: 11, minH: 8 },
-    { i: "operations", x: 0, y: 11, w: 10, h: 18, minH: 10 },
-    { i: "flame-graph", x: 0, y: 29, w: 10, h: 12, minH: 6 },
-    { i: "resource-trends", x: 0, y: 41, w: 10, h: 21, minH: 8 },
+    { i: "overview", x: 0, y: 0, w: 4, h: 10, minH: 8 },
+    { i: "insert-performance", x: 4, y: 0, w: 6, h: 12, minH: 9 },
+    { i: "operations", x: 0, y: 12, w: 10, h: 24, minH: 16 },
+    { i: "resource-trends", x: 0, y: 36, w: 10, h: 16, minH: 10 },
+    { i: "flame-graph", x: 0, y: 52, w: 10, h: 16, minH: 10 },
   ],
   sm: [
     { i: "overview", x: 0, y: 0, w: 6, h: 10, minH: 7 },
-    { i: "insert-performance", x: 0, y: 10, w: 6, h: 14, minH: 6 },
-    { i: "operations", x: 0, y: 24, w: 6, h: 18, minH: 10 },
-    { i: "flame-graph", x: 0, y: 42, w: 6, h: 12, minH: 6 },
-    { i: "resource-trends", x: 0, y: 54, w: 6, h: 18, minH: 8 },
+    { i: "insert-performance", x: 0, y: 10, w: 6, h: 12, minH: 8 },
+    { i: "operations", x: 0, y: 22, w: 6, h: 24, minH: 16 },
+    { i: "resource-trends", x: 0, y: 46, w: 6, h: 16, minH: 10 },
+    { i: "flame-graph", x: 0, y: 62, w: 6, h: 16, minH: 10 },
   ],
   xs: [
     { i: "overview", x: 0, y: 0, w: 4, h: 10, minH: 7 },
-    { i: "insert-performance", x: 0, y: 10, w: 4, h: 14, minH: 6 },
-    { i: "operations", x: 0, y: 24, w: 4, h: 18, minH: 10 },
-    { i: "flame-graph", x: 0, y: 42, w: 4, h: 12, minH: 6 },
-    { i: "resource-trends", x: 0, y: 54, w: 4, h: 18, minH: 8 },
+    { i: "insert-performance", x: 0, y: 10, w: 4, h: 12, minH: 8 },
+    { i: "operations", x: 0, y: 22, w: 4, h: 24, minH: 16 },
+    { i: "resource-trends", x: 0, y: 46, w: 4, h: 16, minH: 10 },
+    { i: "flame-graph", x: 0, y: 62, w: 4, h: 16, minH: 10 },
   ],
 }
 
