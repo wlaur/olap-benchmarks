@@ -190,13 +190,8 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
       </div>
 
       {span.query_sql ? (
-        <div className="mt-3 min-h-0 overflow-hidden rounded-md border border-border-default bg-surface-inset">
-          <SqlCodeView
-            code={span.query_sql}
-            wrapLines
-            fillHeight={false}
-            className="max-h-[clamp(14rem,32vh,24rem)]"
-          />
+        <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-md border border-border-default bg-surface-inset">
+          <SqlCodeView code={span.query_sql} wrapLines fillHeight />
         </div>
       ) : null}
     </div>

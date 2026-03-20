@@ -5,6 +5,7 @@ import { FlameGraphPanel } from "../components/explorer/FlameGraphPanel"
 import { OperationSelector } from "../components/explorer/OperationSelector"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
+import { QueryHeatmapPanel } from "../components/explorer/QueryHeatmapPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
@@ -137,6 +138,16 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={state.queriesManifest}
+            isLoading={isLoading}
+          />
+
+          <QueryHeatmapPanel
+            suiteConfig={suiteConfig}
+            querySummaries={
+              selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
+            }
+            includedDatabases={includedDatabases}
+            databaseColors={databaseColors}
             isLoading={isLoading}
           />
 
