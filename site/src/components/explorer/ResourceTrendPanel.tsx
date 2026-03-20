@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   CartesianGrid,
   Line,
@@ -18,17 +18,13 @@ import {
 } from "../../lib/metricFormat"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
-import {
-  controlButtonClass,
-  controlChipClass,
-  controlGroupClass,
-  quietActionButtonClass,
-} from "../controls/controlStyles"
+import { ControlChip, QuietButton } from "../controls/Control"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
 import { MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
+  selectedOperation?: "select" | "mutate"
   suiteConfig: SuiteConfig
   metricSamples: MetricSample[]
   insertSteps: InsertStep[]
@@ -82,6 +78,7 @@ const MAX_COLLAPSED_STEP_OPTIONS = 12
 const MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS = 8
 
 export function ResourceTrendPanel({
+  selectedOperation,
   suiteConfig,
   metricSamples,
   insertSteps,
@@ -90,29 +87,38 @@ export function ResourceTrendPanel({
   databases,
   isLoading = false,
 }: ResourceTrendPanelProps) {
-  const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [showAllSteps, setShowAllSteps] = useState(false)
   const [showAllUnavailableSteps, setShowAllUnavailableSteps] = useState(false)
+  const resolvedOperation: BenchmarkOperation =
+    selectedOperation === "mutate" && suiteConfig.operations.includes("mutate")
+      ? "mutate"
+      : "select"
 
   const databaseColors = getDatabaseColors(databases)
 
+  useEffect(() => {
+    setSelectedStep(null)
+    setShowAllSteps(false)
+    setShowAllUnavailableSteps(false)
+  }, [resolvedOperation])
+
   const allStepOptions = useMemo(
-    () => getStepOptions(selectedOperation, insertSteps, querySteps, mutateSteps, databases),
-    [selectedOperation, insertSteps, querySteps, mutateSteps, databases],
+    () => getStepOptions(resolvedOperation, insertSteps, querySteps, mutateSteps, databases),
+    [resolvedOperation, insertSteps, querySteps, mutateSteps, databases],
   )
 
   const availableStepWindows = useMemo(
     () =>
       getAvailableStepWindows(
-        selectedOperation,
+        resolvedOperation,
         metricSamples,
         insertSteps,
         querySteps,
         mutateSteps,
         databases,
       ),
-    [selectedOperation, metricSamples, insertSteps, querySteps, mutateSteps, databases],
+    [resolvedOperation, metricSamples, insertSteps, querySteps, mutateSteps, databases],
   )
 
   const stepOptions = useMemo(
@@ -158,8 +164,8 @@ export function ResourceTrendPanel({
 
   const chartData = useMemo(() => {
     if (isTooFast || !resolvedStep) return { cpu_percent: [], mem_mb: [], disk_mb: [] }
-    return buildTrendChartData(metricSamples, selectedOperation, stepTimeWindows)
-  }, [metricSamples, selectedOperation, stepTimeWindows, isTooFast, resolvedStep])
+    return buildTrendChartData(metricSamples, resolvedOperation, stepTimeWindows)
+  }, [metricSamples, resolvedOperation, stepTimeWindows, isTooFast, resolvedStep])
 
   const maxElapsed = useMemo(
     () =>
@@ -173,8 +179,6 @@ export function ResourceTrendPanel({
   const hasSufficientData =
     !isTooFast &&
     Math.max(chartData.cpu_percent.length, chartData.mem_mb.length, chartData.disk_mb.length) > 1
-
-  const availableOperations = suiteConfig.operations
 
   const hasData = metricSamples.length > 0
 
@@ -196,23 +200,7 @@ export function ResourceTrendPanel({
         <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className={controlGroupClass()}>
-                {availableOperations.map((operation) => (
-                  <button
-                    key={operation}
-                    type="button"
-                    onClick={() => {
-                      setSelectedOperation(operation)
-                      setSelectedStep(null)
-                      setShowAllSteps(false)
-                      setShowAllUnavailableSteps(false)
-                    }}
-                    className={controlButtonClass(selectedOperation === operation, "sm")}
-                  >
-                    {toTitleCase(operation)}
-                  </button>
-                ))}
-              </div>
+              <MetaLabel>{toTitleCase(resolvedOperation)} metrics</MetaLabel>
             </div>
 
             <div className="min-w-0">
@@ -231,27 +219,22 @@ export function ResourceTrendPanel({
                 >
                   <div className="flex flex-wrap gap-1.5">
                     {visibleStepOptions.map((step) => (
-                      <button
+                      <ControlChip
                         key={step.value}
-                        type="button"
                         onClick={() => setSelectedStep(step.value)}
-                        className={controlChipClass(resolvedStep === step.value, "sm")}
+                        selected={resolvedStep === step.value}
                       >
                         {step.label}
-                      </button>
+                      </ControlChip>
                     ))}
                   </div>
                 </div>
                 {stepOptions.length > MAX_COLLAPSED_STEP_OPTIONS ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllSteps((current) => !current)}
-                    className={quietActionButtonClass("sm")}
-                  >
+                  <QuietButton onClick={() => setShowAllSteps((current) => !current)}>
                     {showAllSteps
                       ? "Show fewer steps"
                       : `Show ${stepOptions.length - visibleStepOptions.length} more steps`}
-                  </button>
+                  </QuietButton>
                 ) : null}
               </div>
             </div>
@@ -265,15 +248,11 @@ export function ResourceTrendPanel({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <MetaLabel>No Metrics</MetaLabel>
                   {unavailableStepOptions.length > MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllUnavailableSteps((current) => !current)}
-                      className={quietActionButtonClass("sm")}
-                    >
+                    <QuietButton onClick={() => setShowAllUnavailableSteps((current) => !current)}>
                       {showAllUnavailableSteps
                         ? "Show fewer unavailable"
                         : `Show ${unavailableStepOptions.length - visibleUnavailableStepOptions.length} more unavailable`}
-                    </button>
+                    </QuietButton>
                   ) : null}
                 </div>
                 <div

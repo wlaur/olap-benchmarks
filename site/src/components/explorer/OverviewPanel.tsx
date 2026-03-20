@@ -16,7 +16,6 @@ import {
   type OverviewChartRow,
   type OverviewOperationVisibility,
 } from "../../lib/chartTransforms"
-import { cn } from "../../lib/cn"
 import {
   formatDurationAxisTick,
   formatDurationSeconds,
@@ -26,7 +25,7 @@ import {
 } from "../../lib/format"
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, OperationSummary } from "../../lib/types"
-import { controlButtonClass } from "../controls/controlStyles"
+import { ControlGroup, SegmentedButton } from "../controls/Control"
 import { DurationScaleToggle } from "../DurationScaleToggle"
 import { ChartFrame, PanelCard, PanelHeader } from "../layout/Panel"
 import { MetaLabel, SectionTitle } from "../Typography"
@@ -124,12 +123,13 @@ export function OverviewPanel({
               {availableChips.map(([operation, label, chipColor]) => {
                 const isActive = operationVisibility[operation]
                 return (
-                  <button
+                  <SegmentedButton
                     key={operation}
-                    type="button"
                     aria-pressed={isActive}
                     onClick={() => toggleOverviewOperation(operation)}
-                    className={cn(controlButtonClass(isActive, "md"), "gap-2")}
+                    selected={isActive}
+                    size="md"
+                    className="gap-2"
                   >
                     <span
                       className="size-2 rounded-full"
@@ -139,7 +139,7 @@ export function OverviewPanel({
                       }}
                     />
                     {label}
-                  </button>
+                  </SegmentedButton>
                 )
               })}
             </div>
@@ -178,22 +178,14 @@ export function OverviewPanel({
 
 function BarModeToggle({ mode, onChange }: { mode: BarMode; onChange: (m: BarMode) => void }) {
   return (
-    <div className="inline-flex gap-2">
-      <button
-        type="button"
-        onClick={() => onChange("grouped")}
-        className={controlButtonClass(mode === "grouped", "md")}
-      >
+    <ControlGroup compact>
+      <SegmentedButton selected={mode === "grouped"} size="md" onClick={() => onChange("grouped")}>
         Grouped
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("stacked")}
-        className={controlButtonClass(mode === "stacked", "md")}
-      >
+      </SegmentedButton>
+      <SegmentedButton selected={mode === "stacked"} size="md" onClick={() => onChange("stacked")}>
         Stacked
-      </button>
-    </div>
+      </SegmentedButton>
+    </ControlGroup>
   )
 }
 

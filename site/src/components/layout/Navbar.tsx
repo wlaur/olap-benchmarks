@@ -1,6 +1,12 @@
 import { FlaskConical, Home } from "lucide-react"
-import { NavLink, useLocation } from "react-router-dom"
+import { NavLink, useLocation, useNavigate } from "react-router-dom"
 
+import {
+  benchmarkDefinitions,
+  defaultBenchmarkId,
+  type BenchmarkSuiteId,
+} from "../../lib/benchmarks"
+import { SuiteSelector } from "../filters/SuiteSelector"
 import { SystemSelector, SystemSelectorSkeleton } from "../filters/SystemSelector"
 
 interface NavbarProps {
@@ -24,20 +30,25 @@ export function Navbar({
   isSystemLoading = false,
 }: NavbarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const isExplorerActive = location.pathname.startsWith("/explorer")
+  const suiteMatch = location.pathname.match(/^\/explorer\/([^/]+)/)
+  const resolvedSuiteId = benchmarkDefinitions.some((benchmark) => benchmark.id === suiteMatch?.[1])
+    ? (suiteMatch?.[1] as BenchmarkSuiteId)
+    : defaultBenchmarkId
 
   return (
     <header className="border-b border-border-default bg-surface-primary/95 backdrop-blur">
       <div className="px-4 py-3">
-        <div className="flex items-center gap-4">
-          <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
             <NavLink to="/" className="flex shrink-0 items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="h-9 w-9" />
               <h1 className="text-xl font-semibold text-slate-50 max-sm:hidden">OLAP Benchmarks</h1>
             </NavLink>
           </div>
 
-          <nav className="flex items-center gap-2">
+          <nav className="flex shrink-0 items-center gap-2">
             <NavLink
               to="/"
               end
@@ -61,19 +72,27 @@ export function Navbar({
             </NavLink>
           </nav>
 
-          <div className="ml-auto flex shrink-0 justify-end">
-            {isSystemLoading ? (
-              <SystemSelectorSkeleton />
-            ) : systems.length > 0 ? (
-              <SystemSelector
-                systems={systems}
-                selected={selectedSystem}
-                onChange={onSelectSystem}
-                disabled={isSystemLoading}
+          <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3">
+            {isExplorerActive ? (
+              <SuiteSelector
+                selected={resolvedSuiteId}
+                onChange={(next) => navigate(`/explorer/${next}`)}
               />
-            ) : (
-              <p className="text-sm text-slate-500">No completed systems found.</p>
-            )}
+            ) : null}
+            <div className="flex shrink-0 justify-end">
+              {isSystemLoading ? (
+                <SystemSelectorSkeleton />
+              ) : systems.length > 0 ? (
+                <SystemSelector
+                  systems={systems}
+                  selected={selectedSystem}
+                  onChange={onSelectSystem}
+                  disabled={isSystemLoading}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">No completed systems found.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

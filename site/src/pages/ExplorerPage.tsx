@@ -1,7 +1,8 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
 import { FlameGraphPanel } from "../components/explorer/FlameGraphPanel"
+import { OperationSelector } from "../components/explorer/OperationSelector"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
@@ -21,6 +22,8 @@ interface ExplorerPageProps {
 
 export function ExplorerPage({ system, suiteId, isSystemLoading = false }: ExplorerPageProps) {
   const suiteConfig = useMemo(() => getSuiteConfig(suiteId), [suiteId])
+  const hasMutateOperation = suiteConfig.operations.includes("mutate")
+  const [selectedOperation, setSelectedOperation] = useState<"select" | "mutate">("select")
 
   const {
     state,
@@ -40,6 +43,12 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   const showInsertPerformancePanel = isLoading || state.insertSteps.length > 0
   const showFlameGraphPanel = isLoading || system !== null
   const showResourceTrendPanel = isLoading || state.metricSamples.length > 0
+
+  useEffect(() => {
+    if (!hasMutateOperation) {
+      setSelectedOperation("select")
+    }
+  }, [hasMutateOperation])
 
   if (!isLoading && state.error) {
     return (
@@ -94,6 +103,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
       visible: true,
       content: (
         <OperationTabs
+          activeOperation={selectedOperation}
           suiteConfig={suiteConfig}
           querySummaries={filteredQuerySummaries}
           mutateSummaries={filteredMutateSummaries}
@@ -124,6 +134,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
       visible: showResourceTrendPanel,
       content: (
         <ResourceTrendPanel
+          selectedOperation={selectedOperation}
           suiteConfig={suiteConfig}
           metricSamples={state.metricSamples}
           insertSteps={state.insertSteps}
@@ -138,7 +149,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
 
   return (
     <section className="min-h-full w-full pb-4">
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
           Databases
         </span>
@@ -153,6 +164,9 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             onToggleDatabase={toggleDatabase}
           />
         )}
+        {hasMutateOperation ? (
+          <OperationSelector operation={selectedOperation} onChange={setSelectedOperation} />
+        ) : null}
       </div>
       <DashboardGrid widgets={widgets} />
     </section>

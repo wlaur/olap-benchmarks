@@ -17,6 +17,7 @@ import {
 } from "react-grid-layout"
 
 import { useAppStore } from "../../stores/useAppStore"
+import { QuietButton } from "../controls/Control"
 
 const GRID_BREAKPOINTS = { lg: 1280, md: 996, sm: 768, xs: 480 }
 const GRID_COLS = { lg: 12, md: 10, sm: 6, xs: 4 }
@@ -103,13 +104,9 @@ export function DashboardGrid({ widgets }: DashboardGridProps) {
     <div ref={containerRef} className="relative min-h-0 w-full">
       {layoutModified ? (
         <div className="mb-1.5 flex justify-end">
-          <button
-            type="button"
-            onClick={resetLayouts}
-            className="rounded-full border border-border-default bg-surface-inset px-2.5 py-0.5 text-[0.65rem] font-medium text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
-          >
+          <QuietButton size="xs" onClick={resetLayouts}>
             Reset layout
-          </button>
+          </QuietButton>
         </div>
       ) : null}
       {mounted ? (
@@ -135,8 +132,8 @@ export function DashboardGrid({ widgets }: DashboardGridProps) {
                 isDragging ? "cursor-grabbing" : ""
               }`}
             >
-              <div className="widget-drag-handle absolute top-3 right-3 z-10 flex cursor-grab items-center justify-center rounded-full border border-border-default bg-surface-primary/90 px-2 py-1 text-slate-400 opacity-0 shadow-lg shadow-black/25 backdrop-blur transition-all duration-150 group-focus-within/widget:opacity-100 group-hover/widget:opacity-100 hover:border-slate-600 hover:text-slate-200 active:cursor-grabbing">
-                <Grip className="size-3.5" />
+              <div className="widget-drag-handle absolute top-3 right-3 z-10 flex size-8 cursor-grab items-center justify-center rounded-full border border-border-default bg-surface-primary/90 text-slate-400 opacity-0 shadow-lg shadow-black/25 backdrop-blur transition-all duration-150 group-focus-within/widget:opacity-100 group-hover/widget:opacity-100 hover:border-slate-600 hover:text-slate-200 active:cursor-grabbing">
+                <Grip className="size-3.5 shrink-0" />
               </div>
               <div className="h-full min-h-0 min-w-0 overflow-hidden">{widget.content}</div>
             </div>

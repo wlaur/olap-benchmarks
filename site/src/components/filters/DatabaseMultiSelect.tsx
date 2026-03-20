@@ -1,5 +1,4 @@
-import { cn } from "../../lib/cn"
-import { controlChipClass } from "../controls/controlStyles"
+import { ControlChip } from "../controls/Control"
 
 interface DatabaseMultiSelectProps {
   databases: string[]
@@ -25,10 +24,10 @@ export function DatabaseMultiSelect({
           const selected = selectedDatabases.includes(database)
           const color = databaseColors[database] ?? "#94a3b8"
           return (
-            <button
+            <ControlChip
               key={database}
-              type="button"
-              className={cn("gap-1.5", controlChipClass(selected, "sm"))}
+              className="gap-1.5"
+              selected={selected}
               style={selected ? { boxShadow: `inset 0 0 0 1px ${color}55` } : undefined}
               onClick={() => onToggleDatabase(database)}
             >
@@ -37,17 +36,13 @@ export function DatabaseMultiSelect({
                 style={{ backgroundColor: selected ? color : "rgba(71, 85, 105, 0.6)" }}
               />
               {database}
-            </button>
+            </ControlChip>
           )
         })}
       </div>
-      <button
-        type="button"
-        className={cn("shrink-0", controlChipClass(allSelected, "sm"))}
-        onClick={onSelectAll}
-      >
+      <ControlChip className="shrink-0" selected={allSelected} onClick={onSelectAll}>
         All
-      </button>
+      </ControlChip>
     </div>
   )
 }
