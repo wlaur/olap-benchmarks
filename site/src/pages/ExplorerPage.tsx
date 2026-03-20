@@ -5,6 +5,7 @@ import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
+import { DashboardGrid, type WidgetConfig } from "../components/layout/DashboardGrid"
 import { useSuiteData } from "../hooks/useSuiteData"
 import type { BenchmarkSuiteId } from "../lib/benchmarks"
 import { getDatabaseColors } from "../lib/databaseColors"
@@ -58,19 +59,26 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     )
   }
 
-  return (
-    <section className="flex min-h-full w-full flex-col gap-4 pb-4">
-      <OverviewPanel
-        suiteConfig={suiteConfig}
-        databases={databases}
-        includedDatabases={includedDatabases}
-        operationSummaries={filteredOperationSummaries}
-        isLoading={isLoading}
-        onSelectAll={() => setSelectedDatabases(databases)}
-        onToggleDatabase={toggleDatabase}
-      />
-
-      {showInsertPerformancePanel ? (
+  const widgets: WidgetConfig[] = [
+    {
+      id: "overview",
+      visible: isLoading || state.operationSummaries.length > 0,
+      content: (
+        <OverviewPanel
+          suiteConfig={suiteConfig}
+          databases={databases}
+          includedDatabases={includedDatabases}
+          operationSummaries={filteredOperationSummaries}
+          isLoading={isLoading}
+          onSelectAll={() => setSelectedDatabases(databases)}
+          onToggleDatabase={toggleDatabase}
+        />
+      ),
+    },
+    {
+      id: "insert-performance",
+      visible: showInsertPerformancePanel,
+      content: (
         <InsertPerformancePanel
           insertSteps={state.insertSteps}
           metricSamples={state.metricSamples}
@@ -78,22 +86,30 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           databaseColors={databaseColors}
           isLoading={isLoading}
         />
-      ) : null}
-
-      <OperationTabs
-        suiteConfig={suiteConfig}
-        querySummaries={filteredQuerySummaries}
-        mutateSummaries={filteredMutateSummaries}
-        querySteps={filteredQuerySteps}
-        mutateSteps={filteredMutateSteps}
-        metricSamples={state.metricSamples}
-        databases={databases}
-        includedDatabases={includedDatabases}
-        queriesManifest={state.queriesManifest}
-        isLoading={isLoading}
-      />
-
-      {showFlameGraphPanel ? (
+      ),
+    },
+    {
+      id: "operations",
+      visible: true,
+      content: (
+        <OperationTabs
+          suiteConfig={suiteConfig}
+          querySummaries={filteredQuerySummaries}
+          mutateSummaries={filteredMutateSummaries}
+          querySteps={filteredQuerySteps}
+          mutateSteps={filteredMutateSteps}
+          metricSamples={state.metricSamples}
+          databases={databases}
+          includedDatabases={includedDatabases}
+          queriesManifest={state.queriesManifest}
+          isLoading={isLoading}
+        />
+      ),
+    },
+    {
+      id: "flame-graph",
+      visible: showFlameGraphPanel,
+      content: (
         <FlameGraphPanel
           system={system}
           suite={suiteId}
@@ -101,9 +117,12 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           metricSamples={state.metricSamples}
           isLoading={isLoading}
         />
-      ) : null}
-
-      {showResourceTrendPanel ? (
+      ),
+    },
+    {
+      id: "resource-trends",
+      visible: showResourceTrendPanel,
+      content: (
         <ResourceTrendPanel
           suiteConfig={suiteConfig}
           metricSamples={state.metricSamples}
@@ -113,7 +132,13 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
           databases={includedDatabases}
           isLoading={isLoading}
         />
-      ) : null}
+      ),
+    },
+  ]
+
+  return (
+    <section className="min-h-full w-full pb-4">
+      <DashboardGrid widgets={widgets} />
     </section>
   )
 }
