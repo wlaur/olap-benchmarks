@@ -1,6 +1,7 @@
 import logging
 import uuid
 from collections.abc import Mapping
+from math import ceil
 from pathlib import Path
 from shutil import rmtree
 from time import perf_counter, sleep
@@ -272,6 +273,29 @@ class Clickhouse(Database):
 
         return subdir
 
+    def _write_partitioned_parquet_lazy(self, parent: Path, df: pl.LazyFrame, partitions: int) -> Path:
+        subdir = parent / uuid.uuid4().hex
+        subdir.mkdir(parents=True, exist_ok=False)
+
+        row_count = int(df.select(pl.len()).collect().item(0, 0))
+        chunk_size = max(1, ceil(row_count / partitions))
+        total_rows = 0
+
+        for idx, batch in enumerate(df.collect_batches(chunk_size=chunk_size)):
+            batch_rows = batch.shape[0]
+            total_rows += batch_rows
+            batch.write_parquet(subdir / f"partition_{idx}.parquet")
+
+            _LOGGER.info(
+                f"Wrote Parquet file for partition {idx + 1:_}/{partitions:_} "
+                f"with shape ({batch_rows:_}, {batch.shape[1]:_})"
+            )
+
+        if total_rows != row_count:
+            raise RuntimeError(f"Partitioned Parquet staging wrote {total_rows:_} rows, expected {row_count:_}")
+
+        return subdir
+
     def _wait_for_parquet_readable(self, input_file: str, timeout_seconds: float = 10.0) -> None:
         deadline = perf_counter() + timeout_seconds
 
@@ -300,16 +324,14 @@ class Clickhouse(Database):
         # inserting very large Parquet files in a single chunk causes OOM-related issues,
         # e.g. for Clickbench (7.4 GB Parquet)
         # better to insert as partitioned files instead (using wildcard file('*.parquet'))
-        if partitions is not None and isinstance(df, pl.LazyFrame):
-            _LOGGER.warning("Partitioned insert not supported for LazyFrame, collecting first")
-            df = df.collect()
-
         if partitions is None:
             temp_parquet_path = self._write_single_parquet(temp_dir, df)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix()
         else:
-            assert isinstance(df, pl.DataFrame)
-            temp_parquet_path = self._write_partitioned_parquet(temp_dir, df, partitions)
+            if isinstance(df, pl.LazyFrame):
+                temp_parquet_path = self._write_partitioned_parquet_lazy(temp_dir, df, partitions)
+            else:
+                temp_parquet_path = self._write_partitioned_parquet(temp_dir, df, partitions)
             input_file_string = temp_parquet_path.relative_to(temp_dir).as_posix() + "/*.parquet"
 
         self._wait_for_parquet_readable(input_file_string)

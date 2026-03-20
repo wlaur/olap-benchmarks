@@ -28,8 +28,8 @@ export function Navbar({
 
   return (
     <header className="border-b border-border-default bg-surface-primary/95 backdrop-blur">
-      <div className="mx-auto max-w-7xl px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-4">
           <div className="flex shrink-0 items-center gap-2">
             <NavLink to="/" className="flex shrink-0 items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="h-9 w-9" />
@@ -37,33 +37,31 @@ export function Navbar({
             </NavLink>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center justify-center py-1">
-            <nav className="flex items-center gap-2">
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) =>
-                  `inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${
-                    isActive ? activeNavClass : inactiveNavClass
-                  }`
-                }
-                title="Home"
-              >
-                <Home size={18} />
-              </NavLink>
-              <NavLink
-                to="/explorer/time_series"
-                className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm transition ${
-                  isExplorerActive ? activeNavClass : inactiveNavTextClass
-                }`}
-              >
-                <FlaskConical size={16} strokeWidth={1.8} />
-                Explorer
-              </NavLink>
-            </nav>
-          </div>
+          <nav className="flex items-center gap-2">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                `inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${
+                  isActive ? activeNavClass : inactiveNavClass
+                }`
+              }
+              title="Home"
+            >
+              <Home size={18} />
+            </NavLink>
+            <NavLink
+              to="/explorer/time_series"
+              className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm transition ${
+                isExplorerActive ? activeNavClass : inactiveNavTextClass
+              }`}
+            >
+              <FlaskConical size={16} strokeWidth={1.8} />
+              Explorer
+            </NavLink>
+          </nav>
 
-          <div className="flex shrink-0 justify-end">
+          <div className="ml-auto flex shrink-0 justify-end">
             {isSystemLoading ? (
               <SystemSelectorSkeleton />
             ) : systems.length > 0 ? (
