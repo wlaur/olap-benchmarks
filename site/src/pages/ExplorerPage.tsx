@@ -9,6 +9,7 @@ import { QueryHeatmapPanel } from "../components/explorer/QueryHeatmapPanel"
 import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
+import { useSelectionState } from "../hooks/useSelectionState"
 import { useSuiteData } from "../hooks/useSuiteData"
 import type { BenchmarkSuiteId } from "../lib/benchmarks"
 import { cn } from "../lib/cn"
@@ -25,6 +26,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   const suiteConfig = useMemo(() => getSuiteConfig(suiteId), [suiteId])
   const hasMutateOperation = suiteConfig.operations.includes("mutate")
   const [selectedOperation, setSelectedOperation] = useState<"select" | "mutate">("select")
+  const selection = useSelectionState()
 
   const {
     state,
@@ -138,6 +140,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={state.queriesManifest}
+            selection={selection}
             isLoading={isLoading}
           />
 
@@ -148,6 +151,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             }
             includedDatabases={includedDatabases}
             databaseColors={databaseColors}
+            selection={selection}
             isLoading={isLoading}
           />
 

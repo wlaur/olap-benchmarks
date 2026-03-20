@@ -5,10 +5,11 @@ import {
   getSortedRowModel,
   type SortingFn,
   type SortingState,
+  type Table,
   useReactTable,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
@@ -218,41 +219,86 @@ export function QueryComparisonTable({
                   </tr>
                 ))}
               </thead>
-              <tbody>
-                {table.getRowModel().rows.map((row, rowIndex) => {
-                  const queryName = row.original.query_name
-                  const isSelected = selection.selectedQuery === queryName
-                  const isEven = rowIndex % 2 === 0
-
-                  return (
-                    <tr
-                      key={row.id}
-                      className={cn(
-                        "cursor-pointer border-b border-border-subtle transition-colors duration-150",
-                        isSelected
-                          ? "bg-accent-500/8 shadow-[inset_2px_0_0_0_rgba(108,142,239,0.5)]"
-                          : isEven
-                            ? "hover:bg-white/[0.03]"
-                            : "bg-white/[0.02] hover:bg-white/[0.04]",
-                      )}
-                      onMouseEnter={() => selection.setHoveredQuery(queryName)}
-                      onMouseLeave={() => selection.setHoveredQuery(null)}
-                      onClick={() => selection.toggleSelectedQuery(queryName)}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-3 align-top">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  )
-                })}
-              </tbody>
+              <TableBody table={table} selection={selection} />
             </table>
           </div>
         </div>
       </div>
     </div>
+  )
+}
+
+function TableBody({
+  table,
+  selection,
+}: {
+  table: Table<QueryComparisonRow>
+  selection: SelectionState
+}) {
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
+
+  const setRowRef = useCallback((queryName: string, el: HTMLTableRowElement | null) => {
+    if (el) {
+      rowRefs.current.set(queryName, el)
+    } else {
+      rowRefs.current.delete(queryName)
+    }
+  }, [])
+
+  useEffect(() => {
+    const selectedQuery = selection.selectedQuery
+    if (!selectedQuery) return
+    const el = rowRefs.current.get(selectedQuery)
+    if (!el) return
+
+    const scrollContainer = el.closest(".overflow-y-auto")
+    if (!(scrollContainer instanceof HTMLElement)) return
+
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const margin = elRect.height * 2
+    const offsetTop = elRect.top - containerRect.top - margin
+    const offsetBottom = elRect.bottom - containerRect.bottom + margin
+
+    if (offsetTop < 0) {
+      scrollContainer.scrollTop += offsetTop
+    } else if (offsetBottom > 0) {
+      scrollContainer.scrollTop += offsetBottom
+    }
+  }, [selection.selectedQuery])
+
+  return (
+    <tbody>
+      {table.getRowModel().rows.map((row, rowIndex) => {
+        const queryName = row.original.query_name
+        const isSelected = selection.selectedQuery === queryName
+        const isEven = rowIndex % 2 === 0
+
+        return (
+          <tr
+            key={row.id}
+            ref={(el) => setRowRef(queryName, el)}
+            className={cn(
+              "cursor-pointer border-b border-border-subtle transition-colors duration-150",
+              isSelected
+                ? "bg-accent-500/8 shadow-[inset_2px_0_0_0_rgba(108,142,239,0.5)]"
+                : isEven
+                  ? "hover:bg-white/[0.03]"
+                  : "bg-white/[0.02] hover:bg-white/[0.04]",
+            )}
+            onMouseEnter={() => selection.setHoveredQuery(queryName)}
+            onMouseLeave={() => selection.setHoveredQuery(null)}
+            onClick={() => selection.toggleSelectedQuery(queryName)}
+          >
+            {row.getVisibleCells().map((cell) => (
+              <td key={cell.id} className="px-4 py-3 align-top">
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </td>
+            ))}
+          </tr>
+        )
+      })}
+    </tbody>
   )
 }
 
