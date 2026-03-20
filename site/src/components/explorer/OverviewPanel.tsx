@@ -32,6 +32,8 @@ import { OverviewChartSkeleton, OverviewControlsSkeleton } from "./ExplorerSkele
 
 const OVERVIEW_CHART_HEIGHT = 200
 
+type BarMode = "grouped" | "stacked"
+
 interface OverviewPanelProps {
   suiteConfig: SuiteConfig
   databases: string[]
@@ -56,6 +58,7 @@ export function OverviewPanel({
   isLoading,
 }: OverviewPanelProps) {
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("linear")
+  const [barMode, setBarMode] = useState<BarMode>("grouped")
   const [operationVisibility, setOperationVisibility] = useState<OverviewOperationVisibility>({
     populate: true,
     select: true,
@@ -70,16 +73,30 @@ export function OverviewPanel({
     ...entry,
     fill: databaseColors[entry.db] ?? "#94a3b8",
   }))
-  const overviewMaxDuration = Math.max(
-    0,
-    ...runChartData.flatMap((run) => {
-      const durations: number[] = []
-      if (operationVisibility.populate) durations.push(run.populate_duration_s)
-      if (operationVisibility.mutate) durations.push(run.mutate_duration_s)
-      if (operationVisibility.select) durations.push(run.select_duration_s)
-      return durations
-    }),
-  )
+
+  const overviewMaxDuration =
+    barMode === "stacked"
+      ? Math.max(
+          0,
+          ...runChartData.map((run) => {
+            let sum = 0
+            if (operationVisibility.populate) sum += run.populate_chart_duration_s
+            if (operationVisibility.mutate) sum += run.mutate_chart_duration_s
+            if (operationVisibility.select) sum += run.select_chart_duration_s
+            return sum
+          }),
+        )
+      : Math.max(
+          0,
+          ...runChartData.flatMap((run) => {
+            const durations: number[] = []
+            if (operationVisibility.populate) durations.push(run.populate_duration_s)
+            if (operationVisibility.mutate) durations.push(run.mutate_duration_s)
+            if (operationVisibility.select) durations.push(run.select_duration_s)
+            return durations
+          }),
+        )
+
   const overviewAxisDomain = getDurationAxisDomain(overviewMaxDuration, overviewScaleMode)
   const overviewAxisTicks = getDurationAxisTicks(overviewMaxDuration, overviewScaleMode)
   const hasVisibleOverviewSegments = runChartData.some((entry) => entry.total_duration_s > 0)
@@ -127,6 +144,7 @@ export function OverviewPanel({
                 )
               })}
             </div>
+            <BarModeToggle mode={barMode} onChange={setBarMode} />
             <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
             <span className="text-[0.65rem] text-slate-400 tabular-nums">
               {includedDatabases.length}/{databases.length}
@@ -149,10 +167,40 @@ export function OverviewPanel({
             axisTicks={overviewAxisTicks}
             scaleMode={overviewScaleMode}
             operationVisibility={operationVisibility}
+            barMode={barMode}
           />
         )}
       </ChartFrame>
     </PanelCard>
+  )
+}
+
+function BarModeToggle({ mode, onChange }: { mode: BarMode; onChange: (m: BarMode) => void }) {
+  return (
+    <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange("grouped")}
+        className={
+          mode === "grouped"
+            ? "rounded-full bg-white/8 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]"
+            : "rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+        }
+      >
+        Grouped
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("stacked")}
+        className={
+          mode === "stacked"
+            ? "rounded-full bg-white/8 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]"
+            : "rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
+        }
+      >
+        Stacked
+      </button>
+    </div>
   )
 }
 
@@ -162,6 +210,7 @@ interface OverviewBarChartProps {
   axisTicks: number[] | undefined
   scaleMode: DurationScaleMode
   operationVisibility: OverviewOperationVisibility
+  barMode: BarMode
 }
 
 function OverviewBarChart({
@@ -170,7 +219,10 @@ function OverviewBarChart({
   axisTicks,
   scaleMode,
   operationVisibility,
+  barMode,
 }: OverviewBarChartProps) {
+  const stackId = barMode === "stacked" ? "ops" : undefined
+
   return (
     <ResponsiveContainer
       width="100%"
@@ -235,7 +287,8 @@ function OverviewBarChart({
         <Bar
           dataKey="populate_chart_duration_s"
           hide={!operationVisibility.populate}
-          radius={[3, 3, 0, 0]}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Populate"
           shape={(props) => (
             <Rectangle
@@ -250,7 +303,8 @@ function OverviewBarChart({
         <Bar
           dataKey="mutate_chart_duration_s"
           hide={!operationVisibility.mutate}
-          radius={[3, 3, 0, 0]}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Mutate"
           shape={(props) => (
             <Rectangle
@@ -265,7 +319,8 @@ function OverviewBarChart({
         <Bar
           dataKey="select_chart_duration_s"
           hide={!operationVisibility.select}
-          radius={[3, 3, 0, 0]}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Select"
           shape={(props) => (
             <Rectangle

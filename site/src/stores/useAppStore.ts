@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware"
 
 import { fetchSystems } from "../lib/queries"
 
-const LAYOUT_VERSION = 2
+const LAYOUT_VERSION = 3
 
 interface SystemSlice {
   systems: string[]
@@ -27,18 +27,18 @@ type AppStore = SystemSlice & LayoutSlice
 
 export const DEFAULT_LAYOUTS: ResponsiveLayouts = {
   lg: [
-    { i: "overview", x: 0, y: 0, w: 12, h: 10, minH: 7 },
-    { i: "insert-performance", x: 0, y: 10, w: 12, h: 10, minH: 6 },
-    { i: "operations", x: 0, y: 20, w: 12, h: 18, minH: 10 },
-    { i: "flame-graph", x: 0, y: 38, w: 12, h: 12, minH: 6 },
-    { i: "resource-trends", x: 0, y: 50, w: 12, h: 14, minH: 8 },
+    { i: "overview", x: 0, y: 0, w: 5, h: 11, minH: 8 },
+    { i: "insert-performance", x: 5, y: 0, w: 7, h: 11, minH: 8 },
+    { i: "operations", x: 0, y: 11, w: 12, h: 18, minH: 10 },
+    { i: "flame-graph", x: 0, y: 29, w: 6, h: 12, minH: 6 },
+    { i: "resource-trends", x: 6, y: 29, w: 6, h: 12, minH: 8 },
   ],
   md: [
-    { i: "overview", x: 0, y: 0, w: 10, h: 10, minH: 7 },
-    { i: "insert-performance", x: 0, y: 10, w: 10, h: 10, minH: 6 },
-    { i: "operations", x: 0, y: 20, w: 10, h: 18, minH: 10 },
-    { i: "flame-graph", x: 0, y: 38, w: 10, h: 12, minH: 6 },
-    { i: "resource-trends", x: 0, y: 50, w: 10, h: 14, minH: 8 },
+    { i: "overview", x: 0, y: 0, w: 5, h: 11, minH: 8 },
+    { i: "insert-performance", x: 5, y: 0, w: 5, h: 11, minH: 8 },
+    { i: "operations", x: 0, y: 11, w: 10, h: 18, minH: 10 },
+    { i: "flame-graph", x: 0, y: 29, w: 10, h: 12, minH: 6 },
+    { i: "resource-trends", x: 0, y: 41, w: 10, h: 14, minH: 8 },
   ],
   sm: [
     { i: "overview", x: 0, y: 0, w: 6, h: 10, minH: 7 },
