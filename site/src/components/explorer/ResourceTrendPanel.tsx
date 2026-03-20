@@ -1,4 +1,3 @@
-import { ChevronDown, ChevronUp } from "lucide-react"
 import { useMemo, useState } from "react"
 import {
   CartesianGrid,
@@ -85,7 +84,6 @@ export function ResourceTrendPanel({
   databases,
   isLoading = false,
 }: ResourceTrendPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
   const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [showAllSteps, setShowAllSteps] = useState(false)
@@ -175,7 +173,7 @@ export function ResourceTrendPanel({
   const hasData = metricSamples.length > 0
 
   return (
-    <PanelCard>
+    <PanelCard className="h-full">
       <div className="flex items-start justify-between gap-4">
         <div>
           <SectionTitle as="h3">Resource trends</SectionTitle>
@@ -184,18 +182,9 @@ export function ResourceTrendPanel({
             at elapsed 0. Select an operation and step to compare resource profiles.
           </BodyText>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsExpanded((current) => !current)}
-          disabled={isLoading || !hasData}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
-        >
-          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          {isExpanded ? "Hide" : "Show"}
-        </button>
       </div>
 
-      {!isExpanded ? null : isLoading ? (
+      {isLoading ? (
         <div className="mt-4 rounded-2xl border border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
           Loading resource metrics...
         </div>

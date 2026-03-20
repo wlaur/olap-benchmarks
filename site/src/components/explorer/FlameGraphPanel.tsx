@@ -34,7 +34,6 @@ export function FlameGraphPanel({
   metricSamples,
   isLoading = false,
 }: FlameGraphPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
   const [selectedDb, setSelectedDb] = useState<string | null>(null)
   const [spans, setSpans] = useState<FlameSpan[]>([])
   const [selectedSpan, setSelectedSpan] = useState<FlameSpan | null>(null)
@@ -53,7 +52,6 @@ export function FlameGraphPanel({
       setSpans([])
       return
     }
-    if (!isExpanded) return
 
     let cancelled = false
     setIsLoadingSpans(true)
@@ -73,7 +71,7 @@ export function FlameGraphPanel({
     return () => {
       cancelled = true
     }
-  }, [isLoading, system, suite, resolvedDb, isExpanded])
+  }, [isLoading, system, suite, resolvedDb])
 
   const spanMetrics = useMemo((): SpanMetrics | null => {
     if (!selectedSpan || !resolvedDb) return null
@@ -83,12 +81,6 @@ export function FlameGraphPanel({
     )
     if (opSamples.length === 0) return null
 
-    // Find the run start time to map elapsed_s to the global timeline
-    // operation samples have elapsed_s relative to their run start
-    // spans have elapsed_s relative to the global (earliest run) start
-    // We need to find the offset between them
-
-    // Get the operation's start offset by finding the operation-level span
     const opSpan = spans.find(
       (s) => s.depth === "operation" && s.operation === selectedSpan.operation,
     )
@@ -121,7 +113,7 @@ export function FlameGraphPanel({
   }, [])
 
   return (
-    <PanelCard>
+    <PanelCard className="h-full">
       <div className="flex items-start justify-between gap-4">
         <div>
           <SectionTitle as="h3">Execution flame graph</SectionTitle>
@@ -130,56 +122,36 @@ export function FlameGraphPanel({
             to view resource metrics during that window.
           </BodyText>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsExpanded((c) => !c)}
-          disabled={isLoading || databases.length === 0}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
-        >
-          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          {isExpanded ? "Hide" : "Show"}
-        </button>
+        {databases.length > 0 && !isLoading ? (
+          <DatabaseSelector databases={databases} selected={resolvedDb} onChange={setSelectedDb} />
+        ) : null}
       </div>
 
-      {!isExpanded ? null : (
-        <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
-          <div className="mb-4">
-            <DatabaseSelector
-              databases={databases}
-              selected={resolvedDb}
-              onChange={setSelectedDb}
-            />
+      <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
+        {isLoading ? (
+          <div className="flex h-32 items-center justify-center text-sm text-slate-500">
+            Loading execution data...
           </div>
+        ) : isLoadingSpans ? (
+          <div className="flex h-32 items-center justify-center text-sm text-slate-500">
+            Loading execution data...
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <FlameGraph spans={spans} selectedSpan={selectedSpan} onSelectSpan={handleSelectSpan} />
 
-          {isLoading ? (
-            <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-              Loading execution data...
+            <div className="min-h-[4.5rem]">
+              {selectedSpan ? (
+                <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
+              ) : spans.length > 0 ? (
+                <div className="rounded-xl border border-dashed border-border-default bg-surface-primary/40 px-4 py-3 text-xs text-slate-500">
+                  Click a segment to view details and resource metrics.
+                </div>
+              ) : null}
             </div>
-          ) : isLoadingSpans ? (
-            <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-              Loading execution data...
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <FlameGraph
-                spans={spans}
-                selectedSpan={selectedSpan}
-                onSelectSpan={handleSelectSpan}
-              />
-
-              <div className="min-h-[4.5rem]">
-                {selectedSpan ? (
-                  <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
-                ) : spans.length > 0 ? (
-                  <div className="rounded-xl border border-dashed border-border-default bg-surface-primary/40 px-4 py-3 text-xs text-slate-500">
-                    Click a segment to view details and resource metrics.
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </PanelCard>
   )
 }
