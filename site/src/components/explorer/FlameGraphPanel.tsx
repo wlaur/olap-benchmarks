@@ -128,7 +128,7 @@ export function FlameGraphPanel({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div className="panel-scrollbar min-h-0 flex-1 overflow-auto">
+            <div className="shrink-0 overflow-x-auto overflow-y-hidden">
               <FlameGraph
                 spans={spans}
                 selectedSpan={selectedSpan}
@@ -136,11 +136,11 @@ export function FlameGraphPanel({
               />
             </div>
 
-            <div className="min-h-[3.5rem] shrink-0">
+            <div className="flex min-h-0 flex-1 flex-col">
               {selectedSpan ? (
                 <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
               ) : spans.length > 0 ? (
-                <div className="rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
+                <div className="flex min-h-[9rem] flex-1 items-center rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
                   Click a segment to view details and resource metrics.
                 </div>
               ) : null}
@@ -161,8 +161,8 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
   const label = span.depth === "operation" ? span.operation : (span.query_name ?? span.step_name)
 
   return (
-    <div className="rounded-lg border border-border-default bg-surface-primary/60 p-3">
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-default bg-surface-primary/60 p-3">
+      <div className="flex shrink-0 flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
           <MetaLabel>
             {span.depth === "operation" ? "Operation" : span.depth === "step" ? "Step" : "Query"}
@@ -173,14 +173,9 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
               <span className="ml-1 text-slate-500">#{span.iteration}</span>
             ) : null}
           </p>
-          {span.query_sql ? (
-            <div className="panel-scrollbar mt-1.5 max-h-40 overflow-auto rounded-md border border-border-default bg-surface-inset">
-              <SqlCodeView code={span.query_sql} />
-            </div>
-          ) : null}
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <StatMini label="Duration" value={formatDurationSeconds(span.duration_s)} />
           {metrics ? (
             <>
@@ -193,6 +188,17 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
           )}
         </div>
       </div>
+
+      {span.query_sql ? (
+        <div className="mt-3 min-h-0 overflow-hidden rounded-md border border-border-default bg-surface-inset">
+          <SqlCodeView
+            code={span.query_sql}
+            wrapLines
+            fillHeight={false}
+            className="max-h-[clamp(14rem,32vh,24rem)]"
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

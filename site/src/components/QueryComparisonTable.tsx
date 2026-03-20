@@ -2,9 +2,7 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
-  type PaginationState,
   type SortingFn,
   type SortingState,
   useReactTable,
@@ -16,7 +14,6 @@ import { createPortal } from "react-dom"
 import type { SelectionState } from "../hooks/useSelectionState"
 import { cn } from "../lib/cn"
 import { formatDurationSeconds, formatMultiplier, type DurationScaleMode } from "../lib/format"
-import { QuietButton } from "./controls/Control"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { InlineDurationBars } from "./InlineDurationBars"
 
@@ -57,7 +54,6 @@ interface HeaderMeta {
 }
 
 export const QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS = "min-w-[50rem]"
-const DEFAULT_PAGE_SIZE = 40
 
 const columnHelper = createColumnHelper<QueryComparisonRow>()
 
@@ -87,10 +83,6 @@ export function QueryComparisonTable({
   scrollAreaClassName,
 }: QueryComparisonTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "query", desc: false }])
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: DEFAULT_PAGE_SIZE,
-  })
   const linearMaxDuration = useMemo(() => {
     const durations = rows.flatMap((row) =>
       Object.values(row.by_database).filter((value): value is number => value !== null),
@@ -166,23 +158,11 @@ export function QueryComparisonTable({
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, pagination },
+    state: { sorting },
     onSortingChange: setSorting,
-    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   })
-
-  useEffect(() => {
-    setPagination((current) => ({ ...current, pageIndex: 0 }))
-  }, [rows, sorting])
-
-  const totalRows = table.getSortedRowModel().rows.length
-  const pageIndex = table.getState().pagination.pageIndex
-  const pageSize = table.getState().pagination.pageSize
-  const startRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1
-  const endRow = Math.min(totalRows, startRow + pageSize - 1)
 
   return (
     <div className={cn("flex min-h-0 flex-col overflow-hidden", containerClassName)}>
@@ -272,33 +252,6 @@ export function QueryComparisonTable({
           </div>
         </div>
       </div>
-
-      {totalRows > pageSize ? (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border-default px-4 py-3 text-xs text-slate-400">
-          <span>
-            Showing {startRow}-{endRow} of {totalRows} queries
-          </span>
-          <div className="flex items-center gap-2">
-            <QuietButton
-              size="xs"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-            >
-              Previous
-            </QuietButton>
-            <span>
-              Page {pageIndex + 1} of {table.getPageCount()}
-            </span>
-            <QuietButton
-              size="xs"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-            >
-              Next
-            </QuietButton>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }
