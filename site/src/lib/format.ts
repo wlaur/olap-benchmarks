@@ -15,6 +15,21 @@ function trimFixed(value: number, fractionDigits: number): string {
     .replace(/(\.\d*[1-9])0+$/, "$1")
 }
 
+function roundToSignificantDigits(value: number, significantDigits: number): number {
+  if (value === 0) return 0
+  return Number(value.toPrecision(significantDigits))
+}
+
+function formatNumberWithSpaceGrouping(value: number, maximumFractionDigits: number): string {
+  const parts = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+    useGrouping: true,
+  }).formatToParts(value)
+
+  return parts.map((part) => (part.type === "group" ? " " : part.value)).join("")
+}
+
 export function formatDurationSeconds(value: number): string {
   if (value <= 0) return "0s"
   if (value < 1) return formatMilliseconds(value * 1000)
@@ -23,7 +38,10 @@ export function formatDurationSeconds(value: number): string {
 }
 
 export function formatMultiplier(value: number): string {
-  return `${value.toFixed(2)}x`
+  const roundedValue =
+    value >= 100 ? roundToSignificantDigits(value, 2) : value >= 10 ? Math.round(value) : value
+
+  return `${formatNumberWithSpaceGrouping(roundedValue, roundedValue >= 10 ? 0 : 2)}x`
 }
 
 export function scaleDurationForChart(value: number, mode: DurationScaleMode): number {

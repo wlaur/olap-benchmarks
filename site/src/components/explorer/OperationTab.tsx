@@ -17,6 +17,7 @@ import { InspectorSkeleton, LegendSkeleton, QueryTableSkeleton } from "./Explore
 
 const DETAIL_SPLIT_MIN_WIDTH = 1160
 const QUERY_TABLE_MIN_HEIGHT_CLASS = "min-h-[24rem]"
+const QUERY_TABLE_SPLIT_SCROLL_AREA_CLASS = "max-h-[42rem]"
 const QUERY_TABLE_STACKED_SCROLL_AREA_CLASS = "max-h-[34rem]"
 
 interface OperationTabProps {
@@ -152,7 +153,9 @@ export function OperationTab({
                   !isSplitLayout && QUERY_TABLE_MIN_HEIGHT_CLASS,
                 )}
                 scrollAreaClassName={
-                  isSplitLayout ? "h-full min-h-0" : QUERY_TABLE_STACKED_SCROLL_AREA_CLASS
+                  isSplitLayout
+                    ? QUERY_TABLE_SPLIT_SCROLL_AREA_CLASS
+                    : QUERY_TABLE_STACKED_SCROLL_AREA_CLASS
                 }
               />
             )}
