@@ -1,3 +1,4 @@
+import type { SelectionState } from "../../hooks/useSelectionState"
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
 import { OperationTab } from "./OperationTab"
@@ -12,6 +13,7 @@ interface OperationTabsProps {
   databases: string[]
   includedDatabases: string[]
   queriesManifest: QueriesManifest | null
+  selection: SelectionState
   isLoading: boolean
 }
 
@@ -27,6 +29,7 @@ export function OperationTabs({
   databases,
   includedDatabases,
   queriesManifest,
+  selection,
   isLoading,
 }: OperationTabsProps) {
   const resolvedTab: TabOperation =
@@ -44,6 +47,7 @@ export function OperationTabs({
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={queriesManifest}
+            selection={selection}
             isLoading={isLoading}
           />
         ) : (
@@ -55,6 +59,7 @@ export function OperationTabs({
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={queriesManifest}
+            selection={selection}
             isLoading={isLoading}
           />
         )}

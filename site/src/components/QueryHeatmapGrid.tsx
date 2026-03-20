@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react"
 
+import type { SelectionState } from "../hooks/useSelectionState"
 import { formatDurationSeconds, formatMultiplier } from "../lib/format"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 
@@ -7,8 +8,7 @@ interface QueryHeatmapGridProps {
   rows: QueryComparisonRow[]
   databases: string[]
   databaseColors: Record<string, string>
-  onSelectQuery?: (queryName: string) => void
-  selectedQuery?: string | null
+  selection: SelectionState
 }
 
 interface TooltipState {
@@ -16,19 +16,30 @@ interface TooltipState {
   y: number
   queryLabel: string
   queryName: string
+  tableFamily: string
+  queryId: string
   db: string
   duration: number | null
   ratio: number | null
   isFastest: boolean
 }
 
-const CELL_WIDTH = 64
+interface QueryLabelTooltipState {
+  x: number
+  y: number
+  queryLabel: string
+  queryName: string
+  tableFamily: string
+  queryId: string
+}
+
 const CELL_HEIGHT = 28
 const CELL_GAP = 2
-const LABEL_WIDTH = 160
-const HEADER_HEIGHT = 80
 const CELL_RX = 3
+const LABEL_WIDTH = 180
+const HEADER_HEIGHT = 34
 const LEGEND_HEIGHT = 40
+const APPROX_CHAR_WIDTH = 7.5
 
 const COLOR_STOPS: readonly [number, number, number][] = [
   [52, 211, 153],
@@ -74,10 +85,35 @@ interface CellData {
 interface GridData {
   cells: CellData[][]
   maxRatio: number
+  summaryRow: CellData[]
 }
 
 function buildGridData(rows: QueryComparisonRow[], databases: string[]): GridData {
   let maxRatio = 1
+
+  // Per-database: sum of all median durations (total query time per db)
+  const dbTotals = databases.map((db) => {
+    let total = 0
+    let hasAny = false
+    for (const row of rows) {
+      const d = row.by_database[db]
+      if (d !== null && d !== undefined) {
+        total += d
+        hasAny = true
+      }
+    }
+    return hasAny ? total : null
+  })
+
+  const validTotals = dbTotals.filter((d): d is number => d !== null)
+  const fastestTotal = validTotals.length > 0 ? Math.min(...validTotals) : null
+  const summaryRow: CellData[] = dbTotals.map((total) => {
+    const ratio =
+      total !== null && fastestTotal !== null && fastestTotal > 0 ? total / fastestTotal : null
+    if (ratio !== null && ratio > maxRatio) maxRatio = ratio
+    return { duration: total, ratio }
+  })
+
   const cells = rows.map((row) => {
     const durations = databases.map((db) => row.by_database[db] ?? null)
     const validDurations = durations.filter((d): d is number => d !== null)
@@ -89,26 +125,35 @@ function buildGridData(rows: QueryComparisonRow[], databases: string[]): GridDat
       return { duration, ratio }
     })
   })
-  return { cells, maxRatio }
+
+  return { cells, maxRatio, summaryRow }
+}
+
+function computeCellWidth(databases: string[]): number {
+  const longestName = Math.max(0, ...databases.map((db) => db.length))
+  return Math.max(64, longestName * APPROX_CHAR_WIDTH + 20)
 }
 
 export function QueryHeatmapGrid({
   rows,
   databases,
   databaseColors,
-  onSelectQuery,
-  selectedQuery,
+  selection,
 }: QueryHeatmapGridProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [queryLabelTooltip, setQueryLabelTooltip] = useState<QueryLabelTooltipState | null>(null)
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null)
 
   const gridData = useMemo(() => buildGridData(rows, databases), [rows, databases])
-  const { cells, maxRatio } = gridData
+  const { cells, maxRatio, summaryRow } = gridData
+  const cellWidth = useMemo(() => computeCellWidth(databases), [databases])
 
-  const gridWidth = LABEL_WIDTH + databases.length * (CELL_WIDTH + CELL_GAP) - CELL_GAP
+  const SUMMARY_GAP = 10
+  const gridWidth = LABEL_WIDTH + databases.length * (cellWidth + CELL_GAP) - CELL_GAP
+  const queryRowsStartY = HEADER_HEIGHT + CELL_HEIGHT + CELL_GAP + SUMMARY_GAP
   const gridHeight =
-    HEADER_HEIGHT + rows.length * (CELL_HEIGHT + CELL_GAP) - CELL_GAP + LEGEND_HEIGHT
+    queryRowsStartY + rows.length * (CELL_HEIGHT + CELL_GAP) - CELL_GAP + LEGEND_HEIGHT
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent, rowIdx: number, colIdx: number) => {
@@ -124,6 +169,8 @@ export function QueryHeatmapGrid({
         y: event.clientY - rect.top,
         queryLabel: row.query_label,
         queryName: row.query_name,
+        tableFamily: row.table_family,
+        queryId: row.query_id,
         db,
         duration: cell?.duration ?? null,
         ratio: cell?.ratio ?? null,
@@ -134,6 +181,31 @@ export function QueryHeatmapGrid({
     [rows, databases, cells],
   )
 
+  const handleSummaryMouseMove = useCallback(
+    (event: React.MouseEvent, colIdx: number) => {
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const db = databases[colIdx]
+      if (!db) return
+      const cell = summaryRow[colIdx]
+      setTooltip({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        queryLabel: "Sum of medians",
+        queryName: "",
+        tableFamily: "",
+        queryId: "",
+        db,
+        duration: cell?.duration ?? null,
+        ratio: cell?.ratio ?? null,
+        isFastest: cell?.ratio === 1,
+      })
+      setHoveredCell({ row: -1, col: colIdx })
+    },
+    [databases, summaryRow],
+  )
+
   const handleMouseLeave = useCallback(() => {
     setTooltip(null)
     setHoveredCell(null)
@@ -142,10 +214,33 @@ export function QueryHeatmapGrid({
   const handleClick = useCallback(
     (rowIdx: number) => {
       const row = rows[rowIdx]
-      if (row) onSelectQuery?.(row.query_name)
+      if (row) selection.toggleSelectedQuery(row.query_name)
     },
-    [rows, onSelectQuery],
+    [rows, selection],
   )
+
+  const handleQueryLabelEnter = useCallback(
+    (event: React.MouseEvent, rowIdx: number) => {
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const row = rows[rowIdx]
+      if (!row) return
+      setQueryLabelTooltip({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        queryLabel: row.query_label,
+        queryName: row.query_name,
+        tableFamily: row.table_family,
+        queryId: row.query_id,
+      })
+    },
+    [rows],
+  )
+
+  const handleQueryLabelLeave = useCallback(() => {
+    setQueryLabelTooltip(null)
+  }, [])
 
   if (rows.length === 0 || databases.length === 0) {
     return (
@@ -155,7 +250,14 @@ export function QueryHeatmapGrid({
     )
   }
 
-  const legendY = HEADER_HEIGHT + rows.length * (CELL_HEIGHT + CELL_GAP) + 8
+  const summaryY = HEADER_HEIGHT
+  const legendY = queryRowsStartY + rows.length * (CELL_HEIGHT + CELL_GAP) + 8
+  const hoveredQueryName =
+    hoveredCell !== null && hoveredCell.row >= 0
+      ? (rows[hoveredCell.row]?.query_name ?? null)
+      : null
+  const activeQuery = hoveredQueryName ?? selection.selectedQuery
+  const isSummaryDimmed = activeQuery !== null
 
   return (
     <div ref={containerRef} className="relative select-none">
@@ -169,12 +271,29 @@ export function QueryHeatmapGrid({
           <ColumnHeaders
             databases={databases}
             databaseColors={databaseColors}
+            cellWidth={cellWidth}
             hoveredCol={hoveredCell?.col ?? null}
           />
 
+          {/* Summary row — separate section */}
+          <g opacity={isSummaryDimmed && hoveredCell?.row !== -1 ? 0.35 : 1}>
+            <SummaryRow
+              y={summaryY}
+              databases={databases}
+              cellData={summaryRow}
+              cellWidth={cellWidth}
+              maxRatio={maxRatio}
+              hoveredCol={hoveredCell?.row === -1 ? (hoveredCell?.col ?? null) : null}
+              onMouseMove={handleSummaryMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
+          </g>
+
+          {/* Query rows */}
           {rows.map((row, rowIdx) => {
-            const y = HEADER_HEIGHT + rowIdx * (CELL_HEIGHT + CELL_GAP)
-            const isSelected = selectedQuery === row.query_name
+            const y = queryRowsStartY + rowIdx * (CELL_HEIGHT + CELL_GAP)
+            const isSelected = selection.selectedQuery === row.query_name
+            const isDimmed = activeQuery !== null && activeQuery !== row.query_name
             const isRowHovered = hoveredCell?.row === rowIdx
 
             return (
@@ -185,13 +304,17 @@ export function QueryHeatmapGrid({
                 y={y}
                 databases={databases}
                 cellData={cells[rowIdx] ?? []}
+                cellWidth={cellWidth}
                 maxRatio={maxRatio}
                 isSelected={isSelected}
+                isDimmed={isDimmed}
                 isRowHovered={isRowHovered}
                 hoveredCol={hoveredCell?.row === rowIdx ? (hoveredCell?.col ?? null) : null}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
                 onClick={handleClick}
+                onQueryLabelEnter={handleQueryLabelEnter}
+                onQueryLabelLeave={handleQueryLabelLeave}
               />
             )
           })}
@@ -201,6 +324,9 @@ export function QueryHeatmapGrid({
       </div>
 
       {tooltip ? <HeatmapTooltip tooltip={tooltip} containerWidth={gridWidth} /> : null}
+      {queryLabelTooltip ? (
+        <QueryLabelTooltipPopup tooltip={queryLabelTooltip} containerWidth={gridWidth} />
+      ) : null}
     </div>
   )
 }
@@ -229,7 +355,6 @@ function ColorLegend({
     if (maxRatio > 1 && !ticks.includes(Math.round(maxRatio))) {
       ticks.push(Math.round(maxRatio))
     }
-    // Keep max ~5 ticks
     if (ticks.length > 6) {
       const step = Math.ceil(ticks.length / 5)
       const filtered = [ticks[0]!]
@@ -294,40 +419,136 @@ function ColorLegend({
 function ColumnHeaders({
   databases,
   databaseColors,
+  cellWidth,
   hoveredCol,
 }: {
   databases: string[]
   databaseColors: Record<string, string>
+  cellWidth: number
   hoveredCol: number | null
 }) {
   return (
     <g>
       {databases.map((db, colIdx) => {
-        const x = LABEL_WIDTH + colIdx * (CELL_WIDTH + CELL_GAP) + CELL_WIDTH / 2
+        const x = LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP) + cellWidth / 2
         const isHovered = hoveredCol === colIdx
         return (
           <g key={db}>
+            <rect
+              x={LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP)}
+              y={4}
+              width={cellWidth}
+              height={HEADER_HEIGHT - 8}
+              rx={CELL_RX}
+              fill="transparent"
+            />
+            <circle
+              cx={x - (db.length * APPROX_CHAR_WIDTH * 0.44 + 8)}
+              cy={HEADER_HEIGHT / 2}
+              r={3.5}
+              fill={databaseColors[db] ?? "#94a3b8"}
+              opacity={isHovered ? 1 : 0.7}
+            />
             <text
               x={x}
-              y={HEADER_HEIGHT - 8}
-              textAnchor="end"
-              dominantBaseline="auto"
-              transform={`rotate(-45, ${x}, ${HEADER_HEIGHT - 8})`}
-              className="text-[10px]"
+              y={HEADER_HEIGHT / 2}
+              textAnchor="middle"
+              dominantBaseline="central"
+              className="text-[11px]"
               fill={isHovered ? "#e2e8f0" : "#94a3b8"}
-              fontWeight={isHovered ? 600 : 400}
+              fontWeight={isHovered ? 600 : 500}
             >
               {db}
             </text>
-            <line
-              x1={x}
-              y1={HEADER_HEIGHT - 6}
-              x2={x}
-              y2={HEADER_HEIGHT - 2}
-              stroke={databaseColors[db] ?? "#94a3b8"}
-              strokeWidth={2}
-              opacity={isHovered ? 1 : 0.5}
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+interface SummaryRowProps {
+  y: number
+  databases: string[]
+  cellData: CellData[]
+  cellWidth: number
+  maxRatio: number
+  hoveredCol: number | null
+  onMouseMove: (event: React.MouseEvent, colIdx: number) => void
+  onMouseLeave: () => void
+}
+
+function SummaryRow({
+  y,
+  databases,
+  cellData,
+  cellWidth,
+  maxRatio,
+  hoveredCol,
+  onMouseMove,
+  onMouseLeave,
+}: SummaryRowProps) {
+  return (
+    <g>
+      <text
+        x={LABEL_WIDTH - 10}
+        y={y + CELL_HEIGHT / 2}
+        textAnchor="end"
+        dominantBaseline="central"
+        className="text-[11px]"
+        fill="#94a3b8"
+        fontWeight={600}
+      >
+        Σ Median
+      </text>
+
+      {databases.map((_, colIdx) => {
+        const cell = cellData[colIdx]
+        if (!cell) return null
+        const x = LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP)
+        const isCellHovered = hoveredCol === colIdx
+        const fill = ratioColor(cell.ratio, maxRatio)
+
+        return (
+          <g
+            key={colIdx}
+            onMouseMove={(e) => onMouseMove(e, colIdx)}
+            onMouseLeave={onMouseLeave}
+            className="cursor-default"
+          >
+            <rect
+              x={x}
+              y={y}
+              width={cellWidth}
+              height={CELL_HEIGHT}
+              rx={CELL_RX}
+              fill={fill}
+              stroke={isCellHovered ? HOVERED_STROKE : "rgba(148, 163, 184, 0.15)"}
+              strokeWidth={isCellHovered ? 1.5 : 0.5}
             />
+            {cell.duration !== null ? (
+              <text
+                x={x + cellWidth / 2}
+                y={y + CELL_HEIGHT / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                className="pointer-events-none text-[10px] font-semibold"
+                fill={cell.ratio !== null && cell.ratio <= 1.1 ? "#d1fae5" : "#e2e8f0"}
+              >
+                {formatCellDuration(cell.duration)}
+              </text>
+            ) : (
+              <text
+                x={x + cellWidth / 2}
+                y={y + CELL_HEIGHT / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                className="pointer-events-none text-[10px]"
+                fill="#475569"
+              >
+                —
+              </text>
+            )}
           </g>
         )
       })}
@@ -341,13 +562,17 @@ interface HeatmapRowProps {
   y: number
   databases: string[]
   cellData: CellData[]
+  cellWidth: number
   maxRatio: number
   isSelected: boolean
+  isDimmed: boolean
   isRowHovered: boolean
   hoveredCol: number | null
   onMouseMove: (event: React.MouseEvent, rowIdx: number, colIdx: number) => void
   onMouseLeave: () => void
   onClick: (rowIdx: number) => void
+  onQueryLabelEnter: (event: React.MouseEvent, rowIdx: number) => void
+  onQueryLabelLeave: () => void
 }
 
 const HeatmapRow = memo(function HeatmapRow({
@@ -356,16 +581,22 @@ const HeatmapRow = memo(function HeatmapRow({
   y,
   databases,
   cellData,
+  cellWidth,
   maxRatio,
   isSelected,
+  isDimmed,
   isRowHovered,
   hoveredCol,
   onMouseMove,
   onMouseLeave,
   onClick,
+  onQueryLabelEnter,
+  onQueryLabelLeave,
 }: HeatmapRowProps) {
+  const rowOpacity = isDimmed && !isRowHovered ? 0.35 : 1
+
   return (
-    <g>
+    <g opacity={rowOpacity}>
       <text
         x={LABEL_WIDTH - 10}
         y={y + CELL_HEIGHT / 2}
@@ -375,14 +606,16 @@ const HeatmapRow = memo(function HeatmapRow({
         fill={isSelected ? "#e2e8f0" : isRowHovered ? "#cbd5e1" : "#94a3b8"}
         fontWeight={isSelected ? 600 : 400}
         onClick={() => onClick(rowIdx)}
+        onMouseEnter={(e) => onQueryLabelEnter(e, rowIdx)}
+        onMouseLeave={onQueryLabelLeave}
       >
-        {clipLabel(row.query_label, 22)}
+        {clipLabel(row.query_label, 24)}
       </text>
 
       {databases.map((_, colIdx) => {
         const cell = cellData[colIdx]
         if (!cell) return null
-        const x = LABEL_WIDTH + colIdx * (CELL_WIDTH + CELL_GAP)
+        const x = LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP)
         const isCellHovered = isRowHovered && hoveredCol === colIdx
         const fill = ratioColor(cell.ratio, maxRatio)
 
@@ -397,7 +630,7 @@ const HeatmapRow = memo(function HeatmapRow({
             <rect
               x={x}
               y={y}
-              width={CELL_WIDTH}
+              width={cellWidth}
               height={CELL_HEIGHT}
               rx={CELL_RX}
               fill={fill}
@@ -408,7 +641,7 @@ const HeatmapRow = memo(function HeatmapRow({
             />
             {cell.duration !== null ? (
               <text
-                x={x + CELL_WIDTH / 2}
+                x={x + cellWidth / 2}
                 y={y + CELL_HEIGHT / 2}
                 textAnchor="middle"
                 dominantBaseline="central"
@@ -419,7 +652,7 @@ const HeatmapRow = memo(function HeatmapRow({
               </text>
             ) : (
               <text
-                x={x + CELL_WIDTH / 2}
+                x={x + cellWidth / 2}
                 y={y + CELL_HEIGHT / 2}
                 textAnchor="middle"
                 dominantBaseline="central"
@@ -453,6 +686,11 @@ function HeatmapTooltip({
       }}
     >
       <div className="mb-1 font-medium">{tooltip.queryLabel}</div>
+      {tooltip.queryId ? (
+        <div className="mb-1 text-slate-500">
+          {tooltip.tableFamily} · Q{tooltip.queryId}
+        </div>
+      ) : null}
       <div className="space-y-0.5 text-slate-400">
         <div>
           Database: <span className="text-slate-200">{tooltip.db}</span>
@@ -484,6 +722,31 @@ function HeatmapTooltip({
           </div>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function QueryLabelTooltipPopup({
+  tooltip,
+  containerWidth,
+}: {
+  tooltip: QueryLabelTooltipState
+  containerWidth: number
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute z-50 rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
+      style={{
+        left: Math.min(tooltip.x + 12, containerWidth - 260),
+        top: Math.max(0, tooltip.y - 8),
+        maxWidth: 280,
+      }}
+    >
+      <div className="font-medium">{tooltip.queryLabel}</div>
+      <div className="mt-0.5 text-slate-500">
+        {tooltip.tableFamily} · Q{tooltip.queryId}
+      </div>
+      <div className="mt-0.5 font-mono text-[10px] text-slate-500">{tooltip.queryName}</div>
     </div>
   )
 }

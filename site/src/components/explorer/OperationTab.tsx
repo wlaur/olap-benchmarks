@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import { useContainerWidth } from "react-grid-layout"
 
-import { useSelectionState } from "../../hooks/useSelectionState"
+import type { SelectionState } from "../../hooks/useSelectionState"
 import { buildQueryComparisonRows, computeMaxDuration } from "../../lib/chartTransforms"
 import { cn } from "../../lib/cn"
 import { getDatabaseColors } from "../../lib/databaseColors"
@@ -28,6 +28,7 @@ interface OperationTabProps {
   databases: string[]
   includedDatabases: string[]
   queriesManifest: QueriesManifest | null
+  selection: SelectionState
   isLoading: boolean
 }
 
@@ -39,10 +40,10 @@ export function OperationTab({
   databases,
   includedDatabases,
   queriesManifest,
+  selection,
   isLoading,
 }: OperationTabProps) {
   const databaseColors = getDatabaseColors(databases)
-  const selection = useSelectionState()
   const { selectedQuery, setSelectedQuery } = selection
   const [tableScaleMode, setTableScaleMode] = useState<DurationScaleMode>("linear")
   const {
