@@ -411,6 +411,7 @@ def prepare_data(overwrite: bool = False) -> None:
 
 
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
+    supported_operations = ("populate", "mutate", "select")
     name: SuiteName = "time_series"
 
     def get_mutate_steps(self) -> tuple[list[MutateStep], list[MutateStep]]:

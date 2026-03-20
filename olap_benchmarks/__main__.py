@@ -153,9 +153,8 @@ def benchmark(
 
                 try:
                     if operation == "all":
-                        db_instance.benchmark(suite_name, "populate")
-                        db_instance.benchmark(suite_name, "mutate")
-                        db_instance.benchmark(suite_name, "select")
+                        for suite_operation in db_instance.benchmarks[suite_name].supported_operations:
+                            db_instance.benchmark(suite_name, suite_operation)
                     else:
                         db_instance.benchmark(suite_name, operation)
                 finally:

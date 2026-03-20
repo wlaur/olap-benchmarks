@@ -3,12 +3,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 import polars as pl
 from pydantic import BaseModel
 
 from ..dbs import Database
-from ..settings import SuiteName, TableName
+from ..settings import Operation, SuiteName, TableName
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class TableRowCountCheck:
 
 
 class BenchmarkSuite[DBT: Database](BaseModel, ABC):
+    supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select")
     db: DBT
     name: SuiteName
 
