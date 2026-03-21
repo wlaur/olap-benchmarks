@@ -18,6 +18,7 @@ from sqlalchemy import Connection, text
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
+from .utils import tracked_commit
 
 if TYPE_CHECKING:
     from ..suites import BenchmarkSuite
@@ -378,7 +379,7 @@ class Database(BaseModel, ABC):
             con = self.connect(reconnect=True)
             with self.record_query_execution(stmt):
                 con.execute(text(stmt))
-            con.commit()
+            tracked_commit(con)
 
     def initialize_schema(self, suite: SuiteName) -> None:
         fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite}/schemas/{self.name}.sql"
