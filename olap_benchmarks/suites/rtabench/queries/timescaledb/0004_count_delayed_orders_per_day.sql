@@ -6,7 +6,7 @@ FROM
 WHERE
   event_created >= '2024-05-01'
   and event_created < '2024-06-01'
-  AND event_payload -> 'status' @ > '["Delayed", "Priority"]'
+  AND event_payload -> 'status' @> '["Delayed", "Priority"]'
 GROUP BY
   day
 ORDER BY
