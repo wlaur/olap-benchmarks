@@ -21,12 +21,10 @@ const DUCKDB_BUNDLES: duckdb.DuckDBBundles = {
   },
 }
 
-let duckDbInstance: duckdb.AsyncDuckDB | null = null
+let duckDbPromise: Promise<duckdb.AsyncDuckDB> | null = null
 let kyselyInstance: Kysely<DB> | null = null
 
-export async function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
-  if (duckDbInstance) return duckDbInstance
-
+async function initDuckDb(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await duckdb.selectBundle(DUCKDB_BUNDLES)
   const worker = new Worker(bundle.mainWorker!)
   const logger = new duckdb.VoidLogger()
@@ -44,9 +42,18 @@ export async function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
     accessMode: duckdb.DuckDBAccessMode.READ_ONLY,
   })
 
-  duckDbInstance = database
   return database
 }
+
+export function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
+  if (!duckDbPromise) {
+    duckDbPromise = initDuckDb()
+  }
+  return duckDbPromise
+}
+
+// Start DuckDB initialization immediately at module load
+getDuckDb()
 
 export async function getKyselyDb(): Promise<Kysely<DB>> {
   if (kyselyInstance) return kyselyInstance

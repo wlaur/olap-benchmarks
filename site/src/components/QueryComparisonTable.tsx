@@ -5,10 +5,11 @@ import {
   getSortedRowModel,
   type SortingFn,
   type SortingState,
+  type Table,
   useReactTable,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
@@ -45,6 +46,7 @@ interface QueryComparisonTableProps {
   scaleMode: DurationScaleMode
   onScaleModeChange: (mode: DurationScaleMode) => void
   containerClassName?: string
+  scrollAreaClassName?: string
 }
 
 interface HeaderMeta {
@@ -79,6 +81,7 @@ export function QueryComparisonTable({
   scaleMode,
   onScaleModeChange,
   containerClassName,
+  scrollAreaClassName,
 }: QueryComparisonTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "query", desc: false }])
   const linearMaxDuration = useMemo(() => {
@@ -163,97 +166,137 @@ export function QueryComparisonTable({
   })
 
   return (
-    <div
-      className={cn(
-        "panel-scrollbar h-full min-h-0 overflow-x-scroll overflow-y-hidden",
-        containerClassName,
-      )}
-    >
-      <div className={cn("h-full min-h-0", QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS)}>
-        <div className="panel-scrollbar h-full min-h-0 overflow-y-scroll">
-          <table className="w-full table-fixed text-left text-sm">
-            <colgroup>
-              <col className="w-[30%]" />
-              <col className="w-[26%]" />
-              <col className="w-[12%]" />
-              <col className="w-[16%]" />
-              <col className="w-[16%]" />
-            </colgroup>
-            <thead className="sticky top-0 z-10 border-b border-border-default bg-surface-raised text-xs tracking-wide text-slate-500">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    const meta = header.column.columnDef.meta as HeaderMeta | undefined
-                    const headerContent = flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
+    <div className={cn("flex min-h-0 flex-col overflow-hidden", containerClassName)}>
+      <div className="panel-scrollbar min-h-0 overflow-x-auto overflow-y-hidden">
+        <div className={cn("min-h-0", QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS)}>
+          <div className={cn("panel-scrollbar min-h-0 overflow-y-auto", scrollAreaClassName)}>
+            <table className="w-full table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[30%]" />
+                <col className="w-[26%]" />
+                <col className="w-[12%]" />
+                <col className="w-[16%]" />
+                <col className="w-[16%]" />
+              </colgroup>
+              <thead className="sticky top-0 z-10 border-b border-border-default bg-surface-raised text-xs tracking-wide text-slate-500">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      const meta = header.column.columnDef.meta as HeaderMeta | undefined
+                      const headerContent = flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )
 
-                    return (
-                      <th key={header.id} className="px-4 py-2.5 font-medium whitespace-nowrap">
-                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <button
-                              type="button"
-                              className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-slate-200"
-                              onClick={header.column.getToggleSortingHandler()}
-                            >
-                              {meta?.tooltip ? (
-                                <HeaderInfoTooltip
-                                  label={meta.tooltipLabel ?? `Explain ${header.id}`}
-                                  tooltip={meta.tooltip}
-                                >
-                                  {headerContent}
-                                </HeaderInfoTooltip>
-                              ) : (
-                                headerContent
-                              )}
-                              <SortIcon direction={header.column.getIsSorted()} />
-                            </button>
-                          </div>
-                        ) : (
-                          headerContent
-                        )}
-                      </th>
-                    )
-                  })}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map((row, rowIndex) => {
-                const queryName = row.original.query_name
-                const isSelected = selection.selectedQuery === queryName
-                const isEven = rowIndex % 2 === 0
-
-                return (
-                  <tr
-                    key={row.id}
-                    className={cn(
-                      "cursor-pointer border-b border-border-subtle transition-colors duration-150",
-                      isSelected
-                        ? "bg-accent-500/8 shadow-[inset_2px_0_0_0_rgba(108,142,239,0.5)]"
-                        : isEven
-                          ? "hover:bg-white/[0.03]"
-                          : "bg-white/[0.02] hover:bg-white/[0.04]",
-                    )}
-                    onMouseEnter={() => selection.setHoveredQuery(queryName)}
-                    onMouseLeave={() => selection.setHoveredQuery(null)}
-                    onClick={() => selection.toggleSelectedQuery(queryName)}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 align-top">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
+                      return (
+                        <th key={header.id} className="px-4 py-2.5 font-medium whitespace-nowrap">
+                          {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-slate-200"
+                                onClick={header.column.getToggleSortingHandler()}
+                              >
+                                {meta?.tooltip ? (
+                                  <HeaderInfoTooltip
+                                    label={meta.tooltipLabel ?? `Explain ${header.id}`}
+                                    tooltip={meta.tooltip}
+                                  >
+                                    {headerContent}
+                                  </HeaderInfoTooltip>
+                                ) : (
+                                  headerContent
+                                )}
+                                <SortIcon direction={header.column.getIsSorted()} />
+                              </button>
+                            </div>
+                          ) : (
+                            headerContent
+                          )}
+                        </th>
+                      )
+                    })}
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                ))}
+              </thead>
+              <TableBody table={table} selection={selection} />
+            </table>
+          </div>
         </div>
       </div>
     </div>
+  )
+}
+
+function TableBody({
+  table,
+  selection,
+}: {
+  table: Table<QueryComparisonRow>
+  selection: SelectionState
+}) {
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
+
+  const setRowRef = useCallback((queryName: string, el: HTMLTableRowElement | null) => {
+    if (el) {
+      rowRefs.current.set(queryName, el)
+    } else {
+      rowRefs.current.delete(queryName)
+    }
+  }, [])
+
+  useEffect(() => {
+    const selectedQuery = selection.selectedQuery
+    if (!selectedQuery) return
+    const el = rowRefs.current.get(selectedQuery)
+    if (!el) return
+
+    const scrollContainer = el.closest(".overflow-y-auto")
+    if (!(scrollContainer instanceof HTMLElement)) return
+
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const margin = elRect.height * 2
+    const offsetTop = elRect.top - containerRect.top - margin
+    const offsetBottom = elRect.bottom - containerRect.bottom + margin
+
+    if (offsetTop < 0) {
+      scrollContainer.scrollTop += offsetTop
+    } else if (offsetBottom > 0) {
+      scrollContainer.scrollTop += offsetBottom
+    }
+  }, [selection.selectedQuery])
+
+  return (
+    <tbody>
+      {table.getRowModel().rows.map((row, rowIndex) => {
+        const queryName = row.original.query_name
+        const isSelected = selection.selectedQuery === queryName
+        const isEven = rowIndex % 2 === 0
+
+        return (
+          <tr
+            key={row.id}
+            ref={(el) => setRowRef(queryName, el)}
+            className={cn(
+              "relative cursor-pointer border-b border-border-subtle",
+              isSelected
+                ? "bg-white/[0.04] after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:border after:border-accent-400/50"
+                : isEven
+                  ? "hover:bg-white/[0.03]"
+                  : "bg-white/[0.02] hover:bg-white/[0.04]",
+            )}
+            onClick={() => selection.toggleSelectedQuery(queryName)}
+          >
+            {row.getVisibleCells().map((cell) => (
+              <td key={cell.id} className="px-4 py-3 align-top">
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </td>
+            ))}
+          </tr>
+        )
+      })}
+    </tbody>
   )
 }
 

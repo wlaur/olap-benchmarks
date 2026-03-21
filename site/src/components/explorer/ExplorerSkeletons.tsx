@@ -4,21 +4,20 @@ import { BodyText, Eyebrow, FeatureTitle, MetaLabel } from "../Typography"
 
 export function FilterChipsSkeleton() {
   return (
-    <div className="flex flex-wrap gap-2">
-      <Skeleton className="h-11 w-28 rounded-full" />
-      <Skeleton className="h-11 w-32 rounded-full" />
-      <Skeleton className="h-11 w-24 rounded-full" />
-      <Skeleton className="h-11 w-32 rounded-full" />
+    <div className="flex flex-wrap gap-1.5">
+      <Skeleton className="h-6 w-20 rounded-full" />
+      <Skeleton className="h-6 w-24 rounded-full" />
+      <Skeleton className="h-6 w-18 rounded-full" />
+      <Skeleton className="h-6 w-24 rounded-full" />
     </div>
   )
 }
 
 export function OverviewControlsSkeleton() {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Skeleton className="h-8 w-24 rounded-full" />
-      <Skeleton className="h-8 w-20 rounded-full" />
-      <Skeleton className="h-8 w-28 rounded-full" />
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      <Skeleton className="h-6 w-20 rounded-full" />
+      <Skeleton className="h-6 w-16 rounded-full" />
     </div>
   )
 }
@@ -59,7 +58,7 @@ export function LegendSkeleton() {
   )
 }
 
-const QUERY_TABLE_CONTAINER_CLASS = "h-[32rem]"
+const QUERY_TABLE_CONTAINER_CLASS = "h-full min-h-[24rem]"
 
 export function QueryTableSkeleton() {
   return (
@@ -114,15 +113,6 @@ export function InspectorSkeleton() {
           <Skeleton className="mt-2 h-7 w-14" />
         </div>
       </div>
-    </div>
-  )
-}
-
-export function TabsSkeleton() {
-  return (
-    <div className="flex gap-2">
-      <Skeleton className="h-9 w-20 rounded-full" />
-      <Skeleton className="h-9 w-20 rounded-full" />
     </div>
   )
 }

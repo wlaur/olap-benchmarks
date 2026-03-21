@@ -1,5 +1,4 @@
-import * as Select from "@radix-ui/react-select"
-import { Check, ChevronDown, ChevronUp, Database } from "lucide-react"
+import { Database } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { BenchmarkSuiteId } from "../../lib/benchmarks"
@@ -7,9 +6,10 @@ import { formatDurationSeconds } from "../../lib/format"
 import { formatCpuPercent, formatMegabytes } from "../../lib/metricFormat"
 import { fetchFlameSpans } from "../../lib/queries"
 import type { FlameSpan, MetricSample } from "../../lib/types"
+import { ControlSelect } from "../controls/ControlSelect"
 import { PanelCard } from "../layout/Panel"
 import { SqlCodeView } from "../SqlCodeView"
-import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+import { MetaLabel, SectionTitle } from "../Typography"
 import { FlameGraph } from "./FlameGraph"
 
 interface FlameGraphPanelProps {
@@ -34,7 +34,6 @@ export function FlameGraphPanel({
   metricSamples,
   isLoading = false,
 }: FlameGraphPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
   const [selectedDb, setSelectedDb] = useState<string | null>(null)
   const [spans, setSpans] = useState<FlameSpan[]>([])
   const [selectedSpan, setSelectedSpan] = useState<FlameSpan | null>(null)
@@ -53,7 +52,6 @@ export function FlameGraphPanel({
       setSpans([])
       return
     }
-    if (!isExpanded) return
 
     let cancelled = false
     setIsLoadingSpans(true)
@@ -73,7 +71,7 @@ export function FlameGraphPanel({
     return () => {
       cancelled = true
     }
-  }, [isLoading, system, suite, resolvedDb, isExpanded])
+  }, [isLoading, system, suite, resolvedDb])
 
   const spanMetrics = useMemo((): SpanMetrics | null => {
     if (!selectedSpan || !resolvedDb) return null
@@ -83,12 +81,6 @@ export function FlameGraphPanel({
     )
     if (opSamples.length === 0) return null
 
-    // Find the run start time to map elapsed_s to the global timeline
-    // operation samples have elapsed_s relative to their run start
-    // spans have elapsed_s relative to the global (earliest run) start
-    // We need to find the offset between them
-
-    // Get the operation's start offset by finding the operation-level span
     const opSpan = spans.find(
       (s) => s.depth === "operation" && s.operation === selectedSpan.operation,
     )
@@ -121,65 +113,41 @@ export function FlameGraphPanel({
   }, [])
 
   return (
-    <PanelCard>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <SectionTitle as="h3">Execution flame graph</SectionTitle>
-          <BodyText className="mt-1 max-w-3xl">
-            Timeline of all operations, steps, and queries for a single database. Select a segment
-            to view resource metrics during that window.
-          </BodyText>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsExpanded((c) => !c)}
-          disabled={isLoading || databases.length === 0}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
-        >
-          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          {isExpanded ? "Hide" : "Show"}
-        </button>
+    <PanelCard className="flex h-[clamp(28rem,70vh,42rem)] min-h-0 min-w-0 flex-col p-3">
+      <div className="flex shrink-0 items-start justify-between gap-3">
+        <SectionTitle as="h3">Flame graph</SectionTitle>
+        {databases.length > 0 && !isLoading ? (
+          <DatabaseSelector databases={databases} selected={resolvedDb} onChange={setSelectedDb} />
+        ) : null}
       </div>
 
-      {!isExpanded ? null : (
-        <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
-          <div className="mb-4">
-            <DatabaseSelector
-              databases={databases}
-              selected={resolvedDb}
-              onChange={setSelectedDb}
-            />
+      <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
+        {isLoading || isLoadingSpans ? (
+          <div className="flex h-24 items-center justify-center text-xs text-slate-500">
+            Loading execution data…
           </div>
-
-          {isLoading ? (
-            <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-              Loading execution data...
-            </div>
-          ) : isLoadingSpans ? (
-            <div className="flex h-32 items-center justify-center text-sm text-slate-500">
-              Loading execution data...
-            </div>
-          ) : (
-            <div className="space-y-4">
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="shrink-0 overflow-x-auto overflow-y-hidden">
               <FlameGraph
                 spans={spans}
                 selectedSpan={selectedSpan}
                 onSelectSpan={handleSelectSpan}
               />
-
-              <div className="min-h-[4.5rem]">
-                {selectedSpan ? (
-                  <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
-                ) : spans.length > 0 ? (
-                  <div className="rounded-xl border border-dashed border-border-default bg-surface-primary/40 px-4 py-3 text-xs text-slate-500">
-                    Click a segment to view details and resource metrics.
-                  </div>
-                ) : null}
-              </div>
             </div>
-          )}
-        </div>
-      )}
+
+            <div className="flex min-h-0 flex-1 flex-col">
+              {selectedSpan ? (
+                <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
+              ) : spans.length > 0 ? (
+                <div className="flex min-h-[9rem] flex-1 items-center rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
+                  Click a segment to view details and resource metrics.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
     </PanelCard>
   )
 }
@@ -193,41 +161,39 @@ function SelectedSpanDetail({ span, metrics }: SelectedSpanDetailProps) {
   const label = span.depth === "operation" ? span.operation : (span.query_name ?? span.step_name)
 
   return (
-    <div className="rounded-xl border border-border-default bg-surface-primary/60 p-4">
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-default bg-surface-primary/60 p-3">
+      <div className="flex shrink-0 flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
           <MetaLabel>
             {span.depth === "operation" ? "Operation" : span.depth === "step" ? "Step" : "Query"}
           </MetaLabel>
-          <p className="mt-0.5 text-sm font-medium text-slate-200">
+          <p className="mt-0.5 text-xs font-medium text-slate-200">
             {label}
             {span.iteration !== null && span.iteration > 1 ? (
-              <span className="ml-1.5 text-slate-500">#{span.iteration}</span>
+              <span className="ml-1 text-slate-500">#{span.iteration}</span>
             ) : null}
           </p>
-          {span.query_sql ? (
-            <div className="panel-scrollbar mt-2 max-h-56 overflow-auto rounded-lg border border-border-default bg-surface-inset">
-              <SqlCodeView code={span.query_sql} />
-            </div>
-          ) : null}
         </div>
 
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-3">
           <StatMini label="Duration" value={formatDurationSeconds(span.duration_s)} />
           {metrics ? (
             <>
               <StatMini label="Avg CPU" value={formatCpuPercent(metrics.avgCpu)} />
-              <StatMini label="Avg Memory" value={formatMegabytes(metrics.avgMem)} />
+              <StatMini label="Avg Mem" value={formatMegabytes(metrics.avgMem)} />
               <StatMini label="Avg Disk" value={formatMegabytes(metrics.avgDisk)} />
-              <StatMini label="Samples" value={String(metrics.sampleCount)} />
             </>
           ) : (
-            <span className="self-center text-xs text-slate-500">
-              No resource metrics in this window
-            </span>
+            <span className="self-center text-[0.65rem] text-slate-500">No metrics</span>
           )}
         </div>
       </div>
+
+      {span.query_sql ? (
+        <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-md border border-border-default bg-surface-inset">
+          <SqlCodeView code={span.query_sql} wrapLines fillHeight />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -253,58 +219,14 @@ function DatabaseSelector({ databases, selected, onChange }: DatabaseSelectorPro
   const value = selected ?? databases[0]!
 
   return (
-    <Select.Root value={value} onValueChange={onChange}>
-      <Select.Trigger
-        aria-label="Database"
-        className="inline-flex min-w-0 items-center justify-between gap-1.5 rounded-full bg-surface-raised/92 py-1 pr-2 pl-1.5 text-left shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] transition outline-none hover:bg-surface-raised hover:shadow-[inset_0_0_0_1px_rgba(120,154,214,0.18)] focus:shadow-[inset_0_0_0_1px_rgba(90,151,255,0.52),0_0_0_1px_rgba(90,151,255,0.2)]"
-      >
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400/12 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(110,231,183,0.14)]">
-            <Database className="h-3 w-3" strokeWidth={1.8} />
-          </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
-            <span className="shrink-0 text-[0.6rem] font-semibold tracking-[0.18em] text-slate-500 uppercase">
-              Database
-            </span>
-            <span className="h-3 w-px shrink-0 bg-slate-700/50" />
-            <Select.Value className="block min-w-0 flex-1 truncate text-[0.8125rem] font-medium whitespace-nowrap text-slate-100" />
-          </span>
-        </span>
-        <Select.Icon className="shrink-0 text-slate-500">
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </Select.Icon>
-      </Select.Trigger>
-
-      <Select.Portal>
-        <Select.Content
-          position="popper"
-          sideOffset={10}
-          className="z-50 max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-border-default bg-surface-primary/98 p-2 text-slate-100 shadow-2xl shadow-black/40 backdrop-blur data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1"
-        >
-          <Select.ScrollUpButton className="flex h-8 items-center justify-center text-slate-500">
-            <ChevronUp className="h-4 w-4" strokeWidth={1.8} />
-          </Select.ScrollUpButton>
-          <Select.Viewport className="space-y-1">
-            {databases.map((db) => (
-              <Select.Item
-                key={db}
-                value={db}
-                className="relative flex cursor-default items-center rounded-xl py-2.5 pr-8 pl-3 text-[0.8125rem] font-medium text-slate-200 transition outline-none data-[highlighted]:bg-emerald-500/10 data-[highlighted]:text-emerald-100 data-[state=checked]:bg-surface-raised data-[state=checked]:text-slate-50"
-              >
-                <span className="min-w-0 truncate">
-                  <Select.ItemText>{db}</Select.ItemText>
-                </span>
-                <Select.ItemIndicator className="absolute right-3 inline-flex items-center text-emerald-300">
-                  <Check className="h-3.5 w-3.5" strokeWidth={2} />
-                </Select.ItemIndicator>
-              </Select.Item>
-            ))}
-          </Select.Viewport>
-          <Select.ScrollDownButton className="flex h-8 items-center justify-center text-slate-500">
-            <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
-          </Select.ScrollDownButton>
-        </Select.Content>
-      </Select.Portal>
-    </Select.Root>
+    <ControlSelect
+      ariaLabel="Database"
+      label="Database"
+      value={value}
+      onChange={onChange}
+      options={databases.map((db) => ({ value: db, label: db }))}
+      icon={<Database className="h-3 w-3" strokeWidth={1.8} />}
+      labelMode="always"
+    />
   )
 }

@@ -11,7 +11,6 @@ import {
   fetchQuerySteps,
   fetchQuerySummaries,
   fetchRunSummaries,
-  fetchStepMetricAvailability,
 } from "../lib/queries"
 import type { SuiteConfig } from "../lib/suiteConfig"
 import type {
@@ -22,11 +21,11 @@ import type {
   QueryStep,
   QuerySummary,
   RunSummary,
-  StepMetricAvailability,
 } from "../lib/types"
 
 export interface SuiteDataState {
   loading: boolean
+  deferredLoading: boolean
   error: string | null
   runSummaries: RunSummary[]
   operationSummaries: OperationSummary[]
@@ -36,13 +35,13 @@ export interface SuiteDataState {
   insertSteps: InsertStep[]
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
-  stepMetricAvailability: StepMetricAvailability[]
   queriesManifest: QueriesManifest | null
 }
 
 function createInitialState(): SuiteDataState {
   return {
     loading: true,
+    deferredLoading: true,
     error: null,
     runSummaries: [],
     operationSummaries: [],
@@ -52,7 +51,6 @@ function createInitialState(): SuiteDataState {
     insertSteps: [],
     querySteps: [],
     mutateSteps: [],
-    stepMetricAvailability: [],
     queriesManifest: null,
   }
 }
@@ -95,48 +93,28 @@ export function useSuiteData(
 
     const hasMutate = suiteConfig.operations.includes("mutate")
 
+    // Phase 1: critical data for above-fold panels
     Promise.all([
       fetchRunSummaries(system, suite),
       fetchOperationSummaries(system, suite),
-      fetchMetricSamples(system, suite),
       fetchQuerySummaries(system, suite),
       hasMutate ? fetchMutateSummaries(system, suite) : Promise.resolve([] as QuerySummary[]),
-      fetchInsertSteps(system, suite),
-      fetchQuerySteps(system, suite),
-      hasMutate ? fetchMutateSteps(system, suite) : Promise.resolve([] as QueryStep[]),
-      fetchStepMetricAvailability(system, suite),
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
-        ([
-          runSummaries,
-          operationSummaries,
-          metricSamples,
-          querySummaries,
-          mutateSummaries,
-          insertSteps,
-          querySteps,
-          mutateSteps,
-          stepMetricAvailability,
-          queriesManifest,
-        ]) => {
+        ([runSummaries, operationSummaries, querySummaries, mutateSummaries, queriesManifest]) => {
           if (cancelled) return
 
           startTransition(() => {
-            setState({
+            setState((prev) => ({
+              ...prev,
               loading: false,
-              error: null,
               runSummaries,
               operationSummaries,
-              metricSamples,
               querySummaries,
               mutateSummaries,
-              insertSteps,
-              querySteps,
-              mutateSteps,
-              stepMetricAvailability,
               queriesManifest,
-            })
+            }))
           })
         },
       )
@@ -145,19 +123,43 @@ export function useSuiteData(
 
         startTransition(() => {
           setState({
+            ...createInitialState(),
             loading: false,
+            deferredLoading: false,
             error: String(nextError),
-            runSummaries: [],
-            operationSummaries: [],
-            metricSamples: [],
-            querySummaries: [],
-            mutateSummaries: [],
-            insertSteps: [],
-            querySteps: [],
-            mutateSteps: [],
-            stepMetricAvailability: [],
-            queriesManifest: null,
           })
+        })
+      })
+
+    // Phase 2: deferred data for below-fold panels (timeline, insert perf, resource trends)
+    Promise.all([
+      fetchMetricSamples(system, suite),
+      fetchInsertSteps(system, suite),
+      fetchQuerySteps(system, suite),
+      hasMutate ? fetchMutateSteps(system, suite) : Promise.resolve([] as QueryStep[]),
+    ])
+      .then(([metricSamples, insertSteps, querySteps, mutateSteps]) => {
+        if (cancelled) return
+
+        startTransition(() => {
+          setState((prev) => ({
+            ...prev,
+            deferredLoading: false,
+            metricSamples,
+            insertSteps,
+            querySteps,
+            mutateSteps,
+          }))
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+
+        startTransition(() => {
+          setState((prev) => ({
+            ...prev,
+            deferredLoading: false,
+          }))
         })
       })
 

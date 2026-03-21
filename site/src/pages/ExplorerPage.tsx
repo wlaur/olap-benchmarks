@@ -1,12 +1,29 @@
-import { useMemo } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 
-import { FlameGraphPanel } from "../components/explorer/FlameGraphPanel"
+import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
+import { OperationSelector } from "../components/explorer/OperationSelector"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
-import { ResourceTrendPanel } from "../components/explorer/ResourceTrendPanel"
+
+const QueryHeatmapPanel = lazy(() =>
+  import("../components/explorer/QueryHeatmapPanel").then((m) => ({
+    default: m.QueryHeatmapPanel,
+  })),
+)
+const ResourceTrendPanel = lazy(() =>
+  import("../components/explorer/ResourceTrendPanel").then((m) => ({
+    default: m.ResourceTrendPanel,
+  })),
+)
+const FlameGraphPanel = lazy(() =>
+  import("../components/explorer/FlameGraphPanel").then((m) => ({ default: m.FlameGraphPanel })),
+)
+import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
+import { useSelectionState } from "../hooks/useSelectionState"
 import { useSuiteData } from "../hooks/useSuiteData"
 import type { BenchmarkSuiteId } from "../lib/benchmarks"
+import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
 import { getSuiteConfig } from "../lib/suiteConfig"
 
@@ -18,6 +35,9 @@ interface ExplorerPageProps {
 
 export function ExplorerPage({ system, suiteId, isSystemLoading = false }: ExplorerPageProps) {
   const suiteConfig = useMemo(() => getSuiteConfig(suiteId), [suiteId])
+  const hasMutateOperation = suiteConfig.operations.includes("mutate")
+  const [selectedOperation, setSelectedOperation] = useState<"select" | "mutate">("select")
+  const selection = useSelectionState()
 
   const {
     state,
@@ -33,10 +53,17 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     toggleDatabase,
   } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
 
-  const databaseColors = getDatabaseColors(databases)
-  const showInsertPerformancePanel = isLoading || state.insertSteps.length > 0
-  const showFlameGraphPanel = isLoading || system !== null
-  const showResourceTrendPanel = isLoading || state.metricSamples.length > 0
+  const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
+  const deferredLoading = isLoading || state.deferredLoading
+  const showInsertPerformancePanel = deferredLoading || state.insertSteps.length > 0
+  const showFlameGraphPanel = deferredLoading || system !== null
+  const showResourceTrendPanel = deferredLoading || state.metricSamples.length > 0
+
+  useEffect(() => {
+    if (!hasMutateOperation) {
+      setSelectedOperation("select")
+    }
+  }, [hasMutateOperation])
 
   if (!isLoading && state.error) {
     return (
@@ -59,61 +86,127 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   }
 
   return (
-    <section className="flex min-h-full w-full flex-col gap-4 pb-4">
-      <OverviewPanel
-        suiteConfig={suiteConfig}
-        databases={databases}
-        includedDatabases={includedDatabases}
-        operationSummaries={filteredOperationSummaries}
-        isLoading={isLoading}
-        onSelectAll={() => setSelectedDatabases(databases)}
-        onToggleDatabase={toggleDatabase}
-      />
+    <section className="min-h-full w-full pb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
+          Databases
+        </span>
+        {isLoading ? (
+          <FilterChipsSkeleton />
+        ) : (
+          <DatabaseMultiSelect
+            databases={databases}
+            selectedDatabases={includedDatabases}
+            databaseColors={databaseColors}
+            onSelectAll={() => setSelectedDatabases(databases)}
+            onToggleDatabase={toggleDatabase}
+          />
+        )}
+      </div>
 
-      {showInsertPerformancePanel ? (
-        <InsertPerformancePanel
-          insertSteps={state.insertSteps}
-          metricSamples={state.metricSamples}
-          databases={includedDatabases}
-          databaseColors={databaseColors}
-          isLoading={isLoading}
-        />
-      ) : null}
+      <div className="space-y-4">
+        <div
+          className={cn(
+            "grid items-stretch gap-4",
+            showInsertPerformancePanel
+              ? "xl:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.5fr)]"
+              : "grid-cols-1",
+          )}
+        >
+          <OverviewPanel
+            suiteConfig={suiteConfig}
+            databases={databases}
+            includedDatabases={includedDatabases}
+            operationSummaries={filteredOperationSummaries}
+            databaseColors={databaseColors}
+            isLoading={isLoading}
+          />
+          {showInsertPerformancePanel ? (
+            <InsertPerformancePanel
+              insertSteps={state.insertSteps}
+              metricSamples={state.metricSamples}
+              databases={includedDatabases}
+              databaseColors={databaseColors}
+              isLoading={deferredLoading}
+            />
+          ) : null}
+        </div>
 
-      <OperationTabs
-        suiteConfig={suiteConfig}
-        querySummaries={filteredQuerySummaries}
-        mutateSummaries={filteredMutateSummaries}
-        querySteps={filteredQuerySteps}
-        mutateSteps={filteredMutateSteps}
-        metricSamples={state.metricSamples}
-        databases={databases}
-        includedDatabases={includedDatabases}
-        queriesManifest={state.queriesManifest}
-        isLoading={isLoading}
-      />
+        <div className="space-y-4">
+          {hasMutateOperation ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-400 uppercase">
+                Query Analysis
+              </span>
+              <OperationSelector operation={selectedOperation} onChange={setSelectedOperation} />
+            </div>
+          ) : null}
 
-      {showFlameGraphPanel ? (
-        <FlameGraphPanel
-          system={system}
-          suite={suiteId}
-          databases={includedDatabases}
-          metricSamples={state.metricSamples}
-          isLoading={isLoading}
-        />
-      ) : null}
+          <OperationTabs
+            activeOperation={selectedOperation}
+            suiteConfig={suiteConfig}
+            querySummaries={filteredQuerySummaries}
+            mutateSummaries={filteredMutateSummaries}
+            querySteps={filteredQuerySteps}
+            mutateSteps={filteredMutateSteps}
+            databases={databases}
+            includedDatabases={includedDatabases}
+            queriesManifest={state.queriesManifest}
+            selection={selection}
+            isLoading={isLoading}
+            isTimelineLoading={deferredLoading}
+          />
 
-      {showResourceTrendPanel ? (
-        <ResourceTrendPanel
-          suiteConfig={suiteConfig}
-          metricSamples={state.metricSamples}
-          insertSteps={state.insertSteps}
-          querySteps={filteredQuerySteps}
-          mutateSteps={filteredMutateSteps}
-          databases={includedDatabases}
-          isLoading={isLoading}
-        />
-      ) : null}
+          <Suspense>
+            <QueryHeatmapPanel
+              suiteConfig={suiteConfig}
+              querySummaries={
+                selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
+              }
+              includedDatabases={includedDatabases}
+              databaseColors={databaseColors}
+              selection={selection}
+              isLoading={isLoading}
+            />
+          </Suspense>
+
+          {showResourceTrendPanel || showFlameGraphPanel ? (
+            <Suspense>
+              <div
+                className={cn(
+                  "grid items-stretch gap-4",
+                  showResourceTrendPanel && showFlameGraphPanel
+                    ? "xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]"
+                    : "grid-cols-1",
+                )}
+              >
+                {showResourceTrendPanel ? (
+                  <ResourceTrendPanel
+                    selectedOperation={selectedOperation}
+                    suiteConfig={suiteConfig}
+                    metricSamples={state.metricSamples}
+                    insertSteps={state.insertSteps}
+                    querySteps={filteredQuerySteps}
+                    mutateSteps={filteredMutateSteps}
+                    databases={includedDatabases}
+                    isLoading={deferredLoading}
+                  />
+                ) : null}
+
+                {showFlameGraphPanel ? (
+                  <FlameGraphPanel
+                    system={system}
+                    suite={suiteId}
+                    databases={includedDatabases}
+                    metricSamples={state.metricSamples}
+                    isLoading={deferredLoading}
+                  />
+                ) : null}
+              </div>
+            </Suspense>
+          ) : null}
+        </div>
+      </div>
     </section>
   )
 }

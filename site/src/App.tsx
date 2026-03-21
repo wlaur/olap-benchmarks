@@ -1,11 +1,11 @@
-import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
+import { useEffect } from "react"
+import { Navigate, Route, Routes, useParams } from "react-router-dom"
 
-import { SuiteSelector } from "./components/filters/SuiteSelector"
 import { Navbar } from "./components/layout/Navbar"
-import { useSystem } from "./features/system/SystemContext"
 import { defaultBenchmarkId, type BenchmarkSuiteId } from "./lib/benchmarks"
 import { ExplorerPage } from "./pages/ExplorerPage"
 import { HomePage } from "./pages/HomePage"
+import { useAppStore } from "./stores/useAppStore"
 
 function ExplorerRoute({
   selectedSystem,
@@ -15,21 +15,24 @@ function ExplorerRoute({
   isSystemLoading: boolean
 }) {
   const { suiteId: rawId } = useParams<{ suiteId: string }>()
-  const navigate = useNavigate()
   const suiteId = (rawId ?? defaultBenchmarkId) as BenchmarkSuiteId
 
   return (
-    <>
-      <div className="mb-4 flex items-center gap-3">
-        <SuiteSelector selected={suiteId} onChange={(next) => navigate(`/explorer/${next}`)} />
-      </div>
-      <ExplorerPage system={selectedSystem} suiteId={suiteId} isSystemLoading={isSystemLoading} />
-    </>
+    <ExplorerPage system={selectedSystem} suiteId={suiteId} isSystemLoading={isSystemLoading} />
   )
 }
 
 export function App() {
-  const { systems, selectedSystem, setSelectedSystem, loading, error } = useSystem()
+  const systems = useAppStore((s) => s.systems)
+  const selectedSystem = useAppStore((s) => s.selectedSystem)
+  const setSelectedSystem = useAppStore((s) => s.setSelectedSystem)
+  const loading = useAppStore((s) => s.systemLoading)
+  const error = useAppStore((s) => s.systemError)
+  const loadSystems = useAppStore((s) => s.loadSystems)
+
+  useEffect(() => {
+    loadSystems()
+  }, [loadSystems])
 
   const navbar = (
     <Navbar
@@ -84,8 +87,8 @@ function ExplorerMain({ selectedSystem, loading, error }: ExplorerMainProps) {
   )
 
   return (
-    <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 lg:py-8">
-      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col">{content}</div>
+    <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
+      <div className="flex min-h-0 w-full flex-1 flex-col">{content}</div>
     </main>
   )
 }

@@ -12,7 +12,6 @@ import type {
   QueryStep,
   QuerySummary,
   RunSummary,
-  StepMetricAvailability,
 } from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -508,103 +507,6 @@ export async function fetchMutateSteps(
     .where("run_step.iteration", "is not", null)
     .orderBy("latest_runs.db")
     .orderBy("run_step.started_at")
-    .execute()
-}
-
-export async function fetchStepMetricAvailability(
-  system: string,
-  suite: BenchmarkSuiteId,
-): Promise<StepMetricAvailability[]> {
-  const db = await getKyselyDb()
-
-  return db
-    .with("latest_runs", (qb) =>
-      qb
-        .selectFrom("run")
-        .select((eb) => [
-          eb.ref("run.id").as("run_id"),
-          eb.ref("run.db").as("db"),
-          eb.ref("run.operation").as("operation"),
-          sql<number>`row_number() over (
-            partition by ${eb.ref("run.db")}, ${eb.ref("run.operation")}
-            order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
-          )`.as("run_rank"),
-        ])
-        .where("run.suite", "=", suite)
-        .where("run.system", "=", system)
-        .where("run.status", "=", "completed")
-        .where("run.finished_at", "is not", null)
-        .where("run.operation", "in", ["populate", "mutate", "select"]),
-    )
-    .with("step_windows", (qb) => {
-      const insertWindows = qb
-        .selectFrom("run_step")
-        .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
-        .select((eb) => [
-          eb.ref("latest_runs.db").as("db"),
-          eb.ref("latest_runs.operation").$castTo<BenchmarkOperation>().as("operation"),
-          eb.ref("run_step.table_name").$notNull().as("step_name"),
-          eb.ref("latest_runs.run_id").as("run_id"),
-          eb.fn.min("run_step.started_at").as("window_start"),
-          eb.fn.max("run_step.finished_at").$notNull().as("window_end"),
-        ])
-        .where("latest_runs.run_rank", "=", 1)
-        .where("run_step.status", "=", "completed")
-        .where("run_step.finished_at", "is not", null)
-        .where("run_step.step_type", "=", "phase")
-        .where("run_step.step_name", "=", "insert")
-        .where("run_step.table_name", "is not", null)
-        .groupBy([
-          "latest_runs.db",
-          "latest_runs.operation",
-          "run_step.table_name",
-          "latest_runs.run_id",
-        ])
-
-      const queryAndMutationWindows = qb
-        .selectFrom("run_step")
-        .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
-        .select((eb) => [
-          eb.ref("latest_runs.db").as("db"),
-          eb.ref("latest_runs.operation").$castTo<BenchmarkOperation>().as("operation"),
-          eb.ref("run_step.query_name").$notNull().as("step_name"),
-          eb.ref("latest_runs.run_id").as("run_id"),
-          eb.fn.min("run_step.started_at").as("window_start"),
-          eb.fn.max("run_step.finished_at").$notNull().as("window_end"),
-        ])
-        .where("latest_runs.run_rank", "=", 1)
-        .where("run_step.status", "=", "completed")
-        .where("run_step.finished_at", "is not", null)
-        .where("run_step.step_type", "in", ["query", "mutation"])
-        .where("run_step.query_name", "is not", null)
-        .groupBy([
-          "latest_runs.db",
-          "latest_runs.operation",
-          "run_step.query_name",
-          "latest_runs.run_id",
-        ])
-
-      return insertWindows.unionAll(queryAndMutationWindows)
-    })
-    .selectFrom("step_windows")
-    .leftJoin("run_metric", (join) =>
-      join
-        .onRef("run_metric.run_id", "=", "step_windows.run_id")
-        .onRef("run_metric.time", ">=", "step_windows.window_start")
-        .onRef("run_metric.time", "<=", "step_windows.window_end"),
-    )
-    .select((eb) => [
-      eb.ref("step_windows.db").as("db"),
-      eb.ref("step_windows.operation").as("operation"),
-      eb.ref("step_windows.step_name").as("step_name"),
-    ])
-    .groupBy([
-      "step_windows.db",
-      "step_windows.operation",
-      "step_windows.step_name",
-      "step_windows.run_id",
-    ])
-    .having((eb) => eb.fn.count<number>("run_metric.run_id"), ">=", 2)
     .execute()
 }
 

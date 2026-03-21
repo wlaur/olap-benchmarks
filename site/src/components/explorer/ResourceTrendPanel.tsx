@@ -1,5 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   CartesianGrid,
   Line,
@@ -19,11 +18,13 @@ import {
 } from "../../lib/metricFormat"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
+import { ControlChip, QuietButton } from "../controls/Control"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
-import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+import { MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
+  selectedOperation?: "select" | "mutate"
   suiteConfig: SuiteConfig
   metricSamples: MetricSample[]
   insertSteps: InsertStep[]
@@ -77,6 +78,7 @@ const MAX_COLLAPSED_STEP_OPTIONS = 12
 const MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS = 8
 
 export function ResourceTrendPanel({
+  selectedOperation,
   suiteConfig,
   metricSamples,
   insertSteps,
@@ -85,30 +87,38 @@ export function ResourceTrendPanel({
   databases,
   isLoading = false,
 }: ResourceTrendPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [selectedOperation, setSelectedOperation] = useState<BenchmarkOperation>("select")
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [showAllSteps, setShowAllSteps] = useState(false)
   const [showAllUnavailableSteps, setShowAllUnavailableSteps] = useState(false)
+  const resolvedOperation: BenchmarkOperation =
+    selectedOperation === "mutate" && suiteConfig.operations.includes("mutate")
+      ? "mutate"
+      : "select"
 
   const databaseColors = getDatabaseColors(databases)
 
+  useEffect(() => {
+    setSelectedStep(null)
+    setShowAllSteps(false)
+    setShowAllUnavailableSteps(false)
+  }, [resolvedOperation])
+
   const allStepOptions = useMemo(
-    () => getStepOptions(selectedOperation, insertSteps, querySteps, mutateSteps, databases),
-    [selectedOperation, insertSteps, querySteps, mutateSteps, databases],
+    () => getStepOptions(resolvedOperation, insertSteps, querySteps, mutateSteps, databases),
+    [resolvedOperation, insertSteps, querySteps, mutateSteps, databases],
   )
 
   const availableStepWindows = useMemo(
     () =>
       getAvailableStepWindows(
-        selectedOperation,
+        resolvedOperation,
         metricSamples,
         insertSteps,
         querySteps,
         mutateSteps,
         databases,
       ),
-    [selectedOperation, metricSamples, insertSteps, querySteps, mutateSteps, databases],
+    [resolvedOperation, metricSamples, insertSteps, querySteps, mutateSteps, databases],
   )
 
   const stepOptions = useMemo(
@@ -154,8 +164,8 @@ export function ResourceTrendPanel({
 
   const chartData = useMemo(() => {
     if (isTooFast || !resolvedStep) return { cpu_percent: [], mem_mb: [], disk_mb: [] }
-    return buildTrendChartData(metricSamples, selectedOperation, stepTimeWindows)
-  }, [metricSamples, selectedOperation, stepTimeWindows, isTooFast, resolvedStep])
+    return buildTrendChartData(metricSamples, resolvedOperation, stepTimeWindows)
+  }, [metricSamples, resolvedOperation, stepTimeWindows, isTooFast, resolvedStep])
 
   const maxElapsed = useMemo(
     () =>
@@ -170,167 +180,126 @@ export function ResourceTrendPanel({
     !isTooFast &&
     Math.max(chartData.cpu_percent.length, chartData.mem_mb.length, chartData.disk_mb.length) > 1
 
-  const availableOperations = suiteConfig.operations
-
   const hasData = metricSamples.length > 0
 
   return (
-    <PanelCard>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <SectionTitle as="h3">Resource trends</SectionTitle>
-          <BodyText className="mt-1 max-w-3xl">
-            CPU, memory, and disk usage during a specific step, normalized so each database starts
-            at elapsed 0. Select an operation and step to compare resource profiles.
-          </BodyText>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsExpanded((current) => !current)}
-          disabled={isLoading || !hasData}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border-default bg-surface-inset px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
-        >
-          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          {isExpanded ? "Hide" : "Show"}
-        </button>
-      </div>
+    <PanelCard className="flex h-full min-h-0 min-w-0 flex-col p-3">
+      <SectionTitle as="h3" className="shrink-0">
+        Resource trends
+      </SectionTitle>
 
-      {!isExpanded ? null : isLoading ? (
-        <div className="mt-4 rounded-2xl border border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
-          Loading resource metrics...
+      {isLoading ? (
+        <div className="mt-2 rounded-lg border border-border-default bg-surface-inset px-4 py-6 text-xs text-slate-500">
+          Loading resource metrics…
         </div>
       ) : !hasData ? (
-        <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+        <div className="mt-2 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-6 text-xs text-slate-500">
           No resource metrics were recorded for the selected databases.
         </div>
       ) : (
-        <div className="mt-5 rounded-2xl border border-border-default bg-surface-inset p-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
-            <div className="min-w-0 space-y-3">
-              <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
-                {availableOperations.map((operation) => (
-                  <button
-                    key={operation}
-                    type="button"
-                    onClick={() => {
-                      setSelectedOperation(operation)
-                      setSelectedStep(null)
-                      setShowAllSteps(false)
-                      setShowAllUnavailableSteps(false)
-                    }}
-                    className={
-                      selectedOperation === operation
-                        ? "rounded-full bg-accent-400/10 px-3 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
-                        : "rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                    }
-                  >
-                    {toTitleCase(operation)}
-                  </button>
-                ))}
-              </div>
-
-              {stepOptions.length > 0 ? (
-                <div className="space-y-2">
-                  <div
-                    className={`panel-scrollbar overflow-y-auto pr-1 ${
-                      showAllSteps ? "max-h-56" : "max-h-28"
-                    }`}
-                  >
-                    <div className="flex flex-wrap gap-1.5">
-                      {visibleStepOptions.map((step) => (
-                        <button
-                          key={step.value}
-                          type="button"
-                          onClick={() => setSelectedStep(step.value)}
-                          className={
-                            resolvedStep === step.value
-                              ? "rounded-full bg-accent-400/10 px-2.5 py-1 text-xs font-medium text-accent-200 shadow-[inset_0_0_0_1px_rgba(108,142,239,0.4)]"
-                              : "rounded-full border border-border-default px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                          }
-                        >
-                          {step.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {stepOptions.length > MAX_COLLAPSED_STEP_OPTIONS ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllSteps((current) => !current)}
-                      className="rounded-full border border-border-default bg-surface-primary/55 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
-                    >
-                      {showAllSteps
-                        ? "Show fewer steps"
-                        : `Show ${stepOptions.length - visibleStepOptions.length} more steps`}
-                    </button>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500">No steps found for this operation.</p>
-              )}
+        <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
+          <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <MetaLabel>{toTitleCase(resolvedOperation)} metrics</MetaLabel>
             </div>
-            <div className="flex min-w-0 flex-col gap-2 xl:items-end">
+
+            <div className="min-w-0">
               <DatabaseLegend databases={databases} databaseColors={databaseColors} />
-              {unavailableStepOptions.length > 0 ? (
-                <div className="flex max-w-full min-w-0 flex-col gap-1.5 xl:max-w-[22rem] xl:items-end">
-                  <MetaLabel>No Metrics</MetaLabel>
-                  <div
-                    className={`panel-scrollbar overflow-y-auto pr-1 ${
-                      showAllUnavailableSteps ? "max-h-52" : "max-h-28"
-                    }`}
-                  >
-                    <div className="flex flex-wrap gap-1.5 xl:justify-end">
-                      {visibleUnavailableStepOptions.map((step) => (
-                        <span
-                          key={step.value}
-                          className="rounded-full border border-dashed border-border-default bg-surface-primary/45 px-2.5 py-1 text-xs font-medium text-slate-500"
-                          aria-disabled="true"
-                        >
-                          {step.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  {unavailableStepOptions.length > MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllUnavailableSteps((current) => !current)}
-                      className="self-start rounded-full border border-border-default bg-surface-primary/55 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100 xl:self-end"
-                    >
-                      {showAllUnavailableSteps
-                        ? "Show fewer unavailable"
-                        : `Show ${unavailableStepOptions.length - visibleUnavailableStepOptions.length} more unavailable`}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           </div>
 
+          {stepOptions.length > 0 ? (
+            <div className="mt-3 shrink-0">
+              <div className="space-y-2">
+                <MetaLabel>Tracked Step</MetaLabel>
+                <div
+                  className={`panel-scrollbar overflow-y-auto pr-1 ${
+                    showAllSteps ? "max-h-56" : "max-h-28"
+                  }`}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleStepOptions.map((step) => (
+                      <ControlChip
+                        key={step.value}
+                        onClick={() => setSelectedStep(step.value)}
+                        selected={resolvedStep === step.value}
+                      >
+                        {step.label}
+                      </ControlChip>
+                    ))}
+                  </div>
+                </div>
+                {stepOptions.length > MAX_COLLAPSED_STEP_OPTIONS ? (
+                  <QuietButton onClick={() => setShowAllSteps((current) => !current)}>
+                    {showAllSteps
+                      ? "Show fewer steps"
+                      : `Show ${stepOptions.length - visibleStepOptions.length} more steps`}
+                  </QuietButton>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">No steps found for this operation.</p>
+          )}
+
+          {unavailableStepOptions.length > 0 ? (
+            <div className="mt-3 shrink-0">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <MetaLabel>No Metrics</MetaLabel>
+                  {unavailableStepOptions.length > MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS ? (
+                    <QuietButton onClick={() => setShowAllUnavailableSteps((current) => !current)}>
+                      {showAllUnavailableSteps
+                        ? "Show fewer unavailable"
+                        : `Show ${unavailableStepOptions.length - visibleUnavailableStepOptions.length} more unavailable`}
+                    </QuietButton>
+                  ) : null}
+                </div>
+                <div
+                  className={`panel-scrollbar overflow-y-auto pr-1 ${
+                    showAllUnavailableSteps ? "max-h-52" : "max-h-28"
+                  }`}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleUnavailableStepOptions.map((step) => (
+                      <span
+                        key={step.value}
+                        className="rounded-full border border-dashed border-border-default bg-surface-primary/45 px-2.5 py-1 text-xs font-medium text-slate-500"
+                        aria-disabled="true"
+                      >
+                        {step.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {resolvedStep === null ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
+            <div className="mt-3 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-5 text-xs text-slate-500">
               No steps available for the selected operation.
             </div>
           ) : isTooFast || !hasSufficientData ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-border-default bg-surface-inset px-6 py-8 text-sm text-slate-500">
-              Step too fast for resource sampling (under {METRIC_SAMPLE_RATE_S}s). Resource metrics
-              are sampled every {METRIC_SAMPLE_RATE_S} seconds, so steps shorter than this threshold
-              produce no data points.
+            <div className="mt-3 rounded-lg border border-dashed border-border-default bg-surface-inset px-4 py-5 text-xs text-slate-500">
+              Step too fast for resource sampling (under {METRIC_SAMPLE_RATE_S}s).
             </div>
           ) : (
-            <div className="mt-4 grid gap-3">
-              {METRIC_CONFIGS.map((metric) => (
-                <TrendChart
-                  key={metric.key}
-                  label={metric.label}
-                  data={chartData[metric.key]}
-                  databases={databases}
-                  databaseColors={databaseColors}
-                  formatter={metric.formatter}
-                  scaleBuilder={metric.scaleBuilder}
-                  maxElapsed={maxElapsed}
-                />
-              ))}
+            <div className="panel-scrollbar mt-3 min-h-0 flex-1 overflow-auto pr-1">
+              <div className="grid gap-2">
+                {METRIC_CONFIGS.map((metric) => (
+                  <TrendChart
+                    key={metric.key}
+                    label={metric.label}
+                    data={chartData[metric.key]}
+                    databases={databases}
+                    databaseColors={databaseColors}
+                    formatter={metric.formatter}
+                    scaleBuilder={metric.scaleBuilder}
+                    maxElapsed={maxElapsed}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -369,9 +338,9 @@ function TrendChart({
   const xTicks = buildEvenElapsedTicks(maxElapsed)
 
   return (
-    <div className="rounded-2xl border border-border-default bg-surface-primary/60 p-3">
-      <p className="mb-3 text-sm font-medium text-slate-200">{label}</p>
-      <div className="h-40">
+    <div className="rounded-lg border border-border-default bg-surface-primary/60 p-2.5">
+      <p className="mb-2 text-xs font-semibold text-slate-200">{label}</p>
+      <div className="h-36">
         <ResponsiveContainer
           width="100%"
           height="100%"
@@ -388,7 +357,7 @@ function TrendChart({
               dataKey="elapsed_s"
               domain={[0, maxElapsed]}
               ticks={xTicks}
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={formatElapsedLabel}
@@ -397,14 +366,14 @@ function TrendChart({
               domain={yDomain}
               ticks={yTicks}
               width={70}
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickFormatter={tickFormatter}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#161a23",
+                backgroundColor: "#1e2330",
                 border: "1px solid rgba(148, 163, 184, 0.12)",
                 borderRadius: 12,
                 color: "#e2e8f0",

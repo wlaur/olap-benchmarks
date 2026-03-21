@@ -6,6 +6,7 @@ import pytest
 
 from .. import __main__
 from ..__main__ import app
+from ..settings import DatabaseArg, DatabaseName, SuiteArg, SuiteName
 
 
 def test_cli_registers_install_completion_command() -> None:
@@ -120,6 +121,9 @@ def test_delete_cmd_force_skips_confirmation(
 def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    class DummySuite:
+        supported_operations = ("populate", "mutate", "select")
+
     class DummyWriter:
         def __init__(self) -> None:
             self.queue = object()
@@ -132,6 +136,7 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     class DummyDatabase:
         def __init__(self) -> None:
             self._current_suite = None
+            self.benchmarks = {"time_series": DummySuite()}
 
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
@@ -182,3 +187,66 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
 
     assert writer.closed is True
     assert failed_revisions == ["candidate"]
+
+
+def test_benchmark_all_uses_suite_supported_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyClickbenchSuite:
+        supported_operations = ("populate", "select")
+
+    class DummyWriter:
+        def __init__(self) -> None:
+            self.queue = object()
+            self.result_queue = object()
+
+        def close(self) -> None:
+            return None
+
+    class DummyDatabase:
+        def __init__(self) -> None:
+            self._current_suite = None
+            self.benchmarks = {"clickbench": DummyClickbenchSuite()}
+            self.operations: list[tuple[str, str]] = []
+
+        def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def benchmark(self, suite: str, operation: str) -> None:
+            self.operations.append((suite, operation))
+
+    writer = DummyWriter()
+    db_instance = DummyDatabase()
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["clickhouse"]
+
+    def fake_check_input_data(_suite_name: SuiteName) -> None:
+        return None
+
+    def fake_start_writer_process(revision: str = "default") -> DummyWriter:
+        return writer
+
+    def fake_get_dbs() -> dict[DatabaseName, DummyDatabase]:
+        return {"clickhouse": db_instance}
+
+    def fake_start_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_stop_db(_db: DummyDatabase) -> None:
+        return None
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
+    monkeypatch.setattr(__main__, "_get_dbs", fake_get_dbs)
+    monkeypatch.setattr(__main__, "_start_db", fake_start_db)
+    monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+
+    __main__.benchmark(db="clickhouse", suite="clickbench", operation="all")
+
+    assert db_instance.operations == [("clickbench", "populate"), ("clickbench", "select")]
