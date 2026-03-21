@@ -196,6 +196,7 @@ cython_debug/
 
 **/temp
 **/data
+/results/
 
 .claude
 
