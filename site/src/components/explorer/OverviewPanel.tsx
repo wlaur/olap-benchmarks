@@ -65,11 +65,16 @@ export function OverviewPanel({
     select: true,
     mutate: true,
   })
+  const visibleOperations: OverviewOperationVisibility = {
+    populate: suiteConfig.operations.includes("populate") && operationVisibility.populate,
+    mutate: suiteConfig.operations.includes("mutate") && operationVisibility.mutate,
+    select: suiteConfig.operations.includes("select") && operationVisibility.select,
+  }
 
   const runChartData = buildOverviewChartData(
     operationSummaries,
     overviewScaleMode,
-    operationVisibility,
+    visibleOperations,
   ).map((entry) => ({
     ...entry,
     fill: databaseColors[entry.db] ?? "#94a3b8",
@@ -81,9 +86,9 @@ export function OverviewPanel({
           0,
           ...runChartData.map((run) => {
             let sum = 0
-            if (operationVisibility.populate) sum += run.populate_chart_duration_s
-            if (operationVisibility.mutate) sum += run.mutate_chart_duration_s
-            if (operationVisibility.select) sum += run.select_chart_duration_s
+            if (visibleOperations.populate) sum += run.populate_chart_duration_s
+            if (visibleOperations.mutate) sum += run.mutate_chart_duration_s
+            if (visibleOperations.select) sum += run.select_chart_duration_s
             return sum
           }),
         )
@@ -91,9 +96,9 @@ export function OverviewPanel({
           0,
           ...runChartData.flatMap((run) => {
             const durations: number[] = []
-            if (operationVisibility.populate) durations.push(run.populate_duration_s)
-            if (operationVisibility.mutate) durations.push(run.mutate_duration_s)
-            if (operationVisibility.select) durations.push(run.select_duration_s)
+            if (visibleOperations.populate) durations.push(run.populate_duration_s)
+            if (visibleOperations.mutate) durations.push(run.mutate_duration_s)
+            if (visibleOperations.select) durations.push(run.select_duration_s)
             return durations
           }),
         )
@@ -167,7 +172,7 @@ export function OverviewPanel({
             axisDomain={overviewAxisDomain}
             axisTicks={overviewAxisTicks}
             scaleMode={overviewScaleMode}
-            operationVisibility={operationVisibility}
+            operationVisibility={visibleOperations}
             barMode={barMode}
           />
         )}
