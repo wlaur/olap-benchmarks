@@ -13,6 +13,7 @@ from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
+from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,7 +121,8 @@ class DuckDB(Database):
         not_null: str | list[str] | None = None,
         in_memory: bool = True,
     ) -> None:
-        con = get_duckdb_connection(self.connect())
+        connection = self.connect()
+        con = get_duckdb_connection(connection)
 
         result = cast(
             tuple[int] | None,
@@ -186,7 +188,7 @@ class DuckDB(Database):
             finally:
                 fpath.unlink()
 
-        con.commit()
+        tracked_commit(con, recorder_source=connection)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
@@ -198,7 +200,8 @@ class DuckDB(Database):
             if pk not in df.columns:
                 raise ValueError(f"Primary key column '{pk}' not found in DataFrame columns")
 
-        con = get_duckdb_connection(self.connect())
+        connection = self.connect()
+        con = get_duckdb_connection(connection)
 
         con.register("source", df)
 
@@ -213,7 +216,7 @@ class DuckDB(Database):
             """
             with self.record_query_execution(sql):
                 con.execute(sql)
-            con.commit()
+            tracked_commit(con, recorder_source=connection)
             return
 
         set_clause = ", ".join(f'"{col}" = excluded."{col}"' for col in non_key_columns)
@@ -228,7 +231,7 @@ class DuckDB(Database):
 
         with self.record_query_execution(sql):
             con.execute(sql)
-        con.commit()
+        tracked_commit(con, recorder_source=connection)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
@@ -236,7 +239,8 @@ class DuckDB(Database):
         if not primary_keys:
             raise ValueError("primary_key must be a non-empty string or list of strings")
 
-        con = get_duckdb_connection(self.connect())
+        connection = self.connect()
+        con = get_duckdb_connection(connection)
         con.register("delete_keys", keys)
 
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
@@ -244,7 +248,7 @@ class DuckDB(Database):
 
         with self.record_query_execution(sql):
             con.execute(sql)
-        con.commit()
+        tracked_commit(con, recorder_source=connection)
 
     @property
     def clickbench(self) -> DuckDBClickbench:

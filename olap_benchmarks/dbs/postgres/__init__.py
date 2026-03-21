@@ -14,6 +14,7 @@ from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from .. import Database
+from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ class PostgresRTABench(RTABench["Postgres"]):
             with self.db.record_query_execution(statement):
                 con.execute(text(statement))
 
-        con.commit()
+        tracked_commit(con)
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -141,24 +142,24 @@ class PostgresClickbench(Clickbench["Postgres"]):
                 con.execute(text(n))
 
             _LOGGER.info(f"Executed {n}")
-            con.commit()
+            tracked_commit(con)
 
-        # not sure if this requires autocommit but just to be sure
         con = self.db.connect(reconnect=True)
         statement = "CREATE EXTENSION IF NOT EXISTS pg_trgm"
         with self.db.record_query_execution(statement):
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
+            con.execute(text(statement))
+        tracked_commit(con)
 
         statement = "CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"
         with self.db.record_query_execution(statement):
             con.execute(text(statement))
-        con.commit()
+        tracked_commit(con)
         _LOGGER.info("Created index trgm_idx_title")
 
         statement = "CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"
         with self.db.record_query_execution(statement):
             con.execute(text(statement))
-        con.commit()
+        tracked_commit(con)
         _LOGGER.info("Created index trgm_idx_url")
 
         _LOGGER.info("Generated indexes for table hits")
@@ -321,7 +322,7 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
             con.execute(text(statement))
         _LOGGER.info("Indexed data_large")
 
-        con.commit()
+        tracked_commit(con)
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -463,7 +464,7 @@ class Postgres(Database):
         create_sql = generate_create_table_sql(table, schema, primary_key, not_null)
         with self.record_query_execution(create_sql):
             con.execute(text(create_sql))
-        con.commit()
+        tracked_commit(con)
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
     def insert(

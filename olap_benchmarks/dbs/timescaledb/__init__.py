@@ -15,6 +15,7 @@ from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
 from ..postgres import generate_create_table_sql, table_exists
+from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
             with self.db.record_query_execution(statement):
                 conn.execute(text(statement))
 
-        conn.commit()
+        tracked_commit(conn)
 
         con = self.db.connect(reconnect=True)
         statement = "vacuum freeze analyze orders"
@@ -74,7 +75,7 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
         with self.db.record_query_execution(statement):
             con.execute(text(statement))
 
-        con.commit()
+        tracked_commit(con)
 
         con = self.db.connect(reconnect=True)
         statement = "vacuum freeze analyze hits"
@@ -115,7 +116,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
                 statement = f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"
                 with self.db.record_query_execution(statement):
                     con.execute(text(statement))
-                con.commit()
+                tracked_commit(con)
                 _LOGGER.info(f"Compressed table {table_name}")
 
             con = self.db.connect(reconnect=True)
@@ -307,7 +308,7 @@ class TimescaleDB(Database):
         create_sql = generate_create_table_sql(table, schema, primary_key, not_null)
         with self.record_query_execution(create_sql):
             con.execute(text(create_sql))
-        con.commit()
+        tracked_commit(con)
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
     def insert(
@@ -427,7 +428,7 @@ class TimescaleDB(Database):
         statement = f"DROP TABLE {staging_table}"
         with self.record_query_execution(statement):
             con.execute(text(statement))
-        con.commit()
+        tracked_commit(con)
 
         _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
@@ -464,7 +465,7 @@ class TimescaleDB(Database):
         statement = f"DROP TABLE {staging_table}"
         with self.record_query_execution(statement):
             con.execute(text(statement))
-        con.commit()
+        tracked_commit(con)
 
         _LOGGER.info(f"Deleted rows from {table} by primary key")
 
