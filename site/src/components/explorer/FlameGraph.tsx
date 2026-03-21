@@ -23,6 +23,8 @@ const ROW_HEIGHT = 26
 const ROW_GAP = 1
 const TICK_AREA_HEIGHT = 20
 const MIN_VISIBLE_PX = 0.5
+const TICK_LABEL_EDGE_PADDING = 6
+const TICK_LABEL_EDGE_THRESHOLD = 28
 
 const DEPTH_COLORS: Record<
   FlameSpan["depth"],
@@ -259,6 +261,18 @@ export function FlameGraph({
         {/* Time axis ticks */}
         {tickInfo.ticks.map((t) => {
           const x = (t - viewStart) * scale
+          const labelX =
+            x <= TICK_LABEL_EDGE_THRESHOLD
+              ? TICK_LABEL_EDGE_PADDING
+              : x >= chartWidth - TICK_LABEL_EDGE_THRESHOLD
+                ? chartWidth - TICK_LABEL_EDGE_PADDING
+                : x
+          const textAnchor =
+            x <= TICK_LABEL_EDGE_THRESHOLD
+              ? "start"
+              : x >= chartWidth - TICK_LABEL_EDGE_THRESHOLD
+                ? "end"
+                : "middle"
           return (
             <g key={t}>
               <line
@@ -270,9 +284,9 @@ export function FlameGraph({
                 strokeDasharray="3 3"
               />
               <text
-                x={x}
+                x={labelX}
                 y={svgHeight - 4}
-                textAnchor="middle"
+                textAnchor={textAnchor}
                 className="fill-slate-500 text-[10px]"
               >
                 {formatAxisTick(t, tickInfo.stepS)}
