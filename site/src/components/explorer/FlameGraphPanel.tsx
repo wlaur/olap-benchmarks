@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Database } from "lucide-react"
+import { ChevronLeft, ChevronRight, Database, LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { BenchmarkSuiteId } from "../../lib/benchmarks"
@@ -128,6 +128,8 @@ export function FlameGraphPanel({
     setSelectedSpanId(span?.id ?? null)
     setSelectedSpanPath(span ? getFlameSpanSelectionPath(span) : [])
   }, [])
+  const showLoadingOverlay = isLoading || isLoadingSpans
+  const hasSpans = spans.length > 0
 
   return (
     <PanelCard className="flex h-[clamp(28rem,70vh,42rem)] min-h-0 min-w-0 flex-col p-3">
@@ -138,14 +140,10 @@ export function FlameGraphPanel({
         ) : null}
       </div>
 
-      <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
-        {isLoading || isLoadingSpans ? (
-          <div className="flex h-24 items-center justify-center text-xs text-slate-500">
-            Loading execution data…
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div className="shrink-0 overflow-x-auto overflow-y-hidden">
+      <div className="relative mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="shrink-0 overflow-x-auto overflow-y-hidden">
+            {hasSpans ? (
               <FlameGraph
                 spans={spans}
                 selectedSpan={selectedSpan}
@@ -153,19 +151,36 @@ export function FlameGraphPanel({
                 zoomPath={zoomPath}
                 onZoomPathChange={setZoomPath}
               />
-            </div>
+            ) : (
+              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-primary/20 text-xs text-slate-500">
+                {showLoadingOverlay
+                  ? "Loading execution data…"
+                  : "No execution data found for this database."}
+              </div>
+            )}
+          </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
-              {selectedSpan ? (
-                <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
-              ) : spans.length > 0 ? (
-                <div className="flex min-h-[9rem] flex-1 items-center rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
-                  Click a segment to view details and resource metrics.
-                </div>
-              ) : null}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {selectedSpan ? (
+              <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
+            ) : hasSpans ? (
+              <div className="flex min-h-[9rem] flex-1 items-center rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
+                Click a segment to view details and resource metrics.
+              </div>
+            ) : (
+              <div className="min-h-[9rem] flex-1 rounded-lg border border-dashed border-border-default bg-surface-primary/20" />
+            )}
+          </div>
+        </div>
+
+        {showLoadingOverlay ? (
+          <div className="absolute inset-3 z-10 flex items-center justify-center rounded-lg bg-surface-inset/88 backdrop-blur-[1px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-primary/80 px-3 py-1.5 text-xs text-slate-300 shadow-sm">
+              <LoaderCircle className="size-3.5 animate-spin" />
+              <span>Loading execution data…</span>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </PanelCard>
   )
