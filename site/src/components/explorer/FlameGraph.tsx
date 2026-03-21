@@ -1,4 +1,5 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 
 import { formatDurationSeconds } from "../../lib/format"
 import type { BenchmarkOperation, FlameSpan } from "../../lib/types"
@@ -8,18 +9,14 @@ interface FlameGraphProps {
   spans: FlameSpan[]
   selectedSpan: FlameSpan | null
   onSelectSpan: (span: FlameSpan | null) => void
+  zoomPath: string[]
+  onZoomPathChange: (zoomPath: string[]) => void
 }
 
 interface TooltipState {
   x: number
   y: number
   span: FlameSpan
-}
-
-interface ZoomState {
-  startS: number
-  endS: number
-  breadcrumbs: FlameSpan[]
 }
 
 const ROW_HEIGHT = 26
@@ -101,12 +98,17 @@ function truncateSql(sql: string, maxLen: number): string {
   return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen)}...`
 }
 
-export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProps) {
+export function FlameGraph({
+  spans,
+  selectedSpan,
+  onSelectSpan,
+  zoomPath,
+  onZoomPathChange,
+}: FlameGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(800)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [zoom, setZoom] = useState<ZoomState | null>(null)
 
   useLayoutEffect(() => {
     const el = containerRef.current
@@ -120,18 +122,22 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
     return () => observer.disconnect()
   }, [])
 
-  // Reset zoom when spans change (db switch)
-  const spansRef = useRef(spans)
-  if (spansRef.current !== spans) {
-    spansRef.current = spans
-    if (zoom) setZoom(null)
-  }
+  const zoomBreadcrumbs = useMemo(
+    () =>
+      zoomPath
+        .map(
+          (zoomKey) => spans.find((span) => getFlameSpanPersistenceKey(span) === zoomKey) ?? null,
+        )
+        .filter((span): span is FlameSpan => span !== null),
+    [zoomPath, spans],
+  )
+  const zoom = zoomBreadcrumbs[zoomBreadcrumbs.length - 1] ?? null
 
   const globalEnd = useMemo(() => Math.max(0, ...spans.map((s) => s.elapsed_end_s)), [spans])
   const globalStart = 0
 
-  const viewStart = zoom?.startS ?? globalStart
-  const viewEnd = zoom?.endS ?? globalEnd
+  const viewStart = zoom?.elapsed_start_s ?? globalStart
+  const viewEnd = zoom?.elapsed_end_s ?? globalEnd
   const viewDuration = viewEnd - viewStart
 
   // Build visible rows: only show spans overlapping the current view
@@ -154,12 +160,9 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
   const svgHeight = visibleRows.length * (ROW_HEIGHT + ROW_GAP) - ROW_GAP + TICK_AREA_HEIGHT
 
   const handleMouseMove = useCallback((event: React.MouseEvent, span: FlameSpan) => {
-    const container = containerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
     setTooltip({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
+      x: event.clientX,
+      y: event.clientY,
       span,
     })
     setHoveredId(span.id)
@@ -178,52 +181,39 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
       // Zoom: only zoom into operation or step spans (they have children)
       if (span.depth === "query") return
 
-      const currentBreadcrumbs = zoom?.breadcrumbs ?? []
+      const currentZoomPath = zoomBreadcrumbs.map((crumb) => getFlameSpanPersistenceKey(crumb))
 
       // If clicking the same span we're already zoomed into, do nothing extra
-      const lastCrumb = currentBreadcrumbs[currentBreadcrumbs.length - 1]
+      const lastCrumb = zoomBreadcrumbs[zoomBreadcrumbs.length - 1]
       if (lastCrumb?.id === span.id) return
 
       // If clicking a parent in the breadcrumb trail, zoom back to it
-      const crumbIndex = currentBreadcrumbs.findIndex((b) => b.id === span.id)
+      const spanKey = getFlameSpanPersistenceKey(span)
+      const crumbIndex = currentZoomPath.findIndex((crumbKey) => crumbKey === spanKey)
       if (crumbIndex >= 0) {
-        setZoom({
-          startS: span.elapsed_start_s,
-          endS: span.elapsed_end_s,
-          breadcrumbs: currentBreadcrumbs.slice(0, crumbIndex + 1),
-        })
+        onZoomPathChange(currentZoomPath.slice(0, crumbIndex + 1))
         return
       }
 
-      setZoom({
-        startS: span.elapsed_start_s,
-        endS: span.elapsed_end_s,
-        breadcrumbs: [...currentBreadcrumbs, span],
-      })
+      onZoomPathChange([...currentZoomPath, spanKey])
     },
-    [selectedSpan, onSelectSpan, zoom],
+    [selectedSpan, onSelectSpan, zoomBreadcrumbs, onZoomPathChange],
   )
 
   const handleResetZoom = useCallback(() => {
-    setZoom(null)
-  }, [])
+    onZoomPathChange([])
+  }, [onZoomPathChange])
 
   const handleBreadcrumbClick = useCallback(
     (index: number) => {
-      if (!zoom) return
+      if (zoomBreadcrumbs.length === 0) return
       if (index < 0) {
-        setZoom(null)
+        onZoomPathChange([])
         return
       }
-      const span = zoom.breadcrumbs[index]
-      if (!span) return
-      setZoom({
-        startS: span.elapsed_start_s,
-        endS: span.elapsed_end_s,
-        breadcrumbs: zoom.breadcrumbs.slice(0, index + 1),
-      })
+      onZoomPathChange(zoomPath.slice(0, index + 1))
     },
-    [zoom],
+    [onZoomPathChange, zoomBreadcrumbs.length, zoomPath],
   )
 
   const tickInfo = useMemo(() => buildTimeTicks(viewStart, viewEnd), [viewStart, viewEnd])
@@ -244,13 +234,13 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
           <InlineButton size="xs" onClick={handleResetZoom}>
             All
           </InlineButton>
-          {zoom.breadcrumbs.map((crumb, i) => (
+          {zoomBreadcrumbs.map((crumb, i) => (
             <span key={crumb.id} className="flex items-center gap-1">
               <span className="text-slate-600">/</span>
               <InlineButton
                 size="xs"
                 onClick={() => handleBreadcrumbClick(i)}
-                active={i === zoom.breadcrumbs.length - 1}
+                active={i === zoomBreadcrumbs.length - 1}
               >
                 {crumb.operation}
                 {crumb.depth === "step" ? ` / ${crumb.query_name ?? crumb.step_name}` : ""}
@@ -312,30 +302,34 @@ export function FlameGraph({ spans, selectedSpan, onSelectSpan }: FlameGraphProp
         })}
       </svg>
 
-      {tooltip ? (
-        <div
-          className="pointer-events-none absolute z-50 rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
-          style={{
-            left: Math.min(tooltip.x + 12, containerWidth - 260),
-            top: Math.max(0, tooltip.y - 8),
-            maxWidth: 320,
-          }}
-        >
-          <div className="mb-1 font-medium">{getSpanLabel(tooltip.span)}</div>
-          <div className="space-y-0.5 text-slate-400">
-            <div>Duration: {formatDurationSeconds(tooltip.span.duration_s)}</div>
-            <div>
-              Start: {formatElapsedTooltip(tooltip.span.elapsed_start_s, tooltip.span.duration_s)}
-            </div>
-            {tooltip.span.depth !== "operation" ? (
-              <div className="capitalize">Operation: {tooltip.span.operation}</div>
-            ) : null}
-            {tooltip.span.depth !== "query" ? (
-              <div className="mt-1 text-slate-500">Click to zoom in</div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      {tooltip && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[120] rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
+              style={{
+                left: Math.min(tooltip.x + 12, window.innerWidth - 332),
+                top: Math.max(8, tooltip.y - 8),
+                maxWidth: 320,
+              }}
+            >
+              <div className="mb-1 font-medium">{getSpanLabel(tooltip.span)}</div>
+              <div className="space-y-0.5 text-slate-400">
+                <div>Duration: {formatDurationSeconds(tooltip.span.duration_s)}</div>
+                <div>
+                  Start:{" "}
+                  {formatElapsedTooltip(tooltip.span.elapsed_start_s, tooltip.span.duration_s)}
+                </div>
+                {tooltip.span.depth !== "operation" ? (
+                  <div className="capitalize">Operation: {tooltip.span.operation}</div>
+                ) : null}
+                {tooltip.span.depth !== "query" ? (
+                  <div className="mt-1 text-slate-500">Click to zoom in</div>
+                ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
@@ -459,6 +453,26 @@ function formatAxisTick(seconds: number, stepS: number): string {
   const m = Math.floor((seconds % 3600) / 60)
   const s = (seconds % 60).toFixed(3).padStart(6, "0")
   return `${h}h ${String(m).padStart(2, "0")}m ${s}s`
+}
+
+function getFlameSpanPersistenceKey(span: FlameSpan): string {
+  if (span.depth === "operation") {
+    return `operation:${span.operation}`
+  }
+
+  if (span.depth === "step") {
+    return `step:${span.operation}:${span.query_name ?? span.step_name}`
+  }
+
+  if (span.query_name !== null) {
+    return `query:${span.operation}:${span.query_name}:${span.iteration ?? 0}`
+  }
+
+  return `query:${span.operation}:${span.step_name}:${normalizeFlameQuerySql(span.query_sql)}:${span.iteration ?? 0}`
+}
+
+function normalizeFlameQuerySql(querySql: string | null): string {
+  return querySql?.replace(/\s+/g, " ").trim() ?? ""
 }
 
 function buildTimeTicks(startS: number, endS: number): { ticks: number[]; stepS: number } {
