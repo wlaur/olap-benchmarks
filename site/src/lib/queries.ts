@@ -601,7 +601,7 @@ export async function fetchFlameSpans(
     .execute()
 
   // Fetch step-level spans
-  const stepSpans = await db
+  const rawStepSpans = await db
     .with("latest_runs", () => latestRuns)
     .with("operation_runs", (qb) =>
       qb
@@ -663,6 +663,8 @@ export async function fetchFlameSpans(
     .orderBy("operation_offsets.operation_order")
     .orderBy("run_step.started_at")
     .execute()
+
+  const stepSpans = collapseQueryStepIterations(rawStepSpans)
 
   // Fetch query-execution-level spans
   const querySpans = await db
@@ -730,4 +732,47 @@ export async function fetchFlameSpans(
     .execute()
 
   return [...operationSpans, ...stepSpans, ...querySpans]
+}
+
+function collapseQueryStepIterations(stepSpans: FlameSpan[]): FlameSpan[] {
+  const collapsedSpans: FlameSpan[] = []
+  const groupedQueries = new Map<string, FlameSpan>()
+
+  for (const span of stepSpans) {
+    if (span.depth !== "step" || span.query_name === null) {
+      collapsedSpans.push(span)
+      continue
+    }
+
+    const groupKey = `${span.operation}:${span.step_name}:${span.query_name}`
+    const existing = groupedQueries.get(groupKey)
+    if (!existing) {
+      groupedQueries.set(groupKey, {
+        ...span,
+        id: `step_group_${span.operation}_${span.step_name}_${span.query_name}`,
+        iteration: null,
+      })
+      continue
+    }
+
+    existing.elapsed_start_s = Math.min(existing.elapsed_start_s, span.elapsed_start_s)
+    existing.elapsed_end_s = Math.max(existing.elapsed_end_s, span.elapsed_end_s)
+    existing.duration_s = existing.elapsed_end_s - existing.elapsed_start_s
+  }
+
+  return [...collapsedSpans, ...groupedQueries.values()].sort((left, right) => {
+    const operationDelta = compareOperationOrder(left.operation, right.operation)
+    if (operationDelta !== 0) return operationDelta
+    return left.elapsed_start_s - right.elapsed_start_s || left.id.localeCompare(right.id)
+  })
+}
+
+function compareOperationOrder(left: BenchmarkOperation, right: BenchmarkOperation): number {
+  const operationOrder: Record<BenchmarkOperation, number> = {
+    populate: 0,
+    mutate: 1,
+    select: 2,
+  }
+
+  return operationOrder[left] - operationOrder[right]
 }
