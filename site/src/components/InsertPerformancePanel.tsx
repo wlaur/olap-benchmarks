@@ -120,12 +120,7 @@ export function InsertPerformancePanel({
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-6 w-20 rounded-full" />
             </div>
-            <div className="flex h-[220px] items-end gap-2 px-2 pt-3">
-              <Skeleton className="h-[32%] flex-1 rounded-lg" />
-              <Skeleton className="h-[58%] flex-1 rounded-lg" />
-              <Skeleton className="h-[44%] flex-1 rounded-lg" />
-              <Skeleton className="h-[72%] flex-1 rounded-lg" />
-            </div>
+            <InsertDurationChartSkeleton />
           </ChartFrame>
 
           <div className="flex flex-col gap-2">
@@ -247,13 +242,80 @@ function InsertMetricChartSkeleton({ label }: { label: string }) {
   return (
     <ChartFrame className="p-2.5">
       <p className="mb-1.5 text-xs font-semibold text-slate-200">{label}</p>
-      <div className="flex h-28 items-end gap-2">
-        <Skeleton className="h-[42%] flex-1 rounded-md" />
-        <Skeleton className="h-[78%] flex-1 rounded-md" />
-        <Skeleton className="h-[55%] flex-1 rounded-md" />
-        <Skeleton className="h-[68%] flex-1 rounded-md" />
+      <div className="grid h-28 grid-cols-[2.25rem_minmax(0,1fr)] gap-2">
+        <div className="flex flex-col justify-between py-2">
+          <Skeleton className="h-2.5 w-7 rounded-full" />
+          <Skeleton className="h-2.5 w-6 rounded-full" />
+          <Skeleton className="h-2.5 w-7 rounded-full" />
+        </div>
+        <div className="relative min-h-0">
+          <div className="absolute inset-x-0 bottom-0 border-t border-border-default" />
+          <div className="absolute inset-y-0 left-0 border-l border-border-default" />
+          <div className="absolute inset-x-0 top-[24%] border-t border-border-subtle" />
+          <div className="absolute inset-x-0 top-[52%] border-t border-border-subtle" />
+          <div className="absolute inset-x-0 top-[78%] border-t border-border-subtle" />
+          <svg
+            viewBox="0 0 240 112"
+            preserveAspectRatio="none"
+            className="absolute inset-0 h-full w-full"
+            aria-hidden="true"
+          >
+            <path
+              d="M 10 82 C 34 78, 46 56, 68 50 S 108 26, 132 34 S 170 72, 194 60 S 220 36, 230 28"
+              fill="none"
+              stroke="rgba(148, 163, 184, 0.38)"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            <circle cx="10" cy="82" r="4" fill="rgba(148, 163, 184, 0.32)" />
+            <circle cx="68" cy="50" r="4" fill="rgba(148, 163, 184, 0.32)" />
+            <circle cx="132" cy="34" r="4" fill="rgba(148, 163, 184, 0.32)" />
+            <circle cx="194" cy="60" r="4" fill="rgba(148, 163, 184, 0.32)" />
+            <circle cx="230" cy="28" r="4" fill="rgba(148, 163, 184, 0.32)" />
+          </svg>
+          <div className="absolute inset-x-2 bottom-1 flex justify-between">
+            <Skeleton className="h-2.5 w-5 rounded-full" />
+            <Skeleton className="h-2.5 w-5 rounded-full" />
+            <Skeleton className="h-2.5 w-5 rounded-full" />
+            <Skeleton className="h-2.5 w-5 rounded-full" />
+          </div>
+        </div>
       </div>
     </ChartFrame>
+  )
+}
+
+function InsertDurationChartSkeleton() {
+  return (
+    <div className="grid h-[220px] grid-cols-[6.5rem_minmax(0,1fr)] gap-3">
+      <div className="flex flex-col justify-around py-3">
+        <Skeleton className="h-3 w-14 rounded-full" />
+        <Skeleton className="h-3 w-18 rounded-full" />
+        <Skeleton className="h-3 w-16 rounded-full" />
+        <Skeleton className="h-3 w-12 rounded-full" />
+      </div>
+      <div className="relative min-h-0">
+        <div className="absolute inset-y-0 left-0 border-l border-border-default" />
+        <div className="absolute inset-x-0 bottom-0 border-t border-border-default" />
+        <div className="absolute inset-y-0 left-[30%] border-l border-border-subtle" />
+        <div className="absolute inset-y-0 left-[58%] border-l border-border-subtle" />
+        <div className="absolute inset-y-0 left-[82%] border-l border-border-subtle" />
+        <div className="absolute inset-0 flex flex-col justify-around pr-4 pl-2">
+          <div className="flex items-center">
+            <Skeleton className="h-3 w-[42%] rounded-l-sm rounded-r-md" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-3 w-[74%] rounded-l-sm rounded-r-md" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-3 w-[56%] rounded-l-sm rounded-r-md" />
+          </div>
+          <div className="flex items-center">
+            <Skeleton className="h-3 w-[86%] rounded-l-sm rounded-r-md" />
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
