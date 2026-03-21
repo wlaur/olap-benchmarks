@@ -1,3 +1,5 @@
+import { memo } from "react"
+
 import type { DurationScaleMode } from "../lib/format"
 
 const LOG_FLOOR = 1e-6
@@ -14,7 +16,7 @@ interface InlineDurationBarsProps {
   scaleMode: DurationScaleMode
 }
 
-export function InlineDurationBars({
+export const InlineDurationBars = memo(function InlineDurationBars({
   byDatabase,
   databases,
   databaseColors,
@@ -66,4 +68,4 @@ export function InlineDurationBars({
       })}
     </svg>
   )
-}
+})

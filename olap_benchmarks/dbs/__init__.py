@@ -493,6 +493,13 @@ class Database(BaseModel, ABC):
         if benchmark is None:
             raise ValueError(f"Invalid benchmark suite: '{suite}'")
 
+        if operation not in benchmark.supported_operations:
+            supported_operations = ", ".join(benchmark.supported_operations)
+            raise ValueError(
+                f"{type(benchmark).__name__} does not support operation '{operation}'. "
+                f"Supported operations: {supported_operations}"
+            )
+
         match operation:
             case "populate":
                 benchmark_func = benchmark.populate

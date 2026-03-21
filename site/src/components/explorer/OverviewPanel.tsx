@@ -16,7 +16,6 @@ import {
   type OverviewChartRow,
   type OverviewOperationVisibility,
 } from "../../lib/chartTransforms"
-import { getDatabaseColors } from "../../lib/databaseColors"
 import {
   formatDurationAxisTick,
   formatDurationSeconds,
@@ -26,35 +25,29 @@ import {
 } from "../../lib/format"
 import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, OperationSummary } from "../../lib/types"
+import { ControlGroup, SegmentedButton } from "../controls/Control"
 import { DurationScaleToggle } from "../DurationScaleToggle"
-import { DatabaseMultiSelect } from "../filters/DatabaseMultiSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../layout/Panel"
-import { BodyText, DisplayTitle, Eyebrow, SectionTitle } from "../Typography"
-import {
-  FilterChipsSkeleton,
-  OverviewChartSkeleton,
-  OverviewControlsSkeleton,
-} from "./ExplorerSkeletons"
+import { MetaLabel, SectionTitle } from "../Typography"
+import { OverviewChartSkeleton, OverviewControlsSkeleton } from "./ExplorerSkeletons"
 
-const OVERVIEW_CHART_HEIGHT = 220
-const TOP_GRID_CLASS = "grid shrink-0 gap-4 xl:grid-cols-[minmax(24rem,0.95fr)_minmax(0,1.15fr)]"
-const TOP_CARD_MIN_HEIGHT_CLASS = "min-h-[26rem]"
-const OVERVIEW_HEADER_CLASS = "min-h-[8.5rem]"
+const OVERVIEW_CHART_HEIGHT = 200
+
+type BarMode = "grouped" | "stacked"
 
 interface OverviewPanelProps {
   suiteConfig: SuiteConfig
   databases: string[]
   includedDatabases: string[]
   operationSummaries: OperationSummary[]
+  databaseColors: Record<string, string>
   isLoading: boolean
-  onSelectAll: () => void
-  onToggleDatabase: (database: string) => void
 }
 
 const OPERATION_CHIPS: ReadonlyArray<readonly [BenchmarkOperation, string, string]> = [
-  ["populate", "Populate", "rgba(148, 163, 184, 0.45)"],
-  ["mutate", "Mutate", "rgba(168, 85, 247, 0.85)"],
-  ["select", "Select", "rgba(148, 163, 184, 1)"],
+  ["populate", "Populate", "rgba(245, 158, 11, 0.92)"],
+  ["mutate", "Mutate", "rgba(139, 92, 246, 0.94)"],
+  ["select", "Select", "rgba(96, 165, 250, 0.94)"],
 ]
 
 export function OverviewPanel({
@@ -62,18 +55,16 @@ export function OverviewPanel({
   databases,
   includedDatabases,
   operationSummaries,
+  databaseColors,
   isLoading,
-  onSelectAll,
-  onToggleDatabase,
 }: OverviewPanelProps) {
   const [overviewScaleMode, setOverviewScaleMode] = useState<DurationScaleMode>("linear")
+  const [barMode, setBarMode] = useState<BarMode>("grouped")
   const [operationVisibility, setOperationVisibility] = useState<OverviewOperationVisibility>({
     populate: true,
     select: true,
     mutate: true,
   })
-
-  const databaseColors = getDatabaseColors(databases)
 
   const runChartData = buildOverviewChartData(
     operationSummaries,
@@ -83,16 +74,30 @@ export function OverviewPanel({
     ...entry,
     fill: databaseColors[entry.db] ?? "#94a3b8",
   }))
-  const overviewMaxDuration = Math.max(
-    0,
-    ...runChartData.flatMap((run) => {
-      const durations: number[] = []
-      if (operationVisibility.populate) durations.push(run.populate_duration_s)
-      if (operationVisibility.mutate) durations.push(run.mutate_duration_s)
-      if (operationVisibility.select) durations.push(run.select_duration_s)
-      return durations
-    }),
-  )
+
+  const overviewMaxDuration =
+    barMode === "stacked"
+      ? Math.max(
+          0,
+          ...runChartData.map((run) => {
+            let sum = 0
+            if (operationVisibility.populate) sum += run.populate_chart_duration_s
+            if (operationVisibility.mutate) sum += run.mutate_chart_duration_s
+            if (operationVisibility.select) sum += run.select_chart_duration_s
+            return sum
+          }),
+        )
+      : Math.max(
+          0,
+          ...runChartData.flatMap((run) => {
+            const durations: number[] = []
+            if (operationVisibility.populate) durations.push(run.populate_duration_s)
+            if (operationVisibility.mutate) durations.push(run.mutate_duration_s)
+            if (operationVisibility.select) durations.push(run.select_duration_s)
+            return durations
+          }),
+        )
+
   const overviewAxisDomain = getDurationAxisDomain(overviewMaxDuration, overviewScaleMode)
   const overviewAxisTicks = getDurationAxisTicks(overviewMaxDuration, overviewScaleMode)
   const hasVisibleOverviewSegments = runChartData.some((entry) => entry.total_duration_s > 0)
@@ -107,97 +112,80 @@ export function OverviewPanel({
   const availableChips = OPERATION_CHIPS.filter(([op]) => suiteConfig.operations.includes(op))
 
   return (
-    <div className={TOP_GRID_CLASS}>
-      <PanelCard className={TOP_CARD_MIN_HEIGHT_CLASS}>
-        <div className="space-y-2">
-          <Eyebrow>{suiteConfig.label}</Eyebrow>
-          <DisplayTitle as="h2">Results explorer</DisplayTitle>
-          <BodyText className="max-w-2xl leading-6 text-slate-300">
-            Scope the comparison to the databases you care about, scan the aggregate spread, then
-            drill into query-level behavior and SQL without leaving the screen.
-          </BodyText>
-        </div>
-
-        <div className="mt-5">
-          {isLoading ? (
-            <FilterChipsSkeleton />
-          ) : (
-            <DatabaseMultiSelect
-              databases={databases}
-              selectedDatabases={includedDatabases}
-              onSelectAll={onSelectAll}
-              onToggleDatabase={onToggleDatabase}
-            />
-          )}
-        </div>
-      </PanelCard>
-
-      <PanelCard className={TOP_CARD_MIN_HEIGHT_CLASS}>
-        <PanelHeader className={OVERVIEW_HEADER_CLASS}>
-          <div>
-            <SectionTitle as="h3">Aggregate overview</SectionTitle>
-            <BodyText className="mt-1">
-              Latest completed durations per database. Toggle any phase on or off, then switch
-              between log and linear scale before diving into per-query detail.
-            </BodyText>
+    <PanelCard className="h-full p-3">
+      <PanelHeader className="flex-col items-start gap-3">
+        <SectionTitle as="h3">Aggregate overview</SectionTitle>
+        {isLoading ? (
+          <OverviewControlsSkeleton />
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {availableChips.map(([operation, label, chipColor]) => {
+                const isActive = operationVisibility[operation]
+                return (
+                  <SegmentedButton
+                    key={operation}
+                    aria-pressed={isActive}
+                    onClick={() => toggleOverviewOperation(operation)}
+                    selected={isActive}
+                    size="md"
+                    className="gap-2"
+                  >
+                    <span
+                      className="size-2 rounded-full"
+                      style={{
+                        backgroundColor: chipColor,
+                        opacity: isActive ? 1 : 0.55,
+                      }}
+                    />
+                    {label}
+                  </SegmentedButton>
+                )
+              })}
+            </div>
+            <BarModeToggle mode={barMode} onChange={setBarMode} />
+            <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
+            <MetaLabel className="tracking-normal text-slate-400 normal-case">
+              {includedDatabases.length === databases.length
+                ? `${databases.length} databases shown`
+                : `${includedDatabases.length} of ${databases.length} databases shown`}
+            </MetaLabel>
           </div>
-          {isLoading ? (
-            <OverviewControlsSkeleton />
-          ) : (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="inline-flex rounded-full border border-border-default bg-surface-inset p-1">
-                {availableChips.map(([operation, label, chipColor]) => {
-                  const isActive = operationVisibility[operation]
-                  return (
-                    <button
-                      key={operation}
-                      type="button"
-                      aria-pressed={isActive}
-                      onClick={() => toggleOverviewOperation(operation)}
-                      className={
-                        isActive
-                          ? "inline-flex items-center gap-2 rounded-full bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-100 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.28)]"
-                          : "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:text-slate-200"
-                      }
-                    >
-                      <span
-                        className="size-2 rounded-full"
-                        style={{
-                          backgroundColor: isActive ? chipColor : "rgba(71, 85, 105, 0.9)",
-                        }}
-                      />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-              <DurationScaleToggle mode={overviewScaleMode} onChange={setOverviewScaleMode} />
-              <div className="rounded-full border border-border-default bg-surface-inset px-3 py-1 text-xs font-medium whitespace-nowrap text-slate-400">
-                {includedDatabases.length} of {databases.length} databases
-              </div>
-            </div>
-          )}
-        </PanelHeader>
+        )}
+      </PanelHeader>
 
-        <ChartFrame className="mt-4" height={OVERVIEW_CHART_HEIGHT}>
-          {isLoading ? (
-            <OverviewChartSkeleton />
-          ) : !hasVisibleOverviewSegments ? (
-            <div className="flex h-full min-h-28 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-inset px-6 text-center text-sm text-slate-500">
-              Enable at least one phase to display overview bars for the selected databases.
-            </div>
-          ) : (
-            <OverviewBarChart
-              data={runChartData}
-              axisDomain={overviewAxisDomain}
-              axisTicks={overviewAxisTicks}
-              scaleMode={overviewScaleMode}
-              operationVisibility={operationVisibility}
-            />
-          )}
-        </ChartFrame>
-      </PanelCard>
-    </div>
+      <ChartFrame className="mt-2 p-2" height={OVERVIEW_CHART_HEIGHT}>
+        {isLoading ? (
+          <OverviewChartSkeleton />
+        ) : !hasVisibleOverviewSegments ? (
+          <div className="flex h-full items-center justify-center text-xs text-slate-500">
+            Enable at least one phase to display overview bars.
+          </div>
+        ) : (
+          <OverviewBarChart
+            data={runChartData}
+            axisDomain={overviewAxisDomain}
+            axisTicks={overviewAxisTicks}
+            scaleMode={overviewScaleMode}
+            operationVisibility={operationVisibility}
+            barMode={barMode}
+          />
+        )}
+      </ChartFrame>
+    </PanelCard>
+  )
+}
+
+function BarModeToggle({ mode, onChange }: { mode: BarMode; onChange: (m: BarMode) => void }) {
+  return (
+    <ControlGroup compact>
+      <SegmentedButton selected={mode === "grouped"} size="md" onClick={() => onChange("grouped")}>
+        Grouped
+      </SegmentedButton>
+      <SegmentedButton selected={mode === "stacked"} size="md" onClick={() => onChange("stacked")}>
+        Stacked
+      </SegmentedButton>
+    </ControlGroup>
   )
 }
 
@@ -207,6 +195,7 @@ interface OverviewBarChartProps {
   axisTicks: number[] | undefined
   scaleMode: DurationScaleMode
   operationVisibility: OverviewOperationVisibility
+  barMode: BarMode
 }
 
 function OverviewBarChart({
@@ -215,25 +204,28 @@ function OverviewBarChart({
   axisTicks,
   scaleMode,
   operationVisibility,
+  barMode,
 }: OverviewBarChartProps) {
+  const stackId = barMode === "stacked" ? "ops" : undefined
+
   return (
     <ResponsiveContainer
       width="100%"
       height="100%"
       initialDimension={{ width: 640, height: OVERVIEW_CHART_HEIGHT }}
     >
-      <BarChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: 0 }}>
+      <BarChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
         <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
         <XAxis
           dataKey="db"
-          tick={{ fill: "#64748b", fontSize: 11 }}
+          tick={{ fill: "#94a3b8", fontSize: 11 }}
           axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
           tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
         />
         <YAxis
           domain={axisDomain}
           ticks={axisTicks}
-          tick={{ fill: "#64748b", fontSize: 11 }}
+          tick={{ fill: "#94a3b8", fontSize: 10 }}
           axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
           tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
           tickFormatter={(value: number) => formatDurationAxisTick(value, scaleMode)}
@@ -241,9 +233,10 @@ function OverviewBarChart({
         <Tooltip
           cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
           contentStyle={{
-            backgroundColor: "#161a23",
+            backgroundColor: "#1e2330",
             border: "1px solid rgba(148, 163, 184, 0.12)",
-            borderRadius: 12,
+            borderRadius: 10,
+            fontSize: 12,
             color: "#e2e8f0",
           }}
           labelStyle={{ color: "#e2e8f0" }}
@@ -279,7 +272,8 @@ function OverviewBarChart({
         <Bar
           dataKey="populate_chart_duration_s"
           hide={!operationVisibility.populate}
-          radius={[4, 4, 0, 0]}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Populate"
           shape={(props) => (
             <Rectangle
@@ -294,7 +288,8 @@ function OverviewBarChart({
         <Bar
           dataKey="mutate_chart_duration_s"
           hide={!operationVisibility.mutate}
-          radius={[4, 4, 0, 0]}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Mutate"
           shape={(props) => (
             <Rectangle
@@ -309,7 +304,8 @@ function OverviewBarChart({
         <Bar
           dataKey="select_chart_duration_s"
           hide={!operationVisibility.select}
-          radius={[4, 4, 0, 0]}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Select"
           shape={(props) => (
             <Rectangle

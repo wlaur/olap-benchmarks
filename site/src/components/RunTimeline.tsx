@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { formatDurationSeconds } from "../lib/format"
 import type { QueryStep } from "../lib/types"
+import { ControlChip, QuietButton } from "./controls/Control"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard, PanelHeader } from "./layout/Panel"
 import { Skeleton } from "./Skeleton"
@@ -278,14 +279,14 @@ function QueryLegend({
         const colors = queryColorMap[name]!
         const isSelected = selectedQuery === name
         return (
-          <button
+          <ControlChip
             key={name}
-            type="button"
             onClick={() => onSelectQuery?.(name)}
-            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors hover:border-slate-600"
+            className="gap-1.5"
+            selected={isSelected}
+            size="xs"
             style={{
-              backgroundColor: isSelected ? "rgba(108, 142, 239, 0.15)" : "transparent",
-              borderColor: isSelected ? "rgba(108, 142, 239, 0.4)" : "rgba(148, 163, 184, 0.15)",
+              boxShadow: isSelected ? `inset 0 0 0 1px ${colors[1]}` : undefined,
             }}
           >
             <span
@@ -293,17 +294,13 @@ function QueryLegend({
               style={{ backgroundColor: colors[isSelected ? 1 : 0] }}
             />
             <span className="text-slate-400">{short}</span>
-          </button>
+          </ControlChip>
         )
       })}
       {queryNames.length > LEGEND_COLLAPSED_COUNT ? (
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          className="rounded-full border border-border-default px-2.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
-        >
+        <QuietButton size="xs" onClick={onToggleExpanded}>
           {expanded ? "Show less" : `+${hiddenCount} more`}
-        </button>
+        </QuietButton>
       ) : null}
     </div>
   )

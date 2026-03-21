@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 import uuid
 from collections.abc import Mapping
@@ -26,6 +27,8 @@ _LOGGER = logging.getLogger(__name__)
 
 SchemaMethod = Literal["infer", "fetch"]
 DEFAULT_SCHEMA_METHOD: SchemaMethod = "infer"
+_SQL_STRING_LITERAL_RE = re.compile(r"'(?:''|[^'])*'")
+_SQLALCHEMY_TEXT_LITERAL_COLON_RE = re.compile(r":(?=[A-Za-z_])")
 
 
 def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
@@ -55,9 +58,17 @@ def _description_values(d: Description) -> tuple[str, str, int | None, int | Non
     )
 
 
+def _escape_literal_colons_for_sqlalchemy_text(query: str) -> str:
+    return _SQL_STRING_LITERAL_RE.sub(
+        lambda match: _SQLALCHEMY_TEXT_LITERAL_COLON_RE.sub(r"\\:", match.group(0)),
+        query,
+    )
+
+
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
     with _record_query_execution(connection, query):
-        result = connection.execute(text(query.strip().removesuffix(";")))
+        statement = text(_escape_literal_colons_for_sqlalchemy_text(query.strip().removesuffix(";")))
+        result = connection.execute(statement)
         columns = list(result.keys())
         rows = result.fetchall()
 
