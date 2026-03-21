@@ -54,8 +54,8 @@ SELECT
     create_hypertable(
         'order_events',
         'event_created',
-        chunk_time_interval = > interval '3 day',
-        create_default_indexes = > false
+        chunk_time_interval => interval '3 day',
+        create_default_indexes => false
     );
 
 SELECT
