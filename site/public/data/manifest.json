@@ -1,12 +1,12 @@
 {
-  "published_at": "2026-04-06T08:53:45.707626+00:00",
+  "published_at": "2026-04-06T14:01:09.169402+00:00",
   "revision": "default",
   "source": "/Users/williamlauren/repos/olap-benchmarks/results/default.db",
   "schema_revision": "2f5d7f0e8a21",
   "table_counts": {
-    "run": 28,
-    "run_step": 2202,
-    "run_metric": 8964,
-    "query_execution": 2971
+    "run": 36,
+    "run_step": 2664,
+    "run_metric": 9194,
+    "query_execution": 3477
   }
 }
