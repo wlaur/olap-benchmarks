@@ -134,6 +134,12 @@ export function FlameGraph({
     [zoomPath, spans],
   )
   const zoom = zoomBreadcrumbs[zoomBreadcrumbs.length - 1] ?? null
+  const selectedBreadcrumbs = useMemo(
+    () => buildSelectedBreadcrumbs(spans, selectedSpan),
+    [selectedSpan, spans],
+  )
+  const isShowingZoomBreadcrumbs = zoomBreadcrumbs.length > 0
+  const visibleBreadcrumbs = isShowingZoomBreadcrumbs ? zoomBreadcrumbs : selectedBreadcrumbs
 
   const globalEnd = useMemo(() => Math.max(0, ...spans.map((s) => s.elapsed_end_s)), [spans])
   const globalStart = 0
@@ -202,20 +208,29 @@ export function FlameGraph({
     [selectedSpan, onSelectSpan, zoomBreadcrumbs, onZoomPathChange],
   )
 
-  const handleResetZoom = useCallback(() => {
-    onZoomPathChange([])
-  }, [onZoomPathChange])
+  const handleResetBreadcrumbs = useCallback(() => {
+    if (isShowingZoomBreadcrumbs) {
+      onZoomPathChange([])
+      return
+    }
+    onSelectSpan(null)
+  }, [isShowingZoomBreadcrumbs, onSelectSpan, onZoomPathChange])
 
   const handleBreadcrumbClick = useCallback(
     (index: number) => {
-      if (zoomBreadcrumbs.length === 0) return
       if (index < 0) {
         onZoomPathChange([])
         return
       }
-      onZoomPathChange(zoomPath.slice(0, index + 1))
+      if (isShowingZoomBreadcrumbs) {
+        onZoomPathChange(zoomPath.slice(0, index + 1))
+        return
+      }
+
+      const span = selectedBreadcrumbs[index]
+      if (span) onSelectSpan(span)
     },
-    [onZoomPathChange, zoomBreadcrumbs.length, zoomPath],
+    [isShowingZoomBreadcrumbs, onSelectSpan, onZoomPathChange, selectedBreadcrumbs, zoomPath],
   )
 
   const tickInfo = useMemo(() => buildTimeTicks(viewStart, viewEnd), [viewStart, viewEnd])
@@ -231,26 +246,27 @@ export function FlameGraph({
   return (
     <div ref={containerRef} className="relative select-none">
       {/* Breadcrumb / zoom bar */}
-      {zoom ? (
-        <div className="mb-2 flex items-center gap-1 text-[11px]">
-          <InlineButton size="xs" onClick={handleResetZoom}>
-            All
-          </InlineButton>
-          {zoomBreadcrumbs.map((crumb, i) => (
-            <span key={crumb.id} className="flex items-center gap-1">
-              <span className="text-slate-600">/</span>
-              <InlineButton
-                size="xs"
-                onClick={() => handleBreadcrumbClick(i)}
-                active={i === zoomBreadcrumbs.length - 1}
-              >
-                {crumb.operation}
-                {crumb.depth === "step" ? ` / ${crumb.query_name ?? crumb.step_name}` : ""}
-              </InlineButton>
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <div className="mb-2 flex items-center gap-1 text-[11px]">
+        <InlineButton
+          size="xs"
+          onClick={handleResetBreadcrumbs}
+          active={visibleBreadcrumbs.length === 0}
+        >
+          All
+        </InlineButton>
+        {visibleBreadcrumbs.map((crumb, i) => (
+          <span key={crumb.id} className="flex items-center gap-1">
+            <span className="text-slate-600">/</span>
+            <InlineButton
+              size="xs"
+              onClick={() => handleBreadcrumbClick(i)}
+              active={i === visibleBreadcrumbs.length - 1}
+            >
+              {getSpanBreadcrumbLabel(crumb)}
+            </InlineButton>
+          </span>
+        ))}
+      </div>
 
       <svg
         width={containerWidth}
@@ -487,6 +503,45 @@ function getFlameSpanPersistenceKey(span: FlameSpan): string {
 
 function normalizeFlameQuerySql(querySql: string | null): string {
   return querySql?.replace(/\s+/g, " ").trim() ?? ""
+}
+
+function getSpanBreadcrumbLabel(span: FlameSpan): string {
+  if (span.depth === "operation") return span.operation
+  if (span.depth === "step") return span.query_name ?? span.step_name
+  if (span.iteration !== null && span.iteration > 1) {
+    return `${span.query_name ?? span.step_name} #${span.iteration}`
+  }
+  return span.query_name ?? span.step_name
+}
+
+function buildSelectedBreadcrumbs(spans: FlameSpan[], selectedSpan: FlameSpan | null): FlameSpan[] {
+  if (!selectedSpan) return []
+
+  const operationSpan =
+    spans.find((span) => span.depth === "operation" && span.operation === selectedSpan.operation) ??
+    (selectedSpan.depth === "operation" ? selectedSpan : null)
+  const stepLabel = selectedSpan.query_name ?? selectedSpan.step_name
+  const stepSpan =
+    spans.find(
+      (span) =>
+        span.depth === "step" &&
+        span.operation === selectedSpan.operation &&
+        (span.query_name ?? span.step_name) === stepLabel,
+    ) ?? (selectedSpan.depth === "step" ? selectedSpan : null)
+
+  const breadcrumbs: FlameSpan[] = []
+  const seen = new Set<string>()
+  const addBreadcrumb = (span: FlameSpan | null) => {
+    if (!span) return
+    if (seen.has(span.id)) return
+    seen.add(span.id)
+    breadcrumbs.push(span)
+  }
+
+  addBreadcrumb(operationSpan)
+  if (selectedSpan.depth !== "operation") addBreadcrumb(stepSpan)
+  if (selectedSpan.depth === "query") addBreadcrumb(selectedSpan)
+  return breadcrumbs
 }
 
 function buildTimeTicks(startS: number, endS: number): { ticks: number[]; stepS: number } {

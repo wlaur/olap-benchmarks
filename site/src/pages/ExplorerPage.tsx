@@ -38,6 +38,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   const hasMutateOperation = suiteConfig.operations.includes("mutate")
   const [selectedOperation, setSelectedOperation] = useState<"select" | "mutate">("select")
   const selection = useSelectionState()
+  const { resetSelection } = selection
 
   const {
     state,
@@ -64,6 +65,10 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
       setSelectedOperation("select")
     }
   }, [hasMutateOperation])
+
+  useEffect(() => {
+    resetSelection()
+  }, [resetSelection, suiteId])
 
   if (!isLoading && state.error) {
     return (
