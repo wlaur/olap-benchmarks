@@ -58,10 +58,7 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
 
 
 class DuckDBClickbench(Clickbench["DuckDB"]):
-    @property
-    def populate_kwargs(self) -> dict[str, Any]:
-        # uses > 40g memory otherwise
-        return {"in_memory": False}
+    pass
 
 
 class DuckDB(Database):
@@ -119,7 +116,6 @@ class DuckDB(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
-        in_memory: bool = True,
     ) -> None:
         connection = self.connect()
         con = get_duckdb_connection(connection)
@@ -156,9 +152,6 @@ class DuckDB(Database):
                 con.execute(ddl)
 
         if isinstance(df, pl.LazyFrame):
-            if in_memory:
-                raise ValueError("in_memory=True is not compatible with LazyFrame input")
-
             fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
             df.sink_parquet(fpath)
             _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
@@ -169,24 +162,13 @@ class DuckDB(Database):
                     con.execute(sql)
             finally:
                 fpath.unlink()
-        elif in_memory:
+        else:
             con.register("source", df)
             _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
             sql = f"insert into {table} select * from source"
             with self.record_query_execution(sql):
                 con.execute(sql)
-        else:
-            fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
-            df.write_parquet(fpath)
-            _LOGGER.info(f"Inserting from Parquet dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
-
-            try:
-                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
-                with self.record_query_execution(sql):
-                    con.execute(sql)
-            finally:
-                fpath.unlink()
 
         tracked_commit(con, recorder_source=connection)
 
