@@ -142,33 +142,35 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             </div>
           ) : null}
 
-          <OperationTabs
-            activeOperation={selectedOperation}
-            suiteConfig={suiteConfig}
-            querySummaries={filteredQuerySummaries}
-            mutateSummaries={filteredMutateSummaries}
-            querySteps={filteredQuerySteps}
-            mutateSteps={filteredMutateSteps}
-            databases={databases}
-            includedDatabases={includedDatabases}
-            queriesManifest={state.queriesManifest}
-            selection={selection}
-            isLoading={isLoading}
-            isTimelineLoading={deferredLoading}
-          />
-
-          <Suspense>
-            <QueryHeatmapPanel
+          <div className="grid min-h-0 min-w-0 items-start gap-4 2xl:grid-cols-[minmax(0,1.4fr)_minmax(36rem,0.6fr)]">
+            <OperationTabs
+              activeOperation={selectedOperation}
               suiteConfig={suiteConfig}
-              querySummaries={
-                selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
-              }
+              querySummaries={filteredQuerySummaries}
+              mutateSummaries={filteredMutateSummaries}
+              querySteps={filteredQuerySteps}
+              mutateSteps={filteredMutateSteps}
+              databases={databases}
               includedDatabases={includedDatabases}
-              databaseColors={databaseColors}
+              queriesManifest={state.queriesManifest}
               selection={selection}
               isLoading={isLoading}
+              isTimelineLoading={deferredLoading}
             />
-          </Suspense>
+
+            <Suspense>
+              <QueryHeatmapPanel
+                suiteConfig={suiteConfig}
+                querySummaries={
+                  selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
+                }
+                includedDatabases={includedDatabases}
+                databaseColors={databaseColors}
+                selection={selection}
+                isLoading={isLoading}
+              />
+            </Suspense>
+          </div>
 
           {showResourceTrendPanel || showFlameGraphPanel ? (
             <Suspense>
