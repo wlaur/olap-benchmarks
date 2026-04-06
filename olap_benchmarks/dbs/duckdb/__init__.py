@@ -168,6 +168,9 @@ class DuckDB(Database):
         tracked_commit(con, recorder_source=connection)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        # DuckDB 1.5.0 crashes when creating UNIQUE/PRIMARY KEY constraints on
+        # TIMESTAMP columns in persistent databases beyond ~15K rows.
+        # Work around by using DELETE + INSERT instead of ON CONFLICT.
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
 
         if not primary_keys:
@@ -180,34 +183,17 @@ class DuckDB(Database):
         connection = self.connect()
         con = get_duckdb_connection(connection)
 
-        con.register("source", df)
+        con.register("upsert_source", df)
 
-        non_key_columns = [col for col in df.columns if col not in primary_keys]
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+        delete_sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM upsert_source)"
+        with self.record_query_execution(delete_sql):
+            con.execute(delete_sql)
 
-        if not non_key_columns:
-            conflict_target = ", ".join(f'"{col}"' for col in primary_keys)
-            sql = f"""
-                insert into {table}
-                select * from source
-                on conflict ({conflict_target}) do nothing
-            """
-            with self.record_query_execution(sql):
-                con.execute(sql)
-            tracked_commit(con, recorder_source=connection)
-            return
+        insert_sql = f"INSERT INTO {table} SELECT * FROM upsert_source"
+        with self.record_query_execution(insert_sql):
+            con.execute(insert_sql)
 
-        set_clause = ", ".join(f'"{col}" = excluded."{col}"' for col in non_key_columns)
-
-        conflict_target = ", ".join(f'"{col}"' for col in primary_keys)
-
-        sql = f"""
-            insert into {table}
-            select * from source
-            on conflict ({conflict_target}) do update set {set_clause}
-        """
-
-        with self.record_query_execution(sql):
-            con.execute(sql)
         tracked_commit(con, recorder_source=connection)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
