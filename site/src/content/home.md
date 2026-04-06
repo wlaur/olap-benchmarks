@@ -31,7 +31,7 @@ ClickHouse leads on raw query throughput while MonetDB trades speed for a more t
 
 ## RTABench
 
-Operational event-analytics workloads — counts, sums, and group-bys over event streams with realistic cardinality.
+Operational event-analytics workloads — counts, sums, and group-bys over event streams with realistic cardinality. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale.
 
 **Status:** Benchmark defined, results pending.
 
@@ -43,7 +43,7 @@ Expected to stress group-by and distinct-count performance across engines with v
 
 ## ClickBench
 
-Analytical scan-heavy queries derived from the widely-used ClickBench suite — full-table scans, filters, and aggregations over a single wide table.
+Analytical scan-heavy queries derived from [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse — full-table scans, filters, and aggregations over a single wide table.
 
 **Status:** Benchmark defined, results pending.
 
@@ -55,7 +55,7 @@ This suite focuses on raw scan throughput and predicate pushdown efficiency. Res
 
 ## Kaggle Airbnb
 
-Join-oriented analytics over a multi-table Airbnb listings dataset — testing join strategies, subquery optimization, and mixed aggregation patterns.
+Join-oriented analytics over a multi-table Airbnb listings dataset — testing join strategies, subquery optimization, and mixed aggregation patterns. Based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy.
 
 **Status:** Benchmark defined, results pending.
 

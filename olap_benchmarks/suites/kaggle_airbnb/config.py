@@ -1,3 +1,6 @@
+# Based on "Testing query speed for DuckDB vs ClickHouse vs StarRocks databases" by Vitaliy
+# https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef
+
 import logging
 from time import perf_counter
 from typing import Any
