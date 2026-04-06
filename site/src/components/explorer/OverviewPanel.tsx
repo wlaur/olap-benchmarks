@@ -73,6 +73,7 @@ export function OverviewPanel({
 
   const runChartData = buildOverviewChartData(
     operationSummaries,
+    includedDatabases,
     overviewScaleMode,
     visibleOperations,
   ).map((entry) => ({
