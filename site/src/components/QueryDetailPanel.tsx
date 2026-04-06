@@ -236,7 +236,7 @@ export function QueryDetailPanel({
             ))}
           </div>
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-            <SqlCodeView code={activeSql ?? "No SQL available"} />
+            <SqlCodeView code={activeSql ?? "No SQL available"} wrapLines />
           </div>
         </div>
       ) : (
