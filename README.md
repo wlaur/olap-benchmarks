@@ -58,6 +58,12 @@ Apply migrations to an explicit database path:
 uv run --group dev alembic -x db=/absolute/path/to/results.db upgrade head
 ```
 
+## Attribution
+
+- **ClickBench** suite is based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse
+- **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale
+- **Kaggle Airbnb** suite is based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy
+
 ## TODO
 
 - Additional step for time series suite with mutate+select
