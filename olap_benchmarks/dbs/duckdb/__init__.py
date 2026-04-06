@@ -11,7 +11,6 @@ from sqlalchemy import Connection, create_engine
 
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, TableName
-from ...suites.clickbench.config import Clickbench
 from .. import Database
 from ..utils import tracked_commit
 
@@ -55,10 +54,6 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
         if dtype == pl_type:
             return duck_type
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
-
-
-class DuckDBClickbench(Clickbench["DuckDB"]):
-    pass
 
 
 class DuckDB(Database):
@@ -231,7 +226,3 @@ class DuckDB(Database):
         with self.record_query_execution(sql):
             con.execute(sql)
         tracked_commit(con, recorder_source=connection)
-
-    @property
-    def clickbench(self) -> DuckDBClickbench:
-        return DuckDBClickbench(db=self)
