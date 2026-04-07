@@ -2,6 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from pathlib import Path
 from textwrap import dedent
 from typing import Any, cast
 
@@ -529,11 +530,91 @@ class Postgres(Database):
         finally:
             temp_file.unlink()
 
+    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path) -> None:
+        raw_conn = con.connection.dbapi_connection
+        assert raw_conn is not None
+        cursor = raw_conn.cursor()
+        copy_sql = f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)"
+        with open(csv_path) as f, self.record_query_execution(copy_sql):
+            cursor.copy_expert(copy_sql, f)
+
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        raise NotImplementedError
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        for pk in primary_keys:
+            if pk not in df.columns:
+                raise ValueError(f"Primary key column '{pk}' not found in DataFrame columns")
+
+        con = self.connect()
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+
+        staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
+        statement = f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+
+        temp_dir = SETTINGS.temporary_directory / "postgres/data"
+        temp_file = temp_dir / f"{table}_upsert_{uuid.uuid4().hex}.csv"
+
+        try:
+            df.write_csv(temp_file)
+            self._copy_csv_to_table(con, staging_table, temp_file)
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+        delete_sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
+        with self.record_query_execution(delete_sql):
+            con.execute(text(delete_sql))
+
+        all_columns = ", ".join(f'"{col}"' for col in df.columns)
+        insert_sql = f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}"
+        with self.record_query_execution(insert_sql):
+            con.execute(text(insert_sql))
+
+        statement = f"DROP TABLE {staging_table}"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+        tracked_commit(con)
+
+        _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        raise NotImplementedError
+        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+
+        if not primary_keys:
+            raise ValueError("primary_key must be a non-empty string or list of strings")
+
+        con = self.connect()
+
+        staging_table = f"_staging_del_{table}_{uuid.uuid4().hex[:8]}"
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+
+        statement = f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+
+        temp_dir = SETTINGS.temporary_directory / "postgres/data"
+        temp_file = temp_dir / f"{table}_delete_{uuid.uuid4().hex}.csv"
+
+        try:
+            keys.select(primary_keys).write_csv(temp_file)
+            self._copy_csv_to_table(con, staging_table, temp_file)
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
+        with self.record_query_execution(sql):
+            con.execute(text(sql))
+
+        statement = f"DROP TABLE {staging_table}"
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+        tracked_commit(con)
+
+        _LOGGER.info(f"Deleted rows from {table} by primary key")
 
     @property
     def rtabench(self) -> PostgresRTABench:
