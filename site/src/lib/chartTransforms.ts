@@ -20,6 +20,7 @@ export type OverviewOperationVisibility = Record<BenchmarkOperation, boolean>
 
 export function buildOverviewChartData(
   operationSummaries: OperationSummary[],
+  databases: string[],
   scaleMode: DurationScaleMode,
   visibleOperations: OverviewOperationVisibility,
 ): OverviewChartRow[] {
@@ -55,29 +56,39 @@ export function buildOverviewChartData(
     summariesByDatabase.set(summary.db, existing)
   }
 
-  return Array.from(summariesByDatabase.values())
-    .map((entry) => {
-      const visiblePopulate = visibleOperations.populate ? entry.populate_duration_s : 0
-      const visibleSelect = visibleOperations.select ? entry.select_duration_s : 0
-      const visibleMutate = visibleOperations.mutate ? entry.mutate_duration_s : 0
-      const totalDuration = visiblePopulate + visibleSelect + visibleMutate
-
+  return databases.map((database) => {
+    const entry = summariesByDatabase.get(database)
+    if (!entry) {
       return {
-        db: entry.db,
-        db_version: entry.db_version,
-        populate_duration_s: entry.populate_duration_s,
-        select_duration_s: entry.select_duration_s,
-        mutate_duration_s: entry.mutate_duration_s,
-        total_duration_s: totalDuration,
-        populate_chart_duration_s: scaleDurationForChart(visiblePopulate, scaleMode),
-        mutate_chart_duration_s: scaleDurationForChart(visibleMutate, scaleMode),
-        select_chart_duration_s: scaleDurationForChart(visibleSelect, scaleMode),
+        db: database,
+        db_version: "",
+        populate_duration_s: 0,
+        select_duration_s: 0,
+        mutate_duration_s: 0,
+        total_duration_s: 0,
+        populate_chart_duration_s: 0,
+        mutate_chart_duration_s: 0,
+        select_chart_duration_s: 0,
       }
-    })
-    .sort(
-      (left, right) =>
-        left.total_duration_s - right.total_duration_s || left.db.localeCompare(right.db),
-    )
+    }
+
+    const visiblePopulate = visibleOperations.populate ? entry.populate_duration_s : 0
+    const visibleSelect = visibleOperations.select ? entry.select_duration_s : 0
+    const visibleMutate = visibleOperations.mutate ? entry.mutate_duration_s : 0
+    const totalDuration = visiblePopulate + visibleSelect + visibleMutate
+
+    return {
+      db: entry.db,
+      db_version: entry.db_version,
+      populate_duration_s: entry.populate_duration_s,
+      select_duration_s: entry.select_duration_s,
+      mutate_duration_s: entry.mutate_duration_s,
+      total_duration_s: totalDuration,
+      populate_chart_duration_s: scaleDurationForChart(visiblePopulate, scaleMode),
+      mutate_chart_duration_s: scaleDurationForChart(visibleMutate, scaleMode),
+      select_chart_duration_s: scaleDurationForChart(visibleSelect, scaleMode),
+    }
+  })
 }
 
 export function buildQueryComparisonRows(

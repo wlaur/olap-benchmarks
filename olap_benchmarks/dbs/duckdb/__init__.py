@@ -11,8 +11,8 @@ from sqlalchemy import Connection, create_engine
 
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, TableName
-from ...suites.clickbench.config import Clickbench
 from .. import Database
+from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,13 +54,6 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
         if dtype == pl_type:
             return duck_type
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
-
-
-class DuckDBClickbench(Clickbench["DuckDB"]):
-    @property
-    def populate_kwargs(self) -> dict[str, Any]:
-        # uses > 40g memory otherwise
-        return {"in_memory": False}
 
 
 class DuckDB(Database):
@@ -118,9 +111,9 @@ class DuckDB(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
-        in_memory: bool = True,
     ) -> None:
-        con = get_duckdb_connection(self.connect())
+        connection = self.connect()
+        con = get_duckdb_connection(connection)
 
         result = cast(
             tuple[int] | None,
@@ -154,9 +147,6 @@ class DuckDB(Database):
                 con.execute(ddl)
 
         if isinstance(df, pl.LazyFrame):
-            if in_memory:
-                raise ValueError("in_memory=True is not compatible with LazyFrame input")
-
             fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
             df.sink_parquet(fpath)
             _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
@@ -167,28 +157,20 @@ class DuckDB(Database):
                     con.execute(sql)
             finally:
                 fpath.unlink()
-        elif in_memory:
+        else:
             con.register("source", df)
             _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
             sql = f"insert into {table} select * from source"
             with self.record_query_execution(sql):
                 con.execute(sql)
-        else:
-            fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
-            df.write_parquet(fpath)
-            _LOGGER.info(f"Inserting from Parquet dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-            try:
-                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
-                with self.record_query_execution(sql):
-                    con.execute(sql)
-            finally:
-                fpath.unlink()
-
-        con.commit()
+        tracked_commit(con, recorder_source=connection)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        # DuckDB 1.5.0 crashes when creating UNIQUE/PRIMARY KEY constraints on
+        # TIMESTAMP columns in persistent databases beyond ~15K rows.
+        # Work around by using DELETE + INSERT instead of ON CONFLICT.
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
 
         if not primary_keys:
@@ -198,37 +180,21 @@ class DuckDB(Database):
             if pk not in df.columns:
                 raise ValueError(f"Primary key column '{pk}' not found in DataFrame columns")
 
-        con = get_duckdb_connection(self.connect())
+        connection = self.connect()
+        con = get_duckdb_connection(connection)
 
-        con.register("source", df)
+        con.register("upsert_source", df)
 
-        non_key_columns = [col for col in df.columns if col not in primary_keys]
+        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
+        delete_sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM upsert_source)"
+        with self.record_query_execution(delete_sql):
+            con.execute(delete_sql)
 
-        if not non_key_columns:
-            conflict_target = ", ".join(f'"{col}"' for col in primary_keys)
-            sql = f"""
-                insert into {table}
-                select * from source
-                on conflict ({conflict_target}) do nothing
-            """
-            with self.record_query_execution(sql):
-                con.execute(sql)
-            con.commit()
-            return
+        insert_sql = f"INSERT INTO {table} SELECT * FROM upsert_source"
+        with self.record_query_execution(insert_sql):
+            con.execute(insert_sql)
 
-        set_clause = ", ".join(f'"{col}" = excluded."{col}"' for col in non_key_columns)
-
-        conflict_target = ", ".join(f'"{col}"' for col in primary_keys)
-
-        sql = f"""
-            insert into {table}
-            select * from source
-            on conflict ({conflict_target}) do update set {set_clause}
-        """
-
-        with self.record_query_execution(sql):
-            con.execute(sql)
-        con.commit()
+        tracked_commit(con, recorder_source=connection)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
@@ -236,7 +202,8 @@ class DuckDB(Database):
         if not primary_keys:
             raise ValueError("primary_key must be a non-empty string or list of strings")
 
-        con = get_duckdb_connection(self.connect())
+        connection = self.connect()
+        con = get_duckdb_connection(connection)
         con.register("delete_keys", keys)
 
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
@@ -244,8 +211,4 @@ class DuckDB(Database):
 
         with self.record_query_execution(sql):
             con.execute(sql)
-        con.commit()
-
-    @property
-    def clickbench(self) -> DuckDBClickbench:
-        return DuckDBClickbench(db=self)
+        tracked_commit(con, recorder_source=connection)

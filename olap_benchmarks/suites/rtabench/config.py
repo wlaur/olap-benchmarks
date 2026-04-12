@@ -1,3 +1,6 @@
+# Based on RTABench by Timescale
+# https://github.com/timescale/rtabench
+
 import asyncio
 import logging
 import os

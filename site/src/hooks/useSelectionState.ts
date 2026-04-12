@@ -5,6 +5,7 @@ export interface SelectionState {
   selectedQuery: string | null
   setHoveredQuery: (queryName: string | null) => void
   setSelectedQuery: (queryName: string | null) => void
+  resetSelection: () => void
   toggleSelectedQuery: (queryName: string) => void
   isHighlighted: (queryName: string) => boolean
   isAnyActive: boolean
@@ -28,12 +29,17 @@ export function useSelectionState(): SelectionState {
   const toggleSelectedQuery = useCallback((queryName: string) => {
     setSelectedQuery((prev) => (prev === queryName ? null : queryName))
   }, [])
+  const resetSelection = useCallback(() => {
+    setHoveredQuery(null)
+    setSelectedQuery(null)
+  }, [])
 
   return {
     hoveredQuery,
     selectedQuery,
     setHoveredQuery,
     setSelectedQuery,
+    resetSelection,
     toggleSelectedQuery,
     isHighlighted,
     isAnyActive,

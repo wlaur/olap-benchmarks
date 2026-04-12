@@ -547,61 +547,110 @@ export async function fetchFlameSpans(
   // Fetch operation-level spans
   const operationSpans = await db
     .with("latest_runs", () => latestRuns)
-    .with("global_start", (qb) =>
+    .with("operation_runs", (qb) =>
       qb
         .selectFrom("latest_runs")
-        .select((eb) => [eb.fn.min("latest_runs.run_started_at").as("min_start")])
+        .select((eb) => [
+          eb.ref("latest_runs.run_id").as("run_id"),
+          eb.ref("latest_runs.db").as("db"),
+          eb.ref("latest_runs.operation").as("operation"),
+          eb.ref("latest_runs.run_started_at").as("run_started_at"),
+          eb.ref("latest_runs.run_finished_at").as("run_finished_at"),
+          sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.run_finished_at")} - ${eb.ref("latest_runs.run_started_at")}))`.as(
+            "duration_s",
+          ),
+          operationOrder.as("operation_order"),
+        ])
         .where("latest_runs.run_rank", "=", 1),
     )
-    .selectFrom("latest_runs")
-    .crossJoin("global_start")
+    .with("operation_offsets", (qb) =>
+      qb.selectFrom("operation_runs").select((eb) => [
+        eb.ref("operation_runs.run_id").as("run_id"),
+        eb.ref("operation_runs.db").as("db"),
+        eb.ref("operation_runs.operation").as("operation"),
+        eb.ref("operation_runs.run_started_at").as("run_started_at"),
+        eb.ref("operation_runs.run_finished_at").as("run_finished_at"),
+        eb.ref("operation_runs.duration_s").as("duration_s"),
+        eb.ref("operation_runs.operation_order").as("operation_order"),
+        sql<number>`coalesce(
+          sum(${eb.ref("operation_runs.duration_s")}) over (
+            order by ${eb.ref("operation_runs.operation_order")}
+            rows between unbounded preceding and 1 preceding
+          ),
+          0
+        )`.as("operation_offset_s"),
+      ]),
+    )
+    .selectFrom("operation_offsets")
     .select((eb) => [
-      sql<string>`'op_' || ${eb.ref("latest_runs.operation")}`.as("id"),
-      sql<string>`${eb.ref("latest_runs.db")}`.as("db"),
-      sql<BenchmarkOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
-      sql<string>`${eb.ref("latest_runs.operation")}`.as("step_name"),
+      sql<string>`'op_' || ${eb.ref("operation_offsets.operation")}`.as("id"),
+      sql<string>`${eb.ref("operation_offsets.db")}`.as("db"),
+      sql<BenchmarkOperation>`${eb.ref("operation_offsets.operation")}`.as("operation"),
+      sql<string>`${eb.ref("operation_offsets.operation")}`.as("step_name"),
       sql<string | null>`NULL`.as("query_name"),
       sql<string | null>`NULL`.as("query_sql"),
       sql<number | null>`NULL`.as("iteration"),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.run_started_at")} - ${eb.ref("global_start.min_start")}))`.as(
-        "elapsed_start_s",
-      ),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.run_finished_at")} - ${eb.ref("global_start.min_start")}))`.as(
+      eb.ref("operation_offsets.operation_offset_s").as("elapsed_start_s"),
+      sql<number>`${eb.ref("operation_offsets.operation_offset_s")} + ${eb.ref("operation_offsets.duration_s")}`.as(
         "elapsed_end_s",
       ),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.run_finished_at")} - ${eb.ref("latest_runs.run_started_at")}))`.as(
-        "duration_s",
-      ),
+      eb.ref("operation_offsets.duration_s").as("duration_s"),
       sql<"operation">`'operation'`.as("depth"),
     ])
-    .where("latest_runs.run_rank", "=", 1)
-    .orderBy(operationOrder)
+    .orderBy("operation_offsets.operation_order")
     .execute()
 
   // Fetch step-level spans
-  const stepSpans = await db
+  const rawStepSpans = await db
     .with("latest_runs", () => latestRuns)
-    .with("global_start", (qb) =>
+    .with("operation_runs", (qb) =>
       qb
         .selectFrom("latest_runs")
-        .select((eb) => [eb.fn.min("latest_runs.run_started_at").as("min_start")])
+        .select((eb) => [
+          eb.ref("latest_runs.run_id").as("run_id"),
+          eb.ref("latest_runs.db").as("db"),
+          eb.ref("latest_runs.operation").as("operation"),
+          eb.ref("latest_runs.run_started_at").as("run_started_at"),
+          eb.ref("latest_runs.run_finished_at").as("run_finished_at"),
+          sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.run_finished_at")} - ${eb.ref("latest_runs.run_started_at")}))`.as(
+            "duration_s",
+          ),
+          operationOrder.as("operation_order"),
+        ])
         .where("latest_runs.run_rank", "=", 1),
     )
+    .with("operation_offsets", (qb) =>
+      qb.selectFrom("operation_runs").select((eb) => [
+        eb.ref("operation_runs.run_id").as("run_id"),
+        eb.ref("operation_runs.db").as("db"),
+        eb.ref("operation_runs.operation").as("operation"),
+        eb.ref("operation_runs.run_started_at").as("run_started_at"),
+        eb.ref("operation_runs.run_finished_at").as("run_finished_at"),
+        eb.ref("operation_runs.duration_s").as("duration_s"),
+        eb.ref("operation_runs.operation_order").as("operation_order"),
+        sql<number>`coalesce(
+          sum(${eb.ref("operation_runs.duration_s")}) over (
+            order by ${eb.ref("operation_runs.operation_order")}
+            rows between unbounded preceding and 1 preceding
+          ),
+          0
+        )`.as("operation_offset_s"),
+      ]),
+    )
     .selectFrom("run_step")
-    .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
-    .crossJoin("global_start")
+    .innerJoin("operation_offsets", "operation_offsets.run_id", "run_step.run_id")
     .select((eb) => [
       sql<string>`'step_' || ${eb.ref("run_step.id")}`.as("id"),
-      sql<string>`${eb.ref("latest_runs.db")}`.as("db"),
-      sql<BenchmarkOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
+      sql<string>`${eb.ref("operation_offsets.db")}`.as("db"),
+      sql<BenchmarkOperation>`${eb.ref("operation_offsets.operation")}`.as("operation"),
       eb.ref("run_step.step_name").as("step_name"),
       eb.ref("run_step.query_name").as("query_name"),
       sql<string | null>`NULL`.as("query_sql"),
       eb.ref("run_step.iteration").as("iteration"),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.started_at")} - ${eb.ref("global_start.min_start")}))`.as(
+      sql<number>`${eb.ref("operation_offsets.operation_offset_s")} + EXTRACT(EPOCH FROM (${eb.ref("run_step.started_at")} - ${eb.ref("operation_offsets.run_started_at")}))`.as(
         "elapsed_start_s",
       ),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("global_start.min_start")}))`.as(
+      sql<number>`${eb.ref("operation_offsets.operation_offset_s")} + EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("operation_offsets.run_started_at")}))`.as(
         "elapsed_end_s",
       ),
       sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))`.as(
@@ -609,38 +658,66 @@ export async function fetchFlameSpans(
       ),
       sql<"step">`'step'`.as("depth"),
     ])
-    .where("latest_runs.run_rank", "=", 1)
     .where("run_step.status", "=", "completed")
     .where("run_step.finished_at", "is not", null)
-    .orderBy(operationOrder)
+    .orderBy("operation_offsets.operation_order")
     .orderBy("run_step.started_at")
     .execute()
+
+  const stepSpans = collapseQueryStepIterations(rawStepSpans)
 
   // Fetch query-execution-level spans
   const querySpans = await db
     .with("latest_runs", () => latestRuns)
-    .with("global_start", (qb) =>
+    .with("operation_runs", (qb) =>
       qb
         .selectFrom("latest_runs")
-        .select((eb) => [eb.fn.min("latest_runs.run_started_at").as("min_start")])
+        .select((eb) => [
+          eb.ref("latest_runs.run_id").as("run_id"),
+          eb.ref("latest_runs.db").as("db"),
+          eb.ref("latest_runs.operation").as("operation"),
+          eb.ref("latest_runs.run_started_at").as("run_started_at"),
+          eb.ref("latest_runs.run_finished_at").as("run_finished_at"),
+          sql<number>`EXTRACT(EPOCH FROM (${eb.ref("latest_runs.run_finished_at")} - ${eb.ref("latest_runs.run_started_at")}))`.as(
+            "duration_s",
+          ),
+          operationOrder.as("operation_order"),
+        ])
         .where("latest_runs.run_rank", "=", 1),
+    )
+    .with("operation_offsets", (qb) =>
+      qb.selectFrom("operation_runs").select((eb) => [
+        eb.ref("operation_runs.run_id").as("run_id"),
+        eb.ref("operation_runs.db").as("db"),
+        eb.ref("operation_runs.operation").as("operation"),
+        eb.ref("operation_runs.run_started_at").as("run_started_at"),
+        eb.ref("operation_runs.run_finished_at").as("run_finished_at"),
+        eb.ref("operation_runs.duration_s").as("duration_s"),
+        eb.ref("operation_runs.operation_order").as("operation_order"),
+        sql<number>`coalesce(
+          sum(${eb.ref("operation_runs.duration_s")}) over (
+            order by ${eb.ref("operation_runs.operation_order")}
+            rows between unbounded preceding and 1 preceding
+          ),
+          0
+        )`.as("operation_offset_s"),
+      ]),
     )
     .selectFrom("query_execution")
     .innerJoin("run_step", "run_step.id", "query_execution.run_step_id")
-    .innerJoin("latest_runs", "latest_runs.run_id", "query_execution.run_id")
-    .crossJoin("global_start")
+    .innerJoin("operation_offsets", "operation_offsets.run_id", "query_execution.run_id")
     .select((eb) => [
       sql<string>`'qe_' || ${eb.ref("query_execution.id")}`.as("id"),
-      sql<string>`${eb.ref("latest_runs.db")}`.as("db"),
-      sql<BenchmarkOperation>`${eb.ref("latest_runs.operation")}`.as("operation"),
+      sql<string>`${eb.ref("operation_offsets.db")}`.as("db"),
+      sql<BenchmarkOperation>`${eb.ref("operation_offsets.operation")}`.as("operation"),
       eb.ref("run_step.step_name").as("step_name"),
       eb.ref("run_step.query_name").as("query_name"),
       eb.ref("query_execution.query").as("query_sql"),
       eb.ref("run_step.iteration").as("iteration"),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("query_execution.start_time")} - ${eb.ref("global_start.min_start")}))`.as(
+      sql<number>`${eb.ref("operation_offsets.operation_offset_s")} + EXTRACT(EPOCH FROM (${eb.ref("query_execution.start_time")} - ${eb.ref("operation_offsets.run_started_at")}))`.as(
         "elapsed_start_s",
       ),
-      sql<number>`EXTRACT(EPOCH FROM (${eb.ref("query_execution.end_time")} - ${eb.ref("global_start.min_start")}))`.as(
+      sql<number>`${eb.ref("operation_offsets.operation_offset_s")} + EXTRACT(EPOCH FROM (${eb.ref("query_execution.end_time")} - ${eb.ref("operation_offsets.run_started_at")}))`.as(
         "elapsed_end_s",
       ),
       sql<number>`EXTRACT(EPOCH FROM (${eb.ref("query_execution.end_time")} - ${eb.ref("query_execution.start_time")}))`.as(
@@ -648,12 +725,54 @@ export async function fetchFlameSpans(
       ),
       sql<"query">`'query'`.as("depth"),
     ])
-    .where("latest_runs.run_rank", "=", 1)
     .where("run_step.status", "=", "completed")
     .where("run_step.finished_at", "is not", null)
-    .orderBy(operationOrder)
+    .orderBy("operation_offsets.operation_order")
     .orderBy("query_execution.start_time")
     .execute()
 
   return [...operationSpans, ...stepSpans, ...querySpans]
+}
+
+function collapseQueryStepIterations(stepSpans: FlameSpan[]): FlameSpan[] {
+  const collapsedSpans: FlameSpan[] = []
+  const groupedQueries = new Map<string, FlameSpan>()
+
+  for (const span of stepSpans) {
+    if (span.depth !== "step" || span.query_name === null) {
+      collapsedSpans.push(span)
+      continue
+    }
+
+    const groupKey = `${span.operation}:${span.step_name}:${span.query_name}`
+    const existing = groupedQueries.get(groupKey)
+    if (!existing) {
+      groupedQueries.set(groupKey, {
+        ...span,
+        id: `step_group_${span.operation}_${span.step_name}_${span.query_name}`,
+        iteration: null,
+      })
+      continue
+    }
+
+    existing.elapsed_start_s = Math.min(existing.elapsed_start_s, span.elapsed_start_s)
+    existing.elapsed_end_s = Math.max(existing.elapsed_end_s, span.elapsed_end_s)
+    existing.duration_s = existing.elapsed_end_s - existing.elapsed_start_s
+  }
+
+  return [...collapsedSpans, ...groupedQueries.values()].sort((left, right) => {
+    const operationDelta = compareOperationOrder(left.operation, right.operation)
+    if (operationDelta !== 0) return operationDelta
+    return left.elapsed_start_s - right.elapsed_start_s || left.id.localeCompare(right.id)
+  })
+}
+
+function compareOperationOrder(left: BenchmarkOperation, right: BenchmarkOperation): number {
+  const operationOrder: Record<BenchmarkOperation, number> = {
+    populate: 0,
+    mutate: 1,
+    select: 2,
+  }
+
+  return operationOrder[left] - operationOrder[right]
 }
