@@ -34,7 +34,8 @@ interface QueryLabelTooltipState {
 }
 
 const CELL_HEIGHT = 28
-const CELL_GAP = 2
+const COL_GAP = 3
+const ROW_GAP = 3
 const CELL_RX = 3
 const LABEL_WIDTH = 180
 const HEADER_HEIGHT = 34
@@ -51,6 +52,7 @@ const COLOR_STOPS: readonly [number, number, number][] = [
 
 const MISSING_COLOR = "rgba(148, 163, 184, 0.08)"
 const HOVERED_STROKE = "rgba(255, 255, 255, 0.6)"
+const FASTEST_STROKE = "rgba(52, 211, 153, 0.7)"
 
 function interpolateColor(t: number): string {
   const clamped = Math.max(0, Math.min(1, t))
@@ -150,10 +152,10 @@ export function QueryHeatmapGrid({
   const cellWidth = useMemo(() => computeCellWidth(databases), [databases])
 
   const SUMMARY_GAP = 10
-  const gridWidth = LABEL_WIDTH + databases.length * (cellWidth + CELL_GAP) - CELL_GAP
-  const queryRowsStartY = HEADER_HEIGHT + CELL_HEIGHT + CELL_GAP + SUMMARY_GAP
+  const gridWidth = LABEL_WIDTH + databases.length * (cellWidth + COL_GAP) - COL_GAP
+  const queryRowsStartY = HEADER_HEIGHT + CELL_HEIGHT + ROW_GAP + SUMMARY_GAP
   const gridHeight =
-    queryRowsStartY + rows.length * (CELL_HEIGHT + CELL_GAP) - CELL_GAP + LEGEND_HEIGHT
+    queryRowsStartY + rows.length * (CELL_HEIGHT + ROW_GAP) - ROW_GAP + LEGEND_HEIGHT
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent, rowIdx: number, colIdx: number) => {
@@ -251,7 +253,7 @@ export function QueryHeatmapGrid({
   }
 
   const summaryY = HEADER_HEIGHT
-  const legendY = queryRowsStartY + rows.length * (CELL_HEIGHT + CELL_GAP) + 8
+  const legendY = queryRowsStartY + rows.length * (CELL_HEIGHT + ROW_GAP) + 8
   const hoveredQueryName =
     hoveredCell !== null && hoveredCell.row >= 0
       ? (rows[hoveredCell.row]?.query_name ?? null)
@@ -291,7 +293,7 @@ export function QueryHeatmapGrid({
 
           {/* Query rows */}
           {rows.map((row, rowIdx) => {
-            const y = queryRowsStartY + rowIdx * (CELL_HEIGHT + CELL_GAP)
+            const y = queryRowsStartY + rowIdx * (CELL_HEIGHT + ROW_GAP)
             const isSelected = selection.selectedQuery === row.query_name
             const isDimmed = activeQuery !== null && activeQuery !== row.query_name
             const isRowHovered = hoveredCell?.row === rowIdx
@@ -430,12 +432,12 @@ function ColumnHeaders({
   return (
     <g>
       {databases.map((db, colIdx) => {
-        const x = LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP) + cellWidth / 2
+        const x = LABEL_WIDTH + colIdx * (cellWidth + COL_GAP) + cellWidth / 2
         const isHovered = hoveredCol === colIdx
         return (
           <g key={db}>
             <rect
-              x={LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP)}
+              x={LABEL_WIDTH + colIdx * (cellWidth + COL_GAP)}
               y={4}
               width={cellWidth}
               height={HEADER_HEIGHT - 8}
@@ -505,9 +507,17 @@ function SummaryRow({
       {databases.map((_, colIdx) => {
         const cell = cellData[colIdx]
         if (!cell) return null
-        const x = LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP)
+        const x = LABEL_WIDTH + colIdx * (cellWidth + COL_GAP)
         const isCellHovered = hoveredCol === colIdx
+        const isFastest = cell.ratio === 1 && cell.duration !== null
         const fill = ratioColor(cell.ratio, maxRatio)
+
+        const stroke = isCellHovered
+          ? HOVERED_STROKE
+          : isFastest
+            ? FASTEST_STROKE
+            : "rgba(148, 163, 184, 0.15)"
+        const strokeWidth = isCellHovered ? 1.5 : isFastest ? 1.5 : 0.5
 
         return (
           <g
@@ -517,14 +527,21 @@ function SummaryRow({
             className="cursor-default"
           >
             <rect
+              x={x - COL_GAP / 2}
+              y={y - ROW_GAP / 2}
+              width={cellWidth + COL_GAP}
+              height={CELL_HEIGHT + ROW_GAP}
+              fill="transparent"
+            />
+            <rect
               x={x}
               y={y}
               width={cellWidth}
               height={CELL_HEIGHT}
               rx={CELL_RX}
               fill={fill}
-              stroke={isCellHovered ? HOVERED_STROKE : "rgba(148, 163, 184, 0.15)"}
-              strokeWidth={isCellHovered ? 1.5 : 0.5}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
             />
             {cell.duration !== null ? (
               <text
@@ -615,9 +632,19 @@ const HeatmapRow = memo(function HeatmapRow({
       {databases.map((_, colIdx) => {
         const cell = cellData[colIdx]
         if (!cell) return null
-        const x = LABEL_WIDTH + colIdx * (cellWidth + CELL_GAP)
+        const x = LABEL_WIDTH + colIdx * (cellWidth + COL_GAP)
         const isCellHovered = isRowHovered && hoveredCol === colIdx
+        const isFastest = cell.ratio === 1 && cell.duration !== null
         const fill = ratioColor(cell.ratio, maxRatio)
+
+        const stroke = isCellHovered
+          ? HOVERED_STROKE
+          : isSelected
+            ? "rgba(108, 142, 239, 0.5)"
+            : isFastest
+              ? FASTEST_STROKE
+              : "none"
+        const strokeWidth = isCellHovered ? 1.5 : isSelected ? 1 : isFastest ? 1.5 : 0
 
         return (
           <g
@@ -628,16 +655,21 @@ const HeatmapRow = memo(function HeatmapRow({
             className="cursor-pointer"
           >
             <rect
+              x={x - COL_GAP / 2}
+              y={y - ROW_GAP / 2}
+              width={cellWidth + COL_GAP}
+              height={CELL_HEIGHT + ROW_GAP}
+              fill="transparent"
+            />
+            <rect
               x={x}
               y={y}
               width={cellWidth}
               height={CELL_HEIGHT}
               rx={CELL_RX}
               fill={fill}
-              stroke={
-                isCellHovered ? HOVERED_STROKE : isSelected ? "rgba(108, 142, 239, 0.5)" : "none"
-              }
-              strokeWidth={isCellHovered ? 1.5 : isSelected ? 1 : 0}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
             />
             {cell.duration !== null ? (
               <text

@@ -1,4 +1,4 @@
-import { Database } from "lucide-react"
+import { ChevronLeft, ChevronRight, Database, LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { BenchmarkSuiteId } from "../../lib/benchmarks"
@@ -6,7 +6,7 @@ import { formatDurationSeconds } from "../../lib/format"
 import { formatCpuPercent, formatMegabytes } from "../../lib/metricFormat"
 import { fetchFlameSpans } from "../../lib/queries"
 import type { FlameSpan, MetricSample } from "../../lib/types"
-import { ControlSelect } from "../controls/ControlSelect"
+import { QuietButton } from "../controls/Control"
 import { PanelCard } from "../layout/Panel"
 import { SqlCodeView } from "../SqlCodeView"
 import { MetaLabel, SectionTitle } from "../Typography"
@@ -36,7 +36,9 @@ export function FlameGraphPanel({
 }: FlameGraphPanelProps) {
   const [selectedDb, setSelectedDb] = useState<string | null>(null)
   const [spans, setSpans] = useState<FlameSpan[]>([])
-  const [selectedSpan, setSelectedSpan] = useState<FlameSpan | null>(null)
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
+  const [selectedSpanPath, setSelectedSpanPath] = useState<string[]>([])
+  const [zoomPath, setZoomPath] = useState<string[]>([])
   const [isLoadingSpans, setIsLoadingSpans] = useState(false)
 
   const resolvedDb =
@@ -55,7 +57,6 @@ export function FlameGraphPanel({
 
     let cancelled = false
     setIsLoadingSpans(true)
-    setSelectedSpan(null)
 
     fetchFlameSpans(system, suite, resolvedDb)
       .then((result) => {
@@ -72,6 +73,21 @@ export function FlameGraphPanel({
       cancelled = true
     }
   }, [isLoading, system, suite, resolvedDb])
+
+  const selectedSpan = useMemo(() => {
+    if (selectedSpanId) {
+      const matchedById = spans.find((span) => span.id === selectedSpanId)
+      if (matchedById) return matchedById
+    }
+
+    for (let index = selectedSpanPath.length - 1; index >= 0; index -= 1) {
+      const spanKey = selectedSpanPath[index]
+      const matchedSpan = spans.find((span) => getFlameSpanSelectionKey(span) === spanKey)
+      if (matchedSpan) return matchedSpan
+    }
+
+    return null
+  }, [selectedSpanId, selectedSpanPath, spans])
 
   const spanMetrics = useMemo((): SpanMetrics | null => {
     if (!selectedSpan || !resolvedDb) return null
@@ -109,8 +125,11 @@ export function FlameGraphPanel({
   }, [selectedSpan, resolvedDb, metricSamples, spans])
 
   const handleSelectSpan = useCallback((span: FlameSpan | null) => {
-    setSelectedSpan(span)
+    setSelectedSpanId(span?.id ?? null)
+    setSelectedSpanPath(span ? getFlameSpanSelectionPath(span) : [])
   }, [])
+  const showLoadingOverlay = isLoading || isLoadingSpans
+  const hasSpans = spans.length > 0
 
   return (
     <PanelCard className="flex h-[clamp(28rem,70vh,42rem)] min-h-0 min-w-0 flex-col p-3">
@@ -121,32 +140,47 @@ export function FlameGraphPanel({
         ) : null}
       </div>
 
-      <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
-        {isLoading || isLoadingSpans ? (
-          <div className="flex h-24 items-center justify-center text-xs text-slate-500">
-            Loading execution data…
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div className="shrink-0 overflow-x-auto overflow-y-hidden">
+      <div className="relative mt-2 flex min-h-0 flex-1 flex-col rounded-lg border border-border-default bg-surface-inset p-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="shrink-0 overflow-x-auto overflow-y-hidden">
+            {hasSpans ? (
               <FlameGraph
                 spans={spans}
                 selectedSpan={selectedSpan}
                 onSelectSpan={handleSelectSpan}
+                zoomPath={zoomPath}
+                onZoomPathChange={setZoomPath}
               />
-            </div>
+            ) : (
+              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border-default bg-surface-primary/20 text-xs text-slate-500">
+                {showLoadingOverlay
+                  ? "Loading execution data…"
+                  : "No execution data found for this database."}
+              </div>
+            )}
+          </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
-              {selectedSpan ? (
-                <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
-              ) : spans.length > 0 ? (
-                <div className="flex min-h-[9rem] flex-1 items-center rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
-                  Click a segment to view details and resource metrics.
-                </div>
-              ) : null}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {selectedSpan ? (
+              <SelectedSpanDetail span={selectedSpan} metrics={spanMetrics} />
+            ) : hasSpans ? (
+              <div className="flex min-h-[9rem] flex-1 items-center rounded-lg border border-dashed border-border-default bg-surface-primary/40 px-3 py-2 text-xs text-slate-500">
+                Click a segment to view details and resource metrics.
+              </div>
+            ) : (
+              <div className="min-h-[9rem] flex-1 rounded-lg border border-dashed border-border-default bg-surface-primary/20" />
+            )}
+          </div>
+        </div>
+
+        {showLoadingOverlay ? (
+          <div className="absolute inset-3 z-10 flex items-center justify-center rounded-lg bg-surface-inset/88 backdrop-blur-[1px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-primary/80 px-3 py-1.5 text-xs text-slate-300 shadow-sm">
+              <LoaderCircle className="size-3.5 animate-spin" />
+              <span>Loading execution data…</span>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </PanelCard>
   )
@@ -217,16 +251,69 @@ function DatabaseSelector({ databases, selected, onChange }: DatabaseSelectorPro
   if (databases.length === 0) return null
 
   const value = selected ?? databases[0]!
+  const currentIndex = databases.indexOf(value)
+  const previousDb = databases[(currentIndex - 1 + databases.length) % databases.length]!
+  const nextDb = databases[(currentIndex + 1) % databases.length]!
 
   return (
-    <ControlSelect
-      ariaLabel="Database"
-      label="Database"
-      value={value}
-      onChange={onChange}
-      options={databases.map((db) => ({ value: db, label: db }))}
-      icon={<Database className="h-3 w-3" strokeWidth={1.8} />}
-      labelMode="always"
-    />
+    <div className="inline-flex items-center gap-3 rounded-full border border-border-default bg-surface-inset px-2 py-1">
+      <QuietButton
+        size="xs"
+        aria-label="Show previous flame graph database"
+        onClick={() => onChange(previousDb)}
+        className="size-7 rounded-full px-0"
+      >
+        <ChevronLeft className="size-3.5" />
+      </QuietButton>
+      <div className="min-w-[11.5rem] px-1 text-center">
+        <MetaLabel className="tracking-[0.16em] text-slate-500">Database</MetaLabel>
+        <p className="mt-0.5 inline-flex items-center justify-center gap-1.5 text-sm font-medium text-slate-100">
+          <Database className="size-3.5 text-slate-400" strokeWidth={1.8} />
+          <span>{value}</span>
+        </p>
+      </div>
+      <QuietButton
+        size="xs"
+        aria-label="Show next flame graph database"
+        onClick={() => onChange(nextDb)}
+        className="size-7 rounded-full px-0"
+      >
+        <ChevronRight className="size-3.5" />
+      </QuietButton>
+    </div>
   )
+}
+
+function getFlameSpanSelectionKey(span: FlameSpan): string {
+  if (span.depth === "operation") {
+    return `operation:${span.operation}`
+  }
+
+  if (span.depth === "step") {
+    return `step:${span.operation}:${span.query_name ?? span.step_name}`
+  }
+
+  if (span.query_name !== null) {
+    return `query:${span.operation}:${span.query_name}:${span.iteration ?? 0}`
+  }
+
+  return `query:${span.operation}:${span.step_name}:${normalizeFlameQuerySql(span.query_sql)}:${span.iteration ?? 0}`
+}
+
+function getFlameSpanSelectionPath(span: FlameSpan): string[] {
+  const operationKey = `operation:${span.operation}`
+  if (span.depth === "operation") {
+    return [operationKey]
+  }
+
+  const stepKey = `step:${span.operation}:${span.query_name ?? span.step_name}`
+  if (span.depth === "step") {
+    return [operationKey, stepKey]
+  }
+
+  return [operationKey, stepKey, getFlameSpanSelectionKey(span)]
+}
+
+function normalizeFlameQuerySql(querySql: string | null): string {
+  return querySql?.replace(/\s+/g, " ").trim() ?? ""
 }

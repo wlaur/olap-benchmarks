@@ -1,6 +1,5 @@
 import re
 from collections.abc import Mapping
-from contextlib import AbstractContextManager, nullcontext
 from typing import Any, cast
 
 import numpy as np
@@ -19,6 +18,7 @@ from sqlalchemy.schema import CreateTable
 from sqlalchemy.types import UserDefinedType
 
 from ...settings import SETTINGS, TableName
+from ..utils import record_query_execution_context, tracked_commit
 from .settings import SETTINGS as MONETDB_SETTINGS
 
 # NOTE: don't change this, possible that MonetDB assumed ms in some places
@@ -276,18 +276,11 @@ def create_table(
         prefixes=["local", "temporary"] if temporary else None,
     )
 
-    recorder = connection.info.get("olap_query_recorder")
     create_query = str(CreateTable(tbl).compile(connection))
-
-    if callable(recorder):
-        query_context = cast(AbstractContextManager[None], recorder(create_query))
-        with query_context:
-            metadata.create_all(connection, tables=[tbl], checkfirst=False)
-    else:
-        with nullcontext():
-            metadata.create_all(connection, tables=[tbl], checkfirst=False)
+    with record_query_execution_context(create_query, connection):
+        metadata.create_all(connection, tables=[tbl], checkfirst=False)
 
     if commit:
-        connection.commit()
+        tracked_commit(connection)
 
     return tbl

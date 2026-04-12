@@ -2,7 +2,7 @@ import logging
 import shutil
 import uuid
 from collections.abc import Iterator, Sequence
-from contextlib import AbstractContextManager, contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +14,7 @@ import polars as pl
 from sqlalchemy import Connection, text
 
 from ...settings import TableName
+from ..utils import record_query_execution_context, tracked_commit
 from .binary import serialize_binary_column_data, write_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
@@ -50,12 +51,7 @@ class MonetDBInsertKwargs(TypedDict, total=False):
 
 
 def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
-    recorder = connection.info.get("olap_query_recorder")
-
-    if callable(recorder):
-        return cast(AbstractContextManager[None], recorder(query))
-
-    return nullcontext()
+    return record_query_execution_context(query, connection)
 
 
 def _raise_insert_error(table: TableName, columns: Sequence[str], exc: Exception) -> None:
@@ -93,7 +89,7 @@ def _copy_binary_files(
         cast(Any, con).execute(copy_query)
 
     if commit:
-        con.commit()
+        tracked_commit(con, recorder_source=connection)
 
 
 def _write_eager_column_files(df: pl.DataFrame, temp_dir: Path) -> list[Path]:
@@ -320,7 +316,7 @@ def delete(table: TableName, connection: Connection, primary_key: str | list[str
 
     with _record_query_execution(connection, delete_sql):
         connection.execute(text(delete_sql))
-    connection.commit()
+    tracked_commit(connection)
 
     _LOGGER.info(f"Deleted from table {table} using {keys.shape[0]:_} key rows in {perf_counter() - t0:_.2f} seconds")
 
@@ -363,7 +359,7 @@ def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_k
 
     with _record_query_execution(connection, merge_statement):
         connection.execute(text(merge_statement))
-    connection.commit()
+    tracked_commit(connection)
 
     _LOGGER.info(
         f"Upserted dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) "

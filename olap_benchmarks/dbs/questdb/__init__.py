@@ -11,6 +11,7 @@ from sqlalchemy import Connection, create_engine, text
 from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
+from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
             """
             with self.db.record_query_execution(statement):
                 con.execute(text(statement))
-            con.commit()
+            tracked_commit(con)
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
             self.db.wait_until_count("hits", count)
@@ -284,7 +285,7 @@ class QuestDB(Database):
 
             with self.record_query_execution(statement):
                 con.execute(text(statement))
-            con.commit()
+            tracked_commit(con)
             self.wait_until_count(table, initial_count + len(df))
 
         finally:
@@ -328,7 +329,7 @@ class QuestDB(Database):
 
             with self.record_query_execution(statement):
                 con.execute(text(statement))
-            con.commit()
+            tracked_commit(con)
             self.wait_until_count(table, initial_count + row_count)
 
         finally:

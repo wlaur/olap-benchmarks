@@ -1,3 +1,6 @@
+# Based on ClickBench by ClickHouse
+# https://github.com/ClickHouse/ClickBench
+
 import logging
 from time import perf_counter
 from typing import Any

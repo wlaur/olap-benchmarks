@@ -34,7 +34,7 @@ export function QueryHeatmapPanel({
   if (!isLoading && queryRows.length === 0) return null
 
   return (
-    <PanelCard>
+    <PanelCard className="flex h-full flex-col">
       <PanelHeader>
         <div>
           <SectionTitle as="h3">Query latency heatmap</SectionTitle>
@@ -44,7 +44,7 @@ export function QueryHeatmapPanel({
         </div>
       </PanelHeader>
 
-      <div className="mt-3 rounded-lg bg-surface-inset p-4">
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface-inset p-4">
         {isLoading ? (
           <HeatmapSkeleton />
         ) : (
