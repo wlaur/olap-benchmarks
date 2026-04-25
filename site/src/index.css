@@ -132,3 +132,60 @@
 .react-grid-item {
   min-width: 0;
 }
+
+/* One Dark token colors for inline SQL highlighting (matches CodeMirror viewer). */
+.tok-keyword {
+  color: #c678dd;
+}
+.tok-controlKeyword,
+.tok-modifier,
+.tok-operatorKeyword {
+  color: #c678dd;
+}
+.tok-string,
+.tok-string2 {
+  color: #98c379;
+}
+.tok-number,
+.tok-bool,
+.tok-null {
+  color: #d19a66;
+}
+.tok-comment,
+.tok-lineComment,
+.tok-blockComment {
+  color: #5c6370;
+  font-style: italic;
+}
+.tok-typeName,
+.tok-className {
+  color: #e5c07b;
+}
+.tok-function,
+.tok-macroName,
+.tok-propertyName {
+  color: #61afef;
+}
+.tok-variableName,
+.tok-name {
+  color: #e06c75;
+}
+.tok-operator,
+.tok-derefOperator,
+.tok-arithmeticOperator,
+.tok-logicOperator,
+.tok-bitwiseOperator,
+.tok-compareOperator,
+.tok-updateOperator,
+.tok-definitionOperator {
+  color: #56b6c2;
+}
+.tok-punctuation,
+.tok-separator,
+.tok-bracket,
+.tok-paren,
+.tok-brace,
+.tok-squareBracket,
+.tok-angleBracket {
+  color: #abb2bf;
+}

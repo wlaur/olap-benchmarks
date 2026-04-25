@@ -2,6 +2,8 @@ import { memo, useCallback, useMemo, useRef, useState } from "react"
 
 import type { SelectionState } from "../hooks/useSelectionState"
 import { formatDurationSeconds, formatMultiplier } from "../lib/format"
+import { highlightSqlTokens } from "../lib/highlightSql"
+import type { QuerySqlEntry } from "../lib/types"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 
 interface QueryHeatmapGridProps {
@@ -9,6 +11,7 @@ interface QueryHeatmapGridProps {
   databases: string[]
   databaseColors: Record<string, string>
   selection: SelectionState
+  sqlBySuite: Record<string, QuerySqlEntry> | null
 }
 
 interface TooltipState {
@@ -31,6 +34,7 @@ interface QueryLabelTooltipState {
   queryName: string
   tableFamily: string
   queryId: string
+  sql: string | null
 }
 
 const CELL_HEIGHT = 28
@@ -141,6 +145,7 @@ export function QueryHeatmapGrid({
   databases,
   databaseColors,
   selection,
+  sqlBySuite,
 }: QueryHeatmapGridProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
@@ -228,6 +233,8 @@ export function QueryHeatmapGrid({
       const rect = container.getBoundingClientRect()
       const row = rows[rowIdx]
       if (!row) return
+      const entry = sqlBySuite?.[row.query_name] ?? null
+      const sql = entry?.sql ?? Object.values(entry?.db_overrides ?? {})[0] ?? null
       setQueryLabelTooltip({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
@@ -235,9 +242,10 @@ export function QueryHeatmapGrid({
         queryName: row.query_name,
         tableFamily: row.table_family,
         queryId: row.query_id,
+        sql,
       })
     },
-    [rows],
+    [rows, sqlBySuite],
   )
 
   const handleQueryLabelLeave = useCallback(() => {
@@ -765,13 +773,19 @@ function QueryLabelTooltipPopup({
   tooltip: QueryLabelTooltipState
   containerWidth: number
 }) {
+  const popupWidth = tooltip.sql ? 420 : 260
+  const tokens = useMemo(
+    () => (tooltip.sql ? highlightSqlTokens(tooltip.sql.trim()) : null),
+    [tooltip.sql],
+  )
+
   return (
     <div
       className="pointer-events-none absolute z-50 rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
       style={{
-        left: Math.min(tooltip.x + 12, containerWidth - 260),
+        left: Math.min(tooltip.x + 12, containerWidth - popupWidth - 8),
         top: Math.max(0, tooltip.y - 8),
-        maxWidth: 280,
+        maxWidth: popupWidth,
       }}
     >
       <div className="font-medium">{tooltip.queryLabel}</div>
@@ -779,6 +793,15 @@ function QueryLabelTooltipPopup({
         {tooltip.tableFamily} · Q{tooltip.queryId}
       </div>
       <div className="mt-0.5 font-mono text-[10px] text-slate-500">{tooltip.queryName}</div>
+      {tokens ? (
+        <pre className="mt-2 [display:-webkit-box] overflow-hidden font-mono text-[10px] leading-snug whitespace-pre-wrap text-slate-300 [-webkit-box-orient:vertical] [-webkit-line-clamp:10]">
+          {tokens.map((token, idx) => (
+            <span key={idx} className={token.className || undefined}>
+              {token.text}
+            </span>
+          ))}
+        </pre>
+      ) : null}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { useMemo } from "react"
 import type { SelectionState } from "../../hooks/useSelectionState"
 import { buildQueryComparisonRows } from "../../lib/chartTransforms"
 import type { SuiteConfig } from "../../lib/suiteConfig"
-import type { QuerySummary } from "../../lib/types"
+import type { QueriesManifest, QuerySummary } from "../../lib/types"
 import { PanelCard, PanelHeader } from "../layout/Panel"
 import { QueryHeatmapGrid } from "../QueryHeatmapGrid"
 import { Skeleton } from "../Skeleton"
@@ -15,6 +15,7 @@ interface QueryHeatmapPanelProps {
   includedDatabases: string[]
   databaseColors: Record<string, string>
   selection: SelectionState
+  queriesManifest: QueriesManifest | null
   isLoading: boolean
 }
 
@@ -24,6 +25,7 @@ export function QueryHeatmapPanel({
   includedDatabases,
   databaseColors,
   selection,
+  queriesManifest,
   isLoading,
 }: QueryHeatmapPanelProps) {
   const queryRows = useMemo(
@@ -53,6 +55,7 @@ export function QueryHeatmapPanel({
             databases={includedDatabases}
             databaseColors={databaseColors}
             selection={selection}
+            sqlBySuite={queriesManifest?.[suiteConfig.id] ?? null}
           />
         )}
       </div>
