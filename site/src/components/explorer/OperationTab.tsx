@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState } from "react"
 import { useContainerWidth } from "react-grid-layout"
 
 import type { SelectionState } from "../../hooks/useSelectionState"
@@ -10,10 +10,13 @@ import type { SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { QueryComparisonTable } from "../QueryComparisonTable"
-import { QueryDetailPanel } from "../QueryDetailPanel"
 import { RunTimeline } from "../RunTimeline"
 import { BodyText, Eyebrow, FeatureTitle, MetaLabel, SectionTitle } from "../Typography"
 import { InspectorSkeleton, LegendSkeleton, QueryTableSkeleton } from "./ExplorerSkeletons"
+
+const QueryDetailPanel = lazy(() =>
+  import("../QueryDetailPanel").then((m) => ({ default: m.QueryDetailPanel })),
+)
 
 const DETAIL_SPLIT_MIN_WIDTH = 1160
 const QUERY_TABLE_MIN_HEIGHT_CLASS = "min-h-[24rem]"
@@ -175,13 +178,23 @@ export function OperationTab({
           {isLoading ? (
             <InspectorSkeleton />
           ) : selectedRow ? (
-            <QueryDetailPanel
-              row={selectedRow}
-              databases={includedDatabases}
-              databaseColors={databaseColors}
-              sql={selectedSql}
-              onClose={() => selection.setSelectedQuery(null)}
-            />
+            <Suspense
+              fallback={
+                <InspectorPlaceholder
+                  rowCount={queryRows.length}
+                  databaseCount={includedDatabases.length}
+                  operation={operation}
+                />
+              }
+            >
+              <QueryDetailPanel
+                row={selectedRow}
+                databases={includedDatabases}
+                databaseColors={databaseColors}
+                sql={selectedSql}
+                onClose={() => selection.setSelectedQuery(null)}
+              />
+            </Suspense>
           ) : (
             <InspectorPlaceholder
               rowCount={queryRows.length}
