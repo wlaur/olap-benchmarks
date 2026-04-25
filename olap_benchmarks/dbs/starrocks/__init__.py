@@ -1,12 +1,10 @@
-import json
 import logging
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import Any, cast
+from typing import cast
 
-import httpx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
@@ -97,22 +95,30 @@ class StarRocks(Database):
         return " ".join(parts)
 
     def wait_until_accessible(self, timeout_seconds: float = 240.0, interval_seconds: float = 2.0) -> None:
-        # FE + BE startup takes ~30-60s the first time and we also need to
-        # ensure the benchmark database exists before SQLAlchemy can connect.
+        # FE + BE startup takes ~30-60s the first time. Also need to bootstrap
+        # the benchmark database. Wait until BE is registered AND alive --
+        # otherwise CREATE TABLE later fails with "no available BE".
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
         deadline = perf_counter() + timeout_seconds
         attempts = 0
+        bootstrap_uri = f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/"
 
         while perf_counter() < deadline:
             attempts += 1
             try:
-                # connect to no specific db first to issue CREATE DATABASE
-                bootstrap_uri = f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/"
                 engine = create_engine(bootstrap_uri)
-                with engine.connect() as con:
-                    con.execute(text(f"CREATE DATABASE IF NOT EXISTS {STARROCKS_DATABASE}"))
-                engine.dispose()
-                # now check the actual db is reachable
+                try:
+                    with engine.connect() as con:
+                        con.execute(text(f"CREATE DATABASE IF NOT EXISTS {STARROCKS_DATABASE}"))
+                        be_count = con.execute(
+                            text("SELECT count(*) FROM information_schema.backends WHERE alive = 'true'")
+                        ).scalar()
+                finally:
+                    engine.dispose()
+
+                if not be_count:
+                    raise RuntimeError("no alive BE registered yet")
+
                 self.connect(reconnect=True)
                 self.fetch("select 1 as one", schema={"one": pl.Int64})
                 _LOGGER.info(f"Database {self.name} is ready (after {attempts} attempt(s))")
@@ -180,29 +186,46 @@ class StarRocks(Database):
         if isinstance(not_null, str):
             not_null = [not_null]
 
+        # PRIMARY KEY columns must be NOT NULL and must come first in the
+        # column list. Reorder so they appear up front when a PK is given.
+        pk_list: list[str]
+        if isinstance(primary_key, str):
+            pk_list = [primary_key]
+        elif isinstance(primary_key, list) and primary_key:
+            pk_list = list(primary_key)
+        else:
+            pk_list = []
+
+        if pk_list:
+            for c in pk_list:
+                if c not in not_null:
+                    not_null = [*not_null, c]
+            ordered = [c for c in pk_list if c in schema] + [c for c in schema if c not in pk_list]
+        else:
+            ordered = list(schema.names())
+
         columns: list[str] = []
-        for name, dtype in schema.items():
+        for name in ordered:
+            dtype = schema[name]
             sr_type = get_starrocks_type(dtype)
             null_clause = "NOT NULL" if name in not_null else "NULL"
             columns.append(f"`{name}` {sr_type} {null_clause}")
 
         columns_sql = ",\n  ".join(columns)
 
-        # DUPLICATE KEY tables are append-only columnar (no PK enforcement).
-        # PRIMARY KEY tables support UPDATE/DELETE but require declaring the key
-        # columns up front. For now use DUPLICATE KEY everywhere; suite-level
-        # subclasses override CREATE TABLE for tables that need mutate.
-        if isinstance(primary_key, str):
-            key_cols = f"`{primary_key}`"
-        elif isinstance(primary_key, list) and primary_key:
-            key_cols = ", ".join(f"`{c}`" for c in primary_key)
+        # PRIMARY KEY tables support UPDATE/DELETE/UPSERT (used by the
+        # time_series mutate suite); DUPLICATE KEY tables are append-only
+        # columnar and cheaper for read-heavy ClickBench/RTABench shapes.
+        if pk_list:
+            key_clause = "PRIMARY KEY"
+            key_cols = ", ".join(f"`{c}`" for c in pk_list)
         else:
-            # fall back to first column as the duplicate key (StarRocks requires one)
-            key_cols = f"`{next(iter(schema.keys()))}`"
+            key_clause = "DUPLICATE KEY"
+            key_cols = f"`{ordered[0]}`"
 
         return (
             f"CREATE TABLE `{table}` (\n  {columns_sql}\n)\n"
-            f"DUPLICATE KEY ({key_cols})\n"
+            f"{key_clause} ({key_cols})\n"
             f"DISTRIBUTED BY HASH ({key_cols}) BUCKETS 4\n"
             f"PROPERTIES ('replication_num' = '1')"
         )
@@ -221,31 +244,26 @@ class StarRocks(Database):
         tracked_commit(con)
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
-    def _stream_load(self, table: TableName, parquet_path: Path) -> dict[str, Any]:
-        # StarRocks STREAM LOAD: HTTP PUT to FE, FE redirects to BE which
-        # ingests the parquet body.
-        url = f"http://{STARROCKS_HOST}:{STARROCKS_HTTP_PORT}/api/{STARROCKS_DATABASE}/{table}/_stream_load"
-        headers = {
-            "format": "parquet",
-            "label": f"load_{table}_{uuid.uuid4().hex}",
-            "Expect": "100-continue",
-        }
+    def _ingest_parquet(self, table: TableName, parquet_path: Path, columns: list[str]) -> None:
+        # StarRocks STREAM LOAD only supports CSV/JSON; for parquet we use the
+        # FILES table function. The BE reads the parquet from its own
+        # filesystem -- we mount {temp}/starrocks/data -> /staging in the
+        # container, so the file path inside the BE is /staging/<name>.
+        in_container_path = f"/staging/{parquet_path.name}"
+        col_list = ", ".join(f"`{c}`" for c in columns)
+        sql = (
+            f"INSERT INTO `{table}` ({col_list}) "
+            f"SELECT {col_list} FROM FILES("
+            f'"path" = "file://{in_container_path}", '
+            f'"format" = "parquet"'
+            f")"
+        )
         size = parquet_path.stat().st_size
-        _LOGGER.info(f"STREAM LOAD {parquet_path.name} ({size / 1e6:.1f} MB) → {table}")
-        with parquet_path.open("rb") as f:
-            response = httpx.put(
-                url,
-                content=f.read(),
-                headers=headers,
-                auth=(STARROCKS_USER, STARROCKS_PASSWORD),
-                follow_redirects=True,
-                timeout=None,
-            )
-        response.raise_for_status()
-        result = cast(dict[str, Any], response.json())
-        if result.get("Status") not in ("Success", "Publish Timeout"):
-            raise RuntimeError(f"STREAM LOAD failed for {table}: {json.dumps(result)}")
-        return result
+        _LOGGER.info(f"INSERT FROM FILES {parquet_path.name} ({size / 1e6:.1f} MB) → {table}")
+        con = self.connect()
+        with self.record_query_execution(sql):
+            con.execute(text(sql))
+        tracked_commit(con)
 
     def insert(
         self,
@@ -269,8 +287,7 @@ class StarRocks(Database):
             df.write_parquet(parquet_path)
 
         try:
-            with self.record_query_execution(f"STREAM LOAD {table}"):
-                self._stream_load(table, parquet_path)
+            self._ingest_parquet(table, parquet_path, list(schema.names()))
         finally:
             parquet_path.unlink(missing_ok=True)
 
