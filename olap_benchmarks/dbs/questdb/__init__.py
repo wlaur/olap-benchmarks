@@ -4,13 +4,13 @@ import shutil
 import uuid
 from collections.abc import Mapping
 from time import sleep
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from questdb.ingress import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
 from ..utils import tracked_commit
@@ -37,7 +37,11 @@ def _build_clickbench_insert(
             parts.append(f"cast(cast({name} as long) * 86400000000L as timestamp) as {name}")
         else:
             parts.append(name)
-    return f"insert into hits select {', '.join(parts)} from read_parquet('{parquet_name}')"
+    # Pre-sort by EventTime so the WAL apply path is essentially append-only into the
+    # designated-timestamp partitions instead of paying an O3 (out-of-order) merge per
+    # WAL segment. EventTime is monotonically scaled by the cast above, so sorting on
+    # the projected column matches sorting on the source column.
+    return f"insert into hits select {', '.join(parts)} from read_parquet('{parquet_name}') order by EventTime"
 
 
 class QuestDBClickbench(Clickbench["QuestDB"]):
@@ -100,6 +104,17 @@ class QuestDB(Database):
     version: str = VERSION
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
+
+    # QuestDB.upsert and .delete raise NotImplementedError -- skip those mutate
+    # steps for time_series so populate + select can complete in benchmark-all.
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
+        "time_series": frozenset(
+            f"{action}_{table}_{count}"
+            for action in ("upsert", "delete")
+            for table in ("data_tall", "data_wide", "data_large")
+            for count in (1, 100, 10_000)
+        )
+    }
 
     @property
     def start(self) -> str:
