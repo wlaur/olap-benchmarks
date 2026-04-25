@@ -19,7 +19,7 @@ const KNOWN_DATABASE_COLORS: Record<string, string> = {
   monetdb: DATABASE_COLOR_PALETTE[2],
   postgres: DATABASE_COLOR_PALETTE[3],
   questdb: DATABASE_COLOR_PALETTE[4],
-  timescaledb: "#e879f9",
+  timescaledb: "#c084fc",
 }
 
 const FALLBACK_DATABASE_COLORS = DATABASE_COLOR_PALETTE.slice(

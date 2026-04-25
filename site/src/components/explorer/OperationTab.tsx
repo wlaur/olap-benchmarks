@@ -98,6 +98,7 @@ export function OperationTab({
           querySteps={querySteps}
           databases={includedDatabases}
           databaseColors={databaseColors}
+          compareQueryNames={suiteConfig.compareQueryNames}
           onSelectQuery={(queryName) => setSelectedQuery(queryName)}
           selectedQuery={selectedQuery}
           title={timelineTitle}

@@ -106,4 +106,4 @@ CREATE TABLE IF NOT EXISTS hits (
     RefererHash long,
     URLHash long,
     CLID int
-) TIMESTAMP(EventTime) PARTITION BY DAY;
+) TIMESTAMP(EventTime) PARTITION BY MONTH WAL;
