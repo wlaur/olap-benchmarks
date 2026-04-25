@@ -9,7 +9,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
@@ -236,6 +236,7 @@ function TableBody({
   selection: SelectionState
 }) {
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
+  const { selectedQuery, toggleSelectedQuery } = selection
 
   const setRowRef = useCallback((queryName: string, el: HTMLTableRowElement | null) => {
     if (el) {
@@ -246,7 +247,6 @@ function TableBody({
   }, [])
 
   useEffect(() => {
-    const selectedQuery = selection.selectedQuery
     if (!selectedQuery) return
     const el = rowRefs.current.get(selectedQuery)
     if (!el) return
@@ -265,40 +265,71 @@ function TableBody({
     } else if (offsetBottom > 0) {
       scrollContainer.scrollTop += offsetBottom
     }
-  }, [selection.selectedQuery])
+  }, [selectedQuery])
+
+  const rows = table.getRowModel().rows
 
   return (
     <tbody>
-      {table.getRowModel().rows.map((row, rowIndex) => {
+      {rows.map((row, rowIndex) => {
         const queryName = row.original.query_name
-        const isSelected = selection.selectedQuery === queryName
+        const isSelected = selectedQuery === queryName
         const isEven = rowIndex % 2 === 0
 
         return (
-          <tr
+          <TableRow
             key={row.id}
-            ref={(el) => setRowRef(queryName, el)}
-            className={cn(
-              "relative cursor-pointer border-b border-border-subtle",
-              isSelected
-                ? "bg-white/[0.04] after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:border after:border-accent-400/50"
-                : isEven
-                  ? "hover:bg-white/[0.03]"
-                  : "bg-white/[0.02] hover:bg-white/[0.04]",
-            )}
-            onClick={() => selection.toggleSelectedQuery(queryName)}
-          >
-            {row.getVisibleCells().map((cell) => (
-              <td key={cell.id} className="px-4 py-3 align-top">
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </td>
-            ))}
-          </tr>
+            row={row}
+            queryName={queryName}
+            isSelected={isSelected}
+            isEven={isEven}
+            setRowRef={setRowRef}
+            onToggle={toggleSelectedQuery}
+          />
         )
       })}
     </tbody>
   )
 }
+
+interface TableRowProps {
+  row: ReturnType<Table<QueryComparisonRow>["getRowModel"]>["rows"][number]
+  queryName: string
+  isSelected: boolean
+  isEven: boolean
+  setRowRef: (queryName: string, el: HTMLTableRowElement | null) => void
+  onToggle: (queryName: string) => void
+}
+
+const TableRow = memo(function TableRow({
+  row,
+  queryName,
+  isSelected,
+  isEven,
+  setRowRef,
+  onToggle,
+}: TableRowProps) {
+  return (
+    <tr
+      ref={(el) => setRowRef(queryName, el)}
+      className={cn(
+        "relative cursor-pointer border-b border-border-subtle",
+        isSelected
+          ? "bg-white/[0.04] after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:border after:border-accent-400/50"
+          : isEven
+            ? "hover:bg-white/[0.03]"
+            : "bg-white/[0.02] hover:bg-white/[0.04]",
+      )}
+      onClick={() => onToggle(queryName)}
+    >
+      {row.getVisibleCells().map((cell) => (
+        <td key={cell.id} className="px-4 py-3 align-top">
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </td>
+      ))}
+    </tr>
+  )
+})
 
 function getQuantile(values: number[], quantile: number): number | null {
   if (values.length === 0) return null
