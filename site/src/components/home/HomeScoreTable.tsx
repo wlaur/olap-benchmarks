@@ -1,0 +1,168 @@
+import { Trophy } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+
+import { useHomeOverview } from "../../hooks/useHomeOverview"
+import { benchmarkDefinitions, type BenchmarkSuiteId } from "../../lib/benchmarks"
+import { cn } from "../../lib/cn"
+import { getDatabaseColors } from "../../lib/databaseColors"
+import { formatScore, SCORE_EXPLAINER } from "../../lib/score"
+import { useAppStore } from "../../stores/useAppStore"
+import { Skeleton } from "../Skeleton"
+import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+
+export function HomeScoreTable() {
+  const navigate = useNavigate()
+  const selectedSystem = useAppStore((s) => s.selectedSystem)
+  const systemLoading = useAppStore((s) => s.systemLoading)
+  const overview = useHomeOverview(selectedSystem)
+
+  const databaseColors = getDatabaseColors(overview.databases)
+  const suites = benchmarkDefinitions
+  const isLoading = systemLoading || overview.loading
+  const isEmpty = !isLoading && overview.databases.length === 0
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border-default bg-surface-raised">
+      <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border-default px-5 py-4">
+        <div>
+          <SectionTitle as="h2">Suite scores</SectionTitle>
+          <BodyText className="mt-1">
+            Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is
+            the leader.{" "}
+            {selectedSystem ? (
+              <>
+                System: <span className="text-slate-200">{selectedSystem}</span>.
+              </>
+            ) : null}
+          </BodyText>
+        </div>
+        <MetaLabel className="tracking-normal text-slate-400 normal-case">
+          {SCORE_EXPLAINER.body[1]}
+        </MetaLabel>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+          <thead className="bg-surface-inset/60 text-xs tracking-wide text-slate-300 uppercase">
+            <tr>
+              <th className="px-5 py-3 font-medium">Database</th>
+              {suites.map((suite) => (
+                <th key={suite.id} className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md px-1 text-slate-200 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
+                    onClick={() => navigate(`/explorer/${suite.id}`)}
+                    title={`Open ${suite.title} explorer`}
+                  >
+                    {suite.title}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <LoadingRows suiteCount={suites.length} />
+            ) : isEmpty ? (
+              <tr>
+                <td
+                  colSpan={suites.length + 1}
+                  className="px-5 py-10 text-center text-sm text-slate-300"
+                >
+                  No completed runs found{selectedSystem ? ` for ${selectedSystem}` : ""}.
+                </td>
+              </tr>
+            ) : (
+              overview.databases.map((db) => (
+                <tr key={db} className="border-t border-border-subtle">
+                  <td className="px-5 py-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{ backgroundColor: databaseColors[db] ?? "#94a3b8" }}
+                      />
+                      <span className="font-medium text-slate-100">{db}</span>
+                    </div>
+                  </td>
+                  {suites.map((suite) => (
+                    <ScoreCell
+                      key={suite.id}
+                      suiteId={suite.id}
+                      score={overview.scoresByDbAndSuite.get(db)?.get(suite.id)}
+                      rank={
+                        overview.suites
+                          .find((s) => s.suiteId === suite.id)
+                          ?.scores.findIndex((entry) => entry.db === db) ?? -1
+                      }
+                    />
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+interface ScoreCellProps {
+  suiteId: BenchmarkSuiteId
+  score: ReturnType<typeof useHomeOverview>["suites"][number]["scores"][number] | undefined
+  rank: number
+}
+
+function ScoreCell({ score, rank }: ScoreCellProps) {
+  if (!score) {
+    return (
+      <td className="px-4 py-3 text-right align-middle font-mono text-sm text-slate-500 tabular-nums">
+        —
+      </td>
+    )
+  }
+
+  const isLeader = rank === 0
+  return (
+    <td className="px-4 py-3 text-right align-middle">
+      <div className="flex items-center justify-end gap-2">
+        {isLeader ? <Trophy className="size-3.5 text-amber-300" aria-label="Leader" /> : null}
+        <span
+          className={cn(
+            "font-mono text-sm tabular-nums",
+            isLeader ? "font-semibold text-amber-200" : "text-slate-100",
+          )}
+        >
+          {formatScore(score.score)}
+        </span>
+      </div>
+      <p className="mt-0.5 text-right text-[10px] text-slate-400">
+        {score.wins}/{score.queryCount} fastest
+      </p>
+    </td>
+  )
+}
+
+function LoadingRows({ suiteCount }: { suiteCount: number }) {
+  return (
+    <>
+      {Array.from({ length: 5 }, (_, rowIdx) => (
+        <tr key={rowIdx} className="border-t border-border-subtle">
+          <td className="px-5 py-3">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="size-2.5 rounded-full" />
+              <Skeleton className="h-4 w-24 rounded" />
+            </div>
+          </td>
+          {Array.from({ length: suiteCount }, (__, colIdx) => (
+            <td key={colIdx} className="px-4 py-3">
+              <div className="flex flex-col items-end gap-1">
+                <Skeleton className="h-4 w-12 rounded" />
+                <Skeleton className="h-2.5 w-16 rounded" />
+              </div>
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  )
+}
