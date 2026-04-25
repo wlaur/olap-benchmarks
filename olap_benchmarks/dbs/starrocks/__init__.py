@@ -58,6 +58,11 @@ def get_starrocks_type(dtype: pl.DataType | type[pl.DataType]) -> str:
     if dtype == pl.Datetime:
         return "DATETIME"
 
+    if isinstance(dtype, pl.Decimal):
+        precision = dtype.precision or 38
+        scale = dtype.scale or 0
+        return f"DECIMAL({precision}, {scale})"
+
     sql_type = POLARS_STARROCKS_TYPE_MAP.get(dtype)
     if sql_type is None:
         raise ValueError(f"Unsupported Polars dtype for StarRocks: {dtype}")
@@ -110,14 +115,32 @@ class StarRocks(Database):
                 try:
                     with engine.connect() as con:
                         con.execute(text(f"CREATE DATABASE IF NOT EXISTS {STARROCKS_DATABASE}"))
-                        be_count = con.execute(
-                            text("SELECT count(*) FROM information_schema.backends WHERE alive = 'true'")
-                        ).scalar()
                 finally:
                     engine.dispose()
 
-                if not be_count:
-                    raise RuntimeError("no alive BE registered yet")
+                # SHOW BACKENDS reporting Alive=true is not sufficient: the FE
+                # tracks additional per-BE readiness flags (disk capacity
+                # report, tablet report) and CREATE TABLE fails with
+                # "backends without enough disk space" until all of them
+                # arrive. Easiest robust check: actually try a probe CREATE
+                # TABLE and drop it.
+                probe_uri = (
+                    f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/{STARROCKS_DATABASE}"
+                )
+                engine = create_engine(probe_uri)
+                try:
+                    with engine.connect() as con:
+                        con.execute(text("DROP TABLE IF EXISTS _probe"))
+                        con.execute(
+                            text(
+                                "CREATE TABLE _probe (id INT NOT NULL) "
+                                "PRIMARY KEY (id) DISTRIBUTED BY HASH (id) BUCKETS 1 "
+                                "PROPERTIES ('replication_num' = '1')"
+                            )
+                        )
+                        con.execute(text("DROP TABLE _probe"))
+                finally:
+                    engine.dispose()
 
                 self.connect(reconnect=True)
                 self.fetch("select 1 as one", schema={"one": pl.Int64})
@@ -281,10 +304,16 @@ class StarRocks(Database):
         staging.mkdir(parents=True, exist_ok=True)
         parquet_path = staging / f"{table}_{uuid.uuid4().hex}.parquet"
 
+        # Eagerly materialize then write -- sink_parquet has shown empty/truncated
+        # output on some Apple Silicon arm64 + large LazyFrame combinations,
+        # which surfaces as "Parquet magic bytes not found" inside StarRocks.
         if isinstance(df, pl.LazyFrame):
-            df.sink_parquet(parquet_path)
-        else:
-            df.write_parquet(parquet_path)
+            df = df.collect()
+        df.write_parquet(parquet_path)
+        # Same intermittent host -> container bind-mount visibility issue
+        # questdb hits: the container can briefly see a 0-length file even
+        # after write_parquet has returned. 100 ms is enough in practice.
+        sleep(0.1)
 
         try:
             self._ingest_parquet(table, parquet_path, list(schema.names()))
