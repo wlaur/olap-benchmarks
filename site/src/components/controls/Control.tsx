@@ -52,11 +52,11 @@ export function SegmentedButton({
       type={type ?? "button"}
       className={cn(
         "inline-flex items-center justify-center rounded-full border font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-        "focus-visible:border-slate-400/60 focus-visible:ring-2 focus-visible:ring-slate-300/15",
+        "focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20",
         BUTTON_SIZE_CLASS[size],
         selected
-          ? "border-slate-300/40 bg-surface-primary text-slate-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-          : "border-border-default bg-surface-inset text-slate-400 hover:border-slate-600 hover:text-slate-200",
+          ? "border-slate-200/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+          : "border-border-default bg-surface-inset text-slate-300 hover:border-slate-500 hover:bg-surface-raised hover:text-slate-100",
         className,
       )}
       {...props}
@@ -79,11 +79,11 @@ export function ControlChip({
       type={type ?? "button"}
       className={cn(
         "inline-flex items-center justify-center rounded-full border font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-        "focus-visible:border-slate-400/60 focus-visible:ring-2 focus-visible:ring-slate-300/15",
+        "focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20",
         BUTTON_SIZE_CLASS[size],
         selected
-          ? "border-slate-300/40 bg-surface-primary text-slate-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-          : "border-border-default bg-surface-inset text-slate-500 hover:border-slate-600 hover:text-slate-300",
+          ? "border-slate-200/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+          : "border-border-default bg-surface-inset text-slate-300 hover:border-slate-500 hover:bg-surface-raised hover:text-slate-100",
         className,
       )}
       {...props}
@@ -108,8 +108,8 @@ export function QuietButton({
     <button
       type={type ?? "button"}
       className={cn(
-        "inline-flex items-center justify-center rounded-full border border-border-default bg-surface-primary/55 font-medium text-slate-300 transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-        "hover:border-slate-600 hover:text-slate-100 focus-visible:border-slate-400/60 focus-visible:ring-2 focus-visible:ring-slate-300/15",
+        "inline-flex items-center justify-center rounded-full border border-border-default bg-surface-inset font-medium text-slate-200 transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
+        "hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20",
         BUTTON_SIZE_CLASS[size],
         className,
       )}

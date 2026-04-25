@@ -47,7 +47,7 @@ export function MetaLabel({
   return (
     <Text
       as={as}
-      className={cn("text-xs font-medium tracking-wide text-slate-500 uppercase", className)}
+      className={cn("text-xs font-medium tracking-wide text-slate-400 uppercase", className)}
     >
       {children}
     </Text>
@@ -102,6 +102,30 @@ export function FeatureTitle({
   )
 }
 
+export function SectionDivider({
+  title,
+  description,
+  trailing,
+  className,
+}: {
+  title: string
+  description?: string
+  trailing?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("flex flex-wrap items-baseline justify-between gap-3", className)}>
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h2 className="text-[11px] font-semibold tracking-[0.18em] text-slate-300 uppercase">
+          {title}
+        </h2>
+        {description ? <p className="text-xs text-slate-400">{description}</p> : null}
+      </div>
+      {trailing ? <div className="flex items-center gap-2">{trailing}</div> : null}
+    </div>
+  )
+}
+
 export function BodyText({
   as,
   children,
@@ -112,7 +136,7 @@ export function BodyText({
   className?: string
 }) {
   return (
-    <Text as={as} className={cn("text-sm text-slate-400", className)}>
+    <Text as={as} className={cn("text-sm text-slate-300", className)}>
       {children}
     </Text>
   )

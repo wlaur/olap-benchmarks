@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Bar,
   BarChart,
@@ -55,44 +55,56 @@ export function QueryDetailPanel({
     setActiveTab(defaultTab)
   }, [defaultTab, row.query_name])
 
-  const chartData = databases
-    .map((db) => {
-      const raw = row.by_database[db]
-      const stats = row.stats_by_database[db]
-      const medianDuration = raw ?? 0
-      const chartDuration = scaleDurationForChart(medianDuration, chartScaleMode)
-      const minDuration = stats?.min_duration_s ?? medianDuration
-      const maxDuration = stats?.max_duration_s ?? medianDuration
-      const minChartDuration = scaleDurationForChart(minDuration, chartScaleMode)
-      const maxChartDuration = scaleDurationForChart(maxDuration, chartScaleMode)
+  const chartData = useMemo(
+    () =>
+      databases
+        .map((db) => {
+          const raw = row.by_database[db]
+          const stats = row.stats_by_database[db]
+          const medianDuration = raw ?? 0
+          const chartDuration = scaleDurationForChart(medianDuration, chartScaleMode)
+          const minDuration = stats?.min_duration_s ?? medianDuration
+          const maxDuration = stats?.max_duration_s ?? medianDuration
+          const minChartDuration = scaleDurationForChart(minDuration, chartScaleMode)
+          const maxChartDuration = scaleDurationForChart(maxDuration, chartScaleMode)
 
-      return {
-        db,
-        duration: medianDuration,
-        chart_duration: chartDuration,
-        chart_error: [
-          Math.max(0, chartDuration - minChartDuration),
-          Math.max(0, maxChartDuration - chartDuration),
-        ] as const,
-        chart_error_span: Math.max(0, maxChartDuration - minChartDuration),
-        stats,
-        raw,
-        fill: databaseColors[db] ?? "#94a3b8",
-      }
-    })
-    .filter((d) => d.raw !== null)
-  const maxDuration = Math.max(
-    0,
-    ...chartData.map((entry) => entry.stats?.max_duration_s ?? entry.duration),
+          return {
+            db,
+            duration: medianDuration,
+            chart_duration: chartDuration,
+            chart_error: [
+              Math.max(0, chartDuration - minChartDuration),
+              Math.max(0, maxChartDuration - chartDuration),
+            ] as const,
+            chart_error_span: Math.max(0, maxChartDuration - minChartDuration),
+            stats,
+            raw,
+            fill: databaseColors[db] ?? "#94a3b8",
+          }
+        })
+        .filter((d) => d.raw !== null),
+    [databases, row, databaseColors, chartScaleMode],
   )
-  const axisDomain = getDurationAxisDomain(maxDuration, chartScaleMode)
-  const axisTicks = getDurationAxisTicks(maxDuration, chartScaleMode)
-  const chartSpan = Math.max(0, axisDomain[1] - axisDomain[0])
-  const minVisibleErrorSpan = chartSpan * 0.018
-  const visibleChartData = chartData.map((entry) => ({
-    ...entry,
-    chart_error: entry.chart_error_span >= minVisibleErrorSpan ? entry.chart_error : undefined,
-  }))
+  const maxDuration = useMemo(
+    () => Math.max(0, ...chartData.map((entry) => entry.stats?.max_duration_s ?? entry.duration)),
+    [chartData],
+  )
+  const axisDomain = useMemo(
+    () => getDurationAxisDomain(maxDuration, chartScaleMode),
+    [maxDuration, chartScaleMode],
+  )
+  const axisTicks = useMemo(
+    () => getDurationAxisTicks(maxDuration, chartScaleMode),
+    [maxDuration, chartScaleMode],
+  )
+  const visibleChartData = useMemo(() => {
+    const chartSpan = Math.max(0, axisDomain[1] - axisDomain[0])
+    const minVisibleErrorSpan = chartSpan * 0.018
+    return chartData.map((entry) => ({
+      ...entry,
+      chart_error: entry.chart_error_span >= minVisibleErrorSpan ? entry.chart_error : undefined,
+    }))
+  }, [chartData, axisDomain])
 
   const activeSql = activeTab === "common" ? sql?.sql : sql?.db_overrides[activeTab]
   const chartHeight = Math.max(180, chartData.length * 34)
@@ -193,6 +205,7 @@ export function QueryDetailPanel({
                   dataKey="chart_duration"
                   name="Duration"
                   radius={[0, 6, 6, 0]}
+                  isAnimationActive={false}
                   shape={(props) => (
                     <Rectangle
                       {...props}
@@ -205,14 +218,14 @@ export function QueryDetailPanel({
                     width={7}
                     stroke="rgba(30, 41, 59, 0.72)"
                     strokeWidth={4}
-                    isAnimationActive
+                    isAnimationActive={false}
                   />
                   <ErrorBar
                     dataKey="chart_error"
                     width={5}
                     stroke="rgba(108, 142, 239, 0.8)"
                     strokeWidth={2.25}
-                    isAnimationActive
+                    isAnimationActive={false}
                   />
                 </Bar>
               </BarChart>
