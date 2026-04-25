@@ -109,6 +109,38 @@ def _stop_db(db_instance: "Database") -> None:
         os.system(cmd)
 
 
+def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
+    """Remove persistent db files and temp files for a (db, suite) combination.
+
+    Docker (incl. OrbStack on macOS) writes data files as root inside the
+    container, which surfaces on the host as files the current user cannot
+    delete without `sudo`. Run a throwaway alpine container with the host
+    paths mounted so `rm -rf` runs as root and clears them.
+    """
+    db_subdir = SETTINGS.database_directory / db_name / suite_name
+    temp_subdir = SETTINGS.temporary_directory / db_name
+
+    rm_paths: list[str] = []
+    mounts: list[str] = []
+
+    if db_subdir.exists():
+        mounts.append(f"-v {SETTINGS.database_directory.as_posix()}:/dbs")
+        rm_paths.append(f"/dbs/{db_name}/{suite_name}")
+
+    if temp_subdir.exists():
+        mounts.append(f"-v {SETTINGS.temporary_directory.as_posix()}:/temp")
+        rm_paths.append(f"/temp/{db_name}")
+
+    if not rm_paths:
+        return
+
+    cmd = f"docker run --rm {' '.join(mounts)} alpine sh -c 'rm -rf {' '.join(rm_paths)}'"
+    _LOGGER.info(f"Cleaning up files for {db_name}:{suite_name}: {cmd}")
+    rc = os.system(cmd)
+    if rc != 0:
+        _LOGGER.warning(f"Cleanup for {db_name}:{suite_name} exited with code {rc}")
+
+
 @app.command
 def prepare(suite: SuiteArg) -> None:
     """Generate input data files for a benchmark suite (e.g. Parquet files)."""
@@ -132,8 +164,15 @@ def benchmark(
     suite: SuiteArg,
     operation: Literal["populate", "select", "mutate", "all"] = "all",
     revision: Revision = "default",
+    cleanup: bool = False,
 ) -> None:
-    """Run a benchmark suite against a database. Starts and stops the database container automatically."""
+    """Run a benchmark suite against a database. Starts and stops the database container automatically.
+
+    If `--cleanup` is set, persistent db files (under OLAP_BENCHMARKS_DATABASE_DIRECTORY)
+    and temp files (under OLAP_BENCHMARKS_TEMPORARY_DIRECTORY) for the (db, suite)
+    combination are deleted after the run. Cleanup runs inside a throwaway docker
+    container so it can remove root-owned files written by the db container.
+    """
     suite_names = resolve_suites(suite)
     for suite_name in suite_names:
         _check_input_data(suite_name)
@@ -159,6 +198,8 @@ def benchmark(
                         db_instance.benchmark(suite_name, operation)
                 finally:
                     _stop_db(db_instance)
+                    if cleanup:
+                        _cleanup_db_files(db_name, suite_name)
     except KeyboardInterrupt:
         interrupted = True
         raise
@@ -168,6 +209,21 @@ def benchmark(
             failed_runs = mark_running_runs_failed(revision=revision)
             if failed_runs:
                 _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
+
+
+@app.command(name="benchmark-all")
+def benchmark_all(
+    revision: Revision = "default",
+    cleanup: bool = False,
+) -> None:
+    """Run every supported operation of every suite against every database.
+
+    Equivalent to `olap benchmark all all` (with `operation=all`) and `cleanup`
+    forwarded. With `--cleanup`, persistent db files and temp files for each
+    (db, suite) combination are deleted after the run, so each combo starts
+    from a fresh state. Default is no cleanup.
+    """
+    benchmark(db="all", suite="all", operation="all", revision=revision, cleanup=cleanup)
 
 
 @app.command
