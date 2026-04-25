@@ -67,10 +67,9 @@ class StarRocks(Database):
 
     @property
     def start(self) -> str:
-        # allin1-ubuntu runs FE + BE in one process. Persistent dirs:
-        #   /opt/starrocks/fe/meta  (FE metadata)
-        #   /opt/starrocks/be/storage (BE data)
-        # Mount the per-suite database_directory as the parent of both.
+        # allin1-ubuntu 4.x ships FE+BE under /data/deploy/starrocks. Mount
+        # only the two state dirs the image's IMPORTANT NOTICE calls out;
+        # mounting the parent hides the pre-populated configs and BE crashes.
         meta_dir = self.database_directory / "fe-meta"
         storage_dir = self.database_directory / "be-storage"
         staging_dir = SETTINGS.temporary_directory / "starrocks/data"
@@ -81,8 +80,8 @@ class StarRocks(Database):
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d",
             "-p 9030:9030 -p 8030:8030 -p 8040:8040",
-            f"-v {meta_dir.as_posix()}:/opt/starrocks/fe/meta",
-            f"-v {storage_dir.as_posix()}:/opt/starrocks/be/storage",
+            f"-v {meta_dir.as_posix()}:/data/deploy/starrocks/fe/meta",
+            f"-v {storage_dir.as_posix()}:/data/deploy/starrocks/be/storage",
             f"-v {staging_dir.as_posix()}:/staging",
             DOCKER_IMAGE,
         ]
