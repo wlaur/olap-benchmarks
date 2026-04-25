@@ -165,6 +165,7 @@ def benchmark(
     operation: Literal["populate", "select", "mutate", "all"] = "all",
     revision: Revision = "default",
     cleanup: bool = False,
+    omit: list[DatabaseName] | None = None,
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically.
 
@@ -172,16 +173,24 @@ def benchmark(
     and temp files (under OLAP_BENCHMARKS_TEMPORARY_DIRECTORY) for the (db, suite)
     combination are deleted after the run. Cleanup runs inside a throwaway docker
     container so it can remove root-owned files written by the db container.
+
+    If `--omit` is set, the listed databases are skipped. Useful with `db=all`
+    to run every database except some (e.g. `--omit questdb`).
     """
     suite_names = resolve_suites(suite)
     for suite_name in suite_names:
         _check_input_data(suite_name)
+
+    omitted = set(omit or [])
 
     writer = start_writer_process(revision=revision)
     interrupted = False
 
     try:
         for db_name in resolve_dbs(db):
+            if db_name in omitted:
+                _LOGGER.info(f"Omitting database {db_name}")
+                continue
             for suite_name in suite_names:
                 _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
                 db_instance = _get_dbs()[db_name]
@@ -215,6 +224,7 @@ def benchmark(
 def benchmark_all(
     revision: Revision = "default",
     cleanup: bool = False,
+    omit: list[DatabaseName] | None = None,
 ) -> None:
     """Run every supported operation of every suite against every database.
 
@@ -222,8 +232,11 @@ def benchmark_all(
     forwarded. With `--cleanup`, persistent db files and temp files for each
     (db, suite) combination are deleted after the run, so each combo starts
     from a fresh state. Default is no cleanup.
+
+    Use `--omit <db>` (repeatable) to skip specific databases, e.g.
+    `olap benchmark-all --revision release --omit questdb`.
     """
-    benchmark(db="all", suite="all", operation="all", revision=revision, cleanup=cleanup)
+    benchmark(db="all", suite="all", operation="all", revision=revision, cleanup=cleanup, omit=omit)
 
 
 @app.command
