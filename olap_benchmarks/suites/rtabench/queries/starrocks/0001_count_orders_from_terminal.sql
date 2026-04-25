@@ -1,6 +1,6 @@
 SELECT
     date_trunc('day', event_created) as day,
-    count(*)
+    count(*) as count
 FROM
     order_events
 WHERE

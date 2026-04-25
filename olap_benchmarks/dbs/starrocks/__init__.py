@@ -1,4 +1,6 @@
 import logging
+import os
+import shutil
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,6 +11,8 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, TableName
+from ...suites.clickbench.config import Clickbench
+from ...suites.time_series.config import TimeSeries
 from .. import Database
 from ..utils import tracked_commit
 
@@ -67,6 +71,81 @@ def get_starrocks_type(dtype: pl.DataType | type[pl.DataType]) -> str:
     if sql_type is None:
         raise ValueError(f"Unsupported Polars dtype for StarRocks: {dtype}")
     return sql_type
+
+
+_CLICKBENCH_TIMESTAMP_COLS = ("EventTime", "ClientEventTime", "LocalEventTime")
+_CLICKBENCH_DATE_COLS = ("EventDate",)
+
+
+class StarRocksClickbench(Clickbench["StarRocks"]):
+    """Stream the 14 GB hits.parquet straight into StarRocks via FILES().
+
+    The base Clickbench.populate would scan-and-collect the parquet into a
+    polars DataFrame and re-stage it; for 100 M rows that's both slow and
+    memory-hungry. Instead we hardlink the source parquet into the BE-mounted
+    staging dir and use INSERT INTO ... SELECT ... FROM FILES(...) with
+    inline casts for the int-encoded timestamp / date columns.
+    """
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.initialize_schema("clickbench")
+
+        staging = SETTINGS.temporary_directory / "starrocks/data"
+        staging.mkdir(parents=True, exist_ok=True)
+        src = SETTINGS.input_data_directory / "clickbench/hits.parquet"
+        dst = staging / "hits.parquet"
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+        try:
+            os.link(src, dst)
+        except OSError:
+            shutil.copy2(src, dst)
+
+        # Source parquet has EventTime/ClientEventTime/LocalEventTime as
+        # int64 epoch-seconds and EventDate as uint16 days-since-epoch. Cast
+        # inline in the INSERT so we don't rewrite the file.
+        con = self.db.connect()
+        col_names = list(con.execute(text("DESCRIBE hits")).fetchall())
+        select_parts: list[str] = []
+        for row in col_names:
+            name = row[0]
+            if name in _CLICKBENCH_TIMESTAMP_COLS:
+                select_parts.append(f"from_unixtime(`{name}`) AS `{name}`")
+            elif name in _CLICKBENCH_DATE_COLS:
+                select_parts.append(f"date_add('1970-01-01', INTERVAL `{name}` DAY) AS `{name}`")
+            else:
+                select_parts.append(f"`{name}`")
+        select_list = ", ".join(select_parts)
+        sql = (
+            f"INSERT INTO hits SELECT {select_list} "
+            f"FROM FILES('path' = 'file:///staging/hits.parquet', 'format' = 'parquet')"
+        )
+
+        with self.db.phase_context("insert", table_name="hits"):
+            with self.db.record_query_execution(sql):
+                con.execute(text(sql))
+            tracked_commit(con)
+            _LOGGER.info("Inserted clickbench table for starrocks")
+
+        dst.unlink()
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+
+class StarRocksTimeSeries(TimeSeries["StarRocks"]):
+    # Use PRIMARY KEY tables so the mutate phase (UPDATE/DELETE/UPSERT) works.
+    # DUPLICATE KEY tables (the default for read-only suites) reject DELETE
+    # with subqueries, which the mutate path relies on.
+    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:  # noqa: ARG002
+        return "time"
 
 
 class StarRocks(Database):
@@ -320,11 +399,12 @@ class StarRocks(Database):
         finally:
             parquet_path.unlink(missing_ok=True)
 
-    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        # Implemented per-suite where needed: PRIMARY KEY tables support
-        # UPSERT via STREAM LOAD with `partial_update` header. For DUPLICATE
-        # tables there's no native upsert; suites do delete + insert instead.
-        raise NotImplementedError("StarRocks upsert is implemented per suite")
+    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:  # noqa: ARG002
+        # PRIMARY KEY tables (used by the time_series suite) auto-upsert on
+        # INSERT: matching keys overwrite, new ones append. So we just go
+        # through the regular insert path. DUPLICATE KEY tables cannot
+        # upsert, so suites that need upsert must use PRIMARY KEY tables.
+        self.insert(df, table)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
@@ -353,3 +433,11 @@ class StarRocks(Database):
             with self.record_query_execution(statement):
                 con.execute(text(statement))
             tracked_commit(con)
+
+    @property
+    def time_series(self) -> StarRocksTimeSeries:
+        return StarRocksTimeSeries(db=self)
+
+    @property
+    def clickbench(self) -> StarRocksClickbench:
+        return StarRocksClickbench(db=self)

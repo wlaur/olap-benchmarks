@@ -1,4 +1,3 @@
-
 SELECT
     product_id,
     p.name,
@@ -10,9 +9,10 @@ FROM
         AND o.created_at > '2024-12-24'
         AND o.created_at < '2025-01-01'
     INNER JOIN customers c ON c.customer_id = o.customer_id
-        AND age(now(), c.birthday) >= '18 years' AND age(now(), c.birthday) < '26 years'
+        AND years_diff(now(), c.birthday) >= 18
+        AND years_diff(now(), c.birthday) < 26
 GROUP BY
-    product_id
+    product_id, p.name
 ORDER BY
     sum(oi.amount * p.price) DESC
 LIMIT 10;
