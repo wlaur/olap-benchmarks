@@ -16,7 +16,14 @@ from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "4.1.0"
+# Pinned to 4.0.9 because the 4.1.0 BE binary segfaults on startup in both
+# the linux/amd64 (under OrbStack QEMU/Rosetta) and linux/arm64 images on
+# Apple Silicon -- fe-ubuntu/be-ubuntu split images crash the same way.
+# 4.0.9 is the latest 4.0.x patch (2026-04-20) and is one week older than
+# 4.1.0; the LTS-style 4.0 line is fine for benchmarking. When the bench is
+# re-run on a real x86_64 Linux host, bump VERSION to whichever 4.x is
+# current and switch the platform flag below back to linux/amd64.
+VERSION = "4.0.9"
 
 DOCKER_IMAGE = f"starrocks/allin1-ubuntu:{VERSION}"
 
@@ -77,12 +84,10 @@ class StarRocks(Database):
         for d in (meta_dir, storage_dir, staging_dir):
             d.mkdir(parents=True, exist_ok=True)
 
-        # StarRocks 4.x BE requires AVX2 -- on Apple Silicon hosts the
-        # OrbStack runtime needs Rosetta enabled (Settings → System → "Use
-        # Rosetta to run amd64 containers") to expose it to amd64 containers.
-        # On a real x86_64 host AVX2 is native and no extra config is needed.
+        # See VERSION comment above for why this is arm64. On a real x86_64
+        # host, switch to linux/amd64 to match the rest of the suite.
         parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d",
+            f"docker run --platform linux/arm64 --name {self.name}-benchmark --rm -d",
             "-p 9030:9030 -p 8030:8030 -p 8040:8040",
             f"-v {meta_dir.as_posix()}:/data/deploy/starrocks/fe/meta",
             f"-v {storage_dir.as_posix()}:/data/deploy/starrocks/be/storage",
