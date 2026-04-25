@@ -105,9 +105,20 @@ class QuestDB(Database):
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 
-    # QuestDB has no DELETE statement and no row-level upsert (TRUNCATE TABLE
-    # and ALTER TABLE DROP PARTITION exist for bulk time-based deletes, but
-    # those don't model the row-targeted mutate workload). Skip those steps.
+    # QuestDB has no DELETE statement, period. Verified against 9.3.5:
+    # `DELETE FROM t WHERE id = 1` returns "unexpected token [FROM]". Only
+    # TRUNCATE TABLE and ALTER TABLE DROP PARTITION exist for removing data,
+    # neither of which models a row-targeted mutate workload. There is no
+    # row-level upsert either; production users opt into DEDUP UPSERT KEYS at
+    # CREATE TABLE time, which would require a schema change inconsistent
+    # with what every other DB in this benchmark gets.
+    #
+    # We deliberately do NOT emulate delete via full-table-rewrite (CTAS into
+    # a new table excluding the keys, drop, rename) -- that would measure
+    # table-rewrite throughput, not delete throughput, and make QuestDB look
+    # catastrophically slow on a workload nobody actually uses it for.
+    #
+    # Insert is fully supported; only upsert/delete are skipped.
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
         "time_series": frozenset(
             f"{action}_{table}_{count}"
