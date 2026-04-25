@@ -1,3 +1,6 @@
+-- GUC parity with the TimescaleDB rtabench schema.
+ALTER DATABASE postgres SET work_mem TO '50MB';
+
 CREATE TABLE customers (
     customer_id integer not null,
     name text,
