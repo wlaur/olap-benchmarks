@@ -105,8 +105,9 @@ class QuestDB(Database):
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 
-    # QuestDB.upsert and .delete raise NotImplementedError -- skip those mutate
-    # steps for time_series so populate + select can complete in benchmark-all.
+    # QuestDB has no DELETE statement and no row-level upsert (TRUNCATE TABLE
+    # and ALTER TABLE DROP PARTITION exist for bulk time-based deletes, but
+    # those don't model the row-targeted mutate workload). Skip those steps.
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
         "time_series": frozenset(
             f"{action}_{table}_{count}"
@@ -377,10 +378,15 @@ class QuestDB(Database):
         _LOGGER.info(f"Inserted table {table} ({row_count:_} rows via sink_parquet)")
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        raise NotImplementedError
+        # QuestDB has no DELETE statement, so there's no fast in-place upsert
+        # path. Production users either rely on DEDUP keys (declared at
+        # CREATE TABLE) or accept duplicates. Skipped via DISABLED_MUTATION_STEPS.
+        raise NotImplementedError("QuestDB does not support row-level upsert")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        raise NotImplementedError
+        # QuestDB has no DELETE statement (only TRUNCATE TABLE / ALTER TABLE
+        # DROP PARTITION). Skipped via DISABLED_MUTATION_STEPS.
+        raise NotImplementedError("QuestDB does not support row-level delete")
 
     @property
     def clickbench(self) -> QuestDBClickbench:
