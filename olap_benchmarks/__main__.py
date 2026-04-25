@@ -77,6 +77,7 @@ def _get_dbs() -> dict[DatabaseName, "Database"]:
         from .dbs.monetdb import MonetDB
         from .dbs.postgres import Postgres
         from .dbs.questdb import QuestDB
+        from .dbs.starrocks import StarRocks
         from .dbs.timescaledb import TimescaleDB
 
         _dbs = {
@@ -86,6 +87,7 @@ def _get_dbs() -> dict[DatabaseName, "Database"]:
             "duckdb": DuckDB(),
             "questdb": QuestDB(),
             "postgres": Postgres(),
+            "starrocks": StarRocks(),
         }
 
         assert set(_dbs) == set(get_args(DatabaseName))
