@@ -17,6 +17,7 @@ DatabaseName = Literal[
     "duckdb",
     "questdb",
     "postgres",
+    "starrocks",
 ]
 
 SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb"]
