@@ -1,6 +1,4 @@
 import logging
-import os
-import shutil
 import uuid
 from collections.abc import Mapping
 from time import sleep
@@ -37,11 +35,7 @@ def _build_clickbench_insert(
             parts.append(f"cast(cast({name} as long) * 86400000000L as timestamp) as {name}")
         else:
             parts.append(name)
-    # Pre-sort by EventTime so the WAL apply path is essentially append-only into the
-    # designated-timestamp partitions instead of paying an O3 (out-of-order) merge per
-    # WAL segment. EventTime is monotonically scaled by the cast above, so sorting on
-    # the projected column matches sorting on the source column.
-    return f"insert into hits select {', '.join(parts)} from read_parquet('{parquet_name}') order by EventTime"
+    return f"insert into hits select {', '.join(parts)} from read_parquet('{parquet_name}')"
 
 
 class QuestDBClickbench(Clickbench["QuestDB"]):
@@ -61,24 +55,27 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 
         # Source schema has EventTime/ClientEventTime/LocalEventTime as Int64 (epoch
         # seconds) and EventDate as UInt16 (days since epoch). Convert inline in the
-        # INSERT instead of rewriting the 14GB parquet — the rewrite was costing extra
-        # disk I/O for no reason. See _build_clickbench_insert below.
+        # INSERT instead of rewriting the casts into the staged parquet.
         timestamp_columns = ("EventTime", "ClientEventTime", "LocalEventTime")
         date_columns = ("EventDate",)
 
-        # Hard-link the source parquet into questdb's import dir so read_parquet can
-        # see it without copying. Falls back to copy on cross-filesystem.
+        # Pre-sort the source parquet by EventTime on the host before handing it to
+        # QuestDB. With a designated-timestamp partitioned table, sorted input lets
+        # the WAL applier append into partitions instead of paying an O3 merge per
+        # segment. Doing the sort inside QuestDB's INSERT … SELECT runs single-
+        # threaded and stalls before any rows reach the WAL writer. EventTime is
+        # the int64 epoch-seconds column, which has the same order as the cast
+        # microsecond timestamp.
         fpath.parent.mkdir(parents=True, exist_ok=True)
         if fpath.exists() or fpath.is_symlink():
             fpath.unlink()
-        try:
-            os.link(input_fpath, fpath)
-        except OSError:
-            shutil.copy2(input_fpath, fpath)
+
+        with self.db.phase_context("sort_input", table_name="hits"):
+            pl.scan_parquet(input_fpath).sort("EventTime").sink_parquet(fpath)
 
         # 99997497 rows
-        count: int = pl.scan_parquet(input_fpath).select(pl.len()).collect().item(0, 0)
-        _LOGGER.info(f"Linked source hits.parquet ({count:_} rows) to {fpath}")
+        count: int = pl.scan_parquet(fpath).select(pl.len()).collect().item(0, 0)
+        _LOGGER.info(f"Sorted source hits.parquet ({count:_} rows) to {fpath}")
 
         with self.db.phase_context("insert", table_name="hits"):
             con = self.db.connect()
