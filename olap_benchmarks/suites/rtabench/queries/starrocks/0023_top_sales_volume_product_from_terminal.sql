@@ -10,7 +10,7 @@ FROM
     AND oe.event_created >= '2024-07-01' and oe.event_created < '2025-01-01'
     AND oe.event_type = 'Delivered'
 GROUP BY
-    p.product_id
+    p.product_id, p.name
 ORDER BY
     sum(oi.amount * p.price) DESC
 LIMIT 10;

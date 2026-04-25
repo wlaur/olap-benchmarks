@@ -10,7 +10,7 @@ WHERE
     oe.event_created >= '2024-01-01' and oe.event_created < '2024-07-01'
     and oe.event_type = 'Delivered'
 GROUP BY
-    c.customer_id
+    c.customer_id, c.name
 ORDER BY
     count(o.order_id) DESC
 LIMIT 10;

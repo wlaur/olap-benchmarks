@@ -5,8 +5,8 @@ SELECT
     sum(oi.amount)
 FROM
     orders o
-    INNER JOIN order_items oi USING (order_id)
-    INNER JOIN products p USING (product_id)
+    INNER JOIN order_items oi ON oi.order_id = o.order_id
+    INNER JOIN products p ON p.product_id = oi.product_id
 WHERE
     o.created_at > '2024-12-01' AND o.created_at < '2024-12-07' AND
     NOT EXISTS (
@@ -17,5 +17,5 @@ WHERE
             oe.event_type = 'Shipped'
             AND oe.order_id = oi.order_id)
 GROUP BY
-    p.product_id
+    p.product_id, p.name, p.stock
 HAVING (sum(oi.amount) < p.stock);
