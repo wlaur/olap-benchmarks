@@ -1,6 +1,13 @@
 # OLAP Benchmarks: Analysis and Release Preparation
 
-*Analysis date: 2026-04-12 | System: macbook-pro-m4 | Single system, all databases running in Docker (except DuckDB in-process)*
+*Analysis date: 2026-04-12 | System: macbook-pro-m4 | Single system, all
+databases running in Docker (except DuckDB in-process)*
+
+> **Update (2026-04-25)**: The critical and high-priority action items in
+> §7 below have landed on `wip`. Numbers in §1–§3 are from the pre-fix
+> `default` revision and will be regenerated from a fresh `release`
+> revision after the next full re-run. See `PLAN.md` for the
+> done/open/pre-flight checklist.
 
 ## Executive Summary
 
@@ -145,6 +152,12 @@ The 3195s compression time for TimescaleDB is dominated by `data_large` which **
 
 ### 4.1 TimescaleDB / PostgreSQL -- CRITICAL: EAV schema for wide time-series tables
 
+> **Resolved (2026-04-25)**: EAV schema landed for Postgres and TimescaleDB
+> on `data_wide` and `data_large`. `data_tall` stays wide. TimescaleDB
+> columnstore is enabled with `segmentby = 'metric_name'`,
+> `orderby = 'time'`. `data_large` chunk interval 14 days, `data_wide`
+> 1 day. Smoke-tested end-to-end on synthetic data.
+
 **Problem:** `data_large` (4M rows x 1500 cols) and `data_wide` (200K rows x 1500 cols) use a wide columnar schema that cannot use TimescaleDB columnstore compression (exceeds PostgreSQL's 8160-byte max tuple size). This makes the hypertable pure overhead -- TimescaleDB is *slower* than plain Postgres on most queries for these tables.
 
 **Root cause:** Wide telemetry tables (1500+ columns) are common in industrial settings (SCADA, IoT, ML feature stores) and work naturally on columnar engines. But PostgreSQL's row-oriented storage cannot handle this -- the tuple size limit breaks TimescaleDB compression. The idiomatic row-store approach is EAV (entity-attribute-value):
@@ -179,11 +192,21 @@ SELECT avg(value) FROM data_large WHERE metric_name = 'process_364' AND time > '
 
 ### 4.2 ClickHouse -- ORDER BY column selection
 
+> **Resolved (2026-04-25)**: ClickBench schema already had the right
+> `PRIMARY KEY` (which MergeTree uses as `ORDER BY` when `ORDER BY` is
+> absent). Made it explicit -- `ENGINE = MergeTree ORDER BY (...)` --
+> with a comment citing the official ClickBench schema.
+
 **Problem:** For auto-created tables (time_series, clickbench), the ORDER BY is set to the first column or primary key. For time_series, this is `ORDER BY (time)` which is reasonable. But for clickbench, the official ClickHouse benchmark uses a carefully tuned `ORDER BY (CounterID, EventDate, UserID, EventTime, WatchID)`. The current implementation likely uses whatever column happens to be first.
 
 **Recommended fix:** Check if the clickbench schema for ClickHouse uses the official ORDER BY. If it auto-generates from the first column, this could significantly undercount ClickHouse performance.
 
 ### 4.3 PostgreSQL -- Missing parallel query configuration
+
+> **Resolved (2026-04-25)**: ClickBench Postgres schema now sets
+> `work_mem = 1GB` and `min_parallel_table_scan_size = 0` at the database
+> level, matching TimescaleDB. RTABench Postgres also picked up
+> `work_mem = 50MB` to match its TimescaleDB counterpart.
 
 The clickbench TimescaleDB schema sets `min_parallel_table_scan_size TO '0'` and `work_mem TO '1GB'`, but the plain Postgres clickbench setup only creates indexes without tuning these GUCs. This is an unfair disadvantage for Postgres on full-scan queries.
 
@@ -356,50 +379,54 @@ MonetDB has a 445s restart for rtabench and 12s for others. This suggests it's d
 
 ### Critical (must fix before release)
 
-1. **Implement EAV schema for Postgres/TimescaleDB time_series** -- use an entity-attribute-value table for `data_large` and `data_wide`, with query overrides that return equivalent results. This lets TimescaleDB use columnstore compression and tests each engine idiomatically.
+1. **[done]** **Implement EAV schema for Postgres/TimescaleDB time_series** -- use an entity-attribute-value table for `data_large` and `data_wide`, with query overrides that return equivalent results. This lets TimescaleDB use columnstore compression and tests each engine idiomatically.
 
-2. **Audit ClickHouse ORDER BY for ClickBench** -- verify it uses the official recommended ORDER BY, not an auto-generated one. This could change ClickHouse results significantly.
+2. **[done]** **Audit ClickHouse ORDER BY for ClickBench** -- already used the official `PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)`; made it explicit as `ENGINE = MergeTree ORDER BY (...)` with a citation comment.
 
-3. **Equalize PostgreSQL GUC tuning** -- if TimescaleDB gets `work_mem = 1GB` and `min_parallel_table_scan_size = 0`, plain PostgreSQL should get equivalent tuning for ClickBench.
+3. **[done]** **Equalize PostgreSQL GUC tuning** -- ClickBench Postgres now sets `work_mem = 1 GB` and `min_parallel_table_scan_size = 0` at the database level (RTABench Postgres also gets `work_mem = 50 MB` to match its TimescaleDB counterpart).
 
-4. **Document all database configurations** -- every CREATE TABLE, every index, every GUC setting should be visible and auditable. Publish the exact schemas used.
+4. **[open]** **Document all database configurations** -- the schemas are checked in and self-describing, but a methodology doc that summarizes them per-DB hasn't been written yet (PLAN.md §2).
 
 ### High priority (should fix before release)
 
-5. **Implement EAV query/schema overrides** for Postgres/TimescaleDB on wide/large time_series tables. Keep the 1500-column schema for columnar engines (it's realistic SCADA/IoT). The EAV pivot overhead is part of the benchmark insight.
+5. **[done]** Implement EAV query/schema overrides (covered by item 1).
 
-6. **Increase ClickBench iterations** from 3 to 5 for consistency with other suites.
+6. **[done]** **Increase ClickBench iterations** from 3 to 5 for consistency with other suites.
 
-7. **Add cold vs warm reporting** -- separate first-iteration (cold) from subsequent iterations (warm) in the analysis.
+7. **[open]** **Add cold vs warm reporting** -- separate first-iteration (cold) from subsequent iterations (warm) in the analysis. The `iteration` column on `run_step` already records this; needs a pivot in the results UI / analysis writeup.
 
-8. **Either run QuestDB or remove it** from the codebase. Having dead code for an untested DB invites questions.
+8. **[done]** **Either run QuestDB or remove it** -- QuestDB now has end-to-end coverage on rtabench and kaggle_airbnb; clickbench was already verified manually; time_series populate+select expected to work, mutate steps disabled (no DELETE in QuestDB). See PLAN.md QuestDB section for details.
 
-9. **Add methodology documentation** -- explain the Docker setup, restart strategy (ensuring cold cache), measurement approach (wall clock including result serialization), and any known limitations.
+9. **[open]** **Add methodology documentation** -- explain the Docker setup, restart strategy, measurement approach (wall clock including result serialization), and known limitations. Pending (PLAN.md §2).
 
 ### Medium priority (nice to have for release)
 
-10. **Replace Kaggle Airbnb** with either a larger dataset or drop it. It's too small and overlaps with RTABench.
+10. **[open]** **Replace Kaggle Airbnb** with either a larger dataset or drop it. Decision deferred.
 
-11. **Add query categorization** -- tag each query with its type (point lookup, range scan, full scan, aggregation, JOIN, window function, text search) so readers can filter results by workload pattern.
+11. **[open]** **Add query categorization** -- tag each query with its type (point lookup, range scan, full scan, aggregation, JOIN, window function, text search) so readers can filter results by workload pattern.
 
-12. **Add a "query equivalence" verification** -- confirm all DB-specific query variants return the same results. Different SQL dialects could cause semantic differences.
+12. **[open]** **Add a "query equivalence" verification** -- confirm all DB-specific query variants return the same results. Different SQL dialects could cause semantic differences.
 
-13. **Consider adding a real-world time-series dataset** (NYC taxi, weather data, financial data) as an alternative to synthetic generation.
+13. **[open]** **Consider adding a real-world time-series dataset** (NYC taxi, weather data, financial data) as an alternative to synthetic generation.
 
-14. **Add resource consumption metrics** -- the `run_metric` table captures CPU/memory/disk. Include these in the analysis to show cost-of-query, not just wall time.
+14. **[open]** **Add resource consumption metrics** -- the `run_metric` table captures CPU/memory/disk. Include these in the analysis to show cost-of-query, not just wall time.
 
 ---
 
 ## 8. Appendix: Suspicious Data Points to Investigate
 
-| Suite | Query | Issue |
-|---|---|---|
-| clickbench | Q17 | Postgres 0.005s vs DuckDB 0.27s -- LIMIT without ORDER BY, Postgres short-circuits |
-| time_series | large_06_daily_resample | TimescaleDB 100.7s vs Postgres 7.9s -- hypertable overhead without compression; will be resolved by EAV schema |
-| time_series | large_18_top_n_hourly | TimescaleDB 89.3s vs Postgres 7.9s -- same root cause |
-| time_series | large_19_null_gap_detection | TimescaleDB 93.0s vs Postgres 9.8s -- same root cause |
-| clickbench | Q29 | 89 SUM expressions -- synthetic, tests vectorization, not realistic |
-| rtabench | 0017_top_selling_month_product | ClickHouse 2.66s vs DuckDB 0.024s -- 110x gap on a JOIN query |
-| rtabench | 0025_product_category_performance | ClickHouse 5.21s vs DuckDB 0.030s -- 173x gap |
-| time_series | large_23_batch_export | All DBs slow (1.4-63s) -- tests serialization throughput more than query performance |
-| clickbench | Q32-Q34 | Massive spread (DuckDB 0.6s, Postgres 257s) -- high-cardinality GROUP BY |
+> Status as of 2026-04-25 added in the **Status** column. Numbers are
+> from the pre-fix `default` revision; the EAV-related ones should
+> change substantially after the release re-run.
+
+| Suite | Query | Issue | Status |
+|---|---|---|---|
+| clickbench | Q17 | Postgres 0.005s vs DuckDB 0.27s -- LIMIT without ORDER BY, Postgres short-circuits | behavioural difference, kept |
+| time_series | large_06_daily_resample | TimescaleDB 100.7s vs Postgres 7.9s -- hypertable overhead without compression | EAV applied, expect normalized |
+| time_series | large_18_top_n_hourly | TimescaleDB 89.3s vs Postgres 7.9s -- same root cause | EAV applied, expect normalized |
+| time_series | large_19_null_gap_detection | TimescaleDB 93.0s vs Postgres 9.8s -- same root cause | EAV applied, expect normalized |
+| clickbench | Q29 | 89 SUM expressions -- synthetic, tests vectorization, not realistic | kept; documented |
+| rtabench | 0017_top_selling_month_product | ClickHouse 2.66s vs DuckDB 0.024s -- 110x gap on a JOIN query | known ClickHouse JOIN weakness |
+| rtabench | 0025_product_category_performance | ClickHouse 5.21s vs DuckDB 0.030s -- 173x gap | known ClickHouse JOIN weakness |
+| time_series | large_23_batch_export | All DBs slow (1.4-63s) -- tests serialization throughput more than query performance | kept; PG/TS EAV variant returns 3-col long form |
+| clickbench | Q32-Q34 | Massive spread (DuckDB 0.6s, Postgres 257s) -- high-cardinality GROUP BY | should narrow with PG `work_mem = 1GB` |
