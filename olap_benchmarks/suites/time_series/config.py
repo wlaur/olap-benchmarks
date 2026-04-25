@@ -595,6 +595,18 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         )
         return pl.DataFrame({"time": times})
 
+    def _apply_insert(self, step: MutateStep, df: pl.DataFrame) -> None:
+        pk = self._get_mutate_primary_key(step.table)
+        self.db.insert(df, step.table, primary_key=pk if isinstance(pk, list) else None)
+
+    def _apply_upsert(self, step: MutateStep, df: pl.DataFrame) -> None:
+        pk = self._get_mutate_primary_key(step.table)
+        self.db.upsert(df, step.table, primary_key=pk)
+
+    def _apply_delete(self, step: MutateStep, keys: pl.DataFrame) -> None:
+        pk = self._get_mutate_primary_key(step.table)
+        self.db.delete(step.table, primary_key=pk, keys=keys)
+
     def mutate(self) -> None:
         t0 = perf_counter()
         steps, skipped_steps = self.get_mutate_steps()
@@ -618,17 +630,11 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 ):
                     match step.action:
                         case "insert":
-                            df = self._generate_insert_data(step, seed)
-                            pk = self._get_mutate_primary_key(step.table)
-                            self.db.insert(df, step.table, primary_key=pk if isinstance(pk, list) else None)
+                            self._apply_insert(step, self._generate_insert_data(step, seed))
                         case "upsert":
-                            df = self._generate_upsert_data(step, seed)
-                            pk = self._get_mutate_primary_key(step.table)
-                            self.db.upsert(df, step.table, primary_key=pk)
+                            self._apply_upsert(step, self._generate_upsert_data(step, seed))
                         case "delete":
-                            keys = self._generate_delete_keys(step, seed)
-                            pk = self._get_mutate_primary_key(step.table)
-                            self.db.delete(step.table, primary_key=pk, keys=keys)
+                            self._apply_delete(step, self._generate_delete_keys(step, seed))
 
                 _LOGGER.info(
                     f"Executed {step.name} ({step_idx + 1:_}/{len(steps):_}) "

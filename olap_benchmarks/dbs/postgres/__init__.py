@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import connectorx
 import polars as pl
@@ -13,7 +13,13 @@ from sqlalchemy import Connection, create_engine, text
 from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import TimeSeries
+from ...suites.time_series.config import (
+    TIME_SERIES_DATASET_SIZES,
+    MutateStep,
+    TimeSeries,
+    get_time_series_input_files,
+    get_time_series_table_name,
+)
 from .. import Database
 from ..utils import tracked_commit
 
@@ -305,34 +311,133 @@ class PostgresClickbench(Clickbench["Postgres"]):
 
 
 class PostgresTimeSeries(TimeSeries["Postgres"]):
+    # Wide telemetry tables (1500+ cols) blow past PG's 8160-byte tuple limit, so
+    # the row-store engines (Postgres, TimescaleDB) use the idiomatic EAV layout
+    # for them. Tall (10 cols) stays wide.
+    EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
+    # ~6 GB CSV per chunk (≈30 bytes/row). Tune downward if disk gets tight.
+    EAV_CHUNK_TARGET_ROWS: ClassVar[int] = 200_000_000
+
+    def expected_table_row_counts(self) -> Mapping[TableName, int]:
+        counts: dict[TableName, int] = {}
+        for size, (n_rows, n_cols) in TIME_SERIES_DATASET_SIZES.items():
+            table_name = get_time_series_table_name(size)
+            counts[table_name] = n_rows * n_cols if table_name in self.EAV_TABLES else n_rows
+        return counts
+
+    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
+        _ = table_name
+        return None
+
+    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
+        if table_name in self.EAV_TABLES:
+            return ["time", "metric_name"]
+        return "time"
+
     def index_tables(self) -> None:
         con = self.db.connect()
 
-        statement = "CREATE INDEX data_tall_time_index ON data_tall (time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_tall")
+        for table_name in get_time_series_input_files():
+            if table_name in self.EAV_TABLES:
+                statement = f'CREATE INDEX {table_name}_metric_time_index ON "{table_name}" ("metric_name", "time")'
+            else:
+                statement = f'CREATE INDEX {table_name}_time_index ON "{table_name}" ("time")'
 
-        statement = "CREATE INDEX data_wide_time_index ON data_wide (time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_wide")
-
-        statement = "CREATE INDEX data_large_time_index ON data_large (time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_large")
+            with self.db.record_query_execution(statement):
+                con.execute(text(statement))
+            _LOGGER.info(f"Indexed {table_name}")
 
         tracked_commit(con)
 
+    def _eav_create_table(self, table_name: TableName) -> None:
+        con = self.db.connect()
+        statement = (
+            f'CREATE TABLE "{table_name}" ("time" TIMESTAMP NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
+        )
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
+        tracked_commit(con)
+        _LOGGER.info(f"Created EAV table {table_name}")
+
+    def _eav_chunk_rows(self, n_metric_cols: int) -> int:
+        return max(1_000, self.EAV_CHUNK_TARGET_ROWS // max(1, n_metric_cols))
+
+    @staticmethod
+    def _wide_to_eav(df: pl.DataFrame) -> pl.DataFrame:
+        metric_cols = [c for c in df.columns if c != "time"]
+        bool_cols = [c for c, t in df.schema.items() if c != "time" and t == pl.Boolean]
+        casted = df.with_columns([pl.col(c).cast(pl.Float32) for c in bool_cols]) if bool_cols else df
+        return casted.unpivot(
+            index="time",
+            on=metric_cols,
+            variable_name="metric_name",
+            value_name="value",
+        )
+
+    def _eav_chunked_insert(self, table_name: TableName, fpath: Path) -> None:
+        schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
+        metric_cols = [c for c in schema if c != "time"]
+        chunk_rows = self._eav_chunk_rows(len(metric_cols))
+        total = self.parquet_row_count(fpath)
+
+        offset = 0
+        chunk_idx = 0
+        while offset < total:
+            chunk_idx += 1
+            df_wide = pl.scan_parquet(fpath).slice(offset, chunk_rows).collect()
+            df_eav = self._wide_to_eav(df_wide)
+            self.db.insert(df_eav, table_name)
+            _LOGGER.info(
+                f"Inserted EAV chunk {chunk_idx} for {table_name}: "
+                f"wide_rows={offset + df_wide.shape[0]:_}/{total:_}, "
+                f"eav_rows={df_eav.shape[0]:_}"
+            )
+            offset += chunk_rows
+
     def populate(self, restart: bool = True) -> None:
-        super().populate(restart=False)
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.initialize_schema("time_series")
+
+        for table_name, fpath in get_time_series_input_files().items():
+            if table_name in self.EAV_TABLES:
+                with self.db.phase_context("create_eav_table", table_name=table_name):
+                    self._eav_create_table(table_name)
+
+                with self.db.phase_context("insert", table_name=table_name):
+                    self._eav_chunked_insert(table_name, fpath)
+                    _LOGGER.info(f"Inserted {table_name} for {self.name}")
+            else:
+                primary_key = self.get_primary_key(table_name)
+                not_null = self.get_not_null(table_name)
+                df = pl.scan_parquet(fpath)
+
+                with self.db.phase_context("insert", table_name=table_name):
+                    self.insert_table(df, table_name, primary_key, not_null)
+                    _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         with self.db.phase_context("index"):
             self.index_tables()
 
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
         if restart:
             self.db.restart_event()
+
+    def _generate_insert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        df_wide = super()._generate_insert_data(step, seed)
+        if step.table in self.EAV_TABLES:
+            return self._wide_to_eav(df_wide)
+        return df_wide
+
+    def _generate_upsert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        df_wide = super()._generate_upsert_data(step, seed)
+        if step.table in self.EAV_TABLES:
+            return self._wide_to_eav(df_wide)
+        return df_wide
 
 
 class Postgres(Database):
