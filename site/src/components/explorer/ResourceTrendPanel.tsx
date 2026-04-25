@@ -18,7 +18,7 @@ import {
 } from "../../lib/metricFormat"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
-import { ControlChip, QuietButton } from "../controls/Control"
+import { ControlChip, QuietButton, SegmentedButton } from "../controls/Control"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
 import { MetaLabel, SectionTitle } from "../Typography"
@@ -32,6 +32,12 @@ interface ResourceTrendPanelProps {
   mutateSteps: QueryStep[]
   databases: string[]
   isLoading?: boolean
+}
+
+const OPERATION_LABEL: Record<BenchmarkOperation, string> = {
+  populate: "Populate",
+  mutate: "Mutate",
+  select: "Select",
 }
 
 interface StepOption {
@@ -90,10 +96,25 @@ export function ResourceTrendPanel({
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [showAllSteps, setShowAllSteps] = useState(false)
   const [showAllUnavailableSteps, setShowAllUnavailableSteps] = useState(false)
-  const resolvedOperation: BenchmarkOperation =
-    selectedOperation === "mutate" && suiteConfig.operations.includes("mutate")
-      ? "mutate"
-      : "select"
+
+  const availableOperations = suiteConfig.operations
+  const parentOperation: BenchmarkOperation =
+    selectedOperation === "mutate" && availableOperations.includes("mutate") ? "mutate" : "select"
+
+  const [panelOperation, setPanelOperation] = useState<BenchmarkOperation>(parentOperation)
+  // Track whether the user has manually picked an operation inside the panel.
+  // Once they have, we stop syncing to the parent's selectedOperation so a
+  // populate selection here isn't clobbered when the parent switches between
+  // select/mutate.
+  const [hasOverride, setHasOverride] = useState(false)
+
+  useEffect(() => {
+    if (!hasOverride) setPanelOperation(parentOperation)
+  }, [parentOperation, hasOverride])
+
+  const resolvedOperation: BenchmarkOperation = availableOperations.includes(panelOperation)
+    ? panelOperation
+    : (availableOperations[0] ?? "select")
 
   const databaseColors = getDatabaseColors(databases)
 
@@ -104,8 +125,16 @@ export function ResourceTrendPanel({
   }, [resolvedOperation])
 
   const allStepOptions = useMemo(
-    () => getStepOptions(resolvedOperation, insertSteps, querySteps, mutateSteps, databases),
-    [resolvedOperation, insertSteps, querySteps, mutateSteps, databases],
+    () =>
+      getStepOptions(
+        resolvedOperation,
+        insertSteps,
+        querySteps,
+        mutateSteps,
+        databases,
+        suiteConfig.compareQueryNames,
+      ),
+    [resolvedOperation, insertSteps, querySteps, mutateSteps, databases, suiteConfig],
   )
 
   const availableStepWindows = useMemo(
@@ -207,6 +236,26 @@ export function ResourceTrendPanel({
               <DatabaseLegend databases={databases} databaseColors={databaseColors} />
             </div>
           </div>
+
+          {availableOperations.length > 1 ? (
+            <div className="mt-3 shrink-0 space-y-2">
+              <MetaLabel>Operation</MetaLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {availableOperations.map((op) => (
+                  <SegmentedButton
+                    key={op}
+                    selected={resolvedOperation === op}
+                    onClick={() => {
+                      setPanelOperation(op)
+                      setHasOverride(true)
+                    }}
+                  >
+                    {OPERATION_LABEL[op]}
+                  </SegmentedButton>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {stepOptions.length > 0 ? (
             <div className="mt-3 shrink-0">
@@ -417,6 +466,7 @@ function getStepOptions(
   querySteps: QueryStep[],
   mutateSteps: QueryStep[],
   databases: string[],
+  compareQueryNames: (left: string, right: string) => number,
 ): StepOption[] {
   const includedDatabases = new Set(databases)
 
@@ -433,14 +483,14 @@ function getStepOptions(
       mutateSteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
     )
     return Array.from(queryNames)
-      .sort()
+      .sort(compareQueryNames)
       .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
   }
   const queryNames = new Set(
     querySteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
   )
   return Array.from(queryNames)
-    .sort()
+    .sort(compareQueryNames)
     .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
 }
 

@@ -12,6 +12,7 @@ interface RunTimelineProps {
   querySteps: QueryStep[]
   databases: string[]
   databaseColors: Record<string, string>
+  compareQueryNames?: (left: string, right: string) => number
   onSelectQuery?: (queryName: string) => void
   selectedQuery?: string | null
   title?: string
@@ -61,6 +62,7 @@ export function RunTimeline({
   querySteps,
   databases,
   databaseColors,
+  compareQueryNames,
   onSelectQuery,
   selectedQuery,
   title = "Run timeline",
@@ -96,8 +98,8 @@ export function RunTimeline({
   )
 
   const { segmentsByDb, maxElapsed, queryNames } = useMemo(
-    () => buildTimelineData(filteredSteps, databases),
-    [filteredSteps, databases],
+    () => buildTimelineData(filteredSteps, databases, compareQueryNames),
+    [filteredSteps, databases, compareQueryNames],
   )
 
   const queryColorMap = useMemo(() => {
@@ -445,7 +447,11 @@ function SvgContent({
   )
 }
 
-function buildTimelineData(steps: QueryStep[], databases: string[]) {
+function buildTimelineData(
+  steps: QueryStep[],
+  databases: string[],
+  compareQueryNames?: (left: string, right: string) => number,
+) {
   const rawByDb = new Map<string, TimelineSegment[]>()
   const queryNameSet = new Set<string>()
 
@@ -483,7 +489,7 @@ function buildTimelineData(steps: QueryStep[], databases: string[]) {
     if (!segmentsByDb.has(db)) segmentsByDb.set(db, [])
   }
 
-  const queryNames = Array.from(queryNameSet).sort()
+  const queryNames = Array.from(queryNameSet).sort(compareQueryNames)
   maxElapsed = Math.max(1, Math.ceil(maxElapsed))
 
   return { segmentsByDb, maxElapsed, queryNames }

@@ -286,7 +286,7 @@ function OverviewBarChart({
               {...props}
               fill={withAlpha(
                 (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
-                0.45,
+                0.65,
               )}
             />
           )}
@@ -302,7 +302,7 @@ function OverviewBarChart({
               {...props}
               fill={withAlpha(
                 (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
-                0.7,
+                0.85,
               )}
             />
           )}

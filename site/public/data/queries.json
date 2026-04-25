@@ -916,113 +916,171 @@
   "time_series": {
     "large_01_max_time": {
       "sql": "select\n    max(time)\nfrom\n    data_large\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select max(time)\nfrom data_large\nwhere metric_name = 'process_364'\n",
+        "timescaledb": "select max(time)\nfrom data_large\nwhere metric_name = 'process_364'\n"
+      }
     },
     "large_02_latest_50": {
       "sql": "select\n    time\nfrom\n    data_large\norder by\n    time desc\nlimit\n    50\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select distinct time\nfrom data_large\nwhere metric_name = 'process_364'\norder by time desc\nlimit 50\n",
+        "timescaledb": "select distinct time\nfrom data_large\nwhere metric_name = 'process_364'\norder by time desc\nlimit 50\n"
+      }
     },
     "large_03_aggregate_filtered": {
       "sql": "select\n    avg(process_364) as val,\n    count(process_364) as cnt\nfrom\n    data_large\nwhere\n    time > '2020-01-01'\n    and time < '2024-06-01'\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select avg(value) as val, count(value) as cnt\nfrom data_large\nwhere metric_name = 'process_364'\nand time > '2020-01-01' and time < '2024-06-01'\n",
+        "timescaledb": "select avg(value) as val, count(value) as cnt\nfrom data_large\nwhere metric_name = 'process_364'\nand time > '2020-01-01' and time < '2024-06-01'\n"
+      }
     },
     "large_04_hourly_resample_single": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    date_trunc('hour', time)\norder by\n    hr\nlimit\n    100\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    hr\norder by\n    hr\nlimit\n    100\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    time_bucket(INTERVAL '1 hour', time)\norder by\n    hr\nlimit\n    100\n"
+        "postgres": "select date_trunc('hour', time) as hr, avg(value) as value\nfrom data_large\nwhere metric_name = 'process_364'\ngroup by date_trunc('hour', time)\norder by hr\nlimit 100\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 hour', time) as hr, avg(value) as value\nfrom data_large\nwhere metric_name = 'process_364'\ngroup by time_bucket(INTERVAL '1 hour', time)\norder by hr\nlimit 100\n"
       }
     },
     "large_05_hourly_resample_multi": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as int)) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_large\ngroup by\n    date_trunc('hour', time)\norder by\n    hr\nlimit\n    100\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as Nullable(int))) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_large\ngroup by\n    hr\norder by\n    hr\nlimit\n    100\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as int)) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_large\ngroup by\n    time_bucket(INTERVAL '1 hour', time)\norder by\n    hr\nlimit\n    100\n"
+        "postgres": "select date_trunc('hour', time) as hr,\n    avg(value) filter (where metric_name = 'process_667') as value_1,\n    avg(value) filter (where metric_name = 'binary_22') as value_2,\n    avg(value) filter (where metric_name = 'ratio_12') as value_3,\n    avg(value) filter (where metric_name = 'process_259') as value_4,\n    avg(value) filter (where metric_name = 'process_242') as value_5,\n    avg(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_large\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by date_trunc('hour', time)\norder by hr\nlimit 100\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(value) filter (where metric_name = 'process_667') as value_1,\n    avg(value) filter (where metric_name = 'binary_22') as value_2,\n    avg(value) filter (where metric_name = 'ratio_12') as value_3,\n    avg(value) filter (where metric_name = 'process_259') as value_4,\n    avg(value) filter (where metric_name = 'process_242') as value_5,\n    avg(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_large\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time_bucket(INTERVAL '1 hour', time)\norder by hr\nlimit 100\n"
       }
     },
     "large_06_daily_resample": {
       "sql": "select\n    date_trunc('day', time) as d,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    date_trunc('day', time)\norder by\n    d\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('day', time) as d,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    d\norder by\n    d\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 day', time) as d,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    time_bucket(INTERVAL '1 day', time)\norder by\n    d\n"
+        "postgres": "select date_trunc('day', time) as d, avg(value) as value\nfrom data_large\nwhere metric_name = 'process_364'\ngroup by date_trunc('day', time)\norder by d\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 day', time) as d, avg(value) as value\nfrom data_large\nwhere metric_name = 'process_364'\ngroup by time_bucket(INTERVAL '1 day', time)\norder by d\n"
       }
     },
     "large_07_full_aggregate": {
       "sql": "select\n    min(process_364) as min_val,\n    max(process_364) as max_val,\n    avg(process_364) as avg_val,\n    stddev(process_364) as stddev_val,\n    count(process_364) as cnt\nfrom\n    data_large\n",
       "db_overrides": {
         "clickhouse": "select\n    min(process_364) as min_val,\n    max(process_364) as max_val,\n    avg(process_364) as avg_val,\n    stddevSamp(process_364) as stddev_val,\n    count(process_364) as cnt\nfrom\n    data_large\n",
-        "monetdb": "select\n    min(process_364) as min_val,\n    max(process_364) as max_val,\n    avg(process_364) as avg_val,\n    sys.stddev_samp(process_364) as stddev_val,\n    count(process_364) as cnt\nfrom\n    data_large\n"
+        "monetdb": "select\n    min(process_364) as min_val,\n    max(process_364) as max_val,\n    avg(process_364) as avg_val,\n    sys.stddev_samp(process_364) as stddev_val,\n    count(process_364) as cnt\nfrom\n    data_large\n",
+        "postgres": "select min(value) as min_val, max(value) as max_val,\n       avg(value) as avg_val, stddev(value) as stddev_val,\n       count(value) as cnt\nfrom data_large\nwhere metric_name = 'process_364'\n",
+        "timescaledb": "select min(value) as min_val, max(value) as max_val,\n       avg(value) as avg_val, stddev(value) as stddev_val,\n       count(value) as cnt\nfrom data_large\nwhere metric_name = 'process_364'\n"
       }
     },
     "large_08_raw_asc_limit": {
       "sql": "select\n    time,\n    process_364 as value\nfrom\n    data_large\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\norder by time\nlimit 10000\n"
+      }
     },
     "large_09_raw_filtered": {
       "sql": "select\n    time,\n    process_364 as value\nfrom\n    data_large\nwhere\n    time > '2023-06-01'\n    and time < '2023-06-08'\norder by\n    time\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\nand time > '2023-06-01' and time < '2023-06-08'\norder by time\n",
+        "timescaledb": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\nand time > '2023-06-01' and time < '2023-06-08'\norder by time\n"
+      }
     },
     "large_10_scalar_lookup": {
       "sql": "select\n    time,\n    process_364 as value\nfrom\n    data_large\nwhere\n    time = '2023-08-04 12:23:00'\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_large\nwhere metric_name = 'process_364' and time = '2023-08-04 12:23:00'\n",
+        "timescaledb": "select time, value\nfrom data_large\nwhere metric_name = 'process_364' and time = '2023-08-04 12:23:00'\n"
+      }
     },
     "large_11_scalar_lookup_multi": {
       "sql": "select\n    time,\n    process_667 as value_1,\n    cast(binary_22 as int) as value_2,\n    ratio_12 as value_3,\n    process_259 as value_4,\n    process_242 as value_5,\n    deviation_39 as value_6\nfrom\n    data_large\nwhere\n    time = '2023-08-04 12:23:00'\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_large\nwhere time = '2023-08-04 12:23:00' and metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\n",
+        "timescaledb": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_large\nwhere time = '2023-08-04 12:23:00' and metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\n"
+      }
     },
     "large_12_conditional_aggregate": {
       "sql": "select\n    avg(process_667) as value\nfrom\n    data_large\nwhere\n    abs(deviation_39) < 10\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "with valid_times as (\n    select time from data_large\n    where metric_name = 'deviation_39' and abs(value) < 10\n)\nselect avg(value) as value\nfrom data_large\nwhere metric_name = 'process_667'\nand time in (select time from valid_times)\n",
+        "timescaledb": "with valid_times as (\n    select time from data_large\n    where metric_name = 'deviation_39' and abs(value) < 10\n)\nselect avg(value) as value\nfrom data_large\nwhere metric_name = 'process_667'\nand time in (select time from valid_times)\n"
+      }
     },
     "large_13_rolling_avg": {
       "sql": "select\n    time,\n    process_364 as value,\n    avg(process_364) over (order by time rows between 59 preceding and current row) as rolling_avg\nfrom\n    data_large\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value,\n       avg(value) over (order by time rows between 59 preceding and current row) as rolling_avg\nfrom data_large\nwhere metric_name = 'process_364'\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value,\n       avg(value) over (order by time rows between 59 preceding and current row) as rolling_avg\nfrom data_large\nwhere metric_name = 'process_364'\norder by time\nlimit 10000\n"
+      }
     },
     "large_14_rate_of_change": {
       "sql": "select\n    time,\n    process_364 as value,\n    process_364 - lag(process_364) over (order by time) as delta\nfrom\n    data_large\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value,\n       value - lag(value) over (order by time) as delta\nfrom data_large\nwhere metric_name = 'process_364'\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value,\n       value - lag(value) over (order by time) as delta\nfrom data_large\nwhere metric_name = 'process_364'\norder by time\nlimit 10000\n"
+      }
     },
     "large_15_threshold_breach": {
       "sql": "select\n    time,\n    process_364 as value\nfrom\n    data_large\nwhere\n    process_364 > 500\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_large\nwhere metric_name = 'process_364' and value > 500\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value\nfrom data_large\nwhere metric_name = 'process_364' and value > 500\norder by time\nlimit 10000\n"
+      }
     },
     "large_16_count_distinct_days": {
       "sql": "select\n    count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time)\n    from data_large\n) t\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time) as d\n    from data_large\n    where metric_name = 'process_364'\n) t\n",
+        "timescaledb": "select count(*) as distinct_days\nfrom (\n    select distinct time_bucket(INTERVAL '1 day', time) as d\n    from data_large\n    where metric_name = 'process_364'\n) t\n"
+      }
     },
     "large_17_group_by_hour_category": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    binary_22,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    date_trunc('hour', time),\n    binary_22\norder by\n    hr,\n    binary_22\nlimit\n    200\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    binary_22,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    hr,\n    binary_22\norder by\n    hr,\n    binary_22\nlimit\n    200\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    binary_22,\n    avg(process_364) as value\nfrom\n    data_large\ngroup by\n    time_bucket(INTERVAL '1 hour', time),\n    binary_22\norder by\n    hr,\n    binary_22\nlimit\n    200\n"
+        "postgres": "with b as (\n    select time, value as binary_value from data_large\n    where metric_name = 'binary_22'\n),\np as (\n    select time, value from data_large\n    where metric_name = 'process_364'\n)\nselect date_trunc('hour', p.time) as hr,\n       b.binary_value as binary_22,\n       avg(p.value) as value\nfrom p join b on p.time = b.time\ngroup by hr, b.binary_value\norder by hr, binary_22\nlimit 200\n",
+        "timescaledb": "with b as (\n    select time, value as binary_value from data_large\n    where metric_name = 'binary_22'\n),\np as (\n    select time, value from data_large\n    where metric_name = 'process_364'\n)\nselect time_bucket(INTERVAL '1 hour', p.time) as hr,\n       b.binary_value as binary_22,\n       avg(p.value) as value\nfrom p join b on p.time = b.time\ngroup by hr, b.binary_value\norder by hr, binary_22\nlimit 200\n"
       }
     },
     "large_18_top_n_hourly": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    avg(process_364) as avg_value\nfrom\n    data_large\ngroup by\n    date_trunc('hour', time)\norder by\n    avg_value desc\nlimit\n    10\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    avg(process_364) as avg_value\nfrom\n    data_large\ngroup by\n    hr\norder by\n    avg_value desc\nlimit\n    10\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(process_364) as avg_value\nfrom\n    data_large\ngroup by\n    time_bucket(INTERVAL '1 hour', time)\norder by\n    avg_value desc\nlimit\n    10\n"
+        "postgres": "select date_trunc('hour', time) as hr, avg(value) as avg_value\nfrom data_large\nwhere metric_name = 'process_364'\ngroup by date_trunc('hour', time)\norder by avg_value desc\nlimit 10\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 hour', time) as hr, avg(value) as avg_value\nfrom data_large\nwhere metric_name = 'process_364'\ngroup by time_bucket(INTERVAL '1 hour', time)\norder by avg_value desc\nlimit 10\n"
       }
     },
     "large_19_null_gap_detection": {
       "sql": "select\n    time,\n    value,\n    prev_value\nfrom (\n    select\n        time,\n        process_364 as value,\n        lag(process_364) over (order by time) as prev_value\n    from\n        data_large\n) t\nwhere\n    value is null\n    and prev_value is not null\norder by\n    time\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value, prev_value\nfrom (\n    select time, value,\n           lag(value) over (order by time) as prev_value\n    from data_large\n    where metric_name = 'process_364'\n) t\nwhere value is null and prev_value is not null\norder by time\n",
+        "timescaledb": "select time, value, prev_value\nfrom (\n    select time, value,\n           lag(value) over (order by time) as prev_value\n    from data_large\n    where metric_name = 'process_364'\n) t\nwhere value is null and prev_value is not null\norder by time\n"
+      }
     },
     "large_20_raw_multi_limit": {
       "sql": "select\n    time,\n    process_667 as value_1,\n    binary_22 as value_2,\n    ratio_12 as value_3,\n    process_259 as value_4,\n    process_242 as value_5,\n    deviation_39 as value_6\nfrom\n    data_large\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_large\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\norder by time\nlimit 10000\n",
+        "timescaledb": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_large\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\norder by time\nlimit 10000\n"
+      }
     },
     "large_21_raw_desc_limit": {
       "sql": "select\n    time,\n    process_364 as value\nfrom\n    data_large\norder by\n    time desc\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\norder by time desc\nlimit 10000\n",
+        "timescaledb": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\norder by time desc\nlimit 10000\n"
+      }
     },
     "large_22_raw_filtered_desc": {
       "sql": "select\n    time,\n    process_364 as value\nfrom\n    data_large\nwhere\n    time > '2023-06-01'\n    and time < '2023-06-08'\norder by\n    time desc\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\nand time > '2023-06-01' and time < '2023-06-08'\norder by time desc\n",
+        "timescaledb": "select time, value\nfrom data_large\nwhere metric_name = 'process_364'\nand time > '2023-06-01' and time < '2023-06-08'\norder by time desc\n"
+      }
     },
     "large_23_batch_export": {
       "sql": "select\n    *\nfrom\n    data_large\nwhere\n    time >= '2023-01-01'\n    and time < '2023-06-01'\norder by\n    time\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, metric_name, value\nfrom data_large\nwhere time >= '2023-01-01' and time < '2023-06-01'\norder by time, metric_name\n",
+        "timescaledb": "select time, metric_name, value\nfrom data_large\nwhere time >= '2023-01-01' and time < '2023-06-01'\norder by time, metric_name\n"
+      }
     },
     "tall_01_max_time": {
       "sql": "select\n    max(time)\nfrom\n    data_tall\n",
@@ -1120,101 +1178,150 @@
     },
     "wide_01_max_time": {
       "sql": "select\n    max(time)\nfrom\n    data_wide\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select max(time)\nfrom data_wide\nwhere metric_name = 'process_545'\n",
+        "timescaledb": "select max(time)\nfrom data_wide\nwhere metric_name = 'process_545'\n"
+      }
     },
     "wide_02_latest_50": {
       "sql": "select\n    time\nfrom\n    data_wide\norder by\n    time desc\nlimit\n    50\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select distinct time\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time desc\nlimit 50\n",
+        "timescaledb": "select distinct time\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time desc\nlimit 50\n"
+      }
     },
     "wide_03_aggregate_filtered": {
       "sql": "select\n    avg(process_545) as val,\n    count(process_545) as cnt\nfrom\n    data_wide\nwhere\n    time > '2024-09-01'\n    and time < '2024-12-15'\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select avg(value) as val, count(value) as cnt\nfrom data_wide\nwhere metric_name = 'process_545'\nand time > '2024-09-01' and time < '2024-12-15'\n",
+        "timescaledb": "select avg(value) as val, count(value) as cnt\nfrom data_wide\nwhere metric_name = 'process_545'\nand time > '2024-09-01' and time < '2024-12-15'\n"
+      }
     },
     "wide_04_hourly_resample_single": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    hr\nlimit\n    100\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    hr\norder by\n    hr\nlimit\n    100\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    time_bucket(INTERVAL '1 hour', time)\norder by\n    hr\nlimit\n    100\n"
+        "postgres": "select date_trunc('hour', time) as hr, avg(value) as value\nfrom data_wide\nwhere metric_name = 'process_545'\ngroup by date_trunc('hour', time)\norder by hr\nlimit 100\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 hour', time) as hr, avg(value) as value\nfrom data_wide\nwhere metric_name = 'process_545'\ngroup by time_bucket(INTERVAL '1 hour', time)\norder by hr\nlimit 100\n"
       }
     },
     "wide_05_hourly_resample_multi": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as int)) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    hr\nlimit\n    100\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as Nullable(int))) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_wide\ngroup by\n    hr\norder by\n    hr\nlimit\n    100\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(process_667) as value_1,\n    avg(cast(binary_22 as int)) as value_2,\n    avg(ratio_12) as value_3,\n    avg(process_259) as value_4,\n    avg(process_242) as value_5,\n    avg(deviation_39) as value_6\nfrom\n    data_wide\ngroup by\n    time_bucket(INTERVAL '1 hour', time)\norder by\n    hr\nlimit\n    100\n"
+        "postgres": "select date_trunc('hour', time) as hr,\n    avg(value) filter (where metric_name = 'process_667') as value_1,\n    avg(value) filter (where metric_name = 'binary_22') as value_2,\n    avg(value) filter (where metric_name = 'ratio_12') as value_3,\n    avg(value) filter (where metric_name = 'process_259') as value_4,\n    avg(value) filter (where metric_name = 'process_242') as value_5,\n    avg(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_wide\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by date_trunc('hour', time)\norder by hr\nlimit 100\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(value) filter (where metric_name = 'process_667') as value_1,\n    avg(value) filter (where metric_name = 'binary_22') as value_2,\n    avg(value) filter (where metric_name = 'ratio_12') as value_3,\n    avg(value) filter (where metric_name = 'process_259') as value_4,\n    avg(value) filter (where metric_name = 'process_242') as value_5,\n    avg(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_wide\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time_bucket(INTERVAL '1 hour', time)\norder by hr\nlimit 100\n"
       }
     },
     "wide_06_daily_resample": {
       "sql": "select\n    date_trunc('day', time) as d,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    date_trunc('day', time)\norder by\n    d\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('day', time) as d,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    d\norder by\n    d\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 day', time) as d,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    time_bucket(INTERVAL '1 day', time)\norder by\n    d\n"
+        "postgres": "select date_trunc('day', time) as d, avg(value) as value\nfrom data_wide\nwhere metric_name = 'process_545'\ngroup by date_trunc('day', time)\norder by d\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 day', time) as d, avg(value) as value\nfrom data_wide\nwhere metric_name = 'process_545'\ngroup by time_bucket(INTERVAL '1 day', time)\norder by d\n"
       }
     },
     "wide_07_full_aggregate": {
       "sql": "select\n    min(process_545) as min_val,\n    max(process_545) as max_val,\n    avg(process_545) as avg_val,\n    stddev(process_545) as stddev_val,\n    count(process_545) as cnt\nfrom\n    data_wide\n",
       "db_overrides": {
         "clickhouse": "select\n    min(process_545) as min_val,\n    max(process_545) as max_val,\n    avg(process_545) as avg_val,\n    stddevSamp(process_545) as stddev_val,\n    count(process_545) as cnt\nfrom\n    data_wide\n",
-        "monetdb": "select\n    min(process_545) as min_val,\n    max(process_545) as max_val,\n    avg(process_545) as avg_val,\n    sys.stddev_samp(process_545) as stddev_val,\n    count(process_545) as cnt\nfrom\n    data_wide\n"
+        "monetdb": "select\n    min(process_545) as min_val,\n    max(process_545) as max_val,\n    avg(process_545) as avg_val,\n    sys.stddev_samp(process_545) as stddev_val,\n    count(process_545) as cnt\nfrom\n    data_wide\n",
+        "postgres": "select min(value) as min_val, max(value) as max_val,\n       avg(value) as avg_val, stddev(value) as stddev_val,\n       count(value) as cnt\nfrom data_wide\nwhere metric_name = 'process_545'\n",
+        "timescaledb": "select min(value) as min_val, max(value) as max_val,\n       avg(value) as avg_val, stddev(value) as stddev_val,\n       count(value) as cnt\nfrom data_wide\nwhere metric_name = 'process_545'\n"
       }
     },
     "wide_08_raw_asc_limit": {
       "sql": "select\n    time,\n    process_545 as value\nfrom\n    data_wide\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time\nlimit 10000\n"
+      }
     },
     "wide_09_raw_filtered": {
       "sql": "select\n    time,\n    process_545 as value\nfrom\n    data_wide\nwhere\n    time > '2024-10-01'\n    and time < '2024-10-08'\norder by\n    time\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545'\nand time > '2024-10-01' and time < '2024-10-08'\norder by time\n",
+        "timescaledb": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545'\nand time > '2024-10-01' and time < '2024-10-08'\norder by time\n"
+      }
     },
     "wide_10_scalar_lookup": {
       "sql": "select\n    time,\n    process_545 as value\nfrom\n    data_wide\nwhere\n    time = '2024-10-15 12:30:00'\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545' and time = '2024-10-15 12:30:00'\n",
+        "timescaledb": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545' and time = '2024-10-15 12:30:00'\n"
+      }
     },
     "wide_11_scalar_lookup_multi": {
       "sql": "select\n    time,\n    process_667 as value_1,\n    cast(binary_22 as int) as value_2,\n    ratio_12 as value_3,\n    process_259 as value_4,\n    process_242 as value_5,\n    deviation_39 as value_6\nfrom\n    data_wide\nwhere\n    time = '2024-10-15 12:30:00'\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_wide\nwhere time = '2024-10-15 12:30:00' and metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\n",
+        "timescaledb": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_wide\nwhere time = '2024-10-15 12:30:00' and metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\n"
+      }
     },
     "wide_12_conditional_aggregate": {
       "sql": "select\n    avg(process_667) as value\nfrom\n    data_wide\nwhere\n    abs(deviation_39) < 10\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "with valid_times as (\n    select time from data_wide\n    where metric_name = 'deviation_39' and abs(value) < 10\n)\nselect avg(value) as value\nfrom data_wide\nwhere metric_name = 'process_667'\nand time in (select time from valid_times)\n",
+        "timescaledb": "with valid_times as (\n    select time from data_wide\n    where metric_name = 'deviation_39' and abs(value) < 10\n)\nselect avg(value) as value\nfrom data_wide\nwhere metric_name = 'process_667'\nand time in (select time from valid_times)\n"
+      }
     },
     "wide_13_rolling_avg": {
       "sql": "select\n    time,\n    process_545 as value,\n    avg(process_545) over (order by time rows between 59 preceding and current row) as rolling_avg\nfrom\n    data_wide\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value,\n       avg(value) over (order by time rows between 59 preceding and current row) as rolling_avg\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value,\n       avg(value) over (order by time rows between 59 preceding and current row) as rolling_avg\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time\nlimit 10000\n"
+      }
     },
     "wide_14_rate_of_change": {
       "sql": "select\n    time,\n    process_545 as value,\n    process_545 - lag(process_545) over (order by time) as delta\nfrom\n    data_wide\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value,\n       value - lag(value) over (order by time) as delta\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value,\n       value - lag(value) over (order by time) as delta\nfrom data_wide\nwhere metric_name = 'process_545'\norder by time\nlimit 10000\n"
+      }
     },
     "wide_15_threshold_breach": {
       "sql": "select\n    time,\n    process_545 as value\nfrom\n    data_wide\nwhere\n    process_545 > 500\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545' and value > 500\norder by time\nlimit 10000\n",
+        "timescaledb": "select time, value\nfrom data_wide\nwhere metric_name = 'process_545' and value > 500\norder by time\nlimit 10000\n"
+      }
     },
     "wide_16_count_distinct_days": {
       "sql": "select\n    count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time)\n    from data_wide\n) t\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select count(*) as distinct_days\nfrom (\n    select distinct date_trunc('day', time) as d\n    from data_wide\n    where metric_name = 'process_545'\n) t\n",
+        "timescaledb": "select count(*) as distinct_days\nfrom (\n    select distinct time_bucket(INTERVAL '1 day', time) as d\n    from data_wide\n    where metric_name = 'process_545'\n) t\n"
+      }
     },
     "wide_17_group_by_hour_category": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    binary_22,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    date_trunc('hour', time),\n    binary_22\norder by\n    hr,\n    binary_22\nlimit\n    200\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    binary_22,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    hr,\n    binary_22\norder by\n    hr,\n    binary_22\nlimit\n    200\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    binary_22,\n    avg(process_545) as value\nfrom\n    data_wide\ngroup by\n    time_bucket(INTERVAL '1 hour', time),\n    binary_22\norder by\n    hr,\n    binary_22\nlimit\n    200\n"
+        "postgres": "with b as (\n    select time, value as binary_value from data_wide\n    where metric_name = 'binary_22'\n),\np as (\n    select time, value from data_wide\n    where metric_name = 'process_545'\n)\nselect date_trunc('hour', p.time) as hr,\n       b.binary_value as binary_22,\n       avg(p.value) as value\nfrom p join b on p.time = b.time\ngroup by hr, b.binary_value\norder by hr, binary_22\nlimit 200\n",
+        "timescaledb": "with b as (\n    select time, value as binary_value from data_wide\n    where metric_name = 'binary_22'\n),\np as (\n    select time, value from data_wide\n    where metric_name = 'process_545'\n)\nselect time_bucket(INTERVAL '1 hour', p.time) as hr,\n       b.binary_value as binary_22,\n       avg(p.value) as value\nfrom p join b on p.time = b.time\ngroup by hr, b.binary_value\norder by hr, binary_22\nlimit 200\n"
       }
     },
     "wide_18_top_n_hourly": {
       "sql": "select\n    date_trunc('hour', time) as hr,\n    avg(process_545) as avg_value\nfrom\n    data_wide\ngroup by\n    date_trunc('hour', time)\norder by\n    avg_value desc\nlimit\n    10\n",
       "db_overrides": {
         "clickhouse": "select\n    date_trunc('hour', time) as hr,\n    avg(process_545) as avg_value\nfrom\n    data_wide\ngroup by\n    hr\norder by\n    avg_value desc\nlimit\n    10\n",
-        "timescaledb": "select\n    time_bucket(INTERVAL '1 hour', time) as hr,\n    avg(process_545) as avg_value\nfrom\n    data_wide\ngroup by\n    time_bucket(INTERVAL '1 hour', time)\norder by\n    avg_value desc\nlimit\n    10\n"
+        "postgres": "select date_trunc('hour', time) as hr, avg(value) as avg_value\nfrom data_wide\nwhere metric_name = 'process_545'\ngroup by date_trunc('hour', time)\norder by avg_value desc\nlimit 10\n",
+        "timescaledb": "select time_bucket(INTERVAL '1 hour', time) as hr, avg(value) as avg_value\nfrom data_wide\nwhere metric_name = 'process_545'\ngroup by time_bucket(INTERVAL '1 hour', time)\norder by avg_value desc\nlimit 10\n"
       }
     },
     "wide_19_null_gap_detection": {
       "sql": "select\n    time,\n    value,\n    prev_value\nfrom (\n    select\n        time,\n        process_545 as value,\n        lag(process_545) over (order by time) as prev_value\n    from\n        data_wide\n) t\nwhere\n    value is null\n    and prev_value is not null\norder by\n    time\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time, value, prev_value\nfrom (\n    select time, value,\n           lag(value) over (order by time) as prev_value\n    from data_wide\n    where metric_name = 'process_545'\n) t\nwhere value is null and prev_value is not null\norder by time\n",
+        "timescaledb": "select time, value, prev_value\nfrom (\n    select time, value,\n           lag(value) over (order by time) as prev_value\n    from data_wide\n    where metric_name = 'process_545'\n) t\nwhere value is null and prev_value is not null\norder by time\n"
+      }
     },
     "wide_20_raw_multi_limit": {
       "sql": "select\n    time,\n    process_667 as value_1,\n    binary_22 as value_2,\n    ratio_12 as value_3,\n    process_259 as value_4,\n    process_242 as value_5,\n    deviation_39 as value_6\nfrom\n    data_wide\norder by\n    time\nlimit\n    10000\n",
-      "db_overrides": {}
+      "db_overrides": {
+        "postgres": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_wide\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\norder by time\nlimit 10000\n",
+        "timescaledb": "select time,\n    max(value) filter (where metric_name = 'process_667') as value_1,\n    max(value) filter (where metric_name = 'binary_22') as value_2,\n    max(value) filter (where metric_name = 'ratio_12') as value_3,\n    max(value) filter (where metric_name = 'process_259') as value_4,\n    max(value) filter (where metric_name = 'process_242') as value_5,\n    max(value) filter (where metric_name = 'deviation_39') as value_6\nfrom data_wide\nwhere metric_name in ('process_667', 'binary_22', 'ratio_12', 'process_259', 'process_242', 'deviation_39')\ngroup by time\norder by time\nlimit 10000\n"
+      }
     }
   }
 }

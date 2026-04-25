@@ -72,7 +72,7 @@ function parseGenericQueryName(queryName: string): ParsedQueryName {
 }
 
 function compareGenericQueryNames(left: string, right: string): number {
-  return left.localeCompare(right)
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })
 }
 
 const TIME_SERIES_CONFIG: SuiteConfig = {
