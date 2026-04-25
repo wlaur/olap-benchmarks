@@ -1,4 +1,6 @@
 import logging
+import os
+import shutil
 import uuid
 from collections.abc import Mapping
 from time import sleep
@@ -17,7 +19,25 @@ _LOGGER = logging.getLogger(__name__)
 
 VERSION = "9.3.5"
 
-DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
+DOCKER_IMAGE = f"questdb/questdb:{VERSION}"
+
+
+def _build_clickbench_insert(
+    con: Connection,
+    parquet_name: str,
+    timestamp_columns: tuple[str, ...],
+    date_columns: tuple[str, ...],
+) -> str:
+    rows = con.execute(text(f"select * from read_parquet('{parquet_name}') limit 0")).keys()
+    parts: list[str] = []
+    for name in rows:
+        if name in timestamp_columns:
+            parts.append(f"cast({name} * 1000000L as timestamp) as {name}")
+        elif name in date_columns:
+            parts.append(f"cast(cast({name} as long) * 86400000000L as timestamp) as {name}")
+        else:
+            parts.append(name)
+    return f"insert into hits select {', '.join(parts)} from read_parquet('{parquet_name}')"
 
 
 class QuestDBClickbench(Clickbench["QuestDB"]):
@@ -35,31 +55,30 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
         fpath = SETTINGS.temporary_directory / "questdb/data/hits.parquet"
         input_fpath = SETTINGS.input_data_directory / "clickbench/hits.parquet"
 
-        timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
-        date_columns = ["EventDate"]
+        # Source schema has EventTime/ClientEventTime/LocalEventTime as Int64 (epoch
+        # seconds) and EventDate as UInt16 (days since epoch). Convert inline in the
+        # INSERT instead of rewriting the 14GB parquet — the rewrite was costing extra
+        # disk I/O for no reason. See _build_clickbench_insert below.
+        timestamp_columns = ("EventTime", "ClientEventTime", "LocalEventTime")
+        date_columns = ("EventDate",)
 
-        (
-            pl.scan_parquet(input_fpath)
-            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
-            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
-            .with_columns(pl.selectors.decimal().cast(pl.Float64))
-            .with_columns(pl.selectors.date().cast(pl.Datetime("us")))
-            .with_columns(pl.selectors.datetime().cast(pl.Datetime("us")))
-            .sink_parquet(fpath)
-        )
+        # Hard-link the source parquet into questdb's import dir so read_parquet can
+        # see it without copying. Falls back to copy on cross-filesystem.
+        fpath.parent.mkdir(parents=True, exist_ok=True)
+        if fpath.exists() or fpath.is_symlink():
+            fpath.unlink()
+        try:
+            os.link(input_fpath, fpath)
+        except OSError:
+            shutil.copy2(input_fpath, fpath)
 
         # 99997497 rows
         count: int = pl.scan_parquet(input_fpath).select(pl.len()).collect().item(0, 0)
-
-        _LOGGER.info(f"Wrote temporary hits.parquet with {count:_} rows to {fpath}")
+        _LOGGER.info(f"Linked source hits.parquet ({count:_} rows) to {fpath}")
 
         with self.db.phase_context("insert", table_name="hits"):
             con = self.db.connect()
-
-            statement = f"""
-                insert into hits
-                select * from read_parquet('{fpath.name}')
-            """
+            statement = _build_clickbench_insert(con, fpath.name, timestamp_columns, date_columns)
             with self.db.record_query_execution(statement):
                 con.execute(text(statement))
             tracked_commit(con)
@@ -116,10 +135,15 @@ class QuestDB(Database):
     ) -> pl.DataFrame:
         if method == "python":
             with self.record_query_execution(query):
-                df = pl.DataFrame(
-                    self.connect().execute(text(query.strip().removesuffix(";"))).fetchall(),
-                    infer_schema_length=None,
-                )
+                result = self.connect().execute(text(query.strip().removesuffix(";")))
+                columns = list(result.keys())
+                rows = result.fetchall()
+            df = pl.DataFrame(
+                rows,
+                schema=columns,
+                orient="row",
+                infer_schema_length=None,
+            )
 
         elif method == "connectorx":
             uri = "redshift" + self.connection_string.removeprefix("questdb")
