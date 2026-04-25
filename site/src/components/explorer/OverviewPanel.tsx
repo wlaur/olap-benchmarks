@@ -281,6 +281,7 @@ function OverviewBarChart({
           stackId={stackId}
           radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Populate"
+          isAnimationActive={false}
           shape={(props) => (
             <Rectangle
               {...props}
@@ -297,6 +298,7 @@ function OverviewBarChart({
           stackId={stackId}
           radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Mutate"
+          isAnimationActive={false}
           shape={(props) => (
             <Rectangle
               {...props}
@@ -313,6 +315,7 @@ function OverviewBarChart({
           stackId={stackId}
           radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
           name="Select"
+          isAnimationActive={false}
           shape={(props) => (
             <Rectangle
               {...props}

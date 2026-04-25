@@ -47,6 +47,7 @@ export function OperationTab({
 }: OperationTabProps) {
   const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
   const { selectedQuery, setSelectedQuery } = selection
+  const deferredSelectedQuery = useDeferredValue(selectedQuery)
   const [tableScaleMode, setTableScaleMode] = useState<DurationScaleMode>("linear")
   const {
     width: layoutWidth,
@@ -63,11 +64,15 @@ export function OperationTab({
   )
   const maxDuration = useMemo(() => computeMaxDuration(queryRows), [queryRows])
 
-  const selectedRow = selectedQuery
-    ? (queryRows.find((r) => r.query_name === selectedQuery) ?? null)
-    : null
+  const selectedRow = useMemo(
+    () =>
+      deferredSelectedQuery
+        ? (queryRows.find((r) => r.query_name === deferredSelectedQuery) ?? null)
+        : null,
+    [deferredSelectedQuery, queryRows],
+  )
 
-  const selectedSql = queriesManifest?.[suiteConfig.id]?.[selectedQuery ?? ""] ?? null
+  const selectedSql = queriesManifest?.[suiteConfig.id]?.[deferredSelectedQuery ?? ""] ?? null
   const showTimeline = isTimelineLoading || querySteps.length > 0
   const isSplitLayout = !layoutMounted || deferredLayoutWidth >= DETAIL_SPLIT_MIN_WIDTH
 

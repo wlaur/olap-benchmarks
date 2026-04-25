@@ -6,7 +6,7 @@ export function PanelCard({ children, className }: { children: ReactNode; classN
   return (
     <div
       className={cn(
-        "min-h-0 min-w-0 overflow-hidden rounded-xl border border-border-default bg-surface-raised p-3",
+        "min-h-0 min-w-0 overflow-hidden rounded-xl border border-border-default bg-surface-raised p-3 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)]",
         className,
       )}
     >

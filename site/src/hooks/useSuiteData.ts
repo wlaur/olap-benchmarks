@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react"
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react"
 
 import type { BenchmarkSuiteId } from "../lib/benchmarks"
 import {
@@ -191,17 +191,24 @@ export function useSuiteData(
     })
   }, [databases])
 
-  const includedDatabases = selectedDatabases.length > 0 ? selectedDatabases : databases
-  const includedDatabaseSet = new Set(includedDatabases)
+  const includedDatabases = useMemo(
+    () => (selectedDatabases.length > 0 ? selectedDatabases : databases),
+    [selectedDatabases, databases],
+  )
 
-  const filteredQuerySummaries = state.querySummaries.filter((row) =>
-    includedDatabaseSet.has(row.db),
+  const includedDatabaseSet = useMemo(() => new Set(includedDatabases), [includedDatabases])
+
+  const filteredQuerySummaries = useMemo(
+    () => state.querySummaries.filter((row) => includedDatabaseSet.has(row.db)),
+    [state.querySummaries, includedDatabaseSet],
   )
-  const filteredMutateSummaries = state.mutateSummaries.filter((row) =>
-    includedDatabaseSet.has(row.db),
+  const filteredMutateSummaries = useMemo(
+    () => state.mutateSummaries.filter((row) => includedDatabaseSet.has(row.db)),
+    [state.mutateSummaries, includedDatabaseSet],
   )
-  const filteredOperationSummaries = state.operationSummaries.filter((run) =>
-    includedDatabaseSet.has(run.db),
+  const filteredOperationSummaries = useMemo(
+    () => state.operationSummaries.filter((run) => includedDatabaseSet.has(run.db)),
+    [state.operationSummaries, includedDatabaseSet],
   )
 
   const filteredQuerySteps = state.querySteps
@@ -209,7 +216,7 @@ export function useSuiteData(
 
   const isLoading = isSystemLoading || state.loading
 
-  function toggleDatabase(database: string) {
+  const toggleDatabase = useCallback((database: string) => {
     setSelectedDatabases((currentSelection) => {
       const nextSelection = currentSelection.includes(database)
         ? currentSelection.filter((value) => value !== database)
@@ -217,7 +224,7 @@ export function useSuiteData(
 
       return nextSelection.length > 0 ? nextSelection : currentSelection
     })
-  }
+  }, [])
 
   return {
     state,

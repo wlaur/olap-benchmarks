@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 
 export interface SelectionState {
   hoveredQuery: string | null
@@ -34,14 +34,17 @@ export function useSelectionState(): SelectionState {
     setSelectedQuery(null)
   }, [])
 
-  return {
-    hoveredQuery,
-    selectedQuery,
-    setHoveredQuery,
-    setSelectedQuery,
-    resetSelection,
-    toggleSelectedQuery,
-    isHighlighted,
-    isAnyActive,
-  }
+  return useMemo(
+    () => ({
+      hoveredQuery,
+      selectedQuery,
+      setHoveredQuery,
+      setSelectedQuery,
+      resetSelection,
+      toggleSelectedQuery,
+      isHighlighted,
+      isAnyActive,
+    }),
+    [hoveredQuery, selectedQuery, resetSelection, toggleSelectedQuery, isHighlighted, isAnyActive],
+  )
 }

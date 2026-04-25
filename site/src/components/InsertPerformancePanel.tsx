@@ -196,6 +196,7 @@ export function InsertPerformancePanel({
                     fill={databaseColors[db] ?? "#94a3b8"}
                     radius={[0, 4, 4, 0]}
                     barSize={8}
+                    isAnimationActive={false}
                   />
                 ))}
               </BarChart>
