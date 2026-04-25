@@ -183,6 +183,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
               includedDatabases={includedDatabases}
               databaseColors={databaseColors}
               selection={selection}
+              queriesManifest={state.queriesManifest}
               isLoading={isLoading}
             />
           </Suspense>
