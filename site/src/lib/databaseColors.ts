@@ -3,7 +3,7 @@ const DATABASE_COLOR_PALETTE = [
   "#f97316",
   "#34d399",
   "#facc15",
-  "#f472b6",
+  "#ec4899",
   "#a78bfa",
   "#fb7185",
   "#2dd4bf",
