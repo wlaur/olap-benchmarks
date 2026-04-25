@@ -1,9 +1,3 @@
-# OLAP Benchmarks
-
-Run the same SQL queries against different OLAP databases on the same machine and compare how they do.
-
----
-
 ## Time Series
 
 Time-series ingestion and analytical queries across table shapes (wide, tall, large).
