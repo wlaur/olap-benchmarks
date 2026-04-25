@@ -9,10 +9,16 @@ import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import REPO_ROOT, SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import TimeSeries, get_time_series_input_files
+from ...suites.time_series.config import (
+    TIME_SERIES_DATASET_SIZES,
+    MutateStep,
+    TimeSeries,
+    get_time_series_input_files,
+    get_time_series_table_name,
+)
 from .. import Database
 from ..postgres import generate_create_table_sql, table_exists
 from ..utils import tracked_commit
@@ -93,37 +99,89 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 
 
 class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
-    POST_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
-        "data_tall": "tall_post_insert.sql",
-        "data_wide": "wide_post_insert.sql",
-        "data_large": "large_post_insert.sql",
+    EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
+    EAV_CHUNK_TARGET_ROWS: ClassVar[int] = 200_000_000
+
+    PRE_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
+        "data_tall": "tall_pre_insert.sql",
+        "data_wide": "wide_pre_insert.sql",
+        "data_large": "large_pre_insert.sql",
     }
 
-    # wide columnar tables can exceed PostgreSQL's max tuple size for compressed rows
-    # on TimescaleDB 2.25.0 / PG 18.
-    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large", "data_wide"}
+    def expected_table_row_counts(self) -> Mapping[TableName, int]:
+        counts: dict[TableName, int] = {}
+        for size, (n_rows, n_cols) in TIME_SERIES_DATASET_SIZES.items():
+            table_name = get_time_series_table_name(size)
+            counts[table_name] = n_rows * n_cols if table_name in self.EAV_TABLES else n_rows
+        return counts
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         _ = table_name
+        return None
+
+    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
+        if table_name in self.EAV_TABLES:
+            return ["time", "metric_name"]
         return "time"
+
+    @staticmethod
+    def _wide_to_eav(df: pl.DataFrame) -> pl.DataFrame:
+        metric_cols = [c for c in df.columns if c != "time"]
+        bool_cols = [c for c, t in df.schema.items() if c != "time" and t == pl.Boolean]
+        casted = df.with_columns([pl.col(c).cast(pl.Float32) for c in bool_cols]) if bool_cols else df
+        return casted.unpivot(
+            index="time",
+            on=metric_cols,
+            variable_name="metric_name",
+            value_name="value",
+        )
+
+    def _eav_create_table(self, table_name: TableName) -> None:
+        con = self.db.connect()
+        statement = (
+            f'CREATE TABLE "{table_name}" ("time" TIMESTAMP NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
+        )
+        with self.db.record_query_execution(statement):
+            con.execute(text(statement))
+        tracked_commit(con)
+        _LOGGER.info(f"Created EAV table {table_name}")
+
+    def _eav_chunk_rows(self, n_metric_cols: int) -> int:
+        return max(1_000, self.EAV_CHUNK_TARGET_ROWS // max(1, n_metric_cols))
+
+    def _eav_chunked_insert(self, table_name: TableName, fpath: Path) -> None:
+        schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
+        metric_cols = [c for c in schema if c != "time"]
+        chunk_rows = self._eav_chunk_rows(len(metric_cols))
+        total = self.parquet_row_count(fpath)
+
+        offset = 0
+        chunk_idx = 0
+        while offset < total:
+            chunk_idx += 1
+            df_wide = pl.scan_parquet(fpath).slice(offset, chunk_rows).collect()
+            df_eav = self._wide_to_eav(df_wide)
+            self.db.insert(df_eav, table_name)
+            _LOGGER.info(
+                f"Inserted EAV chunk {chunk_idx} for {table_name}: "
+                f"wide_rows={offset + df_wide.shape[0]:_}/{total:_}, "
+                f"eav_rows={df_eav.shape[0]:_}"
+            )
+            offset += chunk_rows
 
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
-            if table_name in self.SKIP_COMPRESS:
-                _LOGGER.warning(f"Skipping compression for {table_name} (exceeds PG max tuple size)")
-            else:
-                con = self.db.connect(reconnect=True)
-                statement = f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"
-                with self.db.record_query_execution(statement):
-                    con.execute(text(statement))
-                tracked_commit(con)
-                _LOGGER.info(f"Compressed table {table_name}")
+            con = self.db.connect(reconnect=True)
+            statement = f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"
+            with self.db.record_query_execution(statement):
+                con.execute(text(statement))
+            tracked_commit(con)
+            _LOGGER.info(f"Compressed table {table_name}")
 
             con = self.db.connect(reconnect=True)
             statement = f"vacuum freeze analyze {table_name}"
             with self.db.record_query_execution(statement):
                 con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
-
             _LOGGER.info(f"Vacuumed table {table_name}")
 
     def populate(self, restart: bool = True) -> None:
@@ -133,34 +191,33 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
 
         input_files = get_time_series_input_files()
 
+        # 1. Create empty tables (regular wide for tall, EAV for wide/large).
         for table_name, fpath in input_files.items():
-            primary_key = self.get_primary_key(table_name)
-            not_null = self.get_not_null(table_name)
+            if table_name in self.EAV_TABLES:
+                self._eav_create_table(table_name)
+            else:
+                schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
+                self.db.create_table(schema, table_name, primary_key=None, not_null="time")
 
-            schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
-
-            self.db.create_table(schema, table_name, primary_key, not_null)
-
-        for table_name, fpath in input_files.items():
-            primary_key = self.get_primary_key(table_name)
-            not_null = self.get_not_null(table_name)
-
-            df = pl.scan_parquet(fpath)
-
-            _LOGGER.info(f"Streaming {table_name} from parquet to staged CSV")
-
-            with self.db.phase_context("insert", table_name=table_name):
-                self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
-                _LOGGER.info(f"Inserted {table_name} for {self.name}")
-
-        for table_name, schema_file in self.POST_INSERT_SCHEMA_FILES.items():
+        # 2. Convert each table to a hypertable + columnstore config (empty
+        #    table → no migrate_data needed, much faster than retro-conversion).
+        for table_name, sql_file in self.PRE_INSERT_SCHEMA_FILES.items():
             with self.db.phase_context("create_hypertable", table_name=table_name):
                 self.db.execute_schema_file(
-                    REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / schema_file
+                    REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / sql_file
                 )
 
-        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+        # 3. Ingest data.
+        for table_name, fpath in input_files.items():
+            with self.db.phase_context("insert", table_name=table_name):
+                if table_name in self.EAV_TABLES:
+                    self._eav_chunked_insert(table_name, fpath)
+                else:
+                    df = pl.scan_parquet(fpath)
+                    self.db.insert(df, table_name, primary_key=None, not_null="time")
+            _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
+        # 4. Compress all chunks.
         with self.db.phase_context("compress"):
             self.compress_tables()
 
@@ -170,19 +227,34 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         if restart:
             self.db.restart_event()
 
+    def _generate_insert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        df_wide = super()._generate_insert_data(step, seed)
+        if step.table in self.EAV_TABLES:
+            return self._wide_to_eav(df_wide)
+        return df_wide
+
+    def _generate_upsert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        df_wide = super()._generate_upsert_data(step, seed)
+        if step.table in self.EAV_TABLES:
+            return self._wide_to_eav(df_wide)
+        return df_wide
+
+    def _apply_upsert(self, step: MutateStep, df: pl.DataFrame) -> None:
+        # EAV has no unique constraint on (time, metric_name) -- ON CONFLICT
+        # would fail, so emulate upsert with DELETE-by-time then INSERT.
+        if step.table in self.EAV_TABLES:
+            keys = df.select("time").unique()
+            self.db.delete(step.table, primary_key="time", keys=keys)
+            self.db.insert(df, step.table, primary_key=None)
+            return
+        super()._apply_upsert(step, df)
+
 
 class TimescaleDB(Database):
     name: DatabaseName = "timescaledb"
     version: str = VERSION
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
-    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
-        "time_series": frozenset(
-            {
-                "insert_data_large_10000",
-            }
-        )
-    }
 
     @property
     def start(self) -> str:
