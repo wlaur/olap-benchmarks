@@ -37,6 +37,17 @@ Implementation done; commits on `wip`:
 - [x] CLI: `--omit <db>` flag added to both `benchmark` and `benchmark-all`
       so `olap benchmark-all --revision release --omit questdb` is the
       single command for the release run.
+- [x] QuestDB rtabench: passes end-to-end on `--revision test`
+      (populate=137s, select=491s).
+- [x] QuestDB kaggle_airbnb: q04 needed an override (no `array_agg` in
+      QuestDB); the override drops the `reviewer_ids` column and keeps the
+      JOIN+GROUP BY workload. q01–03 and q05 pass unchanged.
+- [x] QuestDB time_series mutate: upsert and delete steps disabled via
+      `DISABLED_MUTATION_STEPS` because QuestDB has no DELETE statement
+      (verified against 9.3.5 — `DELETE FROM t WHERE id=1` returns
+      `unexpected token [FROM]`). Insert remains enabled. See the
+      block comment in `dbs/questdb/__init__.py` for the rationale and
+      rejected alternatives (DEDUP UPSERT KEYS, CTAS-then-rename).
 
 Deferred to user (cost-of-disk reasons during smoke test):
 
@@ -60,6 +71,10 @@ Open / not implemented:
 - §1.5 kaggle_airbnb decision (drop vs expand) — left as-is for now.
 - §2 Methodology / README documentation — not yet written.
 - §3 Web app updates — not yet touched.
+- QuestDB time_series populate + select smoke run — pending; deferred
+  while a manual `questdb-benchmark` container is in use. Static review
+  expects it to work (1500-col tables fit under QuestDB's 2048-col limit;
+  date_trunc / lag() / stddev are all supported in 9.3.5).
 
 ---
 
