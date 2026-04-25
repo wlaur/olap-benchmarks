@@ -13,7 +13,7 @@ from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
 
-ITERATIONS = 3
+ITERATIONS = 5
 
 
 def prepare_data() -> None:
