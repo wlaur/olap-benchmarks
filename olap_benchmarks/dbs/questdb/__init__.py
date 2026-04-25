@@ -15,7 +15,7 @@ from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "9.0.1"
+VERSION = "9.3.5"
 
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}-rhel"
 

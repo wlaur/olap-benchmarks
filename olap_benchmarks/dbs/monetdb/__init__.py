@@ -41,7 +41,7 @@ if LOCAL_IMAGE:
     _version = "Mar2025-11"
     _docker_image = f"monetdb-local:{_version}"
 else:
-    _version = "Dec2025-SP1"
+    _version = "Dec2025-SP2"
     _docker_image = f"monetdb/monetdb:{_version}"
 
 VERSION = _version
