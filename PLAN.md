@@ -17,6 +17,50 @@ Concrete, ordered tasks to implement the OUTPUT.md action items.
   for the release, use a fresh revision (e.g. `release`) instead of `default`.
 - `system = macbook-pro-m4` (single-system release).
 
+## Status (2026-04-25)
+
+Implementation done; commits on `wip`:
+
+- [x] §1.1 EAV schema for Postgres + TimescaleDB time_series (data_wide,
+      data_large). data_tall stays wide. Smoke-tested end-to-end on
+      synthetic data: all 62 time_series queries parse and return correct
+      shapes; mutate insert/upsert/delete on EAV tables works; populate
+      paths (chunked unpivot → COPY) verified against real Postgres and
+      TimescaleDB containers.
+- [x] §1.2 ClickHouse ClickBench schema: explicit `ORDER BY (CounterID,
+      EventDate, UserID, EventTime, WatchID)` with citation comment.
+      Verified by applying schema to a fresh container.
+- [x] §1.3 Postgres GUC parity for ClickBench (`work_mem=1GB`,
+      `min_parallel_table_scan_size=0`) and RTABench (`work_mem=50MB`).
+      Verified GUC values persist on a fresh connection after schema apply.
+- [x] §1.4 ClickBench iterations 3 → 5.
+- [x] CLI: `--omit <db>` flag added to both `benchmark` and `benchmark-all`
+      so `olap benchmark-all --revision release --omit questdb` is the
+      single command for the release run.
+
+Deferred to user (cost-of-disk reasons during smoke test):
+
+- Real-data run validation. Smoke-running `benchmark all kaggle_airbnb
+  --revision test --omit questdb --cleanup` failed mid-run on MonetDB with
+  `GDKextendf: No space left on device` — caused by the parallel QuestDB
+  run consuming ~88 GB in `data/dbs/questdb` plus the existing
+  `data_large.parquet` (9 GB), leaving ~67 GB free which MonetDB exhausted
+  during its select-phase HEAP allocations. **Not a code bug**: the
+  populate phase completed cleanly (86 s); the select phase was using
+  unmodified MonetDB code unrelated to any release change.
+- Before kicking off the release run, ensure ≥150 GB free (the EAV
+  `data_large` CSV staging alone needs ~180 GB across chunks, but each
+  chunk file is deleted before the next is written — peak is ~6 GB per
+  chunk).
+- Use `--cleanup` on the release run so per-(db,suite) state is removed
+  after each combo, otherwise total disk use balloons.
+
+Open / not implemented:
+
+- §1.5 kaggle_airbnb decision (drop vs expand) — left as-is for now.
+- §2 Methodology / README documentation — not yet written.
+- §3 Web app updates — not yet touched.
+
 ---
 
 ## 0. Working setup (do once)
