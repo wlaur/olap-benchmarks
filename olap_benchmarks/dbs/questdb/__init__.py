@@ -105,20 +105,17 @@ class QuestDB(Database):
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 
-    # QuestDB has no DELETE statement, period. Verified against 9.3.5:
-    # `DELETE FROM t WHERE id = 1` returns "unexpected token [FROM]". Only
-    # TRUNCATE TABLE and ALTER TABLE DROP PARTITION exist for removing data,
-    # neither of which models a row-targeted mutate workload. There is no
-    # row-level upsert either; production users opt into DEDUP UPSERT KEYS at
-    # CREATE TABLE time, which would require a schema change inconsistent
-    # with what every other DB in this benchmark gets.
+    # No row-level DELETE in QuestDB 9.3.5 (`DELETE FROM t WHERE id = 1` is
+    # rejected as "unexpected token [FROM]"); only TRUNCATE TABLE and ALTER
+    # TABLE DROP PARTITION are available, neither matches the row-targeted
+    # mutate workload. No row-level upsert either -- the QuestDB-native path
+    # is DEDUP UPSERT KEYS at CREATE TABLE, which would mean a schema shape
+    # different from what every other DB here uses.
     #
-    # We deliberately do NOT emulate delete via full-table-rewrite (CTAS into
-    # a new table excluding the keys, drop, rename) -- that would measure
-    # table-rewrite throughput, not delete throughput, and make QuestDB look
-    # catastrophically slow on a workload nobody actually uses it for.
+    # Not emulating delete via CTAS-then-rename: that would measure table-
+    # rewrite throughput rather than delete throughput.
     #
-    # Insert is fully supported; only upsert/delete are skipped.
+    # Insert stays enabled.
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
         "time_series": frozenset(
             f"{action}_{table}_{count}"
