@@ -77,6 +77,10 @@ class StarRocks(Database):
         for d in (meta_dir, storage_dir, staging_dir):
             d.mkdir(parents=True, exist_ok=True)
 
+        # StarRocks 4.x BE requires AVX2 -- on Apple Silicon hosts the
+        # OrbStack runtime needs Rosetta enabled (Settings → System → "Use
+        # Rosetta to run amd64 containers") to expose it to amd64 containers.
+        # On a real x86_64 host AVX2 is native and no extra config is needed.
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d",
             "-p 9030:9030 -p 8030:8030 -p 8040:8040",
