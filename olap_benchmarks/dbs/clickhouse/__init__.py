@@ -193,6 +193,14 @@ class Clickhouse(Database):
         return set(df.get_column("table_name").to_list())
 
     def run_sql(self, statement: str, settings: dict[str, Any] | None = None) -> None:
+        # Transient errors that can fire under heavy back-to-back DELETE/INSERT
+        # mutation traffic and that ClickHouse itself documents as retry-safe:
+        #   1001  -- generic "try again"
+        #   341   -- mutation UNFINISHED
+        #   424   -- CANNOT_LINK (part vanished mid-mutation, surfaces as
+        #            'Cannot link ... .cmrk2 ... No such file or directory')
+        # All three can show up as the textual code in the exception message.
+        retryable_codes = ("error code 1001", "code: 341", "code: 424", "CANNOT_LINK", "UNFINISHED")
         retries = 10
         for retry in range(retries):
             try:
@@ -200,15 +208,22 @@ class Clickhouse(Database):
                     cast(Any, self.get_client()).command(statement, settings=settings)
                 return
             except Exception as e:
-                if "error code 1001" in str(e):
-                    _LOGGER.warning(f"Could not execute statement: '{e}', retrying {retry + 1:_}/{retries:_}")
-                    sleep(0.1)
+                msg = str(e)
+                if any(token in msg for token in retryable_codes):
+                    backoff = min(2.0, 0.1 * (1 << retry))
+                    _LOGGER.warning(
+                        f"Retrying ClickHouse statement after retryable error "
+                        f"({retry + 1:_}/{retries:_}, sleep={backoff:.1f}s): {msg.splitlines()[0][:200]}"
+                    )
+                    sleep(backoff)
                     continue
                 # might happen if the parquet file is not fully written when clickhouse tries to read it
-                if "error code 636" in str(e):
-                    raise e
+                if "error code 636" in msg:
+                    raise
 
                 raise
+
+        raise RuntimeError(f"ClickHouse statement failed after {retries} retries: {statement[:200]}")
 
     def _build_key_filter(self, input_file_string: str, primary_keys: list[str]) -> str:
         if len(primary_keys) == 1:
