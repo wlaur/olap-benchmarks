@@ -402,7 +402,7 @@ class Database(BaseModel, ABC):
             return
         self._connection.rollback()
 
-    def wait_until_accessible(self, timeout_seconds: float = 120.0, interval_seconds: float = 1.0) -> None:
+    def wait_until_accessible(self, timeout_seconds: float = 300.0, interval_seconds: float = 1.0) -> None:
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
 
         deadline = perf_counter() + timeout_seconds
