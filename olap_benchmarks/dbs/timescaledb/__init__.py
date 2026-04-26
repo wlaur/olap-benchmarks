@@ -2,6 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -100,12 +101,21 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 
 class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
-    EAV_CHUNK_TARGET_ROWS: ClassVar[int] = 200_000_000
 
     PRE_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
         "data_tall": "tall_pre_insert.sql",
         "data_wide": "wide_pre_insert.sql",
         "data_large": "large_pre_insert.sql",
+    }
+
+    # Chunk_time_interval per table -- must match the create_hypertable() calls
+    # in the *_pre_insert.sql files. EAV inserts are batched at this granularity
+    # so each just-completed chunk can be compressed before the next batch
+    # starts; otherwise data_large accumulates ~200 GB of uncompressed EAV
+    # heap before any compression runs.
+    EAV_CHUNK_INTERVAL_DAYS: ClassVar[Mapping[str, int]] = {
+        "data_wide": 1,
+        "data_large": 14,
     }
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
@@ -146,28 +156,67 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         tracked_commit(con)
         _LOGGER.info(f"Created EAV table {table_name}")
 
-    def _eav_chunk_rows(self, n_metric_cols: int) -> int:
-        return max(1_000, self.EAV_CHUNK_TARGET_ROWS // max(1, n_metric_cols))
+    def _compress_completed_chunks(self, table_name: TableName, before: datetime) -> None:
+        """Compress all uncompressed chunks of `table_name` whose range_end is
+        at or before `before`. Called after each EAV batch insert so the
+        uncompressed footprint never grows past the chunk currently being
+        written."""
+        con = self.db.connect(reconnect=True)
+        before_str = before.strftime("%Y-%m-%d %H:%M:%S")
+        list_sql = (
+            "SELECT format('%I.%I', chunk_schema, chunk_name) "
+            "FROM timescaledb_information.chunks "
+            f"WHERE hypertable_name = '{table_name}' AND NOT is_compressed "
+            f"AND range_end <= '{before_str}' "
+            "ORDER BY range_end"
+        )
+        with self.db.record_query_execution(list_sql):
+            rows = con.execute(text(list_sql)).fetchall()
+        for (chunk_name,) in rows:
+            stmt = f"SELECT compress_chunk('{chunk_name}'::regclass, if_not_compressed => true)"
+            with self.db.record_query_execution(stmt):
+                con.execute(text(stmt))
+            tracked_commit(con)
+        if rows:
+            _LOGGER.info(f"Compressed {len(rows)} chunk(s) of {table_name} (range_end <= {before_str})")
 
     def _eav_chunked_insert(self, table_name: TableName, fpath: Path) -> None:
+        """Insert EAV in time-aligned batches matching the hypertable's
+        chunk_time_interval, compressing just-completed chunks after each
+        batch. This caps peak uncompressed disk to ~1 chunk."""
         schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
-        metric_cols = [c for c in schema if c != "time"]
-        chunk_rows = self._eav_chunk_rows(len(metric_cols))
-        total = self.parquet_row_count(fpath)
+        _ = [c for c in schema if c != "time"]  # noqa: F841 -- documents schema shape
 
-        offset = 0
-        chunk_idx = 0
-        while offset < total:
-            chunk_idx += 1
-            df_wide = pl.scan_parquet(fpath).slice(offset, chunk_rows).collect()
-            df_eav = self._wide_to_eav(df_wide)
-            self.db.insert(df_eav, table_name)
-            _LOGGER.info(
-                f"Inserted EAV chunk {chunk_idx} for {table_name}: "
-                f"wide_rows={offset + df_wide.shape[0]:_}/{total:_}, "
-                f"eav_rows={df_eav.shape[0]:_}"
-            )
-            offset += chunk_rows
+        days = self.EAV_CHUNK_INTERVAL_DAYS[table_name]
+        interval = timedelta(days=days)
+
+        bounds = pl.scan_parquet(fpath).select(pl.min("time").alias("mn"), pl.max("time").alias("mx")).collect()
+        if bounds.height == 0 or bounds.row(0)[0] is None:
+            return
+        min_t = cast(datetime, bounds.row(0)[0])
+        max_t = cast(datetime, bounds.row(0)[1])
+
+        # Align cur to TimescaleDB chunk boundaries (chunks start at
+        # floor((t - epoch) / interval) * interval).
+        epoch = datetime(1970, 1, 1)
+        secs = interval.total_seconds()
+        aligned = int((min_t - epoch).total_seconds() // secs) * secs
+        cur = epoch + timedelta(seconds=aligned)
+
+        batch_idx = 0
+        while cur <= max_t:
+            end = cur + interval
+            batch_wide = pl.scan_parquet(fpath).filter((pl.col("time") >= cur) & (pl.col("time") < end)).collect()
+            if batch_wide.height > 0:
+                batch_idx += 1
+                batch_eav = self._wide_to_eav(batch_wide)
+                self.db.insert(batch_eav, table_name)
+                _LOGGER.info(
+                    f"Inserted EAV batch {batch_idx} for {table_name}: "
+                    f"{cur} → {end} (wide={batch_wide.shape[0]:_}, eav={batch_eav.shape[0]:_})"
+                )
+                self._compress_completed_chunks(table_name, end)
+            cur = end
 
     def compress_tables(self) -> None:
         for table_name in get_time_series_input_files():
@@ -240,14 +289,16 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         return df_wide
 
     def _apply_upsert(self, step: MutateStep, df: pl.DataFrame) -> None:
-        # EAV has no unique constraint on (time, metric_name) -- ON CONFLICT
-        # would fail, so emulate upsert with DELETE-by-time then INSERT.
-        if step.table in self.EAV_TABLES:
-            keys = df.select("time").unique()
-            self.db.delete(step.table, primary_key="time", keys=keys)
-            self.db.insert(df, step.table, primary_key=None)
-            return
-        super()._apply_upsert(step, df)
+        # None of the time_series tables here have a unique constraint on
+        # `time` (data_tall is wide with no PK; data_wide/data_large are EAV
+        # with no (time, metric_name) unique). ON CONFLICT therefore cannot
+        # bind, so we emulate upsert with DELETE-by-time + INSERT for every
+        # table.
+        keys = df.select("time").unique()
+        self.db.delete(step.table, primary_key="time", keys=keys)
+        primary_key = None if step.table in self.EAV_TABLES else self.get_primary_key(step.table)
+        not_null = self.get_not_null(step.table)
+        self.db.insert(df, step.table, primary_key=primary_key, not_null=not_null)
 
 
 class TimescaleDB(Database):
@@ -259,6 +310,14 @@ class TimescaleDB(Database):
     @property
     def start(self) -> str:
         (SETTINGS.temporary_directory / "timescaledb/data").mkdir(exist_ok=True, parents=True)
+
+        # macOS Finder writes .DS_Store into bind-mounted dirs as soon as it's
+        # browsed; PG's initdb refuses to run on a non-empty PGDATA, so scrub
+        # macOS metadata before handing the dir over.
+        for junk in self.database_directory.glob(".DS_Store"):
+            junk.unlink(missing_ok=True)
+        for junk in self.database_directory.glob("._*"):
+            junk.unlink(missing_ok=True)
 
         parts = [
             f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 5432:5432",
