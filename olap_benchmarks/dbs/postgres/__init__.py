@@ -317,10 +317,12 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
     # for them. Tall (10 cols) stays wide.
     EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
 
-    # data_large EAV is ≈ 6 billion rows × ~60 bytes ≈ 360 GB heap on plain
-    # Postgres (no columnar compression), so we don't try to populate it on
-    # this engine -- the corresponding select queries are skipped too. data_wide
-    # (300 M EAV rows ≈ 18 GB) does fit and is loaded normally.
+    # data_large EAV is ≈ 6 billion rows × ~50 bytes ≈ 300 GB heap on plain
+    # Postgres (no columnar compression) plus a ~70 GB (metric_name, time)
+    # btree index, so the populate would not fit into the per-(db, suite) disk
+    # budget on this host. Skipping it here also disables the corresponding
+    # large_* select queries and *_data_large_* mutation steps. The EAV insert
+    # code path is still wired up so re-enabling is just emptying this set.
     SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
 
     # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
@@ -461,8 +463,9 @@ class Postgres(Database):
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 
-    # data_large is not loaded on Postgres (see PostgresTimeSeries.SKIP_TABLES)
-    # so its mutation steps must be disabled too.
+    # Mirrors PostgresTimeSeries.SKIP_TABLES: data_large EAV does not fit in
+    # the per-(db, suite) disk budget on plain Postgres, so its mutate steps
+    # have to be disabled too.
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
         "time_series": frozenset(
             f"{action}_data_large_{count}" for action in ("insert", "upsert", "delete") for count in (1, 100, 10_000)
@@ -474,6 +477,9 @@ class Postgres(Database):
         host_pgdata = self.database_directory / "pgdata"
         host_pgdata.mkdir(parents=True, exist_ok=True)
         host_pgdata.chmod(0o777)  # macOS bind-friendly
+
+        # Ensure the CSV staging dir for the parallel-copy ingest path exists.
+        (SETTINGS.temporary_directory / "postgres/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             "docker run --platform linux/amd64",
@@ -487,13 +493,13 @@ class Postgres(Database):
             # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
             # with shared_buffers=128MB and max_wal_size=1GB, which forces a
             # checkpoint storm during multi-hundred-million-row inserts.
-            "-c shared_buffers=4GB",
-            "-c effective_cache_size=12GB",
-            "-c work_mem=64MB",
-            "-c maintenance_work_mem=2GB",
-            "-c max_wal_size=8GB",
+            "-c shared_buffers=8GB",
+            "-c effective_cache_size=24GB",
+            "-c work_mem=4GB",
+            "-c maintenance_work_mem=4GB",
+            "-c max_wal_size=16GB",
             "-c min_wal_size=2GB",
-            "-c wal_compression=zstd",
+            "-c wal_compression=off",
             "-c synchronous_commit=off",
             "-c checkpoint_timeout=30min",
             "-c max_parallel_maintenance_workers=4",
