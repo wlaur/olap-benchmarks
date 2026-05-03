@@ -2,13 +2,15 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import connectorx
 import polars as pl
-from sqlalchemy import Connection, create_engine, text
+import pyarrow.parquet as pq
+from sqlalchemy import Connection, Engine, create_engine, text
 
 from ...settings import REPO_ROOT, SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
@@ -109,14 +111,26 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     }
 
     # Chunk_time_interval per table -- must match the create_hypertable() calls
-    # in the *_pre_insert.sql files. EAV inserts are batched at this granularity
-    # so each just-completed chunk can be compressed before the next batch
-    # starts; otherwise data_large accumulates ~200 GB of uncompressed EAV
-    # heap before any compression runs.
+    # in the *_pre_insert.sql files. EAV inserts are flushed at this granularity
+    # so just-completed chunks can be compressed before too much uncompressed
+    # heap accumulates; otherwise data_large would build up ~300 GB of EAV heap.
     EAV_CHUNK_INTERVAL_DAYS: ClassVar[Mapping[str, int]] = {
-        "data_wide": 1,
-        "data_large": 14,
+        "data_wide": 7,
+        "data_large": 30,
     }
+
+    # Each compress_chunk() call is single-threaded inside TimescaleDB but
+    # different chunks compress on independent backends. Two workers is the
+    # sweet spot here -- more compress backends end up fighting the COPY
+    # workers for the WALInsert / WALWrite LWLocks and slow the inserts down
+    # enough to net negative on the EAV bulk load.
+    MAX_PARALLEL_COMPRESSIONS: ClassVar[int] = 2
+
+    # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
+    # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch.
+    PARQUET_STREAM_BATCH_ROWS: ClassVar[int] = 100_000
+
+    _compress_engine: Engine | None = None
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
         counts: dict[TableName, int] = {}
@@ -156,69 +170,126 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         tracked_commit(con)
         _LOGGER.info(f"Created EAV table {table_name}")
 
-    def _compress_completed_chunks(self, table_name: TableName, before: datetime) -> None:
-        """Compress all uncompressed chunks of `table_name` whose range_end is
-        at or before `before`. Called after each EAV batch insert so the
-        uncompressed footprint never grows past the chunk currently being
-        written."""
-        con = self.db.connect(reconnect=True)
-        before_str = before.strftime("%Y-%m-%d %H:%M:%S")
-        list_sql = (
-            "SELECT format('%I.%I', chunk_schema, chunk_name) "
-            "FROM timescaledb_information.chunks "
-            f"WHERE hypertable_name = '{table_name}' AND NOT is_compressed "
-            f"AND range_end <= '{before_str}' "
-            "ORDER BY range_end"
-        )
-        with self.db.record_query_execution(list_sql):
-            rows = con.execute(text(list_sql)).fetchall()
-        for (chunk_name,) in rows:
+    def _get_compress_engine(self) -> Engine:
+        # Compression runs on background threads, so it cannot share the main
+        # SQLAlchemy connection. A QueuePool sized to the worker count avoids
+        # repeated connect/auth overhead across the ~50 chunk compressions.
+        if self._compress_engine is None:
+            self._compress_engine = create_engine(
+                self.db.connection_string,
+                pool_size=self.MAX_PARALLEL_COMPRESSIONS,
+                max_overflow=2,
+                pool_pre_ping=False,
+            )
+        return self._compress_engine
+
+    def _list_uncompressed_chunks_before(self, table_name: TableName, before: datetime) -> list[str]:
+        engine = self._get_compress_engine()
+        with engine.connect() as con:
+            self.db.bind_query_recorder(con)
+            before_str = before.strftime("%Y-%m-%d %H:%M:%S")
+            list_sql = (
+                "SELECT format('%I.%I', chunk_schema, chunk_name) "
+                "FROM timescaledb_information.chunks "
+                f"WHERE hypertable_name = '{table_name}' AND NOT is_compressed "
+                f"AND range_end <= '{before_str}' "
+                "ORDER BY range_end"
+            )
+            with self.db.record_query_execution(list_sql):
+                rows = con.execute(text(list_sql)).fetchall()
+        return [row[0] for row in rows]
+
+    def _compress_chunk_threadsafe(self, chunk_name: str) -> None:
+        engine = self._get_compress_engine()
+        with engine.connect() as con:
+            self.db.bind_query_recorder(con)
             stmt = f"SELECT compress_chunk('{chunk_name}'::regclass, if_not_compressed => true)"
             with self.db.record_query_execution(stmt):
                 con.execute(text(stmt))
             tracked_commit(con)
-        if rows:
-            _LOGGER.info(f"Compressed {len(rows)} chunk(s) of {table_name} (range_end <= {before_str})")
 
-    def _eav_chunked_insert(self, table_name: TableName, fpath: Path) -> None:
-        """Insert EAV in time-aligned batches matching the hypertable's
-        chunk_time_interval, compressing just-completed chunks after each
-        batch. This caps peak uncompressed disk to ~1 chunk."""
-        schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
-        _ = [c for c in schema if c != "time"]  # noqa: F841 -- documents schema shape
+    def _drain_completed(self, futures: list[Future[None]], max_in_flight: int) -> None:
+        # Surface exceptions eagerly while bounding pool depth.
+        while len(futures) > max_in_flight:
+            done, _ = wait(futures, return_when="FIRST_COMPLETED")
+            for fut in done:
+                fut.result()
+                futures.remove(fut)
 
+    def _eav_streaming_insert(self, table_name: TableName, fpath: Path) -> None:
+        """Single-pass stream of `fpath` → unpivot → COPY into the hypertable.
+        Buffers wide rows up to one chunk_time_interval per flush and compresses
+        completed chunks on a thread pool so compression of chunk N overlaps
+        with the COPY for chunk N+1. The previous implementation re-scanned the
+        9 GB parquet ~200 times and serialised the ~30 s/chunk compression."""
         days = self.EAV_CHUNK_INTERVAL_DAYS[table_name]
-        interval = timedelta(days=days)
+        target_wide_rows = days * 24 * 60  # one row per minute → one chunk's worth
 
-        bounds = pl.scan_parquet(fpath).select(pl.min("time").alias("mn"), pl.max("time").alias("mx")).collect()
-        if bounds.height == 0 or bounds.row(0)[0] is None:
-            return
-        min_t = cast(datetime, bounds.row(0)[0])
-        max_t = cast(datetime, bounds.row(0)[1])
+        executor = ThreadPoolExecutor(
+            max_workers=self.MAX_PARALLEL_COMPRESSIONS,
+            thread_name_prefix=f"ts-compress-{table_name}",
+        )
+        in_flight: list[Future[None]] = []
+        # Chunks already handed to the pool. The catalog query returns
+        # not-yet-compressed chunks, so an in-flight compress would otherwise
+        # keep showing up in successive flushes and get submitted twice.
+        submitted_chunks: set[str] = set()
 
-        # Align cur to TimescaleDB chunk boundaries (chunks start at
-        # floor((t - epoch) / interval) * interval).
-        epoch = datetime(1970, 1, 1)
-        secs = interval.total_seconds()
-        aligned = int((min_t - epoch).total_seconds() // secs) * secs
-        cur = epoch + timedelta(seconds=aligned)
-
+        buffer: list[pl.DataFrame] = []
+        buffer_rows = 0
         batch_idx = 0
-        while cur <= max_t:
-            end = cur + interval
-            batch_wide = pl.scan_parquet(fpath).filter((pl.col("time") >= cur) & (pl.col("time") < end)).collect()
-            if batch_wide.height > 0:
-                batch_idx += 1
-                batch_eav = self._wide_to_eav(batch_wide)
-                self.db.insert(batch_eav, table_name)
-                _LOGGER.info(
-                    f"Inserted EAV batch {batch_idx} for {table_name}: "
-                    f"{cur} → {end} (wide={batch_wide.shape[0]:_}, eav={batch_eav.shape[0]:_})"
-                )
-                self._compress_completed_chunks(table_name, end)
-            cur = end
+
+        def flush() -> None:
+            nonlocal buffer_rows, batch_idx
+            if not buffer:
+                return
+            batch_idx += 1
+            df_wide = pl.concat(buffer, how="vertical") if len(buffer) > 1 else buffer[0]
+            max_t = cast(datetime, df_wide["time"].max())
+            df_eav = self._wide_to_eav(df_wide)
+            self.db.insert(df_eav, table_name)
+            _LOGGER.info(
+                f"Inserted EAV batch {batch_idx} for {table_name}: "
+                f"wide={df_wide.shape[0]:_}, eav={df_eav.shape[0]:_}, max_t={max_t}"
+            )
+            buffer.clear()
+            buffer_rows = 0
+
+            # Schedule compression of every newly-completed chunk independently
+            # so the worker pool can parallelise them. Only chunks with
+            # range_end <= max_t are fully filled; the chunk currently being
+            # written (range_end > max_t) is left alone.
+            new_chunks = [
+                c for c in self._list_uncompressed_chunks_before(table_name, max_t) if c not in submitted_chunks
+            ]
+            for chunk in new_chunks:
+                submitted_chunks.add(chunk)
+                in_flight.append(executor.submit(self._compress_chunk_threadsafe, chunk))
+            if new_chunks:
+                _LOGGER.info(f"Submitted {len(new_chunks)} compress task(s) for {table_name}")
+            self._drain_completed(in_flight, self.MAX_PARALLEL_COMPRESSIONS * 2)
+
+        try:
+            pf = pq.ParquetFile(fpath)
+            for arrow_batch in pf.iter_batches(batch_size=self.PARQUET_STREAM_BATCH_ROWS):
+                df = cast(pl.DataFrame, pl.from_arrow(arrow_batch))
+                buffer.append(df)
+                buffer_rows += df.height
+                if buffer_rows >= target_wide_rows:
+                    flush()
+            flush()
+
+            # Drain remaining compressions before declaring this table done so
+            # the next phase doesn't race with background work.
+            self._drain_completed(in_flight, 0)
+        finally:
+            executor.shutdown(wait=True)
 
     def compress_tables(self) -> None:
+        # data_wide / data_large are already fully compressed by the streaming
+        # insert path; the call below is a no-op for those (if_not_compressed
+        # => true). data_tall is still loaded as one big batch and is
+        # compressed here.
         for table_name in get_time_series_input_files():
             con = self.db.connect(reconnect=True)
             statement = f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"
@@ -260,7 +331,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         for table_name, fpath in input_files.items():
             with self.db.phase_context("insert", table_name=table_name):
                 if table_name in self.EAV_TABLES:
-                    self._eav_chunked_insert(table_name, fpath)
+                    self._eav_streaming_insert(table_name, fpath)
                 else:
                     df = pl.scan_parquet(fpath)
                     self.db.insert(df, table_name, primary_key=None, not_null="time")
@@ -325,6 +396,27 @@ class TimescaleDB(Database):
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
             DOCKER_IMAGE,
+            # Postgres settings tuned for the EAV bulk-load + columnstore
+            # compression workload. shared_buffers / parallelism are already
+            # auto-tuned by the Timescale image (timescaledb-tune); the rest
+            # relax checkpoint / WAL pressure for the multi-billion-row insert
+            # and let compress_chunk() sort 130 M-row chunks in memory instead
+            # of spilling to BufFile temp files (the original bottleneck on
+            # data_large -- per-chunk compress jumped from ~50 s to >300 s
+            # once sorts spilled).
+            "-c max_wal_size=16GB",
+            "-c min_wal_size=2GB",
+            # WAL compression saves disk but the CPU cost of zstd on every
+            # WALInsert dominates under heavy concurrent COPY traffic; leaving
+            # it off let the COPY workers spend less time waiting on the
+            # WALInsert LWLock.
+            "-c wal_compression=off",
+            "-c synchronous_commit=off",
+            "-c checkpoint_timeout=30min",
+            "-c work_mem=4GB",
+            "-c max_parallel_maintenance_workers=4",
+            "-c bgwriter_lru_maxpages=1000",
+            "-c bgwriter_delay=10ms",
         ]
 
         return " ".join(parts)
@@ -489,7 +581,6 @@ class TimescaleDB(Database):
             "--file",
             temp_file_str,
             "--workers",
-            # possible that using more workers could speed things up, but this is not linear
             "12",
             "--batch-size",
             "50000",

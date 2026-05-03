@@ -8,9 +8,10 @@ from typing import Any, ClassVar, cast
 
 import connectorx
 import polars as pl
+import pyarrow.parquet as pq
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
@@ -315,13 +316,24 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
     # the row-store engines (Postgres, TimescaleDB) use the idiomatic EAV layout
     # for them. Tall (10 cols) stays wide.
     EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
-    # ~6 GB CSV per chunk (≈30 bytes/row). Tune downward if disk gets tight.
-    EAV_CHUNK_TARGET_ROWS: ClassVar[int] = 200_000_000
+
+    # data_large EAV is ≈ 6 billion rows × ~60 bytes ≈ 360 GB heap on plain
+    # Postgres (no columnar compression), so we don't try to populate it on
+    # this engine -- the corresponding select queries are skipped too. data_wide
+    # (300 M EAV rows ≈ 18 GB) does fit and is loaded normally.
+    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
+
+    # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
+    # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch. Each
+    # flush stages ~5 GB of CSV before it's COPYed into the heap.
+    PARQUET_STREAM_BATCH_ROWS: ClassVar[int] = 100_000
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
         counts: dict[TableName, int] = {}
         for size, (n_rows, n_cols) in TIME_SERIES_DATASET_SIZES.items():
             table_name = get_time_series_table_name(size)
+            if table_name in self.SKIP_TABLES:
+                continue
             counts[table_name] = n_rows * n_cols if table_name in self.EAV_TABLES else n_rows
         return counts
 
@@ -334,10 +346,20 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
             return ["time", "metric_name"]
         return "time"
 
+    def include_query(self, query_name: str) -> bool:
+        # Queries against tables we never populated must be skipped.
+        for table in self.SKIP_TABLES:
+            size = table.removeprefix("data_")
+            if query_name.startswith(f"{size}_"):
+                return False
+        return True
+
     def index_tables(self) -> None:
         con = self.db.connect()
 
         for table_name in get_time_series_input_files():
+            if table_name in self.SKIP_TABLES:
+                continue
             if table_name in self.EAV_TABLES:
                 statement = f'CREATE INDEX {table_name}_metric_time_index ON "{table_name}" ("metric_name", "time")'
             else:
@@ -359,9 +381,6 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
         tracked_commit(con)
         _LOGGER.info(f"Created EAV table {table_name}")
 
-    def _eav_chunk_rows(self, n_metric_cols: int) -> int:
-        return max(1_000, self.EAV_CHUNK_TARGET_ROWS // max(1, n_metric_cols))
-
     @staticmethod
     def _wide_to_eav(df: pl.DataFrame) -> pl.DataFrame:
         metric_cols = [c for c in df.columns if c != "time"]
@@ -374,25 +393,18 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
             value_name="value",
         )
 
-    def _eav_chunked_insert(self, table_name: TableName, fpath: Path) -> None:
-        schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
-        metric_cols = [c for c in schema if c != "time"]
-        chunk_rows = self._eav_chunk_rows(len(metric_cols))
-        total = self.parquet_row_count(fpath)
-
-        offset = 0
-        chunk_idx = 0
-        while offset < total:
-            chunk_idx += 1
-            df_wide = pl.scan_parquet(fpath).slice(offset, chunk_rows).collect()
+    def _eav_streaming_insert(self, table_name: TableName, fpath: Path) -> None:
+        """Single-pass stream of `fpath` → unpivot → COPY. Replaces the previous
+        offset-based loop that called `pl.scan_parquet().slice(offset, n)` per
+        batch and re-decoded the parquet from the start each time."""
+        pf = pq.ParquetFile(fpath)
+        for batch_idx, arrow_batch in enumerate(pf.iter_batches(batch_size=self.PARQUET_STREAM_BATCH_ROWS), start=1):
+            df_wide = cast(pl.DataFrame, pl.from_arrow(arrow_batch))
             df_eav = self._wide_to_eav(df_wide)
             self.db.insert(df_eav, table_name)
             _LOGGER.info(
-                f"Inserted EAV chunk {chunk_idx} for {table_name}: "
-                f"wide_rows={offset + df_wide.shape[0]:_}/{total:_}, "
-                f"eav_rows={df_eav.shape[0]:_}"
+                f"Inserted EAV batch {batch_idx} for {table_name}: wide={df_wide.shape[0]:_}, eav={df_eav.shape[0]:_}"
             )
-            offset += chunk_rows
 
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
@@ -402,12 +414,15 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
         self.db.initialize_schema("time_series")
 
         for table_name, fpath in get_time_series_input_files().items():
+            if table_name in self.SKIP_TABLES:
+                _LOGGER.info(f"Skipping {table_name} for {self.name} (would not fit in disk budget)")
+                continue
             if table_name in self.EAV_TABLES:
                 with self.db.phase_context("create_eav_table", table_name=table_name):
                     self._eav_create_table(table_name)
 
                 with self.db.phase_context("insert", table_name=table_name):
-                    self._eav_chunked_insert(table_name, fpath)
+                    self._eav_streaming_insert(table_name, fpath)
                     _LOGGER.info(f"Inserted {table_name} for {self.name}")
             else:
                 primary_key = self.get_primary_key(table_name)
@@ -446,6 +461,14 @@ class Postgres(Database):
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 
+    # data_large is not loaded on Postgres (see PostgresTimeSeries.SKIP_TABLES)
+    # so its mutation steps must be disabled too.
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
+        "time_series": frozenset(
+            f"{action}_data_large_{count}" for action in ("insert", "upsert", "delete") for count in (1, 100, 10_000)
+        )
+    }
+
     @property
     def start(self) -> str:
         host_pgdata = self.database_directory / "pgdata"
@@ -461,6 +484,21 @@ class Postgres(Database):
             "-e PGDATA=/var/lib/postgresql/pgdata",
             "-e POSTGRES_PASSWORD=password",
             DOCKER_IMAGE,  # e.g. postgres:18
+            # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
+            # with shared_buffers=128MB and max_wal_size=1GB, which forces a
+            # checkpoint storm during multi-hundred-million-row inserts.
+            "-c shared_buffers=4GB",
+            "-c effective_cache_size=12GB",
+            "-c work_mem=64MB",
+            "-c maintenance_work_mem=2GB",
+            "-c max_wal_size=8GB",
+            "-c min_wal_size=2GB",
+            "-c wal_compression=zstd",
+            "-c synchronous_commit=off",
+            "-c checkpoint_timeout=30min",
+            "-c max_parallel_maintenance_workers=4",
+            "-c max_parallel_workers_per_gather=4",
+            "-c max_parallel_workers=8",
         ]
         return " ".join(parts)
 
