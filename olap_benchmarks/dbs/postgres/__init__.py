@@ -50,7 +50,11 @@ def polars_to_postgres_type(dtype: pl.DataType) -> str:
     elif dtype == pl.Date:
         return "DATE"
     elif isinstance(dtype, pl.Datetime):
-        return "TIMESTAMP WITHOUT TIME ZONE"
+        # TimescaleDB / Postgres best-practice is TIMESTAMPTZ (it warns about
+        # TIMESTAMP on hypertables). Polars naive datetimes are interpreted
+        # against the cluster's `timezone` GUC, which the docker entrypoints
+        # below pin to UTC so the round-trip is loss-less.
+        return "TIMESTAMPTZ"
     else:
         _LOGGER.warning(f"Falling back to type JSONB for Polars dtype {dtype}")
         return "JSONB"
@@ -376,7 +380,7 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
     def _eav_create_table(self, table_name: TableName) -> None:
         con = self.db.connect()
         statement = (
-            f'CREATE TABLE "{table_name}" ("time" TIMESTAMP NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
+            f'CREATE TABLE "{table_name}" ("time" TIMESTAMPTZ NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
         )
         with self.db.record_query_execution(statement):
             con.execute(text(statement))
@@ -489,6 +493,10 @@ class Postgres(Database):
             f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
             "-e PGDATA=/var/lib/postgresql/pgdata",
             "-e POSTGRES_PASSWORD=password",
+            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
+            # naive Polars datetimes round-trip without offset surprises.
+            "-e TZ=UTC",
+            "-e PGTZ=UTC",
             DOCKER_IMAGE,  # e.g. postgres:18
             # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
             # with shared_buffers=128MB and max_wal_size=1GB, which forces a

@@ -3,8 +3,7 @@
 SELECT
     create_hypertable(
         'data_tall',
-        'time',
-        chunk_time_interval => INTERVAL '7 days'
+        by_range('time', INTERVAL '7 days')
     );
 
 ALTER TABLE
@@ -12,5 +11,5 @@ ALTER TABLE
 SET
     (
         timescaledb.enable_columnstore = true,
-        timescaledb.orderby = 'time'
+        timescaledb.orderby = 'time DESC'
     );

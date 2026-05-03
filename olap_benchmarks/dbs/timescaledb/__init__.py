@@ -163,7 +163,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
     def _eav_create_table(self, table_name: TableName) -> None:
         con = self.db.connect()
         statement = (
-            f'CREATE TABLE "{table_name}" ("time" TIMESTAMP NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
+            f'CREATE TABLE "{table_name}" ("time" TIMESTAMPTZ NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
         )
         with self.db.record_query_execution(statement):
             con.execute(text(statement))
@@ -395,6 +395,10 @@ class TimescaleDB(Database):
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
+            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
+            # naive Polars datetimes round-trip without offset surprises.
+            "-e TZ=UTC",
+            "-e PGTZ=UTC",
             DOCKER_IMAGE,
             # Postgres settings tuned for the EAV bulk-load + columnstore
             # compression workload. shared_buffers / parallelism are already
