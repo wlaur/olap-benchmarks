@@ -7,8 +7,9 @@ from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
-from ...suites.time_series.config import TimeSeries
+from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
+from ..utils import tracked_commit
 from . import insert as _insert_mod
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import (
@@ -69,6 +70,25 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
             return {"method": "binary"}
 
         return {"method": "pymonetdb"}
+
+    def populate(self, restart: bool = True) -> None:
+        # Skip the parent class's restart so we can slot ANALYZE in between
+        # the inserts and the final restart event.
+        super().populate(restart=False)
+
+        # MonetDB does not auto-collect column statistics on the load path; the
+        # optimizer falls back to defaults until ANALYZE has been run, which
+        # leaves predicate pushdown on the time column off the table.
+        # We only analyse the time column -- value columns hold random
+        # process readings whose stats don't help any of the benchmark queries
+        # and a full ANALYZE on the 1500-column wide tables would otherwise
+        # add ~3 min for ~250 ms of total query speed-up.
+        with self.db.phase_context("analyze"):
+            for table_name in get_time_series_input_files():
+                self.db.analyze_table(table_name, columns=["time"])
+
+        if restart:
+            self.db.restart_event()
 
 
 class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
@@ -193,6 +213,27 @@ class MonetDB(Database):
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         return _insert_mod.delete(table, self.connect(), primary_key=primary_key, keys=keys)
+
+    def analyze_table(self, table: TableName, columns: list[str] | None = None) -> None:
+        # ANALYZE refreshes column statistics (min/max, sortedness, uniqueness)
+        # used by the optimiser. After a bulk binary copy the catalog otherwise
+        # reports defaults, which silently disables some predicate-pushdown
+        # optimisations on time-bounded queries. MonetDB's ANALYZE always
+        # requires a schema-qualified name -- unqualified is parsed as
+        # ANALYZE <schema>.
+        #
+        # On wide tables (1500+ columns) analysing every column is expensive
+        # (~3 min for data_large) and most of those columns hold random
+        # process values that don't benefit query planning. Passing a column
+        # list restricts the work to the columns that actually drive plans
+        # (typically the time column).
+        cols_clause = " (" + ", ".join(f'"{c}"' for c in columns) + ")" if columns else ""
+        statement = f'ANALYZE sys."{table}"{cols_clause}'
+        con = self.connect(reconnect=True)
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+        tracked_commit(con)
+        _LOGGER.info(f"Analyzed table {table}{' columns ' + ', '.join(columns) if columns else ''}")
 
     @property
     def time_series(self) -> MonetDBTimeSeries:
