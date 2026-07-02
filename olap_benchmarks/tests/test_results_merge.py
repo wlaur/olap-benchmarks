@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import Any, cast
+
+import duckdb
+import pytest
+from sqlalchemy.orm import Session
+
+from ..results import get_results_engine, get_results_head_revision, migrate_results
+from ..results.merge import merge_results
+from ..results.models import QueryExecution, Run, RunMetric, RunStep
+
+
+def _create_results_db(db_path: Path) -> None:
+    migrate_results(db_path=db_path)
+
+
+def _insert_run_tree(
+    session: Session,
+    suite: str = "rtabench",
+    db: str = "monetdb",
+    db_version: str = "1.0",
+    status: str = "completed",
+    started_at: datetime | None = None,
+    query: str = "select 1",
+) -> int:
+    run = Run(
+        suite=suite,
+        db=db,
+        db_version=db_version,
+        operation="select",
+        system="test-system",
+        status=status,
+        started_at=started_at or datetime(2026, 1, 1),
+    )
+    session.add(run)
+    session.commit()
+
+    step = RunStep(
+        run_id=run.id,
+        step_type="query",
+        step_name="query",
+        query_name="q1",
+        started_at=datetime(2026, 1, 1),
+        status=status,
+    )
+    session.add(step)
+    session.commit()
+
+    session.add(RunMetric(run_id=run.id, time=datetime(2026, 1, 1), cpu_percent=1.0, mem_mb=10, disk_mb=100))
+    session.add(
+        QueryExecution(
+            run_id=run.id,
+            run_step_id=step.id,
+            query=query,
+            start_time=datetime(2026, 1, 1),
+            end_time=datetime(2026, 1, 1),
+        )
+    )
+    session.commit()
+
+    return run.id
+
+
+def _populate(
+    db_path: Path,
+    db: str = "monetdb",
+    status: str = "completed",
+    started_at: datetime | None = None,
+    query: str = "select 1",
+) -> int:
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            return _insert_run_tree(session, db=db, status=status, started_at=started_at, query=query)
+    finally:
+        engine.dispose()
+
+
+def _query(db_path: Path, sql: str) -> list[tuple[Any, ...]]:
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        return con.execute(sql).fetchall()
+    finally:
+        con.close()
+
+
+def test_merge_into_empty_destination(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    _populate(source, db="monetdb")
+    _populate(source, db="duckdb", started_at=datetime(2026, 1, 2))
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.runs_added == 2
+    assert stats.runs_replaced == 0
+    assert stats.run_steps_added == 2
+    assert stats.run_metrics_added == 2
+    assert stats.query_executions_added == 2
+
+    assert _query(dest, "select count(*) from run")[0][0] == 2
+
+
+def test_merge_remaps_colliding_ids(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    _populate(dest, db="clickhouse", query="dest query")
+    source_run_id = _populate(source, db="monetdb", query="source query")
+
+    assert _query(dest, "select id from run")[0][0] == source_run_id  # both files allocated id 1
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.runs_added == 1
+    assert stats.runs_replaced == 0
+
+    rows = _query(dest, "select id, db from run order by id")
+    assert rows == [(1, "clickhouse"), (2, "monetdb")]
+
+    # children follow the remapped run id and step id
+    step_rows = _query(dest, "select run_id from run_step where id = 2")
+    assert step_rows == [(2,)]
+    qe_rows = _query(dest, "select run_id, run_step_id from query_execution where query = 'source query'")
+    assert qe_rows == [(2, 2)]
+    assert _query(dest, "select run_id from run_metric order by id") == [(1,), (2,)]
+
+
+def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    started_at = datetime(2026, 3, 1, 12, 0, 0)
+    _populate(dest, db="monetdb", started_at=started_at, query="old query")
+    _populate(dest, db="duckdb", started_at=datetime(2026, 3, 2))
+    _populate(source, db="monetdb", started_at=started_at, query="new query")
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.runs_added == 1
+    assert stats.runs_replaced == 1
+
+    assert _query(dest, "select count(*) from run")[0][0] == 2
+    assert _query(dest, "select count(*) from query_execution where query = 'old query'")[0][0] == 0
+    assert _query(dest, "select count(*) from query_execution where query = 'new query'")[0][0] == 1
+
+    # merging the same source again is idempotent
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+    assert stats.runs_added == 1
+    assert stats.runs_replaced == 1
+    assert _query(dest, "select count(*) from run")[0][0] == 2
+    assert _query(dest, "select count(*) from run_step")[0][0] == 2
+    assert _query(dest, "select count(*) from run_metric")[0][0] == 2
+    assert _query(dest, "select count(*) from query_execution")[0][0] == 2
+
+
+def test_merge_skips_running_orphans(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    _populate(source, db="monetdb", status="running")
+    _populate(source, db="duckdb", started_at=datetime(2026, 1, 2))
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.runs_added == 1
+    assert _query(dest, "select db from run") == [("duckdb",)]
+
+
+def test_merge_syncs_sequences(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    _populate(dest, db="clickhouse")
+    _populate(source, db="monetdb")
+    _populate(source, db="duckdb", started_at=datetime(2026, 1, 2))
+
+    merge_results(source, dest, head_revision=get_results_head_revision())
+
+    # a fresh insert through the ORM (sequence default) must not collide
+    new_run_id = _populate(dest, db="postgres", started_at=datetime(2026, 1, 3))
+    assert new_run_id == 4
+
+
+def test_merge_rejects_schema_revision_mismatch(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    with pytest.raises(RuntimeError, match="schema revision"):
+        merge_results(source, dest, head_revision="nonexistent")

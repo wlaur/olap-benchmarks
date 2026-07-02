@@ -368,10 +368,23 @@ def rename_database_cmd(old_name: str, new_name: str, revision: Revision = "defa
 
 
 @app.command
-def publish(revision: Revision = "default") -> None:
-    """Copy a results database to site/public/data for the webpage, with a manifest."""
-    output_dir = publish_results(revision=revision)
-    print(f"Published revision '{revision}' to {output_dir}")
+def publish(revision: Revision = "default", merge: bool = False) -> None:
+    """Copy a results database to site/public/data for the webpage, with a manifest.
+
+    With `--merge`, runs from the revision are merged into the already published
+    results.db instead of replacing the whole file: runs matching an existing
+    (system, db, db_version, suite, operation, started_at) are replaced, new
+    runs are added, and everything else in the published file is kept.
+    """
+    output_dir, merge_stats = publish_results(revision=revision, merge=merge)
+
+    if merge_stats is not None:
+        print(
+            f"Merged revision '{revision}' into {output_dir}: "
+            f"{merge_stats.runs_added} run(s) added, {merge_stats.runs_replaced} replaced"
+        )
+    else:
+        print(f"Published revision '{revision}' to {output_dir}")
 
 
 @app.command
