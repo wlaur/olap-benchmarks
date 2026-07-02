@@ -1,9 +1,9 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { createPortal } from "react-dom"
 
 import { formatDurationSeconds } from "../../lib/format"
 import type { BenchmarkOperation, FlameSpan } from "../../lib/types"
 import { InlineButton } from "../controls/Control"
+import { PortalCard } from "../controls/Popover"
 
 interface FlameGraphProps {
   spans: FlameSpan[]
@@ -332,34 +332,30 @@ export function FlameGraph({
         })}
       </svg>
 
-      {tooltip && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="pointer-events-none fixed z-[120] rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
-              style={{
-                left: Math.min(tooltip.x + 12, window.innerWidth - 332),
-                top: Math.max(8, tooltip.y - 8),
-                maxWidth: 320,
-              }}
-            >
-              <div className="mb-1 font-medium">{getSpanLabel(tooltip.span)}</div>
-              <div className="space-y-0.5 text-slate-400">
-                <div>Duration: {formatDurationSeconds(tooltip.span.duration_s)}</div>
-                <div>
-                  Start:{" "}
-                  {formatElapsedTooltip(tooltip.span.elapsed_start_s, tooltip.span.duration_s)}
-                </div>
-                {tooltip.span.depth !== "operation" ? (
-                  <div className="capitalize">Operation: {tooltip.span.operation}</div>
-                ) : null}
-                {tooltip.span.depth !== "query" ? (
-                  <div className="mt-1 text-slate-500">Click to zoom in</div>
-                ) : null}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {tooltip && typeof document !== "undefined" ? (
+        <PortalCard
+          className="pointer-events-none z-[120] rounded-lg px-3 py-2 text-xs shadow-xl"
+          style={{
+            left: Math.min(tooltip.x + 12, window.innerWidth - 332),
+            top: Math.max(8, tooltip.y - 8),
+            maxWidth: 320,
+          }}
+        >
+          <div className="mb-1 font-medium">{getSpanLabel(tooltip.span)}</div>
+          <div className="space-y-0.5 text-slate-400">
+            <div>Duration: {formatDurationSeconds(tooltip.span.duration_s)}</div>
+            <div>
+              Start: {formatElapsedTooltip(tooltip.span.elapsed_start_s, tooltip.span.duration_s)}
+            </div>
+            {tooltip.span.depth !== "operation" ? (
+              <div className="capitalize">Operation: {tooltip.span.operation}</div>
+            ) : null}
+            {tooltip.span.depth !== "query" ? (
+              <div className="mt-1 text-slate-500">Click to zoom in</div>
+            ) : null}
+          </div>
+        </PortalCard>
+      ) : null}
     </div>
   )
 }
