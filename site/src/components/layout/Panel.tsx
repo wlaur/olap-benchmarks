@@ -2,6 +2,17 @@ import type { CSSProperties, ReactNode } from "react"
 
 import { cn } from "../../lib/cn"
 
+export const CHART_TOOLTIP_STYLES = {
+  contentStyle: {
+    backgroundColor: "#1e2330",
+    border: "1px solid rgba(148, 163, 184, 0.12)",
+    borderRadius: 12,
+    color: "#e2e8f0",
+  },
+  labelStyle: { color: "#e2e8f0" },
+  itemStyle: { color: "#e2e8f0" },
+} satisfies Record<string, CSSProperties>
+
 export function PanelCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Database, LoaderCircle } from "lucide-react"
+import { Database, LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { BenchmarkSuiteId } from "../../lib/benchmarks"
@@ -6,7 +6,7 @@ import { formatDurationSeconds } from "../../lib/format"
 import { formatCpuPercent, formatMegabytes } from "../../lib/metricFormat"
 import { fetchFlameSpans } from "../../lib/queries"
 import type { FlameSpan, MetricSample } from "../../lib/types"
-import { QuietButton } from "../controls/Control"
+import { CycleSelect } from "../controls/CycleSelect"
 import { PanelCard } from "../layout/Panel"
 import { SqlCodeView } from "../SqlCodeView"
 import { MetaLabel, SectionTitle } from "../Typography"
@@ -135,8 +135,22 @@ export function FlameGraphPanel({
     <PanelCard className="flex h-[clamp(28rem,70vh,42rem)] min-h-0 min-w-0 flex-col p-3">
       <div className="flex shrink-0 items-start justify-between gap-3">
         <SectionTitle as="h3">Flame graph</SectionTitle>
-        {databases.length > 0 && !isLoading ? (
-          <DatabaseSelector databases={databases} selected={resolvedDb} onChange={setSelectedDb} />
+        {resolvedDb !== null && !isLoading ? (
+          <CycleSelect
+            label="Database"
+            ariaLabel="flame graph database"
+            value={resolvedDb}
+            options={databases.map((db) => ({
+              value: db,
+              label: (
+                <>
+                  <Database className="size-3.5 text-slate-400" strokeWidth={1.8} />
+                  <span>{db}</span>
+                </>
+              ),
+            }))}
+            onChange={setSelectedDb}
+          />
         ) : null}
       </div>
 
@@ -237,49 +251,6 @@ function StatMini({ label, value }: { label: string; value: string }) {
     <div className="text-center">
       <MetaLabel>{label}</MetaLabel>
       <p className="mt-0.5 text-sm font-semibold text-slate-200 tabular-nums">{value}</p>
-    </div>
-  )
-}
-
-interface DatabaseSelectorProps {
-  databases: string[]
-  selected: string | null
-  onChange: (db: string) => void
-}
-
-function DatabaseSelector({ databases, selected, onChange }: DatabaseSelectorProps) {
-  if (databases.length === 0) return null
-
-  const value = selected ?? databases[0]!
-  const currentIndex = databases.indexOf(value)
-  const previousDb = databases[(currentIndex - 1 + databases.length) % databases.length]!
-  const nextDb = databases[(currentIndex + 1) % databases.length]!
-
-  return (
-    <div className="inline-flex items-center gap-3 rounded-full border border-border-default bg-surface-inset px-2 py-1">
-      <QuietButton
-        size="xs"
-        aria-label="Show previous flame graph database"
-        onClick={() => onChange(previousDb)}
-        className="size-7 rounded-full px-0"
-      >
-        <ChevronLeft className="size-3.5" />
-      </QuietButton>
-      <div className="min-w-[11.5rem] px-1 text-center">
-        <MetaLabel className="tracking-[0.16em] text-slate-500">Database</MetaLabel>
-        <p className="mt-0.5 inline-flex items-center justify-center gap-1.5 text-sm font-medium text-slate-100">
-          <Database className="size-3.5 text-slate-400" strokeWidth={1.8} />
-          <span>{value}</span>
-        </p>
-      </div>
-      <QuietButton
-        size="xs"
-        aria-label="Show next flame graph database"
-        onClick={() => onChange(nextDb)}
-        className="size-7 rounded-full px-0"
-      >
-        <ChevronRight className="size-3.5" />
-      </QuietButton>
     </div>
   )
 }

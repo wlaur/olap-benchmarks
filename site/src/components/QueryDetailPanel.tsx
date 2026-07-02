@@ -24,7 +24,7 @@ import {
 import type { QuerySqlEntry } from "../lib/types"
 import { ControlChip, QuietButton } from "./controls/Control"
 import { DurationScaleToggle } from "./DurationScaleToggle"
-import { ChartFrame, PanelCard } from "./layout/Panel"
+import { CHART_TOOLTIP_STYLES, ChartFrame, PanelCard } from "./layout/Panel"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 import { SqlCodeView } from "./SqlCodeView"
 import { BodyText, SectionTitle } from "./Typography"
@@ -163,14 +163,7 @@ export function QueryDetailPanel({
                 />
                 <Tooltip
                   cursor={{ fill: "rgba(15, 23, 42, 0.3)" }}
-                  contentStyle={{
-                    backgroundColor: "#1e2330",
-                    border: "1px solid rgba(148, 163, 184, 0.12)",
-                    borderRadius: 12,
-                    color: "#e2e8f0",
-                  }}
-                  labelStyle={{ color: "#e2e8f0" }}
-                  itemStyle={{ color: "#e2e8f0" }}
+                  {...CHART_TOOLTIP_STYLES}
                   content={({ active, label, payload }) => {
                     if (!active || !payload || payload.length === 0) return null
 

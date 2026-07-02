@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react"
 
 import type { SelectionState } from "../hooks/useSelectionState"
-import { formatDurationSeconds, formatMultiplier } from "../lib/format"
+import { clamp, formatDurationSeconds, formatMultiplier } from "../lib/format"
 import { highlightSqlTokens } from "../lib/highlightSql"
 import type { QuerySqlEntry } from "../lib/types"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
@@ -59,7 +59,7 @@ const HOVERED_STROKE = "rgba(255, 255, 255, 0.6)"
 const FASTEST_STROKE = "rgba(52, 211, 153, 0.7)"
 
 function interpolateColor(t: number): string {
-  const clamped = Math.max(0, Math.min(1, t))
+  const clamped = clamp(t, 0, 1)
   const segmentCount = COLOR_STOPS.length - 1
   const segment = Math.min(Math.floor(clamped * segmentCount), segmentCount - 1)
   const segmentT = clamped * segmentCount - segment

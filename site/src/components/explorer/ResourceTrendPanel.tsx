@@ -10,6 +10,7 @@ import {
 } from "recharts"
 
 import { getDatabaseColors } from "../../lib/databaseColors"
+import { buildElapsedTicks, formatElapsedSeconds, toTitleCase } from "../../lib/format"
 import {
   formatCpuPercent,
   formatMegabytes,
@@ -20,7 +21,7 @@ import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
 import { ControlChip, QuietButton, SegmentedButton } from "../controls/Control"
 import { DatabaseLegend } from "../DatabaseLegend"
-import { PanelCard } from "../layout/Panel"
+import { CHART_TOOLTIP_STYLES, PanelCard } from "../layout/Panel"
 import { MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
@@ -384,7 +385,7 @@ function TrendChart({
   const { domain: yDomain, ticks: yTicks } = yScale
   const tickFormatter = yScale.formatter ?? formatter
 
-  const xTicks = buildEvenElapsedTicks(maxElapsed)
+  const xTicks = buildElapsedTicks(maxElapsed)
 
   return (
     <div className="rounded-lg border border-border-default bg-surface-primary/60 p-2.5">
@@ -409,7 +410,7 @@ function TrendChart({
               tick={{ fill: "#94a3b8", fontSize: 11 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={formatElapsedLabel}
+              tickFormatter={formatElapsedSeconds}
             />
             <YAxis
               domain={yDomain}
@@ -421,18 +422,11 @@ function TrendChart({
               tickFormatter={tickFormatter}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: "#1e2330",
-                border: "1px solid rgba(148, 163, 184, 0.12)",
-                borderRadius: 12,
-                color: "#e2e8f0",
-              }}
-              labelStyle={{ color: "#e2e8f0" }}
-              itemStyle={{ color: "#e2e8f0" }}
+              {...CHART_TOOLTIP_STYLES}
               cursor={{ stroke: "rgba(148, 163, 184, 0.15)", strokeDasharray: "4 4" }}
               labelFormatter={(value) => {
                 const numericValue = typeof value === "number" ? value : Number(value ?? 0)
-                return `Elapsed ${formatElapsedLabel(numericValue)}`
+                return `Elapsed ${formatElapsedSeconds(numericValue)}`
               }}
               formatter={(value, _name, item) => {
                 const numericValue = typeof value === "number" ? value : Number(value ?? 0)
@@ -652,31 +646,4 @@ function buildTrendChartData(
     mem_mb: Array.from(result.mem_mb.values()).sort((a, b) => a.elapsed_s - b.elapsed_s),
     disk_mb: Array.from(result.disk_mb.values()).sort((a, b) => a.elapsed_s - b.elapsed_s),
   }
-}
-
-function formatElapsedLabel(value: number): string {
-  const total = Math.max(0, Math.round(value))
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
-  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
-  return `${s}s`
-}
-
-const ELAPSED_STEPS = [
-  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
-]
-
-function buildEvenElapsedTicks(maxSeconds: number): number[] {
-  const safeMax = Math.max(1, Math.ceil(maxSeconds))
-  const target = safeMax / 5
-  const step = ELAPSED_STEPS.find((s) => s >= target) ?? ELAPSED_STEPS[ELAPSED_STEPS.length - 1]!
-  const ticks: number[] = []
-  for (let t = 0; t <= safeMax; t += step) ticks.push(t)
-  return ticks
-}
-
-function toTitleCase(value: string): string {
-  return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }

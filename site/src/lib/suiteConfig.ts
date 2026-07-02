@@ -1,4 +1,5 @@
 import type { BenchmarkSuiteId } from "./benchmarks"
+import { toTitleCase } from "./format"
 import type { BenchmarkOperation } from "./types"
 
 export interface ParsedQueryName {
@@ -13,10 +14,6 @@ export interface SuiteConfig {
   operations: BenchmarkOperation[]
   parseQueryName: (queryName: string) => ParsedQueryName
   compareQueryNames: (left: string, right: string) => number
-}
-
-function toTitleCase(value: string): string {
-  return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function parseTimeSeriesQueryName(queryName: string): ParsedQueryName {

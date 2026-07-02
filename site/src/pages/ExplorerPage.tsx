@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 
+import { CycleSelect } from "../components/controls/CycleSelect"
 import { ExplorerSection } from "../components/explorer/ExplorerSection"
 import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
-import { OperationSelector } from "../components/explorer/OperationSelector"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
 import { SuiteScoreCards } from "../components/explorer/SuiteScoreCards"
@@ -34,6 +34,11 @@ interface ExplorerPageProps {
   suiteId: BenchmarkSuiteId
   isSystemLoading?: boolean
 }
+
+const QUERY_GROUP_OPTIONS: { value: "select" | "mutate"; label: string }[] = [
+  { value: "mutate", label: "Mutate queries" },
+  { value: "select", label: "Select queries" },
+]
 
 export function ExplorerPage({ system, suiteId, isSystemLoading = false }: ExplorerPageProps) {
   const suiteConfig = useMemo(() => getSuiteConfig(suiteId), [suiteId])
@@ -152,7 +157,12 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
         description="Per-query latency, timeline, and detail inspector."
         trailing={
           hasMutateOperation ? (
-            <OperationSelector operation={selectedOperation} onChange={setSelectedOperation} />
+            <CycleSelect
+              label="Query Group"
+              value={selectedOperation}
+              options={QUERY_GROUP_OPTIONS}
+              onChange={setSelectedOperation}
+            />
           ) : null
         }
       >
