@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import tempfile
 from datetime import UTC, datetime
@@ -18,8 +19,11 @@ from alembic import command
 
 from ..settings import REPO_ROOT, SETTINGS, Revision
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
+from .merge import MergeStats, merge_results
 from .models import QueryExecution, Run, RunMetric, RunStep
 from .schema import ensure_results_schema
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def get_results_db_path(revision: Revision = "default") -> Path:
@@ -110,7 +114,21 @@ def query_results(sql: str, revision: Revision = "default") -> None:
             con.close()
 
 
-def publish(revision: Revision = "default") -> Path:
+def _published_table_counts(db_path: Path) -> dict[str, int]:
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
+
+    try:
+        counts: dict[str, int] = {}
+        for table in ("run", "run_step", "run_metric", "query_execution"):
+            row = con.execute(f"select count(*) from {table}").fetchone()
+            assert row is not None
+            counts[table] = int(row[0])
+        return counts
+    finally:
+        con.close()
+
+
+def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, MergeStats | None]:
     source_db_path = _require_revision(revision)
     output_dir = REPO_ROOT / "site" / "public" / "data"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -122,28 +140,29 @@ def publish(revision: Revision = "default") -> Path:
 
     try:
         ensure_results_schema(engine, allow_create=False)
-
-        with Session(engine) as session:
-            table_counts = {
-                "run": int(session.scalar(select(func.count()).select_from(Run)) or 0),
-                "run_step": int(session.scalar(select(func.count()).select_from(RunStep)) or 0),
-                "run_metric": int(session.scalar(select(func.count()).select_from(RunMetric)) or 0),
-                "query_execution": int(session.scalar(select(func.count()).select_from(QueryExecution)) or 0),
-            }
     finally:
         engine.dispose()
 
-    if output_db_path.is_file():
-        output_db_path.unlink()
+    merge_stats: MergeStats | None = None
 
-    shutil.copy2(source_db_path, output_db_path)
+    if merge and output_db_path.is_file():
+        merge_stats = merge_results(source_db_path, output_db_path, head_revision=get_results_head_revision())
+    else:
+        if merge:
+            _LOGGER.info(f"No published database at {output_db_path}, copying instead of merging")
+
+        if output_db_path.is_file():
+            output_db_path.unlink()
+
+        shutil.copy2(source_db_path, output_db_path)
 
     manifest = {
         "published_at": datetime.now(UTC).isoformat(),
         "revision": revision,
         "source": source_db_path.as_posix(),
+        "merged": merge_stats is not None,
         "schema_revision": get_results_head_revision(),
-        "table_counts": table_counts,
+        "table_counts": _published_table_counts(output_db_path),
     }
 
     manifest_path.write_text(f"{json.dumps(manifest, indent=2)}\n")
@@ -152,7 +171,7 @@ def publish(revision: Revision = "default") -> Path:
     queries_path = output_dir / "queries.json"
     queries_path.write_text(f"{json.dumps(queries_manifest, indent=2)}\n")
 
-    return output_dir
+    return output_dir, merge_stats
 
 
 def _build_queries_manifest() -> dict[str, dict[str, dict[str, str | None | dict[str, str]]]]:
