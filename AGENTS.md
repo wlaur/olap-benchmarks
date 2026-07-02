@@ -1,6 +1,6 @@
 # Development instructions
 
-* Use Python 3.13 with full typing
+* Use Python 3.13+ with full typing (the local venv runs 3.14)
 * Use uv, never pip
 * In `site/`, use Bun for dependency management and script execution (`bun`, `bun run`), not npm
 * Test code with pyright, ruff and pytest (Python) and `bun run *` (TypeScript). Never leave code unlinted or unformatted.
