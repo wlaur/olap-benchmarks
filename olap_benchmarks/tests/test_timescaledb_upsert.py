@@ -68,7 +68,7 @@ def test_timescaledb_upsert_uses_on_conflict_instead_of_delete_insert(
     data_dir = tmp_path / "timescaledb" / "data"
     data_dir.mkdir(parents=True)
 
-    monkeypatch.setattr("olap_benchmarks.dbs.timescaledb.SETTINGS.temporary_directory", tmp_path)
+    monkeypatch.setattr("olap_benchmarks.settings.SETTINGS.temporary_directory", tmp_path)
     monkeypatch.setattr(TimescaleDB, "connect", fake_connect)
     monkeypatch.setattr(TimescaleDB, "_copy_csv_to_table", fake_copy_csv_to_table)
 

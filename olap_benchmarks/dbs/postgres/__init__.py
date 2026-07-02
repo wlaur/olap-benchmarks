@@ -4,10 +4,11 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from textwrap import dedent
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
+from sqlalchemy.engine import make_url
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
@@ -20,7 +21,7 @@ from ...suites.time_series.config import (
     get_time_series_table_name,
 )
 from .. import Database
-from ..utils import iter_parquet_frames, tracked_commit
+from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,17 +97,14 @@ def table_exists(connection: Connection, table: str) -> bool:
 
 class PostgresRTABench(RTABench["Postgres"]):
     def index_tables(self) -> None:
-        con = self.db.connect()
-
         for statement in (
             "CREATE INDEX orders_customer_id_index ON orders (customer_id);",
             "CREATE INDEX order_events_order_id_index ON order_events (order_id);",
             "CREATE INDEX order_events_event_type_index ON order_events (event_type);",
         ):
-            with self.db.record_query_execution(statement):
-                con.execute(text(statement))
+            self.db.execute(statement, commit=False)
 
-        tracked_commit(con)
+        tracked_commit(self.db.connect())
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -140,45 +138,26 @@ class PostgresClickbench(Clickbench["Postgres"]):
 
         """)
 
-        con = self.db.connect()
-
         for n in statements.strip().split(";"):
             n = n.strip()
 
             if not n:
                 continue
 
-            with self.db.record_query_execution(n):
-                con.execute(text(n))
-
+            self.db.execute(n)
             _LOGGER.info(f"Executed {n}")
-            tracked_commit(con)
 
-        con = self.db.connect(reconnect=True)
-        statement = "CREATE EXTENSION IF NOT EXISTS pg_trgm"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm", reconnect=True)
 
-        statement = "CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.db.execute("CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);")
         _LOGGER.info("Created index trgm_idx_title")
 
-        statement = "CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.db.execute("CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);")
         _LOGGER.info("Created index trgm_idx_url")
 
         _LOGGER.info("Generated indexes for table hits")
 
-        con = self.db.connect(reconnect=True)
-        statement = "VACUUM ANALYZE hits"
-        with self.db.record_query_execution(statement):
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
-
+        self.db.execute("VACUUM ANALYZE hits", autocommit=True)
         _LOGGER.info("Ran vacuum analyze for table hits")
 
     def populate(self, restart: bool = True) -> None:
@@ -313,7 +292,7 @@ class PostgresClickbench(Clickbench["Postgres"]):
             self.db.restart_event()
 
 
-class PostgresTimeSeries(TimeSeries["Postgres"]):
+class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
     # Wide telemetry tables (1500+ cols) blow past PG's 8160-byte tuple limit, so
     # the row-store engines (Postgres, TimescaleDB) use the idiomatic EAV layout
     # for them. Tall (10 cols) stays wide.
@@ -359,8 +338,6 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
         return True
 
     def index_tables(self) -> None:
-        con = self.db.connect()
-
         for table_name in get_time_series_input_files():
             if table_name in self.SKIP_TABLES:
                 continue
@@ -369,20 +346,15 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
             else:
                 statement = f'CREATE INDEX {table_name}_time_index ON "{table_name}" ("time")'
 
-            with self.db.record_query_execution(statement):
-                con.execute(text(statement))
+            self.db.execute(statement, commit=False)
             _LOGGER.info(f"Indexed {table_name}")
 
-        tracked_commit(con)
+        tracked_commit(self.db.connect())
 
     def _eav_create_table(self, table_name: TableName) -> None:
-        con = self.db.connect()
-        statement = (
+        self.db.execute(
             f'CREATE TABLE "{table_name}" ("time" TIMESTAMPTZ NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
         )
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
         _LOGGER.info(f"Created EAV table {table_name}")
 
     @staticmethod
@@ -478,9 +450,6 @@ class Postgres(Database):
         host_pgdata = self.database_directory / "pgdata"
         host_pgdata.mkdir(parents=True, exist_ok=True)
         host_pgdata.chmod(0o777)  # macOS bind-friendly
-
-        # Ensure the CSV staging dir for the parallel-copy ingest path exists.
-        (SETTINGS.temporary_directory / "postgres/data").mkdir(exist_ok=True, parents=True)
 
         parts = [
             "docker run --platform linux/amd64",
@@ -581,6 +550,15 @@ class Postgres(Database):
         tracked_commit(con)
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
+    @property
+    def _staging_directory(self) -> Path:
+        directory = SETTINGS.temporary_directory / self.name / "data"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _dml_session_setup(self, con: Connection) -> None:
+        """Hook for session settings needed before DML statements."""
+
     def insert(
         self,
         df: pl.DataFrame | pl.LazyFrame,
@@ -596,9 +574,7 @@ class Postgres(Database):
         if not table_exists(con, table):
             self.create_table(schema, table, primary_key, not_null)
 
-        temp_dir = SETTINGS.temporary_directory / "postgres/data"
-
-        temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.csv"
+        temp_file = self._staging_directory / f"{table}_{uuid.uuid4().hex}.csv"
         temp_file_str = temp_file.resolve().as_posix()
 
         if isinstance(df, pl.LazyFrame):
@@ -610,13 +586,10 @@ class Postgres(Database):
                 f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
             )
 
-        db_host = "localhost"
-        db_name = "postgres"
-        db_user = "postgres"
-        db_password = "password"
-        db_port = "5433"
-
-        connection_string = f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_password}"
+        url = make_url(self.connection_string)
+        connection_string = (
+            f"host={url.host} port={url.port} dbname={url.database} user={url.username} password={url.password}"
+        )
 
         # install timescaledb-parallel-copy first
         # on macos: brew tap timescale/tap && brew install timescaledb-tools
@@ -651,11 +624,17 @@ class Postgres(Database):
         with open(csv_path) as f, self.record_query_execution(copy_sql):
             cursor.copy_expert(copy_sql, f)
 
-    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+    def _copy_dataframe(self, con: Connection, table: str, df: pl.DataFrame, label: str) -> None:
+        temp_file = self._staging_directory / f"{label}_{uuid.uuid4().hex}.csv"
 
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        try:
+            df.write_csv(temp_file)
+            self._copy_csv_to_table(con, table, temp_file)
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        primary_keys = require_columns(primary_key)
 
         for pk in primary_keys:
             if pk not in df.columns:
@@ -665,78 +644,46 @@ class Postgres(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
-        statement = f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._dml_session_setup(con)
 
-        temp_dir = SETTINGS.temporary_directory / "postgres/data"
-        temp_file = temp_dir / f"{table}_upsert_{uuid.uuid4().hex}.csv"
-
-        try:
-            df.write_csv(temp_file)
-            self._copy_csv_to_table(con, staging_table, temp_file)
-        finally:
-            temp_file.unlink(missing_ok=True)
-
-        delete_sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
-        with self.record_query_execution(delete_sql):
-            con.execute(text(delete_sql))
+        self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
 
         all_columns = ", ".join(f'"{col}"' for col in df.columns)
-        insert_sql = f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}"
-        with self.record_query_execution(insert_sql):
-            con.execute(text(insert_sql))
+        self.execute(f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}", commit=False)
 
-        statement = f"DROP TABLE {staging_table}"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"DROP TABLE {staging_table}", commit=False)
         tracked_commit(con)
 
         _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
 
         con = self.connect()
 
         staging_table = f"_staging_del_{table}_{uuid.uuid4().hex[:8]}"
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
-        statement = f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false", commit=False)
+        self._copy_dataframe(con, staging_table, keys.select(primary_keys), f"{table}_delete")
+        self._dml_session_setup(con)
 
-        temp_dir = SETTINGS.temporary_directory / "postgres/data"
-        temp_file = temp_dir / f"{table}_delete_{uuid.uuid4().hex}.csv"
-
-        try:
-            keys.select(primary_keys).write_csv(temp_file)
-            self._copy_csv_to_table(con, staging_table, temp_file)
-        finally:
-            temp_file.unlink(missing_ok=True)
-
-        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
-        with self.record_query_execution(sql):
-            con.execute(text(sql))
-
-        statement = f"DROP TABLE {staging_table}"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
+        self.execute(f"DROP TABLE {staging_table}", commit=False)
         tracked_commit(con)
 
         _LOGGER.info(f"Deleted rows from {table} by primary key")
 
     @property
-    def rtabench(self) -> PostgresRTABench:
+    def rtabench(self) -> RTABench[Any]:
         return PostgresRTABench(db=self)
 
     @property
-    def clickbench(self) -> PostgresClickbench:
+    def clickbench(self) -> Clickbench[Any]:
         return PostgresClickbench(db=self)
 
     @property
-    def time_series(self) -> PostgresTimeSeries:
+    def time_series(self) -> PostgresTimeSeries[Any]:
         return PostgresTimeSeries(db=self)
