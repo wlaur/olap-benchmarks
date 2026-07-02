@@ -7,6 +7,9 @@ const DURATION_TICK_STEPS_S = [
   1800, 3600, 7200, 10800, 14400, 21600, 43200, 86400,
 ] as const
 const LOG_DURATION_TICKS_S = [0.001, 0.01, 0.1, 1, 10, 60, 600, 3600, 21600, 43200, 86400] as const
+const ELAPSED_TICK_STEPS_S = [
+  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
+] as const
 
 function trimFixed(value: number, fractionDigits: number): string {
   return value
@@ -42,6 +45,35 @@ export function formatMultiplier(value: number): string {
     value >= 100 ? roundToSignificantDigits(value, 2) : value >= 10 ? Math.round(value) : value
 
   return `${formatNumberWithSpaceGrouping(roundedValue, roundedValue >= 10 ? 0 : 2)}x`
+}
+
+export function formatElapsedSeconds(value: number): string {
+  const total = Math.max(0, Math.round(value))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
+  return `${s}s`
+}
+
+export function buildElapsedTicks(maxSeconds: number): number[] {
+  const safeMax = Math.max(1, Math.ceil(maxSeconds))
+  const target = safeMax / 5
+  const step =
+    ELAPSED_TICK_STEPS_S.find((s) => s >= target) ??
+    ELAPSED_TICK_STEPS_S[ELAPSED_TICK_STEPS_S.length - 1]!
+  const ticks: number[] = []
+  for (let t = 0; t <= safeMax; t += step) ticks.push(t)
+  return ticks
+}
+
+export function toTitleCase(value: string): string {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
 }
 
 export function scaleDurationForChart(value: number, mode: DurationScaleMode): number {

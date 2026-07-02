@@ -14,7 +14,12 @@ import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
 import { cn } from "../lib/cn"
-import { formatDurationSeconds, formatMultiplier, type DurationScaleMode } from "../lib/format"
+import {
+  clamp,
+  formatDurationSeconds,
+  formatMultiplier,
+  type DurationScaleMode,
+} from "../lib/format"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { InlineDurationBars } from "./InlineDurationBars"
 
@@ -455,8 +460,4 @@ function HeaderInfoTooltip({ label, tooltip, children }: HeaderWithTooltipProps)
         : null}
     </>
   )
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
 }

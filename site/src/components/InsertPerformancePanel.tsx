@@ -13,8 +13,10 @@ import {
 } from "recharts"
 
 import {
+  buildElapsedTicks,
   formatDurationAxisTick,
   formatDurationSeconds,
+  formatElapsedSeconds,
   getDurationAxisDomain,
   getDurationAxisTicks,
   scaleDurationForChart,
@@ -29,7 +31,7 @@ import {
 import type { InsertStep, MetricSample } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { DurationScaleToggle } from "./DurationScaleToggle"
-import { ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
+import { CHART_TOOLTIP_STYLES, ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
 import { Skeleton } from "./Skeleton"
 import { SectionTitle } from "./Typography"
 
@@ -87,7 +89,7 @@ export function InsertPerformancePanel({
     () => Math.max(1, ...populateSamples.map((s) => Math.ceil(s.run_duration_s))),
     [populateSamples],
   )
-  const elapsedTicks = useMemo(() => buildEvenTicks(maxElapsed), [maxElapsed])
+  const elapsedTicks = useMemo(() => buildElapsedTicks(maxElapsed), [maxElapsed])
 
   const maxDuration = useMemo(
     () => Math.max(0.001, ...filteredSteps.map((s) => s.duration_s)),
@@ -173,13 +175,8 @@ export function InsertPerformancePanel({
                   tickLine={false}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1e2330",
-                    border: "1px solid rgba(148, 163, 184, 0.12)",
-                    borderRadius: 12,
-                    color: "#e2e8f0",
-                  }}
-                  labelStyle={{ color: "#e2e8f0" }}
+                  contentStyle={CHART_TOOLTIP_STYLES.contentStyle}
+                  labelStyle={CHART_TOOLTIP_STYLES.labelStyle}
                   formatter={(value, name, item) => {
                     const row = item.payload as InsertBarRow
                     const rawKey = `${String(name)}_raw`
@@ -368,7 +365,7 @@ function MetricMiniChart({
               tick={{ fill: "#94a3b8", fontSize: 10 }}
               axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
               tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={formatElapsedLabel}
+              tickFormatter={formatElapsedSeconds}
             />
             <YAxis
               domain={yScale.domain}
@@ -380,16 +377,11 @@ function MetricMiniChart({
               tickFormatter={yScale.formatter ?? formatter}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: "#1e2330",
-                border: "1px solid rgba(148, 163, 184, 0.12)",
-                borderRadius: 12,
-                color: "#e2e8f0",
-              }}
-              labelStyle={{ color: "#e2e8f0" }}
+              contentStyle={CHART_TOOLTIP_STYLES.contentStyle}
+              labelStyle={CHART_TOOLTIP_STYLES.labelStyle}
               cursor={{ stroke: "rgba(148, 163, 184, 0.15)", strokeDasharray: "4 4" }}
               labelFormatter={(v) =>
-                `Elapsed ${formatElapsedLabel(typeof v === "number" ? v : Number(v ?? 0))}`
+                `Elapsed ${formatElapsedSeconds(typeof v === "number" ? v : Number(v ?? 0))}`
               }
               formatter={(value, _name, item) =>
                 [formatter(Number(value ?? 0)), item.name ?? ""] as const
@@ -461,27 +453,4 @@ function buildMetricRows(
   }
 
   return Array.from(rowsBySecond.values()).sort((a, b) => a.elapsed_s - b.elapsed_s)
-}
-
-const ELAPSED_STEPS = [
-  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
-]
-
-function buildEvenTicks(maxSeconds: number): number[] {
-  const safeMax = Math.max(1, Math.ceil(maxSeconds))
-  const target = safeMax / 5
-  const step = ELAPSED_STEPS.find((s) => s >= target) ?? ELAPSED_STEPS[ELAPSED_STEPS.length - 1]!
-  const ticks: number[] = []
-  for (let t = 0; t <= safeMax; t += step) ticks.push(t)
-  return ticks
-}
-
-function formatElapsedLabel(value: number): string {
-  const total = Math.max(0, Math.round(value))
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
-  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
-  return `${s}s`
 }

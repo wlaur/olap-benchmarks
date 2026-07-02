@@ -1,6 +1,11 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
-import { formatDurationSeconds } from "../lib/format"
+import {
+  buildElapsedTicks,
+  formatDurationSeconds,
+  formatElapsedSeconds,
+  toTitleCase,
+} from "../lib/format"
 import type { QueryStep } from "../lib/types"
 import { ControlChip, QuietButton } from "./controls/Control"
 import { DatabaseLegend } from "./DatabaseLegend"
@@ -365,7 +370,7 @@ function SvgContent({
               fontSize={11}
               textAnchor={anchor}
             >
-              {formatElapsed(tick)}
+              {formatElapsedSeconds(tick)}
             </text>
           </g>
         )
@@ -495,19 +500,6 @@ function buildTimelineData(
   return { segmentsByDb, maxElapsed, queryNames }
 }
 
-const TIME_STEPS = [
-  1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400,
-]
-
-function buildElapsedTicks(maxSeconds: number): number[] {
-  const safeMax = Math.max(1, Math.ceil(maxSeconds))
-  const target = safeMax / 5
-  const step = TIME_STEPS.find((s) => s >= target) ?? TIME_STEPS[TIME_STEPS.length - 1]!
-  const ticks: number[] = []
-  for (let t = 0; t <= safeMax; t += step) ticks.push(t)
-  return ticks
-}
-
 function shortenQueryName(name: string): string {
   const match = /^([a-z]+)_(\d+)/.exec(name)
   if (!match) return name
@@ -515,15 +507,5 @@ function shortenQueryName(name: string): string {
 }
 
 function formatQueryLabel(name: string): string {
-  return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-function formatElapsed(value: number): string {
-  const total = Math.max(0, Math.round(value))
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`
-  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`
-  return `${s}s`
+  return toTitleCase(name.replace(/_/g, " "))
 }
