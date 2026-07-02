@@ -23,5 +23,13 @@
     "react/jsx-no-constructed-context-values": "error",
     "typescript/no-floating-promises": "error",
     "typescript/switch-exhaustiveness-check": "warn"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
 }

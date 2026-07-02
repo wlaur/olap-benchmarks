@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts"
 
+import { databaseEngine } from "../lib/databaseColors"
 import {
   formatDurationAxisTick,
   formatDurationSeconds,
@@ -44,7 +45,9 @@ export function QueryDetailPanel({
   onClose,
 }: QueryDetailPanelProps) {
   const overrideKeys = sql
-    ? databases.filter((database) => Object.hasOwn(sql.db_overrides, database))
+    ? [...new Set(databases.map(databaseEngine))].filter((engine) =>
+        Object.hasOwn(sql.db_overrides, engine),
+      )
     : []
   const hasTabs = sql !== null && (sql.sql !== null || overrideKeys.length > 0)
   const defaultTab = sql?.sql !== null ? "common" : (overrideKeys[0] ?? "common")
