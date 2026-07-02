@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "react-grid-layout/css/styles.css";
-@import "react-resizable/css/styles.css";
 @plugin "@tailwindcss/typography";
 
 @theme {
@@ -106,21 +104,6 @@
 
 .panel-scrollbar::-webkit-scrollbar-corner {
   background: transparent;
-}
-
-.react-grid-item > .react-resizable-handle::after {
-  border-color: rgba(148, 163, 184, 0.3) !important;
-}
-
-.react-grid-item.react-grid-placeholder {
-  background: rgba(90, 151, 255, 0.15) !important;
-  border: 1px dashed rgba(90, 151, 255, 0.4);
-  border-radius: 1rem;
-}
-
-.react-grid-layout,
-.react-grid-item {
-  min-width: 0;
 }
 
 /* One Dark token colors for inline SQL highlighting (matches CodeMirror viewer). */

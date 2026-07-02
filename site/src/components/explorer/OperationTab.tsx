@@ -1,6 +1,6 @@
 import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState } from "react"
-import { useContainerWidth } from "react-grid-layout"
 
+import { useContainerWidth } from "../../hooks/useContainerWidth"
 import type { SelectionState } from "../../hooks/useSelectionState"
 import { buildQueryComparisonRows, computeMaxDuration } from "../../lib/chartTransforms"
 import { cn } from "../../lib/cn"
