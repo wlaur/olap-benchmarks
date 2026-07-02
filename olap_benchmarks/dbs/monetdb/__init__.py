@@ -25,28 +25,8 @@ from .utils import get_pymonetdb_connection
 
 _LOGGER = logging.getLogger(__name__)
 
-LOCAL_IMAGE = False
-
-if LOCAL_IMAGE:
-    # built from https://github.com/MonetDBSolutions/monetdb-docker
-    # docker build -t monetdb-local:Mar2025-11 -f ubuntu.dockerfile --platform linux/amd64 --build-arg BRANCH=Mar2025_11 . # noqa: E501
-    # NOTE: getting 401 error from https://www.monetdb.org/hg/MonetDB/archive/${BRANCH}.tar.bz2
-    # need to modify Dockerfile to use https://github.com/MonetDB/MonetDB/archive/refs/tags/${BRANCH}.tar.gz instead
-    # change in monetdb-docker/ubuntu.Dockerfile:
-    # RUN curl -L -o MonetDB.tar.gz https://github.com/MonetDB/MonetDB/archive/refs/tags/${BRANCH}.tar.gz
-    # RUN tar zxf MonetDB.tar.gz
-
-    # TODO: fails with "#main-thread: log_read_types_file: ERROR: unknown type in log file 'mbr'"
-    # when starting a db created with Mar2025-SP1
-    # (this is an unreleased version, will probably be fixed before SP2 is released)
-    _version = "Mar2025-11"
-    _docker_image = f"monetdb-local:{_version}"
-else:
-    _version = "Dec2025-SP2"
-    _docker_image = f"monetdb/monetdb:{_version}"
-
-VERSION = _version
-DOCKER_IMAGE = _docker_image
+VERSION = "Dec2025-SP2"
+DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
@@ -64,9 +44,9 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        assert self.db.context is not None
+        assert self.db.current_query_name is not None
 
-        if "batch_export" in self.db.context.query_name:
+        if "batch_export" in self.db.current_query_name:
             return {"method": "binary"}
 
         return {"method": "pymonetdb"}
@@ -94,13 +74,13 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
 class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        assert self.db.context is not None
+        assert self.db.current_query_name is not None
 
         pymonetdb_queries = [
             "01_calendar_count",
         ]
 
-        if any(n in self.db.context.query_name for n in pymonetdb_queries):
+        if any(n in self.db.current_query_name for n in pymonetdb_queries):
             return {"method": "pymonetdb"}
 
         return {"method": "binary"}

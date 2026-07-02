@@ -31,15 +31,6 @@ _LOGGER = logging.getLogger(__name__)
 LiteralStepType = Literal["phase", "query", "mutation"]
 
 
-def _status_from_exception() -> RunStatus:
-    return "failed"
-
-
-class QueryContext(BaseModel):
-    suite: SuiteName
-    query_name: str
-
-
 class Database(BaseModel, ABC):
     name: DatabaseName
     version: str
@@ -47,7 +38,7 @@ class Database(BaseModel, ABC):
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
 
-    context: QueryContext | None = None
+    current_query_name: str | None = None
     _current_suite: SuiteName | None = None
 
     _connection: Connection | None = None
@@ -202,7 +193,7 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self._finish_step(
                 step_id=step_id,
-                status=_status_from_exception(),
+                status="failed",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -213,19 +204,13 @@ class Database(BaseModel, ABC):
         self._finish_step(step_id=step_id, status="completed")
 
     @contextmanager
-    def event_context(self, name: str) -> Generator[None]:
-        # Backwards-compatible alias for existing suite/database implementations.
-        with self.phase_context(name):
-            yield
-
-    @contextmanager
-    def query_context(self, suite: SuiteName, query_name: str) -> Generator[None]:
-        self.context = QueryContext(suite=suite, query_name=query_name)
+    def query_context(self, query_name: str) -> Generator[None]:
+        self.current_query_name = query_name
 
         try:
             yield
         finally:
-            self.context = None
+            self.current_query_name = None
 
     def start_query_step(self, query_name: str, iteration: int) -> int:
         return self._start_step(
@@ -303,7 +288,7 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self.finish_mutation_step(
                 step_id=step_id,
-                status=_status_from_exception(),
+                status="failed",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -336,7 +321,7 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self.finish_query_step(
                 step_id=step_id,
-                status=_status_from_exception(),
+                status="failed",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -545,7 +530,7 @@ class Database(BaseModel, ABC):
             with self.phase_context(operation):
                 benchmark_func()
         except BaseException as exc:
-            status = _status_from_exception()
+            status = "failed"
             error_type = type(exc).__name__
             error_message = str(exc)
             raise

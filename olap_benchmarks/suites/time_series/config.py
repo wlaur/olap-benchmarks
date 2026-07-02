@@ -87,13 +87,6 @@ def get_time_series_column_counts(n_cols: int) -> TimeSeriesColumnCounts:
     )
 
 
-def get_time_series_schemas() -> Mapping[TableName, Mapping[str, pl.DataType | type[pl.DataType]]]:
-    return {
-        get_time_series_table_name(size): pl.read_parquet_schema(get_dataset_path(size))
-        for size in TIME_SERIES_DATASET_SIZES
-    }
-
-
 def get_time_series_input_files() -> dict[TableName, Path]:
     return {get_time_series_table_name(size): get_dataset_path(size) for size in TIME_SERIES_DATASET_SIZES}
 
@@ -499,7 +492,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             if not self.include_query(query_name):
                 continue
 
-            with self.db.query_context("time_series", query_name):
+            with self.db.query_context(query_name):
                 query = self.load_time_series_query(query_name)
 
                 for it in range(1, iterations + 1):

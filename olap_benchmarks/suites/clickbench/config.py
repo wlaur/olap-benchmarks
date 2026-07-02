@@ -92,7 +92,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
             if not self.include_query(query_name):
                 continue
 
-            with self.db.query_context("clickbench", query_name):
+            with self.db.query_context(query_name):
                 for it in range(1, ITERATIONS + 1):
                     df, t = self.db.execute_query_iteration(
                         query_name=query_name,
