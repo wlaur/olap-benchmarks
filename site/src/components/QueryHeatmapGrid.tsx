@@ -1,9 +1,22 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react"
 
 import type { SelectionState } from "../hooks/useSelectionState"
-import { clamp, formatDurationSeconds, formatMultiplier } from "../lib/format"
+import { formatDurationSeconds, formatMultiplier } from "../lib/format"
+import {
+  APPROX_CHAR_WIDTH,
+  buildHeatmapGridData,
+  buildLegendTickRatios,
+  clipLabel,
+  computeCellWidth,
+  formatCellDuration,
+  interpolateColor,
+  ratioColor,
+  ratioToT,
+  type HeatmapCellData,
+} from "../lib/heatmapTransforms"
 import { highlightSqlTokens } from "../lib/highlightSql"
 import type { QuerySqlEntry } from "../lib/types"
+import { PortalCard } from "./controls/Popover"
 import type { QueryComparisonRow } from "./QueryComparisonTable"
 
 interface QueryHeatmapGridProps {
@@ -17,6 +30,8 @@ interface QueryHeatmapGridProps {
 interface TooltipState {
   x: number
   y: number
+  originLeft: number
+  originTop: number
   queryLabel: string
   queryName: string
   tableFamily: string
@@ -30,6 +45,8 @@ interface TooltipState {
 interface QueryLabelTooltipState {
   x: number
   y: number
+  originLeft: number
+  originTop: number
   queryLabel: string
   queryName: string
   tableFamily: string
@@ -44,101 +61,9 @@ const CELL_RX = 3
 const LABEL_WIDTH = 180
 const HEADER_HEIGHT = 34
 const LEGEND_HEIGHT = 40
-const APPROX_CHAR_WIDTH = 7.5
 
-const COLOR_STOPS: readonly [number, number, number][] = [
-  [52, 211, 153],
-  [250, 204, 21],
-  [249, 115, 22],
-  [239, 68, 68],
-  [153, 27, 27],
-]
-
-const MISSING_COLOR = "rgba(148, 163, 184, 0.08)"
 const HOVERED_STROKE = "rgba(255, 255, 255, 0.6)"
 const FASTEST_STROKE = "rgba(52, 211, 153, 0.7)"
-
-function interpolateColor(t: number): string {
-  const clamped = clamp(t, 0, 1)
-  const segmentCount = COLOR_STOPS.length - 1
-  const segment = Math.min(Math.floor(clamped * segmentCount), segmentCount - 1)
-  const segmentT = clamped * segmentCount - segment
-  const from = COLOR_STOPS[segment]!
-  const to = COLOR_STOPS[segment + 1]!
-  const r = Math.round(from[0] + (to[0] - from[0]) * segmentT)
-  const g = Math.round(from[1] + (to[1] - from[1]) * segmentT)
-  const b = Math.round(from[2] + (to[2] - from[2]) * segmentT)
-  const alpha = 0.45 + clamped * 0.3
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-function ratioToT(ratio: number, maxRatio: number): number {
-  if (ratio <= 1) return 0
-  const logMax = Math.log(Math.max(maxRatio, 1.01))
-  return Math.min(1, Math.log(ratio) / logMax)
-}
-
-function ratioColor(ratio: number | null, maxRatio: number): string {
-  if (ratio === null) return MISSING_COLOR
-  return interpolateColor(ratioToT(ratio, maxRatio))
-}
-
-interface CellData {
-  duration: number | null
-  ratio: number | null
-}
-
-interface GridData {
-  cells: CellData[][]
-  maxRatio: number
-  summaryRow: CellData[]
-}
-
-function buildGridData(rows: QueryComparisonRow[], databases: string[]): GridData {
-  let maxRatio = 1
-
-  // Per-database: sum of all median durations (total query time per db)
-  const dbTotals = databases.map((db) => {
-    let total = 0
-    let hasAny = false
-    for (const row of rows) {
-      const d = row.by_database[db]
-      if (d !== null && d !== undefined) {
-        total += d
-        hasAny = true
-      }
-    }
-    return hasAny ? total : null
-  })
-
-  const validTotals = dbTotals.filter((d): d is number => d !== null)
-  const fastestTotal = validTotals.length > 0 ? Math.min(...validTotals) : null
-  const summaryRow: CellData[] = dbTotals.map((total) => {
-    const ratio =
-      total !== null && fastestTotal !== null && fastestTotal > 0 ? total / fastestTotal : null
-    if (ratio !== null && ratio > maxRatio) maxRatio = ratio
-    return { duration: total, ratio }
-  })
-
-  const cells = rows.map((row) => {
-    const durations = databases.map((db) => row.by_database[db] ?? null)
-    const validDurations = durations.filter((d): d is number => d !== null)
-    const fastest = validDurations.length > 0 ? Math.min(...validDurations) : null
-
-    return durations.map((duration) => {
-      const ratio = duration !== null && fastest !== null && fastest > 0 ? duration / fastest : null
-      if (ratio !== null && ratio > maxRatio) maxRatio = ratio
-      return { duration, ratio }
-    })
-  })
-
-  return { cells, maxRatio, summaryRow }
-}
-
-function computeCellWidth(databases: string[]): number {
-  const longestName = Math.max(0, ...databases.map((db) => db.length))
-  return Math.max(64, longestName * APPROX_CHAR_WIDTH + 20)
-}
 
 export function QueryHeatmapGrid({
   rows,
@@ -152,7 +77,7 @@ export function QueryHeatmapGrid({
   const [queryLabelTooltip, setQueryLabelTooltip] = useState<QueryLabelTooltipState | null>(null)
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null)
 
-  const gridData = useMemo(() => buildGridData(rows, databases), [rows, databases])
+  const gridData = useMemo(() => buildHeatmapGridData(rows, databases), [rows, databases])
   const { cells, maxRatio, summaryRow } = gridData
   const cellWidth = useMemo(() => computeCellWidth(databases), [databases])
 
@@ -174,6 +99,8 @@ export function QueryHeatmapGrid({
       setTooltip({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
+        originLeft: rect.left,
+        originTop: rect.top,
         queryLabel: row.query_label,
         queryName: row.query_name,
         tableFamily: row.table_family,
@@ -199,6 +126,8 @@ export function QueryHeatmapGrid({
       setTooltip({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
+        originLeft: rect.left,
+        originTop: rect.top,
         queryLabel: "Sum of medians",
         queryName: "",
         tableFamily: "",
@@ -238,6 +167,8 @@ export function QueryHeatmapGrid({
       setQueryLabelTooltip({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
+        originLeft: rect.left,
+        originTop: rect.top,
         queryLabel: row.query_label,
         queryName: row.query_name,
         tableFamily: row.table_family,
@@ -356,24 +287,7 @@ function ColorLegend({
   const barWidth = Math.min(280, gridWidth - LABEL_WIDTH - 20)
   const barX = LABEL_WIDTH
 
-  const tickRatios = useMemo(() => {
-    const ticks: number[] = [1]
-    const candidates = [1.5, 2, 3, 5, 10, 20, 50, 100, 500, 1000]
-    for (const c of candidates) {
-      if (c <= maxRatio) ticks.push(c)
-    }
-    if (maxRatio > 1 && !ticks.includes(Math.round(maxRatio))) {
-      ticks.push(Math.round(maxRatio))
-    }
-    if (ticks.length > 6) {
-      const step = Math.ceil(ticks.length / 5)
-      const filtered = [ticks[0]!]
-      for (let i = step; i < ticks.length - 1; i += step) filtered.push(ticks[i]!)
-      filtered.push(ticks[ticks.length - 1]!)
-      return filtered
-    }
-    return ticks
-  }, [maxRatio])
+  const tickRatios = useMemo(() => buildLegendTickRatios(maxRatio), [maxRatio])
 
   return (
     <g transform={`translate(0, ${y})`}>
@@ -480,7 +394,7 @@ function ColumnHeaders({
 interface SummaryRowProps {
   y: number
   databases: string[]
-  cellData: CellData[]
+  cellData: HeatmapCellData[]
   cellWidth: number
   maxRatio: number
   hoveredCol: number | null
@@ -586,7 +500,7 @@ interface HeatmapRowProps {
   rowIdx: number
   y: number
   databases: string[]
-  cellData: CellData[]
+  cellData: HeatmapCellData[]
   cellWidth: number
   maxRatio: number
   isSelected: boolean
@@ -717,11 +631,11 @@ function HeatmapTooltip({
   containerWidth: number
 }) {
   return (
-    <div
-      className="pointer-events-none absolute z-50 rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
+    <PortalCard
+      className="pointer-events-none z-50 px-3 py-2 text-xs"
       style={{
-        left: Math.min(tooltip.x + 12, containerWidth - 280),
-        top: Math.max(0, tooltip.y - 8),
+        left: tooltip.originLeft + Math.min(tooltip.x + 12, containerWidth - 280),
+        top: tooltip.originTop + Math.max(0, tooltip.y - 8),
         maxWidth: 300,
       }}
     >
@@ -762,7 +676,7 @@ function HeatmapTooltip({
           </div>
         ) : null}
       </div>
-    </div>
+    </PortalCard>
   )
 }
 
@@ -780,11 +694,11 @@ function QueryLabelTooltipPopup({
   )
 
   return (
-    <div
-      className="pointer-events-none absolute z-50 rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-xl"
+    <PortalCard
+      className="pointer-events-none z-50 px-3 py-2 text-xs"
       style={{
-        left: Math.min(tooltip.x + 12, containerWidth - popupWidth - 8),
-        top: Math.max(0, tooltip.y - 8),
+        left: tooltip.originLeft + Math.min(tooltip.x + 12, containerWidth - popupWidth - 8),
+        top: tooltip.originTop + Math.max(0, tooltip.y - 8),
         maxWidth: popupWidth,
       }}
     >
@@ -802,22 +716,6 @@ function QueryLabelTooltipPopup({
           ))}
         </pre>
       ) : null}
-    </div>
+    </PortalCard>
   )
-}
-
-function formatCellDuration(seconds: number): string {
-  if (seconds <= 0) return "0s"
-  if (seconds < 0.001) return "<1ms"
-  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
-  if (seconds < 10) return `${seconds.toFixed(1)}s`
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  return s > 0 ? `${m}m${s}s` : `${m}m`
-}
-
-function clipLabel(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text
-  return `${text.slice(0, maxChars - 1)}…`
 }
