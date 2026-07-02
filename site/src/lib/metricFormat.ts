@@ -20,6 +20,14 @@ export function formatCpuPercent(value: number): string {
   return `${value.toFixed(0)}%`
 }
 
+export interface MetricScale {
+  domain: [number, number]
+  ticks: number[]
+  formatter?: (v: number) => string
+}
+
+export type MetricScaleBuilder = (maxValue: number) => MetricScale
+
 export function toMetricScale(maxValue: number): { domain: [number, number]; ticks: number[] } {
   const roughStep = maxValue <= 0 ? 1 : maxValue / 4
   const step = getNiceMetricStep(roughStep)

@@ -1,5 +1,20 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
+import {
+  buildSelectedBreadcrumbs,
+  buildTimeTicks,
+  buildVisibleRows,
+  clipText,
+  formatAxisTick,
+  formatElapsedTooltip,
+  getFlameSpanKey,
+  getSpanBarLabel,
+  getSpanBreadcrumbLabel,
+  getSpanLabel,
+  getSpanRect,
+  getTickLabelPlacement,
+  resolveZoomBreadcrumbs,
+} from "../../lib/flameTransforms"
 import { formatDurationSeconds } from "../../lib/format"
 import type { BenchmarkOperation, FlameSpan } from "../../lib/types"
 import { InlineButton } from "../controls/Control"
@@ -22,9 +37,6 @@ interface TooltipState {
 const ROW_HEIGHT = 26
 const ROW_GAP = 1
 const TICK_AREA_HEIGHT = 20
-const MIN_VISIBLE_PX = 0.5
-const TICK_LABEL_EDGE_PADDING = 6
-const TICK_LABEL_EDGE_THRESHOLD = 28
 
 const DEPTH_COLORS: Record<
   FlameSpan["depth"],
@@ -69,35 +81,11 @@ const OPERATION_COLORS: Partial<
   },
 }
 
-const DEPTHS: FlameSpan["depth"][] = ["operation", "step", "query"]
-
 function getSpanColors(span: FlameSpan) {
   if (span.depth === "operation") {
     return OPERATION_COLORS[span.operation] ?? DEPTH_COLORS.operation
   }
   return DEPTH_COLORS[span.depth]
-}
-
-function getSpanLabel(span: FlameSpan): string {
-  if (span.depth === "operation") return span.operation
-  if (span.depth === "step") {
-    const name = span.query_name ?? span.step_name
-    if (span.iteration !== null && span.iteration > 1) return `${name} #${span.iteration}`
-    return name
-  }
-  return span.query_sql ? truncateSql(span.query_sql, 80) : (span.query_name ?? span.step_name)
-}
-
-function getSpanBarLabel(span: FlameSpan): string {
-  if (span.depth === "step" && span.query_name === null && span.step_name === span.operation) {
-    return ""
-  }
-  return getSpanLabel(span)
-}
-
-function truncateSql(sql: string, maxLen: number): string {
-  const cleaned = sql.replace(/\s+/g, " ").trim()
-  return cleaned.length <= maxLen ? cleaned : `${cleaned.slice(0, maxLen)}...`
 }
 
 export function FlameGraph({
@@ -124,15 +112,7 @@ export function FlameGraph({
     return () => observer.disconnect()
   }, [])
 
-  const zoomBreadcrumbs = useMemo(
-    () =>
-      zoomPath
-        .map(
-          (zoomKey) => spans.find((span) => getFlameSpanPersistenceKey(span) === zoomKey) ?? null,
-        )
-        .filter((span): span is FlameSpan => span !== null),
-    [zoomPath, spans],
-  )
+  const zoomBreadcrumbs = useMemo(() => resolveZoomBreadcrumbs(spans, zoomPath), [zoomPath, spans])
   const zoom = zoomBreadcrumbs[zoomBreadcrumbs.length - 1] ?? null
   const selectedBreadcrumbs = useMemo(
     () => buildSelectedBreadcrumbs(spans, selectedSpan),
@@ -148,20 +128,10 @@ export function FlameGraph({
   const viewEnd = zoom?.elapsed_end_s ?? globalEnd
   const viewDuration = viewEnd - viewStart
 
-  // Build visible rows: only show spans overlapping the current view
-  const visibleRows = useMemo(() => {
-    const result: { depth: FlameSpan["depth"]; spans: FlameSpan[] }[] = []
-    for (const depth of DEPTHS) {
-      const depthSpans = spans.filter((s) => {
-        if (s.depth !== depth) return false
-        return s.elapsed_end_s > viewStart && s.elapsed_start_s < viewEnd
-      })
-      if (depthSpans.length > 0) {
-        result.push({ depth, spans: depthSpans })
-      }
-    }
-    return result
-  }, [spans, viewStart, viewEnd])
+  const visibleRows = useMemo(
+    () => buildVisibleRows(spans, viewStart, viewEnd),
+    [spans, viewStart, viewEnd],
+  )
 
   const chartWidth = containerWidth
   const scale = viewDuration > 0 ? chartWidth / viewDuration : 1
@@ -189,14 +159,14 @@ export function FlameGraph({
       // Zoom: only zoom into operation or step spans (they have children)
       if (span.depth === "query") return
 
-      const currentZoomPath = zoomBreadcrumbs.map((crumb) => getFlameSpanPersistenceKey(crumb))
+      const currentZoomPath = zoomBreadcrumbs.map((crumb) => getFlameSpanKey(crumb))
 
       // If clicking the same span we're already zoomed into, do nothing extra
       const lastCrumb = zoomBreadcrumbs[zoomBreadcrumbs.length - 1]
       if (lastCrumb?.id === span.id) return
 
       // If clicking a parent in the breadcrumb trail, zoom back to it
-      const spanKey = getFlameSpanPersistenceKey(span)
+      const spanKey = getFlameSpanKey(span)
       const crumbIndex = currentZoomPath.findIndex((crumbKey) => crumbKey === spanKey)
       if (crumbIndex >= 0) {
         onZoomPathChange(currentZoomPath.slice(0, crumbIndex + 1))
@@ -277,18 +247,7 @@ export function FlameGraph({
         {/* Time axis ticks */}
         {tickInfo.ticks.map((t) => {
           const x = (t - viewStart) * scale
-          const labelX =
-            x <= TICK_LABEL_EDGE_THRESHOLD
-              ? TICK_LABEL_EDGE_PADDING
-              : x >= chartWidth - TICK_LABEL_EDGE_THRESHOLD
-                ? chartWidth - TICK_LABEL_EDGE_PADDING
-                : x
-          const textAnchor =
-            x <= TICK_LABEL_EDGE_THRESHOLD
-              ? "start"
-              : x >= chartWidth - TICK_LABEL_EDGE_THRESHOLD
-                ? "end"
-                : "middle"
+          const { labelX, textAnchor } = getTickLabelPlacement(x, chartWidth)
           return (
             <g key={t}>
               <line
@@ -388,11 +347,7 @@ const FlameRow = memo(function FlameRow({
   return (
     <g transform={`translate(0, ${y})`}>
       {spans.map((span) => {
-        const rawX = (span.elapsed_start_s - viewStart) * scale
-        const rawEnd = (span.elapsed_end_s - viewStart) * scale
-        const x = Math.max(0, rawX)
-        const endX = Math.min(chartWidth, rawEnd)
-        const w = Math.max(MIN_VISIBLE_PX, endX - x)
+        const { x, width } = getSpanRect(span, viewStart, scale, chartWidth)
         const colors = getSpanColors(span)
         const isSelected = selectedId === span.id
         const isHovered = hoveredId === span.id
@@ -409,21 +364,21 @@ const FlameRow = memo(function FlameRow({
             <rect
               x={x}
               y={0}
-              width={w}
+              width={width}
               height={ROW_HEIGHT}
               rx={2}
               fill={isHovered ? colors.fillHover : colors.fill}
               stroke={isSelected ? SELECTED_STROKE : colors.stroke}
               strokeWidth={isSelected ? 1.5 : 0.5}
             />
-            {w > 36 ? (
+            {width > 36 ? (
               <text
                 x={x + 5}
                 y={ROW_HEIGHT / 2}
                 dominantBaseline="central"
                 className="pointer-events-none fill-slate-200 text-[11px]"
               >
-                {clipText(getSpanBarLabel(span), w - 10)}
+                {clipText(getSpanBarLabel(span), width - 10)}
               </text>
             ) : null}
           </g>
@@ -432,126 +387,3 @@ const FlameRow = memo(function FlameRow({
     </g>
   )
 })
-
-function clipText(text: string, maxWidth: number): string {
-  const approxCharWidth = 6.5
-  const maxChars = Math.floor(maxWidth / approxCharWidth)
-  if (text.length <= maxChars) return text
-  return maxChars > 3 ? `${text.slice(0, maxChars - 1)}…` : ""
-}
-
-function formatElapsedCompact(seconds: number): string {
-  if (seconds <= 0) return "0s"
-  if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`
-  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  return s > 0 ? `${m}m${s}s` : `${m}m`
-}
-
-function formatElapsedTooltip(seconds: number, spanDurationS: number): string {
-  if (spanDurationS >= 1) return formatElapsedCompact(seconds)
-  if (seconds <= 0) return "0s"
-  if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`
-  if (seconds < 60) return `${seconds.toFixed(3)}s`
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60)
-    const s = (seconds % 60).toFixed(3).padStart(6, "0")
-    return `${m}m ${s}s`
-  }
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = (seconds % 60).toFixed(3).padStart(6, "0")
-  return `${h}h ${String(m).padStart(2, "0")}m ${s}s`
-}
-
-function formatAxisTick(seconds: number, stepS: number): string {
-  if (stepS >= 10) return formatElapsedCompact(seconds)
-  if (seconds <= 0) return "0s"
-  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
-  if (seconds < 60) return `${seconds.toFixed(3)}s`
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60)
-    const s = (seconds % 60).toFixed(3).padStart(6, "0")
-    return `${m}m ${s}s`
-  }
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = (seconds % 60).toFixed(3).padStart(6, "0")
-  return `${h}h ${String(m).padStart(2, "0")}m ${s}s`
-}
-
-function getFlameSpanPersistenceKey(span: FlameSpan): string {
-  if (span.depth === "operation") {
-    return `operation:${span.operation}`
-  }
-
-  if (span.depth === "step") {
-    return `step:${span.operation}:${span.query_name ?? span.step_name}`
-  }
-
-  if (span.query_name !== null) {
-    return `query:${span.operation}:${span.query_name}:${span.iteration ?? 0}`
-  }
-
-  return `query:${span.operation}:${span.step_name}:${normalizeFlameQuerySql(span.query_sql)}:${span.iteration ?? 0}`
-}
-
-function normalizeFlameQuerySql(querySql: string | null): string {
-  return querySql?.replace(/\s+/g, " ").trim() ?? ""
-}
-
-function getSpanBreadcrumbLabel(span: FlameSpan): string {
-  if (span.depth === "operation") return span.operation
-  if (span.depth === "step") return span.query_name ?? span.step_name
-  if (span.iteration !== null && span.iteration > 1) {
-    return `${span.query_name ?? span.step_name} #${span.iteration}`
-  }
-  return span.query_name ?? span.step_name
-}
-
-function buildSelectedBreadcrumbs(spans: FlameSpan[], selectedSpan: FlameSpan | null): FlameSpan[] {
-  if (!selectedSpan) return []
-
-  const operationSpan =
-    spans.find((span) => span.depth === "operation" && span.operation === selectedSpan.operation) ??
-    (selectedSpan.depth === "operation" ? selectedSpan : null)
-  const stepLabel = selectedSpan.query_name ?? selectedSpan.step_name
-  const stepSpan =
-    spans.find(
-      (span) =>
-        span.depth === "step" &&
-        span.operation === selectedSpan.operation &&
-        (span.query_name ?? span.step_name) === stepLabel,
-    ) ?? (selectedSpan.depth === "step" ? selectedSpan : null)
-
-  const breadcrumbs: FlameSpan[] = []
-  const seen = new Set<string>()
-  const addBreadcrumb = (span: FlameSpan | null) => {
-    if (!span) return
-    if (seen.has(span.id)) return
-    seen.add(span.id)
-    breadcrumbs.push(span)
-  }
-
-  addBreadcrumb(operationSpan)
-  if (selectedSpan.depth !== "operation") addBreadcrumb(stepSpan)
-  if (selectedSpan.depth === "query") addBreadcrumb(selectedSpan)
-  return breadcrumbs
-}
-
-function buildTimeTicks(startS: number, endS: number): { ticks: number[]; stepS: number } {
-  const duration = endS - startS
-  if (duration <= 0) return { ticks: [startS], stepS: 1 }
-  const steps = [
-    0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600,
-    900, 1800, 3600,
-  ]
-  const targetCount = 6
-  const rawStep = duration / targetCount
-  const step = steps.find((s) => s >= rawStep) ?? Math.ceil(rawStep / 3600) * 3600
-  const firstTick = Math.ceil(startS / step) * step
-  const ticks: number[] = []
-  for (let t = firstTick; t <= endS; t += step) ticks.push(Number(t.toPrecision(10)))
-  return { ticks, stepS: step }
-}
