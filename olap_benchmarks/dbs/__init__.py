@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import lru_cache
 from multiprocessing import Queue
 from pathlib import Path
 from time import perf_counter, sleep
@@ -548,3 +549,27 @@ class Database(BaseModel, ABC):
             )
 
         _LOGGER.info(f"Finished benchmark run {self.run_id} with status={status} in {perf_counter() - t0:_.2f} seconds")
+
+
+@lru_cache(maxsize=1)
+def get_databases() -> dict[DatabaseName, Database]:
+    from .clickhouse import Clickhouse
+    from .duckdb import DuckDB
+    from .monetdb import MonetDB
+    from .postgres import Postgres
+    from .questdb import QuestDB
+    from .starrocks import StarRocks
+    from .timescaledb import TimescaleDB
+
+    databases: dict[DatabaseName, Database] = {
+        "monetdb": MonetDB(),
+        "clickhouse": Clickhouse(),
+        "timescaledb": TimescaleDB(),
+        "duckdb": DuckDB(),
+        "questdb": QuestDB(),
+        "postgres": Postgres(),
+        "starrocks": StarRocks(),
+    }
+
+    assert set(databases) == set(get_args(DatabaseName))
+    return databases

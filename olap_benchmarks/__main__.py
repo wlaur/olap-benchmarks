@@ -1,10 +1,11 @@
+import json
 import logging
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import cyclopts
 from setproctitle import setproctitle
 
+from .dbs import get_databases
 from .metrics.storage import start_writer_process
 from .results import (
     config as show_config,
@@ -34,6 +35,7 @@ from .settings import (
     resolve_suites,
     setup_stdout_logging,
 )
+from .suites import get_suite_preparer
 from .utils import run_shell
 
 if TYPE_CHECKING:
@@ -44,55 +46,12 @@ setup_stdout_logging()
 
 _LOGGER = logging.getLogger(__name__)
 
-_dbs: dict[DatabaseName, "Database"] | None = None
-
-SUITE_PREPARERS: dict[SuiteName, Callable[[], None]] = {}
-
-
-def _get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
-    if suite not in SUITE_PREPARERS:
-        from .suites.clickbench.config import prepare_data as clickbench_prepare
-        from .suites.kaggle_airbnb.config import prepare_data as kaggle_prepare
-        from .suites.rtabench.config import prepare_data as rtabench_prepare
-        from .suites.time_series.config import prepare_data as timeseries_prepare
-
-        SUITE_PREPARERS["rtabench"] = rtabench_prepare
-        SUITE_PREPARERS["clickbench"] = clickbench_prepare
-        SUITE_PREPARERS["time_series"] = timeseries_prepare
-        SUITE_PREPARERS["kaggle_airbnb"] = kaggle_prepare
-
-    return SUITE_PREPARERS[suite]
-
-
 app = cyclopts.App(name="olap", help="OLAP database benchmarking tool.")
+# the method itself is typed but takes **kwargs, which strict pyright rejects
 cast(Any, app).register_install_completion_command()
 
-
-def _get_dbs() -> dict[DatabaseName, "Database"]:
-    global _dbs
-
-    if _dbs is None:
-        from .dbs.clickhouse import Clickhouse
-        from .dbs.duckdb import DuckDB
-        from .dbs.monetdb import MonetDB
-        from .dbs.postgres import Postgres
-        from .dbs.questdb import QuestDB
-        from .dbs.starrocks import StarRocks
-        from .dbs.timescaledb import TimescaleDB
-
-        _dbs = {
-            "monetdb": MonetDB(),
-            "clickhouse": Clickhouse(),
-            "timescaledb": TimescaleDB(),
-            "duckdb": DuckDB(),
-            "questdb": QuestDB(),
-            "postgres": Postgres(),
-            "starrocks": StarRocks(),
-        }
-
-        assert set(_dbs) == set(get_args(DatabaseName))
-
-    return _dbs
+results_app = cyclopts.App(name="results", help="Inspect and manage the results database.")
+app.command(results_app)
 
 
 def _start_db(db_instance: "Database") -> None:
@@ -143,14 +102,6 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
         _LOGGER.warning(f"Cleanup for {db_name}:{suite_name} exited with code {rc}")
 
 
-@app.command
-def prepare(suite: SuiteArg) -> None:
-    """Generate input data files for a benchmark suite (e.g. Parquet files)."""
-    for suite_name in resolve_suites(suite):
-        _LOGGER.info(f"Preparing data for {suite_name}")
-        _get_suite_preparer(suite_name)()
-
-
 def _check_input_data(suite_name: SuiteName) -> None:
     input_dir = SETTINGS.input_data_directory / suite_name
 
@@ -158,6 +109,14 @@ def _check_input_data(suite_name: SuiteName) -> None:
         raise SystemExit(
             f"No input data found for suite '{suite_name}' at {input_dir}\nRun 'olap prepare {suite_name}' first."
         )
+
+
+@app.command
+def prepare(suite: SuiteArg) -> None:
+    """Generate input data files for a benchmark suite (e.g. Parquet files)."""
+    for suite_name in resolve_suites(suite):
+        _LOGGER.info(f"Preparing data for {suite_name}")
+        get_suite_preparer(suite_name)()
 
 
 @app.command
@@ -170,6 +129,9 @@ def benchmark(
     omit: list[DatabaseName] | None = None,
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically.
+
+    `db` and `suite` accept `all`, so `olap benchmark all all` runs every
+    supported operation of every suite against every database.
 
     If `--cleanup` is set, persistent db files (under OLAP_BENCHMARKS_DATABASE_DIRECTORY)
     and temp files (under OLAP_BENCHMARKS_TEMPORARY_DIRECTORY) for the (db, suite)
@@ -195,7 +157,7 @@ def benchmark(
                 continue
             for suite_name in suite_names:
                 _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
-                db_instance = _get_dbs()[db_name]
+                db_instance = get_databases()[db_name]
                 db_instance._current_suite = suite_name
                 db_instance.set_queues(writer.queue, writer.result_queue)
 
@@ -222,31 +184,12 @@ def benchmark(
                 _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
 
 
-@app.command(name="benchmark-all")
-def benchmark_all(
-    revision: Revision = "default",
-    cleanup: bool = False,
-    omit: list[DatabaseName] | None = None,
-) -> None:
-    """Run every supported operation of every suite against every database.
-
-    Equivalent to `olap benchmark all all` (with `operation=all`) and `cleanup`
-    forwarded. With `--cleanup`, persistent db files and temp files for each
-    (db, suite) combination are deleted after the run, so each combo starts
-    from a fresh state. Default is no cleanup.
-
-    Use `--omit <db>` (repeatable) to skip specific databases, e.g.
-    `olap benchmark-all --revision release --omit questdb`.
-    """
-    benchmark(db="all", suite="all", operation="all", revision=revision, cleanup=cleanup, omit=omit)
-
-
 @app.command
 def docker(db: DatabaseArg, suite: SuiteArg, command: Literal["start", "stop", "restart"]) -> None:
     """Manually start, stop, or restart a database container."""
     for db_name in resolve_dbs(db):
         for suite_name in resolve_suites(suite):
-            db_instance = _get_dbs()[db_name]
+            db_instance = get_databases()[db_name]
             db_instance._current_suite = suite_name
 
             match command:
@@ -259,32 +202,39 @@ def docker(db: DatabaseArg, suite: SuiteArg, command: Literal["start", "stop", "
                     _start_db(db_instance)
 
 
-results_app = cyclopts.App(name="results", help="Inspect and manage the results database.")
-app.command(results_app)
+@app.command
+def publish(revision: Revision = "default", merge: bool = False) -> None:
+    """Copy a results database to site/public/data for the webpage, with a manifest.
+
+    With `--merge`, runs from the revision are merged into the already published
+    results.db instead of replacing the whole file: runs matching an existing
+    (system, db, db_version, suite, operation, started_at) are replaced, new
+    runs are added, and everything else in the published file is kept.
+    """
+    output_dir, merge_stats = publish_results(revision=revision, merge=merge)
+
+    if merge_stats is not None:
+        print(
+            f"Merged revision '{revision}' into {output_dir}: "
+            f"{merge_stats.runs_added} run(s) added, {merge_stats.runs_replaced} replaced"
+        )
+    else:
+        print(f"Published revision '{revision}' to {output_dir}")
 
 
-def _print_runs(rows: list[dict[str, object]]) -> None:
-    import json
-
-    if not rows:
-        print("No runs found.")
-        return
-
-    print(json.dumps(rows, indent=2))
+@app.command
+def config(as_json: bool = False) -> None:
+    """Show current configuration from .env."""
+    show_config(as_json)
 
 
-def _confirm_delete(description: str, force: bool = False) -> None:
+def _confirm(description: str, force: bool = False) -> None:
     if force:
         return
 
     confirmation = input(f"Type 'yes' to {description}: ").strip()
     if confirmation != "yes":
         raise SystemExit("Aborted.")
-
-
-def _validate_delete_status(status: str) -> None:
-    if status not in {"failed", "orphaned"}:
-        raise SystemExit("`results delete --status` only supports 'failed' or 'orphaned'.")
 
 
 @results_app.command
@@ -296,41 +246,38 @@ def runs(
 ) -> None:
     """List benchmark runs, optionally filtered by status, suite, or db."""
     rows = list_runs(revision=revision, status=status, suite=suite, db=db)
-    _print_runs(rows)
 
+    if not rows:
+        print("No runs found.")
+        return
 
-@results_app.command(name="failed")
-def failed_runs(
-    suite: str | None = None,
-    db: str | None = None,
-    revision: Revision = "default",
-) -> None:
-    """List failed benchmark runs, optionally filtered by suite or db."""
-    rows = list_runs(revision=revision, status="failed", suite=suite, db=db)
-    _print_runs(rows)
+    print(json.dumps(rows, indent=2))
 
 
 @results_app.command(name="delete")
 def delete_cmd(
     run_id: list[int] | None = None,
-    status: str | None = None,
+    status: Literal["failed", "orphaned"] | None = None,
     revision: Revision = "default",
     force: bool = False,
 ) -> None:
-    """Delete runs (and their steps/metrics) by run ID or status (e.g. 'failed', 'orphaned')."""
+    """Delete runs (and their steps/metrics) by run ID or status.
+
+    `--status failed` deletes failed and orphaned runs, `--status orphaned`
+    only runs still marked as running.
+    """
     if run_id and status:
         raise SystemExit("Specify either --run-id or --status, not both.")
     if not run_id and not status:
         raise SystemExit("Specify --run-id or --status to select runs to delete.")
 
     if run_id:
-        _confirm_delete(f"delete {len(run_id)} run(s)", force=force)
+        _confirm(f"delete {len(run_id)} run(s)", force=force)
         count = delete_runs(run_id, revision=revision)
     else:
         assert status is not None
-        _validate_delete_status(status)
         description = "delete all failed and orphaned run(s)" if status == "failed" else "delete all orphaned run(s)"
-        _confirm_delete(description, force=force)
+        _confirm(description, force=force)
         count = delete_runs_by_status(status, revision=revision)
 
     print(f"Deleted {count} run(s) and their associated steps and metrics.")
@@ -365,32 +312,6 @@ def rename_database_cmd(old_name: str, new_name: str, revision: Revision = "defa
     """Rename a database name stored in a results database revision."""
     renamed_runs = rename_database(old_name, new_name, revision=revision)
     print(f"Renamed database '{old_name}' to '{new_name}' in {renamed_runs} run(s).")
-
-
-@app.command
-def publish(revision: Revision = "default", merge: bool = False) -> None:
-    """Copy a results database to site/public/data for the webpage, with a manifest.
-
-    With `--merge`, runs from the revision are merged into the already published
-    results.db instead of replacing the whole file: runs matching an existing
-    (system, db, db_version, suite, operation, started_at) are replaced, new
-    runs are added, and everything else in the published file is kept.
-    """
-    output_dir, merge_stats = publish_results(revision=revision, merge=merge)
-
-    if merge_stats is not None:
-        print(
-            f"Merged revision '{revision}' into {output_dir}: "
-            f"{merge_stats.runs_added} run(s) added, {merge_stats.runs_replaced} replaced"
-        )
-    else:
-        print(f"Published revision '{revision}' to {output_dir}")
-
-
-@app.command
-def config(as_json: bool = False) -> None:
-    """Show current configuration from .env."""
-    show_config(as_json)
 
 
 if __name__ == "__main__":

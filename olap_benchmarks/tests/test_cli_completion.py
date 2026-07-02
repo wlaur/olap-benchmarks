@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from cyclopts.exceptions import CoercionError
 
 from .. import __main__
 from ..__main__ import app
@@ -15,7 +16,7 @@ def test_cli_registers_install_completion_command() -> None:
     assert app.generate_completion(shell="zsh").splitlines()[0] == "#compdef olap"
 
 
-def test_failed_runs_shortcut_lists_failed_runs(
+def test_runs_lists_filtered_runs(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -46,7 +47,7 @@ def test_failed_runs_shortcut_lists_failed_runs(
 
     monkeypatch.setattr(__main__, "list_runs", fake_list_runs)
 
-    __main__.failed_runs(revision="candidate", suite="time_series", db="timescaledb")
+    __main__.runs(status="failed", revision="candidate", suite="time_series", db="timescaledb")
 
     assert capsys.readouterr().out == f"{json.dumps(rows, indent=2)}\n"
 
@@ -71,16 +72,9 @@ def test_delete_cmd_deletes_orphaned_runs_by_status(
     assert capsys.readouterr().out == "Deleted 2 run(s) and their associated steps and metrics.\n"
 
 
-def test_delete_cmd_rejects_completed_status(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def unexpected_delete_runs_by_status(_status: str, _revision: str = "default") -> int:
-        raise AssertionError("delete_runs_by_status should not be called")
-
-    monkeypatch.setattr(__main__, "delete_runs_by_status", unexpected_delete_runs_by_status)
-
-    with pytest.raises(SystemExit, match="only supports 'failed' or 'orphaned'"):
-        __main__.delete_cmd(status="completed")
+def test_delete_cmd_rejects_completed_status() -> None:
+    with pytest.raises(CoercionError):
+        app(["results", "delete", "--status", "completed"], exit_on_error=False)
 
 
 def test_delete_cmd_aborts_without_yes(
@@ -160,7 +154,7 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
 
-    def fake_get_dbs() -> dict[str, DummyDatabase]:
+    def fake_get_databases() -> dict[str, DummyDatabase]:
         return {"timescaledb": db_instance}
 
     def fake_start_db(_db: object) -> None:
@@ -177,7 +171,7 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
     monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
-    monkeypatch.setattr(__main__, "_get_dbs", fake_get_dbs)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
     monkeypatch.setattr(__main__, "mark_running_runs_failed", fake_mark_running_runs_failed)
@@ -230,7 +224,7 @@ def test_benchmark_all_uses_suite_supported_operations(
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
 
-    def fake_get_dbs() -> dict[DatabaseName, DummyDatabase]:
+    def fake_get_databases() -> dict[DatabaseName, DummyDatabase]:
         return {"clickhouse": db_instance}
 
     def fake_start_db(_db: DummyDatabase) -> None:
@@ -243,7 +237,7 @@ def test_benchmark_all_uses_suite_supported_operations(
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
     monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
-    monkeypatch.setattr(__main__, "_get_dbs", fake_get_dbs)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
 
