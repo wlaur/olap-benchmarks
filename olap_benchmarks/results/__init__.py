@@ -261,19 +261,22 @@ def list_runs(
         engine.dispose()
 
 
+def _delete_run_subtrees(session: Session, run_ids: list[int]) -> None:
+    session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
+    session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
+    session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
+    session.execute(delete(Run).where(Run.id.in_(run_ids)))
+    session.commit()
+
+
 def delete_runs(run_ids: list[int], revision: Revision = "default", db_path: Path | None = None) -> int:
     db_path = db_path or _require_revision(revision)
     engine = get_results_engine(read_only=False, db_path=db_path)
 
     try:
         with Session(engine) as session:
-            count = len(run_ids)
-            session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
-            session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
-            session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
-            session.execute(delete(Run).where(Run.id.in_(run_ids)))
-            session.commit()
-            return count
+            _delete_run_subtrees(session, run_ids)
+            return len(run_ids)
     finally:
         engine.dispose()
 
@@ -294,11 +297,7 @@ def delete_runs_by_status(status: str, revision: Revision = "default", db_path: 
             if not run_ids:
                 return 0
 
-            session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
-            session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
-            session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
-            session.execute(delete(Run).where(Run.id.in_(run_ids)))
-            session.commit()
+            _delete_run_subtrees(session, run_ids)
             return len(run_ids)
     finally:
         engine.dispose()

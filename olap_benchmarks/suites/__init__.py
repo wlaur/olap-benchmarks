@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -135,3 +135,17 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
 
     def mutate(self) -> None:
         raise NotImplementedError(f"{type(self).__name__} does not support the mutate operation")
+
+
+def get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
+    match suite:
+        case "rtabench":
+            from .rtabench.config import prepare_data
+        case "clickbench":
+            from .clickbench.config import prepare_data
+        case "time_series":
+            from .time_series.config import prepare_data
+        case "kaggle_airbnb":
+            from .kaggle_airbnb.config import prepare_data
+
+    return prepare_data
