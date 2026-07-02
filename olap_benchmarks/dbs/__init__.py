@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-import os
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from multiprocessing import Queue
@@ -18,6 +17,7 @@ from sqlalchemy import Connection, text
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
+from ..utils import run_shell
 from .utils import tracked_commit
 
 if TYPE_CHECKING:
@@ -171,7 +171,7 @@ class Database(BaseModel, ABC):
         return connection
 
     @contextmanager
-    def record_query_execution(self, query: str) -> Iterator[None]:
+    def record_query_execution(self, query: str) -> Generator[None]:
         stripped_query = query.strip()
 
         if not stripped_query or self._result_storage is None or self._run_id is None:
@@ -193,7 +193,7 @@ class Database(BaseModel, ABC):
             )
 
     @contextmanager
-    def phase_context(self, phase_name: str, table_name: str | None = None) -> Iterator[None]:
+    def phase_context(self, phase_name: str, table_name: str | None = None) -> Generator[None]:
         step_id = self._start_step("phase", phase_name, table_name=table_name)
         self._push_active_step(step_id)
 
@@ -213,13 +213,13 @@ class Database(BaseModel, ABC):
         self._finish_step(step_id=step_id, status="completed")
 
     @contextmanager
-    def event_context(self, name: str) -> Iterator[None]:
+    def event_context(self, name: str) -> Generator[None]:
         # Backwards-compatible alias for existing suite/database implementations.
         with self.phase_context(name):
             yield
 
     @contextmanager
-    def query_context(self, suite: SuiteName, query_name: str) -> Iterator[None]:
+    def query_context(self, suite: SuiteName, query_name: str) -> Generator[None]:
         self.context = QueryContext(suite=suite, query_name=query_name)
 
         try:
@@ -293,7 +293,7 @@ class Database(BaseModel, ABC):
         query_name: str,
         iteration: int,
         table_name: str | None = None,
-    ) -> Iterator[None]:
+    ) -> Generator[None]:
         step_id = self.start_mutation_step(query_name=query_name, iteration=iteration, table_name=table_name)
         self._push_active_step(step_id)
         try:
@@ -360,7 +360,7 @@ class Database(BaseModel, ABC):
 
         with self.phase_context("restart"):
             _LOGGER.info(f"Restarting service {self.name}")
-            os.system(cmd)
+            run_shell(cmd)
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 

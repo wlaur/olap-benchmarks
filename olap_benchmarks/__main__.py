@@ -1,5 +1,4 @@
 import logging
-import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 
@@ -35,6 +34,7 @@ from .settings import (
     resolve_suites,
     setup_stdout_logging,
 )
+from .utils import run_shell
 
 if TYPE_CHECKING:
     from .dbs import Database
@@ -100,7 +100,7 @@ def _start_db(db_instance: "Database") -> None:
     if cmd is not None:
         _stop_db(db_instance)
         _LOGGER.info(f"Starting {db_instance.name}: {cmd}")
-        os.system(cmd)
+        run_shell(cmd)
         db_instance.wait_until_accessible()
 
 
@@ -108,7 +108,7 @@ def _stop_db(db_instance: "Database") -> None:
     cmd = db_instance.stop
     if cmd is not None:
         _LOGGER.info(f"Stopping {db_instance.name}: {cmd}")
-        os.system(cmd)
+        run_shell(cmd)
 
 
 def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
@@ -138,7 +138,7 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
 
     cmd = f"docker run --rm {' '.join(mounts)} alpine sh -c 'rm -rf {' '.join(rm_paths)}'"
     _LOGGER.info(f"Cleaning up files for {db_name}:{suite_name}: {cmd}")
-    rc = os.system(cmd)
+    rc = run_shell(cmd)
     if rc != 0:
         _LOGGER.warning(f"Cleanup for {db_name}:{suite_name} exited with code {rc}")
 

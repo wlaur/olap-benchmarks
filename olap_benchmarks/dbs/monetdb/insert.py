@@ -1,7 +1,7 @@
 import logging
 import shutil
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -60,7 +60,7 @@ def _raise_insert_error(table: TableName, columns: Sequence[str], exc: Exception
 
 
 @contextmanager
-def _temporary_binary_directory() -> Iterator[Path]:
+def _temporary_binary_directory() -> Generator[Path]:
     temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 

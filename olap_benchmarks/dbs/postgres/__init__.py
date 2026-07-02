@@ -8,7 +8,6 @@ from typing import Any, ClassVar, cast
 
 import connectorx
 import polars as pl
-import pyarrow.parquet as pq
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
@@ -22,7 +21,7 @@ from ...suites.time_series.config import (
     get_time_series_table_name,
 )
 from .. import Database
-from ..utils import tracked_commit
+from ..utils import iter_parquet_frames, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -403,9 +402,8 @@ class PostgresTimeSeries(TimeSeries["Postgres"]):
         """Single-pass stream of `fpath` → unpivot → COPY. Replaces the previous
         offset-based loop that called `pl.scan_parquet().slice(offset, n)` per
         batch and re-decoded the parquet from the start each time."""
-        pf = pq.ParquetFile(fpath)
-        for batch_idx, arrow_batch in enumerate(pf.iter_batches(batch_size=self.PARQUET_STREAM_BATCH_ROWS), start=1):
-            df_wide = cast(pl.DataFrame, pl.from_arrow(arrow_batch))
+        frames = iter_parquet_frames(fpath, self.PARQUET_STREAM_BATCH_ROWS)
+        for batch_idx, df_wide in enumerate(frames, start=1):
             df_eav = self._wide_to_eav(df_wide)
             self.db.insert(df_eav, table_name)
             _LOGGER.info(

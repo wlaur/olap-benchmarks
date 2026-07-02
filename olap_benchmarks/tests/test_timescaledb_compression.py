@@ -39,7 +39,7 @@ class FakeTimescaleDB:
         return nullcontext()
 
 
-def test_timescaledb_time_series_compression_skips_too_wide_tables(
+def test_timescaledb_time_series_compresses_all_tables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connection = FakeConnection()
@@ -60,9 +60,9 @@ def test_timescaledb_time_series_compression_skips_too_wide_tables(
 
     executed_sql = "\n".join(connection.executed_sql)
 
-    assert "show_chunks('data_wide')" not in executed_sql
+    assert "show_chunks('data_wide')" in executed_sql
     assert "show_chunks('data_tall')" in executed_sql
     assert "vacuum freeze analyze data_wide" in executed_sql
     assert "vacuum freeze analyze data_tall" in executed_sql
-    assert connection.commit_calls == 1
+    assert connection.commit_calls == 2
     assert connection.rollback_calls == 0

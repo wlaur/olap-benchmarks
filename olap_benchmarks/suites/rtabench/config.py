@@ -3,7 +3,7 @@
 
 import asyncio
 import logging
-import os
+import subprocess
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -106,7 +106,7 @@ async def download_file(client: httpx.AsyncClient, url: str, dest_path: Path) ->
     response.raise_for_status()
     dest_path.write_bytes(response.content)
 
-    os.system(f"cd {dest_path.parent.as_posix()} && gzip -d {dest_path.name}")
+    subprocess.run(["gzip", "-d", dest_path.name], cwd=dest_path.parent, check=True)
 
     _LOGGER.info(f"Downloaded and extracted {dest_path.name}")
 

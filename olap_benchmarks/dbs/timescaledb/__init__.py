@@ -9,7 +9,6 @@ from typing import Any, ClassVar, cast
 
 import connectorx
 import polars as pl
-import pyarrow.parquet as pq
 from sqlalchemy import Connection, Engine, create_engine, text
 
 from ...settings import REPO_ROOT, SETTINGS, DatabaseName, TableName
@@ -24,7 +23,7 @@ from ...suites.time_series.config import (
 )
 from .. import Database
 from ..postgres import generate_create_table_sql, table_exists
-from ..utils import tracked_commit
+from ..utils import iter_parquet_frames, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -270,9 +269,7 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
             self._drain_completed(in_flight, self.MAX_PARALLEL_COMPRESSIONS * 2)
 
         try:
-            pf = pq.ParquetFile(fpath)
-            for arrow_batch in pf.iter_batches(batch_size=self.PARQUET_STREAM_BATCH_ROWS):
-                df = cast(pl.DataFrame, pl.from_arrow(arrow_batch))
+            for df in iter_parquet_frames(fpath, self.PARQUET_STREAM_BATCH_ROWS):
                 buffer.append(df)
                 buffer_rows += df.height
                 if buffer_rows >= target_wide_rows:
