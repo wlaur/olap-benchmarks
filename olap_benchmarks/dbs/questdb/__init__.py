@@ -9,6 +9,7 @@ from questdb.ingress import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
     CLICKBENCH_TIMESTAMP_COLUMNS,
@@ -350,6 +351,5 @@ class QuestDB(Database):
         # DROP PARTITION). Skipped via DISABLED_MUTATION_STEPS.
         raise NotImplementedError("QuestDB does not support row-level delete")
 
-    @property
-    def clickbench(self) -> QuestDBClickbench:
-        return QuestDBClickbench(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {**super().suite_registry(), "clickbench": QuestDBClickbench}

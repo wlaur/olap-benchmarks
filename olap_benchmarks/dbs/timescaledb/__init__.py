@@ -10,6 +10,7 @@ import polars as pl
 from sqlalchemy import Connection, Engine, create_engine, text
 
 from ...settings import REPO_ROOT, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
@@ -382,14 +383,10 @@ class TimescaleDB(Postgres):
 
         _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
-    @property
-    def rtabench(self) -> RTABench[Any]:
-        return TimescaleRTABench(db=self)
-
-    @property
-    def clickbench(self) -> Clickbench[Any]:
-        return TimescaleClickbench(db=self)
-
-    @property
-    def time_series(self) -> PostgresTimeSeries[Any]:
-        return TimescaleTimeSeries(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "rtabench": TimescaleRTABench,
+            "clickbench": TimescaleClickbench,
+            "time_series": TimescaleTimeSeries,
+        }

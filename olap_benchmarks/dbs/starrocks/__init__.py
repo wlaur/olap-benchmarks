@@ -5,12 +5,13 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import cast
+from typing import Any, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
     CLICKBENCH_TIMESTAMP_COLUMNS,
@@ -407,10 +408,9 @@ class StarRocks(Database):
         finally:
             self.execute(f"DROP TABLE IF EXISTS `{staging_table}`")
 
-    @property
-    def time_series(self) -> StarRocksTimeSeries:
-        return StarRocksTimeSeries(db=self)
-
-    @property
-    def clickbench(self) -> StarRocksClickbench:
-        return StarRocksClickbench(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "time_series": StarRocksTimeSeries,
+            "clickbench": StarRocksClickbench,
+        }

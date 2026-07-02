@@ -9,7 +9,7 @@ from functools import lru_cache
 from multiprocessing import Queue
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 import polars as pl
 from pydantic import BaseModel
@@ -23,10 +23,6 @@ from .utils import tracked_commit
 
 if TYPE_CHECKING:
     from ..suites import BenchmarkSuite
-    from ..suites.clickbench.config import Clickbench
-    from ..suites.kaggle_airbnb.config import KaggleAirbnb
-    from ..suites.rtabench.config import RTABench
-    from ..suites.time_series.config import TimeSeries
 
 _LOGGER = logging.getLogger(__name__)
 LiteralStepType = Literal["phase", "query", "mutation"]
@@ -437,36 +433,25 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None: ...
 
-    @property
-    def rtabench(self) -> RTABench[Any]:
-        from ..suites.rtabench.config import RTABench
-
-        return RTABench(db=self)
-
-    @property
-    def clickbench(self) -> Clickbench[Any]:
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
         from ..suites.clickbench.config import Clickbench
-
-        return Clickbench(db=self)
-
-    @property
-    def time_series(self) -> TimeSeries[Any]:
+        from ..suites.kaggle_airbnb.config import KaggleAirbnb
+        from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
 
-        return TimeSeries(db=self)
-
-    @property
-    def kaggle_airbnb(self) -> KaggleAirbnb[Any]:
-        from ..suites.kaggle_airbnb.config import KaggleAirbnb
-
-        return KaggleAirbnb(db=self)
+        return {
+            "rtabench": RTABench,
+            "clickbench": Clickbench,
+            "time_series": TimeSeries,
+            "kaggle_airbnb": KaggleAirbnb,
+        }
 
     @property
     def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
-        return cast(
-            "dict[SuiteName, BenchmarkSuite[Any]]",
-            {suite_name: getattr(self, suite_name) for suite_name in get_args(SuiteName)},
-        )
+        return {
+            suite_name: suite_class(db=self, name=suite_name)
+            for suite_name, suite_class in self.suite_registry().items()
+        }
 
     def benchmark(self, suite: SuiteName, operation: Operation) -> None:
         self._current_suite = suite

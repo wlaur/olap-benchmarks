@@ -15,7 +15,8 @@ import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
@@ -546,14 +547,10 @@ class Clickhouse(Database):
         finally:
             self._cleanup_temporary_parquet(temp_parquet_path)
 
-    @property
-    def rtabench(self) -> ClickHouseRTABench:
-        return ClickHouseRTABench(db=self)
-
-    @property
-    def clickbench(self) -> ClickhouseClickbench:
-        return ClickhouseClickbench(db=self)
-
-    @property
-    def time_series(self) -> ClickhouseTimeseries:
-        return ClickhouseTimeseries(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "rtabench": ClickHouseRTABench,
+            "clickbench": ClickhouseClickbench,
+            "time_series": ClickhouseTimeseries,
+        }
