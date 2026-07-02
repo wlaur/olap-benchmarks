@@ -11,6 +11,7 @@ from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
@@ -676,14 +677,10 @@ class Postgres(Database):
 
         _LOGGER.info(f"Deleted rows from {table} by primary key")
 
-    @property
-    def rtabench(self) -> RTABench[Any]:
-        return PostgresRTABench(db=self)
-
-    @property
-    def clickbench(self) -> Clickbench[Any]:
-        return PostgresClickbench(db=self)
-
-    @property
-    def time_series(self) -> PostgresTimeSeries[Any]:
-        return PostgresTimeSeries(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "rtabench": PostgresRTABench,
+            "clickbench": PostgresClickbench,
+            "time_series": PostgresTimeSeries,
+        }

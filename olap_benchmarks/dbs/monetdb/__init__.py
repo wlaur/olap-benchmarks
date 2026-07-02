@@ -5,7 +5,8 @@ from typing import Any, Literal, cast
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
@@ -214,10 +215,9 @@ class MonetDB(Database):
         tracked_commit(con)
         _LOGGER.info(f"Analyzed table {table}{' columns ' + ', '.join(columns) if columns else ''}")
 
-    @property
-    def time_series(self) -> MonetDBTimeSeries:
-        return MonetDBTimeSeries(db=self)
-
-    @property
-    def kaggle_airbnb(self) -> MonetDBKaggleAirbnb:
-        return MonetDBKaggleAirbnb(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "time_series": MonetDBTimeSeries,
+            "kaggle_airbnb": MonetDBKaggleAirbnb,
+        }
