@@ -1,16 +1,19 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
+import { buildElapsedTicks, formatDurationSeconds, formatElapsedSeconds } from "../lib/format"
 import {
-  buildElapsedTicks,
-  formatDurationSeconds,
-  formatElapsedSeconds,
-  toTitleCase,
-} from "../lib/format"
+  buildQueryColorMap,
+  buildTimelineData,
+  formatQueryLabel,
+  shortenQueryName,
+  type TimelineSegment,
+} from "../lib/timelineTransforms"
 import type { QueryStep } from "../lib/types"
 import { ControlChip, QuietButton } from "./controls/Control"
+import { PortalCard } from "./controls/Popover"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { PanelCard, PanelHeader } from "./layout/Panel"
-import { Skeleton } from "./Skeleton"
+import { Skeleton, SkeletonChips } from "./Skeleton"
 import { BodyText, SectionTitle } from "./Typography"
 
 interface RunTimelineProps {
@@ -25,35 +28,11 @@ interface RunTimelineProps {
   loading?: boolean
 }
 
-interface TimelineSegment {
-  db: string
-  query_name: string
-  iteration: number
-  start_s: number
-  end_s: number
-  duration_s: number
-}
-
 interface TooltipState {
   x: number
   y: number
   segment: TimelineSegment
 }
-
-const QUERY_COLORS = [
-  ["rgba(96, 165, 250, 0.58)", "rgba(147, 197, 253, 0.9)"],
-  ["rgba(251, 146, 60, 0.58)", "rgba(253, 186, 116, 0.9)"],
-  ["rgba(52, 211, 153, 0.58)", "rgba(110, 231, 183, 0.9)"],
-  ["rgba(250, 204, 21, 0.56)", "rgba(253, 224, 71, 0.9)"],
-  ["rgba(244, 114, 182, 0.56)", "rgba(251, 182, 206, 0.9)"],
-  ["rgba(168, 85, 247, 0.62)", "rgba(216, 180, 254, 0.92)"],
-  ["rgba(251, 113, 133, 0.56)", "rgba(253, 164, 175, 0.9)"],
-  ["rgba(45, 212, 191, 0.58)", "rgba(153, 246, 228, 0.9)"],
-  ["rgba(129, 140, 248, 0.6)", "rgba(199, 210, 254, 0.92)"],
-  ["rgba(245, 158, 11, 0.58)", "rgba(252, 211, 77, 0.9)"],
-  ["rgba(74, 222, 128, 0.58)", "rgba(134, 239, 172, 0.9)"],
-  ["rgba(192, 132, 252, 0.6)", "rgba(233, 213, 255, 0.92)"],
-] as const
 
 const ROW_HEIGHT = 32
 const ROW_GAP = 8
@@ -74,7 +53,6 @@ export function RunTimeline({
   description = "Full query execution timeline per database. Each segment represents one query iteration. Click to inspect.",
   loading = false,
 }: RunTimelineProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const [legendExpanded, setLegendExpanded] = useState(false)
@@ -107,13 +85,7 @@ export function RunTimeline({
     [filteredSteps, databases, compareQueryNames],
   )
 
-  const queryColorMap = useMemo(() => {
-    const map: Record<string, [string, string]> = {}
-    for (const [i, name] of queryNames.entries()) {
-      map[name] = QUERY_COLORS[i % QUERY_COLORS.length]! as [string, string]
-    }
-    return map
-  }, [queryNames])
+  const queryColorMap = useMemo(() => buildQueryColorMap(queryNames), [queryNames])
 
   const handleSegmentClick = useCallback(
     (queryName: string) => {
@@ -123,12 +95,9 @@ export function RunTimeline({
   )
 
   const handleSegmentEnter = useCallback((segment: TimelineSegment, event: React.MouseEvent) => {
-    const container = containerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
     setTooltip({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top - 8,
+      x: event.clientX,
+      y: event.clientY - 8,
       segment,
     })
   }, [])
@@ -145,20 +114,10 @@ export function RunTimeline({
             <SectionTitle as="h3">{title}</SectionTitle>
             <BodyText className="mt-1">{description}</BodyText>
           </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-6 w-16 rounded-full" />
-            <Skeleton className="h-6 w-20 rounded-full" />
-            <Skeleton className="h-6 w-20 rounded-full" />
-          </div>
+          <SkeletonChips widths={["w-16", "w-20", "w-20"]} className="gap-2" />
         </PanelHeader>
 
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <Skeleton className="h-6 w-18 rounded-full" />
-          <Skeleton className="h-6 w-20 rounded-full" />
-          <Skeleton className="h-6 w-16 rounded-full" />
-          <Skeleton className="h-6 w-24 rounded-full" />
-          <Skeleton className="h-6 w-20 rounded-full" />
-        </div>
+        <SkeletonChips widths={["w-18", "w-20", "w-16", "w-24", "w-20"]} className="mt-3" />
 
         <div className="relative mt-4 rounded-xl bg-surface-inset p-4">
           <div className="grid gap-3">
@@ -215,11 +174,7 @@ export function RunTimeline({
         onSelectQuery={onSelectQuery}
       />
 
-      <div
-        ref={containerRef}
-        className="relative mt-4 rounded-xl bg-surface-inset p-4"
-        style={{ height: chartHeight + 16 }}
-      >
+      <div className="mt-4 rounded-xl bg-surface-inset p-4" style={{ height: chartHeight + 16 }}>
         <svg ref={svgRef} width="100%" height={chartHeight} className="overflow-visible">
           {svgWidth > 0 ? (
             <SvgContent
@@ -239,8 +194,8 @@ export function RunTimeline({
         </svg>
 
         {tooltip ? (
-          <div
-            className="pointer-events-none absolute z-10 rounded-lg border border-border-default bg-[#161a23] px-3 py-2 text-xs text-slate-200 shadow-lg"
+          <PortalCard
+            className="pointer-events-none z-10 px-3 py-2 text-xs"
             style={{
               left: tooltip.x,
               top: tooltip.y,
@@ -252,7 +207,7 @@ export function RunTimeline({
               Iteration {tooltip.segment.iteration} ·{" "}
               {formatDurationSeconds(tooltip.segment.duration_s)}
             </p>
-          </div>
+          </PortalCard>
         ) : null}
       </div>
     </PanelCard>
@@ -450,62 +405,4 @@ function SvgContent({
       })}
     </g>
   )
-}
-
-function buildTimelineData(
-  steps: QueryStep[],
-  databases: string[],
-  compareQueryNames?: (left: string, right: string) => number,
-) {
-  const rawByDb = new Map<string, TimelineSegment[]>()
-  const queryNameSet = new Set<string>()
-
-  for (const step of steps) {
-    queryNameSet.add(step.query_name)
-
-    const dbSegments = rawByDb.get(step.db) ?? []
-    dbSegments.push({
-      db: step.db,
-      query_name: step.query_name,
-      iteration: step.iteration,
-      start_s: step.elapsed_start_s,
-      end_s: step.elapsed_end_s,
-      duration_s: step.duration_s,
-    })
-    rawByDb.set(step.db, dbSegments)
-  }
-
-  const segmentsByDb = new Map<string, TimelineSegment[]>()
-  let maxElapsed = 0
-
-  for (const [db, segs] of rawByDb) {
-    segs.sort((a, b) => a.start_s - b.start_s)
-    let cursor = 0
-    const packed = segs.map((seg) => {
-      const packedSeg = { ...seg, start_s: cursor, end_s: cursor + seg.duration_s }
-      cursor = packedSeg.end_s
-      return packedSeg
-    })
-    if (cursor > maxElapsed) maxElapsed = cursor
-    segmentsByDb.set(db, packed)
-  }
-
-  for (const db of databases) {
-    if (!segmentsByDb.has(db)) segmentsByDb.set(db, [])
-  }
-
-  const queryNames = Array.from(queryNameSet).sort(compareQueryNames)
-  maxElapsed = Math.max(1, Math.ceil(maxElapsed))
-
-  return { segmentsByDb, maxElapsed, queryNames }
-}
-
-function shortenQueryName(name: string): string {
-  const match = /^([a-z]+)_(\d+)/.exec(name)
-  if (!match) return name
-  return `${match[1]}_${match[2]}`
-}
-
-function formatQueryLabel(name: string): string {
-  return toTitleCase(name.replace(/_/g, " "))
 }

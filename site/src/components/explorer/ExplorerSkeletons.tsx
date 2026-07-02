@@ -1,25 +1,13 @@
 import { QUERY_COMPARISON_TABLE_MIN_WIDTH_CLASS } from "../QueryComparisonTable"
-import { Skeleton } from "../Skeleton"
+import { Skeleton, SkeletonChips } from "../Skeleton"
 import { BodyText, Eyebrow, FeatureTitle, MetaLabel } from "../Typography"
 
 export function FilterChipsSkeleton() {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      <Skeleton className="h-6 w-20 rounded-full" />
-      <Skeleton className="h-6 w-24 rounded-full" />
-      <Skeleton className="h-6 w-18 rounded-full" />
-      <Skeleton className="h-6 w-24 rounded-full" />
-    </div>
-  )
+  return <SkeletonChips widths={["w-20", "w-24", "w-18", "w-24"]} />
 }
 
 export function OverviewControlsSkeleton() {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5">
-      <Skeleton className="h-6 w-20 rounded-full" />
-      <Skeleton className="h-6 w-16 rounded-full" />
-    </div>
-  )
+  return <SkeletonChips widths={["w-20", "w-16"]} className="justify-end" />
 }
 
 export function OverviewChartSkeleton() {
