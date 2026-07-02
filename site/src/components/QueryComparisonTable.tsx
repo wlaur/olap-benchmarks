@@ -10,16 +10,11 @@ import {
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { createPortal } from "react-dom"
 
 import type { SelectionState } from "../hooks/useSelectionState"
 import { cn } from "../lib/cn"
-import {
-  clamp,
-  formatDurationSeconds,
-  formatMultiplier,
-  type DurationScaleMode,
-} from "../lib/format"
+import { formatDurationSeconds, formatMultiplier, type DurationScaleMode } from "../lib/format"
+import { InfoTooltip } from "./controls/Popover"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { InlineDurationBars } from "./InlineDurationBars"
 
@@ -203,12 +198,12 @@ export function QueryComparisonTable({
                                 onClick={header.column.getToggleSortingHandler()}
                               >
                                 {meta?.tooltip ? (
-                                  <HeaderInfoTooltip
+                                  <InfoTooltip
                                     label={meta.tooltipLabel ?? `Explain ${header.id}`}
-                                    tooltip={meta.tooltip}
+                                    content={meta.tooltip}
                                   >
                                     {headerContent}
-                                  </HeaderInfoTooltip>
+                                  </InfoTooltip>
                                 ) : (
                                   headerContent
                                 )}
@@ -379,85 +374,4 @@ function SortIcon({ direction }: { direction: false | "asc" | "desc" }) {
   }
 
   return <ArrowUpDown className="size-4 shrink-0 text-slate-500" />
-}
-
-interface HeaderWithTooltipProps {
-  label: string
-  tooltip: ReactNode
-  children: ReactNode
-}
-
-interface TooltipPosition {
-  left: number
-  top: number
-  placement: "top" | "bottom"
-}
-
-function HeaderInfoTooltip({ label, tooltip, children }: HeaderWithTooltipProps) {
-  const triggerRef = useRef<HTMLSpanElement | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
-  const [position, setPosition] = useState<TooltipPosition | null>(null)
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    function updatePosition() {
-      const trigger = triggerRef.current
-      if (!trigger) return
-
-      const rect = trigger.getBoundingClientRect()
-      const tooltipWidth = 288
-      const margin = 12
-      const gap = 10
-      const left = clamp(
-        rect.left + rect.width / 2 - tooltipWidth / 2,
-        margin,
-        window.innerWidth - tooltipWidth - margin,
-      )
-      const placement = rect.top > 120 ? "top" : "bottom"
-
-      setPosition({
-        left,
-        top: placement === "top" ? rect.top - gap : rect.bottom + gap,
-        placement,
-      })
-    }
-
-    updatePosition()
-    window.addEventListener("resize", updatePosition)
-    window.addEventListener("scroll", updatePosition, true)
-
-    return () => {
-      window.removeEventListener("resize", updatePosition)
-      window.removeEventListener("scroll", updatePosition, true)
-    }
-  }, [isOpen])
-
-  return (
-    <>
-      <span
-        ref={triggerRef}
-        aria-label={label}
-        onMouseEnter={() => setIsOpen(true)}
-        onMouseLeave={() => setIsOpen(false)}
-        className="transition-colors hover:text-slate-100"
-      >
-        {children}
-      </span>
-      {isOpen && position
-        ? createPortal(
-            <div
-              className={cn(
-                "pointer-events-none fixed z-[80] w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-border-default bg-surface-primary/98 px-3 py-2 text-xs leading-5 text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.4)]",
-                position.placement === "top" ? "-translate-y-full" : undefined,
-              )}
-              style={{ left: position.left, top: position.top }}
-            >
-              {tooltip}
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
-  )
 }

@@ -1,10 +1,10 @@
 import { HelpCircle, Trophy } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import { useCallback, useMemo, useRef, useState } from "react"
 
 import { cn } from "../../lib/cn"
 import { computeDatabaseScores, formatScore, SCORE_EXPLAINER } from "../../lib/score"
 import type { QuerySummary } from "../../lib/types"
+import { PortalCard, useAnchoredPosition, useDismissable } from "../controls/Popover"
 import { PanelCard } from "../layout/Panel"
 import { Skeleton } from "../Skeleton"
 import { MetaLabel, SectionTitle } from "../Typography"
@@ -104,45 +104,10 @@ function ScoreCard({ rank, db, score, wins, queryCount, missing, accent }: Score
 function ScoreInfoButton() {
   const [isOpen, setIsOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    function updatePosition() {
-      const trigger = triggerRef.current
-      if (!trigger) return
-      const rect = trigger.getBoundingClientRect()
-      setPosition({ left: rect.left, top: rect.bottom + 8 })
-    }
-    updatePosition()
-    window.addEventListener("resize", updatePosition)
-    window.addEventListener("scroll", updatePosition, true)
-    return () => {
-      window.removeEventListener("resize", updatePosition)
-      window.removeEventListener("scroll", updatePosition, true)
-    }
-  }, [isOpen])
-
-  useEffect(() => {
-    if (!isOpen) return
-    function handleClickOutside(event: MouseEvent) {
-      const trigger = triggerRef.current
-      if (!trigger || trigger.contains(event.target as Node)) return
-      const popover = document.querySelector("[data-score-explainer]")
-      if (popover && popover.contains(event.target as Node)) return
-      setIsOpen(false)
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsOpen(false)
-    }
-    window.addEventListener("mousedown", handleClickOutside)
-    window.addEventListener("keydown", handleKeyDown)
-    return () => {
-      window.removeEventListener("mousedown", handleClickOutside)
-      window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [isOpen])
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const position = useAnchoredPosition(isOpen, triggerRef, { align: "start", gap: 8 })
+  const close = useCallback(() => setIsOpen(false), [])
+  useDismissable(isOpen, close, triggerRef, popoverRef)
 
   return (
     <>
@@ -156,23 +121,20 @@ function ScoreInfoButton() {
       >
         <HelpCircle className="size-4" />
       </button>
-      {isOpen && position
-        ? createPortal(
-            <div
-              data-score-explainer
-              className="fixed z-50 w-80 max-w-[calc(100vw-1.5rem)] rounded-xl border border-border-default bg-surface-elevated p-4 text-sm text-slate-200 shadow-2xl"
-              style={{ left: position.left, top: position.top }}
-            >
-              <p className="text-sm font-semibold text-slate-50">{SCORE_EXPLAINER.title}</p>
-              <div className="mt-2 space-y-2 text-[13px] leading-relaxed text-slate-300">
-                {SCORE_EXPLAINER.body.map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {isOpen && position ? (
+        <PortalCard
+          ref={popoverRef}
+          className="w-80 max-w-[calc(100vw-1.5rem)] bg-surface-elevated p-4 text-sm"
+          style={{ left: position.left, top: position.top }}
+        >
+          <p className="text-sm font-semibold text-slate-50">{SCORE_EXPLAINER.title}</p>
+          <div className="mt-2 space-y-2 text-[13px] leading-relaxed text-slate-300">
+            {SCORE_EXPLAINER.body.map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+          </div>
+        </PortalCard>
+      ) : null}
     </>
   )
 }
