@@ -46,6 +46,21 @@ def tracked_commit(connection: SupportsCommit, recorder_source: object | None = 
         connection.commit()
 
 
+def normalize_columns(value: str | list[str] | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return value
+
+
+def require_columns(value: str | list[str], kind: str = "primary_key") -> list[str]:
+    columns = normalize_columns(value)
+    if not columns:
+        raise ValueError(f"{kind} must be a non-empty string or list of strings")
+    return columns
+
+
 def iter_parquet_frames(fpath: Path, batch_size: int) -> Iterator[pl.DataFrame]:
     parquet_file = cast(Any, pq.ParquetFile(fpath))
 

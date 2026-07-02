@@ -162,6 +162,23 @@ class Database(BaseModel, ABC):
         connection.info["olap_query_recorder"] = self.record_query_execution
         return connection
 
+    def execute(self, statement: str, commit: bool = True, autocommit: bool = False, reconnect: bool = False) -> None:
+        """Execute a single statement with query-execution recording.
+
+        `autocommit` reconnects and runs the statement outside a transaction
+        (needed for e.g. VACUUM). `commit` is ignored in that case.
+        """
+        con = self.connect(reconnect=reconnect or autocommit)
+
+        if autocommit:
+            con = con.execution_options(isolation_level="AUTOCOMMIT")
+
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+
+        if commit and not autocommit:
+            tracked_commit(con)
+
     @contextmanager
     def record_query_execution(self, query: str) -> Generator[None]:
         stripped_query = query.strip()
@@ -213,44 +230,7 @@ class Database(BaseModel, ABC):
         finally:
             self.current_query_name = None
 
-    def start_query_step(self, query_name: str, iteration: int) -> int:
-        return self._start_step(
-            step_type="query",
-            step_name="query",
-            query_name=query_name,
-            iteration=iteration,
-        )
-
-    def finish_query_step(
-        self,
-        step_id: int,
-        status: RunStatus,
-        row_count: int | None = None,
-        error_type: str | None = None,
-        error_message: str | None = None,
-        duration_ms: float | None = None,
-    ) -> None:
-        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
-
-        self._finish_step(
-            step_id=step_id,
-            status=status,
-            row_count=row_count,
-            error_type=error_type,
-            error_message=error_message,
-            metadata=metadata,
-        )
-
-    def start_mutation_step(self, query_name: str, iteration: int, table_name: str | None = None) -> int:
-        return self._start_step(
-            step_type="mutation",
-            step_name="mutation",
-            query_name=query_name,
-            iteration=iteration,
-            table_name=table_name,
-        )
-
-    def finish_mutation_step(
+    def _finish_timed_step(
         self,
         step_id: int,
         status: RunStatus,
@@ -280,14 +260,16 @@ class Database(BaseModel, ABC):
         iteration: int,
         table_name: str | None = None,
     ) -> Generator[None]:
-        step_id = self.start_mutation_step(query_name=query_name, iteration=iteration, table_name=table_name)
+        step_id = self._start_step(
+            "mutation", "mutation", query_name=query_name, iteration=iteration, table_name=table_name
+        )
         self._push_active_step(step_id)
         try:
             t0 = perf_counter()
             yield
             duration_seconds = perf_counter() - t0
         except BaseException as exc:
-            self.finish_mutation_step(
+            self._finish_timed_step(
                 step_id=step_id,
                 status="failed",
                 error_type=type(exc).__name__,
@@ -297,7 +279,7 @@ class Database(BaseModel, ABC):
         finally:
             self._pop_active_step(step_id)
 
-        self.finish_mutation_step(
+        self._finish_timed_step(
             step_id=step_id,
             status="completed",
             duration_ms=1_000 * duration_seconds,
@@ -310,7 +292,7 @@ class Database(BaseModel, ABC):
         query: str,
         fetch_kwargs: Mapping[str, Any] | None = None,
     ) -> tuple[pl.DataFrame, float]:
-        step_id = self.start_query_step(query_name=query_name, iteration=iteration)
+        step_id = self._start_step("query", "query", query_name=query_name, iteration=iteration)
         self._push_active_step(step_id)
 
         kwargs = dict(fetch_kwargs or {})
@@ -320,7 +302,7 @@ class Database(BaseModel, ABC):
             df = self.fetch(query, **kwargs)
             duration_seconds = perf_counter() - t0
         except BaseException as exc:
-            self.finish_query_step(
+            self._finish_timed_step(
                 step_id=step_id,
                 status="failed",
                 error_type=type(exc).__name__,
@@ -330,7 +312,7 @@ class Database(BaseModel, ABC):
         finally:
             self._pop_active_step(step_id)
 
-        self.finish_query_step(
+        self._finish_timed_step(
             step_id=step_id,
             status="completed",
             row_count=df.shape[0],
@@ -362,10 +344,7 @@ class Database(BaseModel, ABC):
 
             # ensure the connection used when initializing the schema is not reused
             # if we use e.g. alter database, it's important that subsequent queries use a new connection
-            con = self.connect(reconnect=True)
-            with self.record_query_execution(stmt):
-                con.execute(text(stmt))
-            tracked_commit(con)
+            self.execute(stmt, reconnect=True)
 
     def initialize_schema(self, suite: SuiteName) -> None:
         fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite}/schemas/{self.name}.sql"

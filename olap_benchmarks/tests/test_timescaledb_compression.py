@@ -1,4 +1,4 @@
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -35,8 +35,20 @@ class FakeTimescaleDB:
     def connect(self, reconnect: bool = False) -> FakeConnection:
         return self.connection
 
-    def record_query_execution(self, _query: str) -> object:
+    def record_query_execution(self, _query: str) -> AbstractContextManager[None]:
         return nullcontext()
+
+    def execute(self, statement: str, commit: bool = True, autocommit: bool = False, reconnect: bool = False) -> None:
+        con = self.connect(reconnect=reconnect or autocommit)
+
+        if autocommit:
+            con = con.execution_options(isolation_level="AUTOCOMMIT")
+
+        with self.record_query_execution(statement):
+            con.execute(statement)
+
+        if commit and not autocommit:
+            con.commit()
 
 
 def test_timescaledb_time_series_compresses_all_tables(
