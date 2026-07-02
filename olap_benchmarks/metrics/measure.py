@@ -2,6 +2,7 @@ import logging
 import os
 import platform
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from time import sleep
 from typing import Any, cast
@@ -49,7 +50,9 @@ def get_docker_socket() -> str:
     )
 
 
-DOCKER_CLIENT = docker.DockerClient(base_url=get_docker_socket())
+@lru_cache(maxsize=1)
+def get_docker_client() -> docker.DockerClient:
+    return docker.DockerClient(base_url=get_docker_socket())
 
 
 class BenchmarkMetric(BaseModel):
@@ -111,7 +114,7 @@ def get_container_metrics(db: DatabaseName, suite: SuiteName) -> BenchmarkMetric
         # reads and processes input Parquet files
         return get_main_process_metrics(db, suite)
 
-    container = cast(Any, DOCKER_CLIENT.containers).get(get_container_name(db))
+    container = cast(Any, get_docker_client().containers).get(get_container_name(db))
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = cast(dict[str, Any], container.stats(stream=False))

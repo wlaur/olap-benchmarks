@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, nullcontext
-from typing import Protocol, cast
+from pathlib import Path
+from typing import Any, Protocol, cast
 
+import polars as pl
+import pyarrow.parquet as pq
 from sqlalchemy import Connection, text
 
 from ..settings import TableName
@@ -41,6 +44,13 @@ def record_query_execution_context(
 def tracked_commit(connection: SupportsCommit, recorder_source: object | None = None) -> None:
     with record_query_execution_context("COMMIT", recorder_source or connection):
         connection.commit()
+
+
+def iter_parquet_frames(fpath: Path, batch_size: int) -> Iterator[pl.DataFrame]:
+    parquet_file = cast(Any, pq.ParquetFile(fpath))
+
+    for batch in parquet_file.iter_batches(batch_size=batch_size):
+        yield cast(pl.DataFrame, cast(Any, pl).from_arrow(batch))
 
 
 def drop_table(table: TableName, connection: Connection, commit: bool = True) -> None:

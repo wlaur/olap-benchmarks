@@ -9,6 +9,7 @@ RESULT_TABLES = [
     "run",
     "run_step",
     "run_metric",
+    "query_execution",
     "debug",
 ]
 

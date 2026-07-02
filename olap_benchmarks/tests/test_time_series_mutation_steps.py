@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, cast
@@ -47,7 +47,7 @@ class FakeMutationDB(Database):
         return step_name not in self.disabled_steps
 
     @contextmanager
-    def mutation_context(self, query_name: str, iteration: int, table_name: str | None = None) -> Iterator[None]:
+    def mutation_context(self, query_name: str, iteration: int, table_name: str | None = None) -> Generator[None]:
         self.executed_steps.append((query_name, iteration, table_name))
         yield
 

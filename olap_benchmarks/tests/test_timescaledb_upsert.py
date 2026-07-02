@@ -30,15 +30,19 @@ class FakeTimescaleDB:
         return self.connection
 
 
-def test_timescaledb_time_series_primary_keys_match_mutation_keys() -> None:
+def test_timescaledb_time_series_tables_have_no_primary_keys() -> None:
     suite = TimescaleTimeSeries.model_construct(
         db=FakeTimescaleDB(FakeConnection()),
         name="time_series",
     )
 
-    assert suite.get_primary_key("data_tall") == "time"
-    assert suite.get_primary_key("data_wide") == "time"
-    assert suite.get_primary_key("data_large") == "time"
+    assert suite.get_primary_key("data_tall") is None
+    assert suite.get_primary_key("data_wide") is None
+    assert suite.get_primary_key("data_large") is None
+
+    assert suite.get_not_null("data_tall") == "time"
+    assert suite.get_not_null("data_wide") == ["time", "metric_name"]
+    assert suite.get_not_null("data_large") == ["time", "metric_name"]
 
 
 def test_timescaledb_upsert_uses_on_conflict_instead_of_delete_insert(
