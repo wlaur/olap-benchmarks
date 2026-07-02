@@ -4,7 +4,6 @@ export interface BenchmarkDefinition {
   id: BenchmarkSuiteId
   navLabel: string
   title: string
-  summary: string
 }
 
 export const benchmarkDefinitions: BenchmarkDefinition[] = [
@@ -12,29 +11,21 @@ export const benchmarkDefinitions: BenchmarkDefinition[] = [
     id: "time_series",
     navLabel: "Time Series",
     title: "Time Series",
-    summary:
-      "Query-pattern and scale-sensitive latency comparisons for wide time-series workloads.",
   },
   {
     id: "rtabench",
     navLabel: "RTABench",
     title: "RTABench",
-    summary:
-      "Operational event-analytics workloads with a distinct visualization surface still to be designed.",
   },
   {
     id: "clickbench",
     navLabel: "ClickBench",
     title: "ClickBench",
-    summary:
-      "Analytical scan-heavy benchmark with a page scaffold ready for a dedicated presentation.",
   },
   {
     id: "kaggle_airbnb",
     navLabel: "Kaggle Airbnb",
     title: "Kaggle Airbnb",
-    summary:
-      "Join-oriented Airbnb analytics benchmark with a page scaffold ready for a dedicated presentation.",
   },
 ]
 

@@ -50,8 +50,6 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     filteredQuerySummaries,
     filteredMutateSummaries,
     filteredOperationSummaries,
-    filteredQuerySteps,
-    filteredMutateSteps,
     isLoading,
     toggleDatabase,
   } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
@@ -164,8 +162,8 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
             suiteConfig={suiteConfig}
             querySummaries={filteredQuerySummaries}
             mutateSummaries={filteredMutateSummaries}
-            querySteps={filteredQuerySteps}
-            mutateSteps={filteredMutateSteps}
+            querySteps={state.querySteps}
+            mutateSteps={state.mutateSteps}
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={state.queriesManifest}
@@ -210,8 +208,8 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
                   suiteConfig={suiteConfig}
                   metricSamples={state.metricSamples}
                   insertSteps={state.insertSteps}
-                  querySteps={filteredQuerySteps}
-                  mutateSteps={filteredMutateSteps}
+                  querySteps={state.querySteps}
+                  mutateSteps={state.mutateSteps}
                   databases={includedDatabases}
                   isLoading={deferredLoading}
                 />

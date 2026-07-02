@@ -64,8 +64,6 @@ export interface UseSuiteDataResult {
   filteredQuerySummaries: QuerySummary[]
   filteredMutateSummaries: QuerySummary[]
   filteredOperationSummaries: OperationSummary[]
-  filteredQuerySteps: QueryStep[]
-  filteredMutateSteps: QueryStep[]
   isLoading: boolean
   toggleDatabase: (database: string) => void
 }
@@ -211,9 +209,6 @@ export function useSuiteData(
     [state.operationSummaries, includedDatabaseSet],
   )
 
-  const filteredQuerySteps = state.querySteps
-  const filteredMutateSteps = state.mutateSteps
-
   const isLoading = isSystemLoading || state.loading
 
   const toggleDatabase = useCallback((database: string) => {
@@ -235,8 +230,6 @@ export function useSuiteData(
     filteredQuerySummaries,
     filteredMutateSummaries,
     filteredOperationSummaries,
-    filteredQuerySteps,
-    filteredMutateSteps,
     isLoading,
     toggleDatabase,
   }
