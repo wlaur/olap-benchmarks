@@ -153,7 +153,7 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
             codec = self._column_codec(name, dtype)
             columns_def.append(f"`{name}` {sql_type}{(' ' + codec) if codec else ''}")
 
-        order_by = self.db._get_order_by_columns(df, primary_key, not_null)
+        order_by = self.db.get_order_by_columns(df, primary_key, not_null)
         order_by_clause = f"ORDER BY ({order_by})" if order_by is not None else ""
 
         partition_clause = f"PARTITION BY {self.PARTITION_EXPR}" if self.PARTITION_EXPR else ""
@@ -323,7 +323,7 @@ class Clickhouse(Database):
         key_tuple = ", ".join(primary_keys)
         return f"({key_tuple}) in (select distinct {key_tuple} from file('{input_file_string}', parquet))"
 
-    def _get_order_by_columns(
+    def get_order_by_columns(
         self,
         df: pl.DataFrame | pl.LazyFrame,
         primary_key: str | list[str] | None,
@@ -475,7 +475,7 @@ class Clickhouse(Database):
                 # time is read as epoch integer by default
                 time_col_def = "toDateTime(time) AS time," if "time" in columns else ""
 
-                order_by = self._get_order_by_columns(df, primary_key, not_null)
+                order_by = self.get_order_by_columns(df, primary_key, not_null)
                 order_by_clause = f"order by ({order_by})" if order_by is not None else ""
 
                 sql = f"""

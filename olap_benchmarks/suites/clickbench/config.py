@@ -23,6 +23,12 @@ def prepare_data() -> None:
     raise NotImplementedError
 
 
+# The source parquet stores these as epoch integers; every engine's populate
+# path must cast them to real timestamp/date columns.
+CLICKBENCH_TIMESTAMP_COLUMNS = ("EventTime", "ClientEventTime", "LocalEventTime")
+CLICKBENCH_DATE_COLUMNS = ("EventDate",)
+
+
 class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "clickbench"
 
@@ -31,13 +37,10 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
 
     def load_dataset(self) -> pl.LazyFrame:
         # parquet file stores these as integers, the schema expects correct dtypes
-        timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
-        date_columns = ["EventDate"]
-
         return (
             pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
-            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
-            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
+            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in CLICKBENCH_TIMESTAMP_COLUMNS)
+            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in CLICKBENCH_DATE_COLUMNS)
         )
 
     @property
