@@ -155,7 +155,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
             if not self.include_query(query_name):
                 continue
 
-            with self.db.query_context(self.name, query_name):
+            with self.db.query_context(query_name):
                 query = self.load_kaggle_airbnb_query(query_name)
 
                 for it in range(1, iterations + 1):

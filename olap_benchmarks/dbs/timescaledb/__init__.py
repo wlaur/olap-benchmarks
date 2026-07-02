@@ -5,9 +5,8 @@ from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import ClassVar, cast
 
-import connectorx
 import polars as pl
 from sqlalchemy import Connection, Engine, create_engine, text
 
@@ -439,12 +438,6 @@ class TimescaleDB(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
-        # fetch_python is fastest for small result sets
-        # fetch_connectorx might be better for large results and simple queries
-        # (e.g. "select time, col_23 from data order by time")
-        # fetch_polars is slightly slower than fetch_connectorx
-
-        # schemas do not match exactly between these (i32 vs i64 for example)
         return self.fetch_python(query, schema)
 
     def get_table_names(self) -> set[TableName]:
@@ -475,45 +468,6 @@ class TimescaleDB(Database):
             return pl.DataFrame({col: [] for col in columns})
 
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def fetch_connectorx(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        with self.record_query_execution(query):
-            df = cast(
-                pl.DataFrame,
-                cast(Any, connectorx).read_sql(
-                    TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
-                ),
-            )
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def fetch_polars(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        # (maybe) emits a separate "select ... limit 1" query to determine the output schema
-        # avoid doing this for complex queries with small result sizes
-        # not clear if postgres actually does this, could check source if this is important to know
-        # engine="adbc" is slower that "connectorx"
-        with self.record_query_execution(query):
-            df = pl.read_database_uri(
-                query.strip().removesuffix(";"),
-                TIMESCALEDB_CONNECTION_STRING,
-                engine="connectorx",
-            )
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
