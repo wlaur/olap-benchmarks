@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -95,6 +95,23 @@ class Database(BaseModel, ABC):
     @property
     @abstractmethod
     def start(self) -> str | None: ...
+
+    def docker_run_command(
+        self,
+        image: str,
+        ports: Mapping[str, str] | None = None,
+        mounts: Mapping[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
+        args: Sequence[str] = (),
+        platform: str = "linux/amd64",
+    ) -> str:
+        parts = [f"docker run --platform {platform} --name {self.name}-benchmark --rm -d"]
+        parts.extend(f"-p {host}:{container}" for host, container in (ports or {}).items())
+        parts.extend(f"-v {src}:{dst}" for src, dst in (mounts or {}).items())
+        parts.extend(f"-e {key}={value}" for key, value in (env or {}).items())
+        parts.append(image)
+        parts.extend(args)
+        return " ".join(parts)
 
     @property
     def stop(self) -> str | None:

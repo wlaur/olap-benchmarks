@@ -20,6 +20,7 @@ from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from .. import Database
+from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -177,12 +178,7 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
-        if not_null is None:
-            normalized: list[str] = []
-        elif isinstance(not_null, str):
-            normalized = [not_null]
-        else:
-            normalized = list(not_null)
+        normalized = normalize_columns(not_null)
 
         if table_name not in self.db.get_table_names():
             self._create_time_series_table(df, table_name, primary_key, normalized)
@@ -205,19 +201,21 @@ class Clickhouse(Database):
     def start(self) -> str:
         (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
-        parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 18123:8123 -p 19000:9000",
-            f"-v {self.database_directory.as_posix()}:/var/lib/clickhouse",
-            f"-v {SETTINGS.temporary_directory.as_posix()}/clickhouse/data:/var/lib/clickhouse/user_files",
-            # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
-            "-e CLICKHOUSE_DB=default",
-            "-e CLICKHOUSE_PASSWORD=password",
-            "-e CLICKHOUSE_USER=user",
-            "-e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1",
+        return self.docker_run_command(
             DOCKER_IMAGE,
-        ]
-
-        return " ".join(parts)
+            ports={"18123": "8123", "19000": "9000"},
+            mounts={
+                self.database_directory.as_posix(): "/var/lib/clickhouse",
+                f"{SETTINGS.temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
+            },
+            env={
+                # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
+                "CLICKHOUSE_DB": "default",
+                "CLICKHOUSE_PASSWORD": "password",
+                "CLICKHOUSE_USER": "user",
+                "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
+            },
+        )
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
@@ -452,11 +450,7 @@ class Clickhouse(Database):
         not_null: str | list[str] | None = None,
         partitions: int | None = None,
     ) -> None:
-        if not_null is None:
-            not_null = []
-
-        if isinstance(not_null, str):
-            not_null = [not_null]
+        not_null = normalize_columns(not_null)
 
         schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
         columns = list(schema.names())
@@ -523,7 +517,7 @@ class Clickhouse(Database):
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
         try:
-            pk_list = [primary_key] if isinstance(primary_key, str) else primary_key
+            pk_list = normalize_columns(primary_key)
 
             where_clause = self._build_key_filter(input_file_string, pk_list)
             delete_sql = f"delete from {table} where {where_clause}"
@@ -540,10 +534,7 @@ class Clickhouse(Database):
             self._cleanup_temporary_parquet(temp_parquet_path)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
 
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(keys, temp_dir, None)
