@@ -96,17 +96,16 @@ class MonetDB(Database):
     def start(self) -> str:
         (SETTINGS.temporary_directory / "monetdb/data").mkdir(exist_ok=True, parents=True)
 
-        parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 50000:50000",
-            f"-v {self.database_directory.as_posix()}:/var/monetdb5/dbfarm",
-            f"-v {SETTINGS.temporary_directory.as_posix()}/monetdb/data:/data"
-            if not MONETDB_SETTINGS.client_file_transfer
-            else "",
-            "-e MDB_DB_ADMIN_PASS=monetdb -e MDB_CREATE_DBS=benchmark",
-            DOCKER_IMAGE,
-        ]
+        mounts = {self.database_directory.as_posix(): "/var/monetdb5/dbfarm"}
+        if not MONETDB_SETTINGS.client_file_transfer:
+            mounts[f"{SETTINGS.temporary_directory.as_posix()}/monetdb/data"] = "/data"
 
-        return " ".join(parts)
+        return self.docker_run_command(
+            DOCKER_IMAGE,
+            ports={"50000": "50000"},
+            mounts=mounts,
+            env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},
+        )
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:

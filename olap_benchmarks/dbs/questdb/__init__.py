@@ -11,7 +11,6 @@ from sqlalchemy import Connection, create_engine, text
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites.clickbench.config import Clickbench
 from .. import Database
-from ..utils import tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,11 +77,8 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
         _LOGGER.info(f"Sorted source hits.parquet ({count:_} rows) to {fpath}")
 
         with self.db.phase_context("insert", table_name="hits"):
-            con = self.db.connect()
-            statement = _build_clickbench_insert(con, fpath.name, timestamp_columns, date_columns)
-            with self.db.record_query_execution(statement):
-                con.execute(text(statement))
-            tracked_commit(con)
+            statement = _build_clickbench_insert(self.db.connect(), fpath.name, timestamp_columns, date_columns)
+            self.db.execute(statement)
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
             self.db.wait_until_count("hits", count)
@@ -126,15 +122,15 @@ class QuestDB(Database):
     def start(self) -> str:
         (SETTINGS.temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
 
-        parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 9000:9000 -p 8812:8812",
-            f"-v {self.database_directory.as_posix()}:/var/lib/questdb",
-            f"-v {SETTINGS.temporary_directory.as_posix()}/questdb/data:/import",
-            "-e QDB_CAIRO_SQL_COPY_ROOT=/import",
+        return self.docker_run_command(
             DOCKER_IMAGE,
-        ]
-
-        return " ".join(parts)
+            ports={"9000": "9000", "8812": "8812"},
+            mounts={
+                self.database_directory.as_posix(): "/var/lib/questdb",
+                f"{SETTINGS.temporary_directory.as_posix()}/questdb/data": "/import",
+            },
+            env={"QDB_CAIRO_SQL_COPY_ROOT": "/import"},
+        )
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
@@ -230,8 +226,7 @@ class QuestDB(Database):
 
         if isinstance(df, pl.LazyFrame):
             if method == "parquet":
-                df = df.with_columns(*cast_expr)
-                self.insert_parquet_lazy(df, table, primary_key, not_null)
+                self.insert_parquet(df.with_columns(*cast_expr), table, primary_key, not_null)
                 return
 
             _LOGGER.warning("QuestDB LazyFrame insert with sender method requires collecting to DataFrame")
@@ -294,15 +289,20 @@ class QuestDB(Database):
 
     def insert_parquet(
         self,
-        df: pl.DataFrame,
+        df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
         parquet_fname = f"{table}_{uuid.uuid4().hex}.parquet"
-
         parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname
-        df.write_parquet(parquet_fpath)
+
+        if isinstance(df, pl.LazyFrame):
+            df.sink_parquet(parquet_fpath)
+            row_count: int = pl.scan_parquet(parquet_fpath).select(pl.len()).collect().item(0, 0)
+        else:
+            df.write_parquet(parquet_fpath)
+            row_count = len(df)
 
         # TODO: issue with parquet file not being accessible by questdb even if it is completely written
         # intermittent issue, sleeping for 100 ms seems to fix it
@@ -328,59 +328,13 @@ class QuestDB(Database):
                     )
                     """
 
-            with self.record_query_execution(statement):
-                con.execute(text(statement))
-            tracked_commit(con)
-            self.wait_until_count(table, initial_count + len(df))
-
-        finally:
-            parquet_fpath.unlink()
-
-        _LOGGER.info(f"Inserted table {table}")
-
-    def insert_parquet_lazy(
-        self,
-        df: pl.LazyFrame,
-        table: TableName,
-        primary_key: str | list[str] | None = None,
-        not_null: str | list[str] | None = None,
-    ) -> None:
-        parquet_fname = f"{table}_{uuid.uuid4().hex}.parquet"
-        parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname
-
-        df.sink_parquet(parquet_fpath)
-        row_count: int = pl.scan_parquet(parquet_fpath).select(pl.len()).collect().item(0, 0)
-
-        sleep(0.1)
-
-        try:
-            con = self.connect()
-            with self.record_query_execution("show tables"):
-                tables = [n[0] for n in con.execute(text("show tables")).fetchall()]
-
-            if table in tables:
-                initial_count = self.get_count(table)
-                statement = f"""
-                    insert into {table}
-                    select * from read_parquet('{parquet_fname}')
-                    """
-            else:
-                initial_count = 0
-                statement = f"""
-                    create table {table} as (
-                        select * from read_parquet('{parquet_fname}')
-                    )
-                    """
-
-            with self.record_query_execution(statement):
-                con.execute(text(statement))
-            tracked_commit(con)
+            self.execute(statement)
             self.wait_until_count(table, initial_count + row_count)
 
         finally:
             parquet_fpath.unlink()
 
-        _LOGGER.info(f"Inserted table {table} ({row_count:_} rows via sink_parquet)")
+        _LOGGER.info(f"Inserted table {table} ({row_count:_} rows)")
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         # QuestDB has no DELETE statement, so there's no fast in-place upsert

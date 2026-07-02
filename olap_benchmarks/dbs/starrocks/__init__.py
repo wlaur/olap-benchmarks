@@ -14,7 +14,7 @@ from ...settings import SETTINGS, DatabaseName, TableName
 from ...suites.clickbench.config import Clickbench
 from ...suites.time_series.config import TimeSeries
 from .. import Database
-from ..utils import tracked_commit
+from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -126,9 +126,7 @@ class StarRocksClickbench(Clickbench["StarRocks"]):
         )
 
         with self.db.phase_context("insert", table_name="hits"):
-            with self.db.record_query_execution(sql):
-                con.execute(text(sql))
-            tracked_commit(con)
+            self.db.execute(sql)
             _LOGGER.info("Inserted clickbench table for starrocks")
 
         dst.unlink()
@@ -168,15 +166,16 @@ class StarRocks(Database):
 
         # See VERSION comment above for why this is arm64. On a real x86_64
         # host, switch to linux/amd64 to match the rest of the suite.
-        parts = [
-            f"docker run --platform linux/arm64 --name {self.name}-benchmark --rm -d",
-            "-p 9030:9030 -p 8030:8030 -p 8040:8040",
-            f"-v {meta_dir.as_posix()}:/data/deploy/starrocks/fe/meta",
-            f"-v {storage_dir.as_posix()}:/data/deploy/starrocks/be/storage",
-            f"-v {staging_dir.as_posix()}:/staging",
+        return self.docker_run_command(
             DOCKER_IMAGE,
-        ]
-        return " ".join(parts)
+            ports={"9030": "9030", "8030": "8030", "8040": "8040"},
+            mounts={
+                meta_dir.as_posix(): "/data/deploy/starrocks/fe/meta",
+                storage_dir.as_posix(): "/data/deploy/starrocks/be/storage",
+                staging_dir.as_posix(): "/staging",
+            },
+            platform="linux/arm64",
+        )
 
     def wait_until_accessible(self, timeout_seconds: float = 240.0, interval_seconds: float = 2.0) -> None:
         # FE + BE startup takes ~30-60s the first time. Also need to bootstrap
@@ -283,20 +282,11 @@ class StarRocks(Database):
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> str:
-        if not_null is None:
-            not_null = []
-        if isinstance(not_null, str):
-            not_null = [not_null]
+        not_null = normalize_columns(not_null)
 
         # PRIMARY KEY columns must be NOT NULL and must come first in the
         # column list. Reorder so they appear up front when a PK is given.
-        pk_list: list[str]
-        if isinstance(primary_key, str):
-            pk_list = [primary_key]
-        elif isinstance(primary_key, list) and primary_key:
-            pk_list = list(primary_key)
-        else:
-            pk_list = []
+        pk_list = normalize_columns(primary_key)
 
         if pk_list:
             for c in pk_list:
@@ -339,11 +329,7 @@ class StarRocks(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
-        con = self.connect()
-        statement = self._generate_create_table_sql(schema, table, primary_key, not_null)
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.execute(self._generate_create_table_sql(schema, table, primary_key, not_null))
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
     def _ingest_parquet(self, table: TableName, parquet_path: Path, columns: list[str]) -> None:
@@ -362,10 +348,7 @@ class StarRocks(Database):
         )
         size = parquet_path.stat().st_size
         _LOGGER.info(f"INSERT FROM FILES {parquet_path.name} ({size / 1e6:.1f} MB) → {table}")
-        con = self.connect()
-        with self.record_query_execution(sql):
-            con.execute(text(sql))
-        tracked_commit(con)
+        self.execute(sql)
 
     def insert(
         self,
@@ -407,9 +390,7 @@ class StarRocks(Database):
         self.insert(df, table)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
         if len(primary_keys) != 1:
             raise NotImplementedError("StarRocks delete supports a single-column primary key only")
 
@@ -422,17 +403,9 @@ class StarRocks(Database):
         self.insert(keys.select(pk).unique(), staging_table, primary_key=pk, not_null=pk)
 
         try:
-            con = self.connect()
-            statement = f"DELETE FROM `{table}` WHERE `{pk}` IN (SELECT `{pk}` FROM `{staging_table}`)"
-            with self.record_query_execution(statement):
-                con.execute(text(statement))
-            tracked_commit(con)
+            self.execute(f"DELETE FROM `{table}` WHERE `{pk}` IN (SELECT `{pk}` FROM `{staging_table}`)")
         finally:
-            con = self.connect()
-            statement = f"DROP TABLE IF EXISTS `{staging_table}`"
-            with self.record_query_execution(statement):
-                con.execute(text(statement))
-            tracked_commit(con)
+            self.execute(f"DROP TABLE IF EXISTS `{staging_table}`")
 
     @property
     def time_series(self) -> StarRocksTimeSeries:
