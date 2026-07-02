@@ -11,7 +11,11 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, TableName
-from ...suites.clickbench.config import Clickbench
+from ...suites.clickbench.config import (
+    CLICKBENCH_DATE_COLUMNS,
+    CLICKBENCH_TIMESTAMP_COLUMNS,
+    Clickbench,
+)
 from ...suites.time_series.config import TimeSeries
 from .. import Database
 from ..utils import normalize_columns, require_columns
@@ -73,10 +77,6 @@ def get_starrocks_type(dtype: pl.DataType | type[pl.DataType]) -> str:
     return sql_type
 
 
-_CLICKBENCH_TIMESTAMP_COLS = ("EventTime", "ClientEventTime", "LocalEventTime")
-_CLICKBENCH_DATE_COLS = ("EventDate",)
-
-
 class StarRocksClickbench(Clickbench["StarRocks"]):
     """Stream the 14 GB hits.parquet straight into StarRocks via FILES().
 
@@ -113,9 +113,9 @@ class StarRocksClickbench(Clickbench["StarRocks"]):
         select_parts: list[str] = []
         for row in col_names:
             name = row[0]
-            if name in _CLICKBENCH_TIMESTAMP_COLS:
+            if name in CLICKBENCH_TIMESTAMP_COLUMNS:
                 select_parts.append(f"from_unixtime(`{name}`) AS `{name}`")
-            elif name in _CLICKBENCH_DATE_COLS:
+            elif name in CLICKBENCH_DATE_COLUMNS:
                 select_parts.append(f"date_add('1970-01-01', INTERVAL `{name}` DAY) AS `{name}`")
             else:
                 select_parts.append(f"`{name}`")

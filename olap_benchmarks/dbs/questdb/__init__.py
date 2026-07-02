@@ -9,7 +9,11 @@ from questdb.ingress import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
-from ...suites.clickbench.config import Clickbench
+from ...suites.clickbench.config import (
+    CLICKBENCH_DATE_COLUMNS,
+    CLICKBENCH_TIMESTAMP_COLUMNS,
+    Clickbench,
+)
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,11 +56,8 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
         fpath = SETTINGS.temporary_directory / "questdb/data/hits.parquet"
         input_fpath = SETTINGS.input_data_directory / "clickbench/hits.parquet"
 
-        # Source schema has EventTime/ClientEventTime/LocalEventTime as Int64 (epoch
-        # seconds) and EventDate as UInt16 (days since epoch). Convert inline in the
-        # INSERT instead of rewriting the casts into the staged parquet.
-        timestamp_columns = ("EventTime", "ClientEventTime", "LocalEventTime")
-        date_columns = ("EventDate",)
+        # Convert the epoch-integer columns inline in the INSERT instead of
+        # rewriting the casts into the staged parquet.
 
         # Pre-sort the source parquet by EventTime on the host before handing it to
         # QuestDB. With a designated-timestamp partitioned table, sorted input lets
@@ -77,7 +78,9 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
         _LOGGER.info(f"Sorted source hits.parquet ({count:_} rows) to {fpath}")
 
         with self.db.phase_context("insert", table_name="hits"):
-            statement = _build_clickbench_insert(self.db.connect(), fpath.name, timestamp_columns, date_columns)
+            statement = _build_clickbench_insert(
+                self.db.connect(), fpath.name, CLICKBENCH_TIMESTAMP_COLUMNS, CLICKBENCH_DATE_COLUMNS
+            )
             self.db.execute(statement)
             _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
