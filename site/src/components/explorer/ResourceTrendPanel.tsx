@@ -1,27 +1,20 @@
 import { useEffect, useMemo, useState } from "react"
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
 
 import { getDatabaseColors } from "../../lib/databaseColors"
-import { buildElapsedTicks, formatElapsedSeconds, toTitleCase } from "../../lib/format"
+import { toTitleCase } from "../../lib/format"
 import {
-  formatCpuPercent,
-  formatMegabytes,
-  toMemoryScale,
-  toMetricScale,
-} from "../../lib/metricFormat"
+  buildTrendChartData,
+  getAvailableStepWindows,
+  getStepOptions,
+  METRIC_CONFIGS,
+  type StepTimeWindow,
+} from "../../lib/resourceTrendTransforms"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
 import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
 import { ControlChip, QuietButton, SegmentedButton } from "../controls/Control"
 import { DatabaseLegend } from "../DatabaseLegend"
-import { CHART_TOOLTIP_STYLES, PanelCard } from "../layout/Panel"
+import { PanelCard } from "../layout/Panel"
+import { MetricTrendChart } from "../MetricTrendChart"
 import { MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
@@ -40,46 +33,6 @@ const OPERATION_LABEL: Record<BenchmarkOperation, string> = {
   mutate: "Mutate",
   select: "Select",
 }
-
-interface StepOption {
-  label: string
-  value: string
-}
-
-interface StepTimeWindow {
-  start_s: number
-  end_s: number
-  duration_s: number
-}
-
-interface StepInstance extends StepTimeWindow {
-  db: string
-  value: string
-}
-
-type MetricKey = "cpu_percent" | "mem_mb" | "disk_mb"
-
-interface ChartRow {
-  elapsed_s: number
-  [db: string]: number | undefined
-}
-
-type ScaleBuilder = (maxValue: number) => {
-  domain: [number, number]
-  ticks: number[]
-  formatter?: (v: number) => string
-}
-
-const METRIC_CONFIGS: ReadonlyArray<{
-  key: MetricKey
-  label: string
-  formatter: (value: number) => string
-  scaleBuilder: ScaleBuilder
-}> = [
-  { key: "cpu_percent", label: "CPU", formatter: formatCpuPercent, scaleBuilder: toMetricScale },
-  { key: "mem_mb", label: "Memory", formatter: formatMegabytes, scaleBuilder: toMemoryScale },
-  { key: "disk_mb", label: "Disk", formatter: formatMegabytes, scaleBuilder: toMemoryScale },
-]
 
 const MAX_COLLAPSED_STEP_OPTIONS = 12
 const MAX_COLLAPSED_UNAVAILABLE_STEP_OPTIONS = 8
@@ -338,16 +291,22 @@ export function ResourceTrendPanel({
             <div className="panel-scrollbar mt-3 min-h-0 flex-1 overflow-auto pr-1">
               <div className="grid gap-2">
                 {METRIC_CONFIGS.map((metric) => (
-                  <TrendChart
+                  <div
                     key={metric.key}
-                    label={metric.label}
-                    data={chartData[metric.key]}
-                    databases={databases}
-                    databaseColors={databaseColors}
-                    formatter={metric.formatter}
-                    scaleBuilder={metric.scaleBuilder}
-                    maxElapsed={maxElapsed}
-                  />
+                    className="rounded-lg border border-border-default bg-surface-primary/60 p-2.5"
+                  >
+                    <MetricTrendChart
+                      label={metric.label}
+                      data={chartData[metric.key]}
+                      databases={databases}
+                      databaseColors={databaseColors}
+                      maxElapsed={maxElapsed}
+                      formatter={metric.formatter}
+                      scaleBuilder={metric.scaleBuilder}
+                      syncId="resource-trends"
+                      size="md"
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -356,294 +315,4 @@ export function ResourceTrendPanel({
       )}
     </PanelCard>
   )
-}
-
-interface TrendChartProps {
-  label: string
-  data: ChartRow[]
-  databases: string[]
-  databaseColors: Record<string, string>
-  formatter: (value: number) => string
-  scaleBuilder: ScaleBuilder
-  maxElapsed: number
-}
-
-function TrendChart({
-  label,
-  data,
-  databases,
-  databaseColors,
-  formatter,
-  scaleBuilder,
-  maxElapsed,
-}: TrendChartProps) {
-  const yValues = data.flatMap((row) =>
-    databases.map((db) => row[db]).filter((v): v is number => v !== undefined),
-  )
-  const maxY = Math.max(1, ...yValues)
-  const yScale = scaleBuilder(maxY)
-  const { domain: yDomain, ticks: yTicks } = yScale
-  const tickFormatter = yScale.formatter ?? formatter
-
-  const xTicks = buildElapsedTicks(maxElapsed)
-
-  return (
-    <div className="rounded-lg border border-border-default bg-surface-primary/60 p-2.5">
-      <p className="mb-2 text-xs font-semibold text-slate-200">{label}</p>
-      <div className="h-36">
-        <ResponsiveContainer
-          width="100%"
-          height="100%"
-          initialDimension={{ width: 640, height: 160 }}
-        >
-          <LineChart
-            data={data}
-            syncId="resource-trends"
-            margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
-          >
-            <CartesianGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
-            <XAxis
-              type="number"
-              dataKey="elapsed_s"
-              domain={[0, maxElapsed]}
-              ticks={xTicks}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
-              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={formatElapsedSeconds}
-            />
-            <YAxis
-              domain={yDomain}
-              ticks={yTicks}
-              width={70}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
-              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={tickFormatter}
-            />
-            <Tooltip
-              {...CHART_TOOLTIP_STYLES}
-              cursor={{ stroke: "rgba(148, 163, 184, 0.15)", strokeDasharray: "4 4" }}
-              labelFormatter={(value) => {
-                const numericValue = typeof value === "number" ? value : Number(value ?? 0)
-                return `Elapsed ${formatElapsedSeconds(numericValue)}`
-              }}
-              formatter={(value, _name, item) => {
-                const numericValue = typeof value === "number" ? value : Number(value ?? 0)
-                return [formatter(numericValue), item.name ?? ""] as const
-              }}
-            />
-            {databases.map((db) => (
-              <Line
-                key={db}
-                type="stepAfter"
-                name={db}
-                dataKey={(row: ChartRow) => row[db]}
-                connectNulls
-                dot={false}
-                activeDot={{ r: 3, strokeWidth: 0 }}
-                stroke={databaseColors[db] ?? "#94a3b8"}
-                strokeWidth={2}
-                isAnimationActive={false}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  )
-}
-
-function getStepOptions(
-  operation: BenchmarkOperation,
-  insertSteps: InsertStep[],
-  querySteps: QueryStep[],
-  mutateSteps: QueryStep[],
-  databases: string[],
-  compareQueryNames: (left: string, right: string) => number,
-): StepOption[] {
-  const includedDatabases = new Set(databases)
-
-  if (operation === "populate") {
-    const tableNames = new Set(
-      insertSteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.table_name),
-    )
-    return Array.from(tableNames)
-      .sort()
-      .map((name) => ({ label: name, value: name }))
-  }
-  if (operation === "mutate") {
-    const queryNames = new Set(
-      mutateSteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
-    )
-    return Array.from(queryNames)
-      .sort(compareQueryNames)
-      .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
-  }
-  const queryNames = new Set(
-    querySteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
-  )
-  return Array.from(queryNames)
-    .sort(compareQueryNames)
-    .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
-}
-
-function getStepInstances(
-  operation: BenchmarkOperation,
-  insertSteps: InsertStep[],
-  querySteps: QueryStep[],
-  mutateSteps: QueryStep[],
-  databases: string[],
-): StepInstance[] {
-  const includedDatabases = new Set(databases)
-
-  if (operation === "populate") {
-    return insertSteps
-      .filter((step) => includedDatabases.has(step.db))
-      .map((step) => ({
-        db: step.db,
-        value: step.table_name,
-        start_s: step.elapsed_start_s,
-        end_s: step.elapsed_end_s,
-        duration_s: step.duration_s,
-      }))
-  }
-
-  const steps = operation === "mutate" ? mutateSteps : querySteps
-  return steps
-    .filter((step) => includedDatabases.has(step.db))
-    .map((step) => ({
-      db: step.db,
-      value: step.query_name,
-      start_s: step.elapsed_start_s,
-      end_s: step.elapsed_end_s,
-      duration_s: step.duration_s,
-    }))
-}
-
-function getAvailableStepWindows(
-  operation: BenchmarkOperation,
-  metricSamples: MetricSample[],
-  insertSteps: InsertStep[],
-  querySteps: QueryStep[],
-  mutateSteps: QueryStep[],
-  databases: string[],
-): Map<string, Map<string, StepTimeWindow>> {
-  const stepInstances = getStepInstances(operation, insertSteps, querySteps, mutateSteps, databases)
-  const samplesByDb = new Map<string, number[]>()
-
-  for (const sample of metricSamples) {
-    if (sample.operation !== operation || !databases.includes(sample.db)) continue
-    const existing = samplesByDb.get(sample.db)
-    if (existing) {
-      existing.push(sample.elapsed_s)
-    } else {
-      samplesByDb.set(sample.db, [sample.elapsed_s])
-    }
-  }
-
-  const available = new Map<string, Map<string, StepTimeWindow & { sampleCount: number }>>()
-
-  for (const instance of stepInstances) {
-    const sampleCount = countSamplesInWindow(
-      samplesByDb.get(instance.db) ?? [],
-      instance.start_s,
-      instance.end_s,
-    )
-    if (sampleCount < 2) continue
-
-    const windowsByDb =
-      available.get(instance.value) ?? new Map<string, StepTimeWindow & { sampleCount: number }>()
-    const current = windowsByDb.get(instance.db)
-    if (
-      current === undefined ||
-      sampleCount > current.sampleCount ||
-      (sampleCount === current.sampleCount && instance.duration_s > current.duration_s)
-    ) {
-      windowsByDb.set(instance.db, {
-        start_s: instance.start_s,
-        end_s: instance.end_s,
-        duration_s: instance.duration_s,
-        sampleCount,
-      })
-    }
-    available.set(instance.value, windowsByDb)
-  }
-
-  return new Map(
-    Array.from(available.entries())
-      .filter(([, windowsByDb]) => windowsByDb.size >= (databases.length > 1 ? 2 : 1))
-      .map(([stepValue, windowsByDb]) => [
-        stepValue,
-        new Map(
-          Array.from(windowsByDb.entries()).map(([db, window]) => [
-            db,
-            {
-              start_s: window.start_s,
-              end_s: window.end_s,
-              duration_s: window.duration_s,
-            },
-          ]),
-        ),
-      ]),
-  )
-}
-
-function countSamplesInWindow(sampleTimes: number[], startS: number, endS: number): number {
-  let count = 0
-  for (const sampleTime of sampleTimes) {
-    if (sampleTime < startS) continue
-    if (sampleTime > endS) break
-    count += 1
-  }
-  return count
-}
-
-function buildTrendChartData(
-  metricSamples: MetricSample[],
-  operation: BenchmarkOperation,
-  stepTimeWindows: Map<string, StepTimeWindow>,
-): Record<MetricKey, ChartRow[]> {
-  const result: Record<MetricKey, Map<number, ChartRow>> = {
-    cpu_percent: new Map(),
-    mem_mb: new Map(),
-    disk_mb: new Map(),
-  }
-
-  // Find the first metric sample elapsed_s per database within the window
-  // so we can normalize each database's timeline to start at 0.
-  const firstSampleElapsed = new Map<string, number>()
-  for (const sample of metricSamples) {
-    if (sample.operation !== operation) continue
-    const window = stepTimeWindows.get(sample.db)
-    if (!window) continue
-    if (sample.elapsed_s < window.start_s || sample.elapsed_s > window.end_s) continue
-    const existing = firstSampleElapsed.get(sample.db)
-    if (existing === undefined || sample.elapsed_s < existing) {
-      firstSampleElapsed.set(sample.db, sample.elapsed_s)
-    }
-  }
-
-  for (const sample of metricSamples) {
-    if (sample.operation !== operation) continue
-    const window = stepTimeWindows.get(sample.db)
-    if (!window) continue
-    if (sample.elapsed_s < window.start_s || sample.elapsed_s > window.end_s) continue
-
-    const dbOffset = firstSampleElapsed.get(sample.db) ?? window.start_s
-    const normalizedElapsed = Math.max(0, Math.round(sample.elapsed_s - dbOffset))
-
-    for (const metricConfig of METRIC_CONFIGS) {
-      const map = result[metricConfig.key]
-      const existing = map.get(normalizedElapsed) ?? { elapsed_s: normalizedElapsed }
-      existing[sample.db] = sample[metricConfig.key]
-      map.set(normalizedElapsed, existing)
-    }
-  }
-
-  return {
-    cpu_percent: Array.from(result.cpu_percent.values()).sort((a, b) => a.elapsed_s - b.elapsed_s),
-    mem_mb: Array.from(result.mem_mb.values()).sort((a, b) => a.elapsed_s - b.elapsed_s),
-    disk_mb: Array.from(result.disk_mb.values()).sort((a, b) => a.elapsed_s - b.elapsed_s),
-  }
 }

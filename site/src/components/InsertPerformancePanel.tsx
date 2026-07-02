@@ -1,27 +1,18 @@
 import { useMemo, useState } from "react"
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  CartesianGrid as CpuGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import {
-  buildElapsedTicks,
   formatDurationAxisTick,
   formatDurationSeconds,
-  formatElapsedSeconds,
   getDurationAxisDomain,
   getDurationAxisTicks,
-  scaleDurationForChart,
   type DurationScaleMode,
 } from "../lib/format"
+import {
+  buildInsertBarData,
+  buildMetricRows,
+  type InsertBarRow,
+} from "../lib/insertPerformanceTransforms"
 import {
   formatCpuPercent,
   formatMegabytes,
@@ -32,7 +23,8 @@ import type { InsertStep, MetricSample } from "../lib/types"
 import { DatabaseLegend } from "./DatabaseLegend"
 import { DurationScaleToggle } from "./DurationScaleToggle"
 import { CHART_TOOLTIP_STYLES, ChartFrame, PanelCard, PanelHeader } from "./layout/Panel"
-import { Skeleton } from "./Skeleton"
+import { MetricTrendChart } from "./MetricTrendChart"
+import { Skeleton, SkeletonChips } from "./Skeleton"
 import { SectionTitle } from "./Typography"
 
 interface InsertPerformancePanelProps {
@@ -42,15 +34,6 @@ interface InsertPerformancePanelProps {
   databaseColors: Record<string, string>
   isLoading?: boolean
 }
-
-interface InsertBarRow {
-  table_name: string
-  [db: string]: string | number
-}
-
-type MetricChartRow = {
-  elapsed_s: number
-} & Partial<Record<string, number>>
 
 export function InsertPerformancePanel({
   insertSteps,
@@ -89,7 +72,6 @@ export function InsertPerformancePanel({
     () => Math.max(1, ...populateSamples.map((s) => Math.ceil(s.run_duration_s))),
     [populateSamples],
   )
-  const elapsedTicks = useMemo(() => buildElapsedTicks(maxElapsed), [maxElapsed])
 
   const maxDuration = useMemo(
     () => Math.max(0.001, ...filteredSteps.map((s) => s.duration_s)),
@@ -109,11 +91,7 @@ export function InsertPerformancePanel({
       <PanelCard className="h-full p-3">
         <PanelHeader>
           <SectionTitle as="h3">Insert performance</SectionTitle>
-          <div className="flex gap-1.5">
-            <Skeleton className="h-5 w-14 rounded-full" />
-            <Skeleton className="h-5 w-16 rounded-full" />
-            <Skeleton className="h-5 w-16 rounded-full" />
-          </div>
+          <SkeletonChips widths={["h-5 w-14", "h-5 w-16", "h-5 w-16"]} />
         </PanelHeader>
 
         <div className="mt-2 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -207,28 +185,32 @@ export function InsertPerformancePanel({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <MetricMiniChart
-              label="CPU during populate"
-              data={cpuChartData}
-              databases={databases}
-              databaseColors={databaseColors}
-              maxElapsed={maxElapsed}
-              elapsedTicks={elapsedTicks}
-              formatter={formatCpuPercent}
-              scaleBuilder={toMetricScale}
-              syncId="insert-metrics"
-            />
-            <MetricMiniChart
-              label="Memory during populate"
-              data={memChartData}
-              databases={databases}
-              databaseColors={databaseColors}
-              maxElapsed={maxElapsed}
-              elapsedTicks={elapsedTicks}
-              formatter={formatMegabytes}
-              scaleBuilder={toMemoryScale}
-              syncId="insert-metrics"
-            />
+            <ChartFrame className="p-2.5">
+              <MetricTrendChart
+                label="CPU during populate"
+                data={cpuChartData}
+                databases={databases}
+                databaseColors={databaseColors}
+                maxElapsed={maxElapsed}
+                formatter={formatCpuPercent}
+                scaleBuilder={toMetricScale}
+                syncId="insert-metrics"
+                size="sm"
+              />
+            </ChartFrame>
+            <ChartFrame className="p-2.5">
+              <MetricTrendChart
+                label="Memory during populate"
+                data={memChartData}
+                databases={databases}
+                databaseColors={databaseColors}
+                maxElapsed={maxElapsed}
+                formatter={formatMegabytes}
+                scaleBuilder={toMemoryScale}
+                syncId="insert-metrics"
+                size="sm"
+              />
+            </ChartFrame>
           </div>
         )}
       </div>
@@ -315,142 +297,4 @@ function InsertDurationChartSkeleton() {
       </div>
     </div>
   )
-}
-
-function MetricMiniChart({
-  label,
-  data,
-  databases,
-  databaseColors,
-  maxElapsed,
-  elapsedTicks,
-  formatter,
-  scaleBuilder,
-  syncId,
-}: {
-  label: string
-  data: MetricChartRow[]
-  databases: string[]
-  databaseColors: Record<string, string>
-  maxElapsed: number
-  elapsedTicks: number[]
-  formatter: (v: number) => string
-  scaleBuilder: (maxValue: number) => {
-    domain: [number, number]
-    ticks: number[]
-    formatter?: (v: number) => string
-  }
-  syncId: string
-}) {
-  const values = data.flatMap((row) => databases.map((db) => (row[db] as number | undefined) ?? 0))
-  const maxVal = Math.max(1, ...values)
-  const yScale = scaleBuilder(maxVal)
-
-  return (
-    <ChartFrame className="p-2.5">
-      <p className="mb-1.5 text-xs font-semibold text-slate-200">{label}</p>
-      <div className="h-28">
-        <ResponsiveContainer
-          width="100%"
-          height="100%"
-          initialDimension={{ width: 400, height: 128 }}
-        >
-          <LineChart data={data} syncId={syncId} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-            <CpuGrid stroke="rgba(148, 163, 184, 0.06)" vertical={false} />
-            <XAxis
-              type="number"
-              dataKey="elapsed_s"
-              domain={[0, maxElapsed]}
-              ticks={elapsedTicks}
-              tick={{ fill: "#94a3b8", fontSize: 10 }}
-              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={formatElapsedSeconds}
-            />
-            <YAxis
-              domain={yScale.domain}
-              ticks={yScale.ticks}
-              width={60}
-              tick={{ fill: "#94a3b8", fontSize: 10 }}
-              axisLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickLine={{ stroke: "rgba(148, 163, 184, 0.1)" }}
-              tickFormatter={yScale.formatter ?? formatter}
-            />
-            <Tooltip
-              contentStyle={CHART_TOOLTIP_STYLES.contentStyle}
-              labelStyle={CHART_TOOLTIP_STYLES.labelStyle}
-              cursor={{ stroke: "rgba(148, 163, 184, 0.15)", strokeDasharray: "4 4" }}
-              labelFormatter={(v) =>
-                `Elapsed ${formatElapsedSeconds(typeof v === "number" ? v : Number(v ?? 0))}`
-              }
-              formatter={(value, _name, item) =>
-                [formatter(Number(value ?? 0)), item.name ?? ""] as const
-              }
-            />
-            {databases.map((db) => (
-              <Line
-                key={db}
-                type="stepAfter"
-                name={db}
-                dataKey={(row: MetricChartRow) => row[db]}
-                connectNulls
-                dot={false}
-                activeDot={{ r: 3, strokeWidth: 0 }}
-                stroke={databaseColors[db] ?? "#94a3b8"}
-                strokeWidth={1.5}
-                isAnimationActive={false}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </ChartFrame>
-  )
-}
-
-function buildInsertBarData(
-  steps: InsertStep[],
-  databases: string[],
-  scaleMode: DurationScaleMode,
-): InsertBarRow[] {
-  const byTable = new Map<string, InsertBarRow>()
-
-  for (const step of steps) {
-    const existing = byTable.get(step.table_name) ?? { table_name: step.table_name }
-    existing[step.db] = scaleDurationForChart(step.duration_s, scaleMode)
-    existing[`${step.db}_raw`] = step.duration_s
-    byTable.set(step.table_name, existing)
-  }
-
-  return Array.from(byTable.values()).sort((a, b) => {
-    const aMax = Math.max(
-      ...databases.map((db) => {
-        const raw = a[`${db}_raw`]
-        return typeof raw === "number" ? raw : 0
-      }),
-    )
-    const bMax = Math.max(
-      ...databases.map((db) => {
-        const raw = b[`${db}_raw`]
-        return typeof raw === "number" ? raw : 0
-      }),
-    )
-    return bMax - aMax
-  })
-}
-
-function buildMetricRows(
-  samples: MetricSample[],
-  metric: "cpu_percent" | "mem_mb",
-): MetricChartRow[] {
-  const rowsBySecond = new Map<number, MetricChartRow>()
-
-  for (const sample of samples) {
-    const second = Math.max(0, Math.round(sample.elapsed_s))
-    const existing = rowsBySecond.get(second) ?? ({ elapsed_s: second } as MetricChartRow)
-    existing[sample.db] = sample[metric]
-    rowsBySecond.set(second, existing)
-  }
-
-  return Array.from(rowsBySecond.values()).sort((a, b) => a.elapsed_s - b.elapsed_s)
 }
