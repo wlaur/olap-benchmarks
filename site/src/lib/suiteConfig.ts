@@ -104,11 +104,29 @@ const KAGGLE_AIRBNB_CONFIG: SuiteConfig = {
   compareQueryNames: compareGenericQueryNames,
 }
 
+const TPCH_SF10_CONFIG: SuiteConfig = {
+  id: "tpch_sf10",
+  label: "TPC-H SF10",
+  operations: ["populate", "select"],
+  parseQueryName: parseGenericQueryName,
+  compareQueryNames: compareGenericQueryNames,
+}
+
+const TPCH_SF50_CONFIG: SuiteConfig = {
+  id: "tpch_sf50",
+  label: "TPC-H SF50",
+  operations: ["populate", "select"],
+  parseQueryName: parseGenericQueryName,
+  compareQueryNames: compareGenericQueryNames,
+}
+
 const SUITE_CONFIGS: Record<BenchmarkSuiteId, SuiteConfig> = {
   time_series: TIME_SERIES_CONFIG,
   rtabench: RTABENCH_CONFIG,
   clickbench: CLICKBENCH_CONFIG,
   kaggle_airbnb: KAGGLE_AIRBNB_CONFIG,
+  tpch_sf10: TPCH_SF10_CONFIG,
+  tpch_sf50: TPCH_SF50_CONFIG,
 }
 
 export function getSuiteConfig(suiteId: BenchmarkSuiteId): SuiteConfig {
