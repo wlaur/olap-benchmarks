@@ -1,6 +1,7 @@
 -- Same spec-style DDL as postgres.sql. TPC-H is not a time-series workload,
--- so no hypertables are created; this measures TimescaleDB as a Postgres
--- distribution.
+-- so no hypertables are created. This measures TimescaleDB as a Postgres
+-- distribution. The lineitem FK index mirrors postgres.sql (see there for
+-- the Q17/Q20 rationale).
 CREATE TABLE region (
     r_regionkey BIGINT NOT NULL,
     r_name VARCHAR(25) NOT NULL,
@@ -93,3 +94,5 @@ CREATE TABLE lineitem (
     l_comment VARCHAR(44) NOT NULL,
     PRIMARY KEY (l_orderkey, l_linenumber)
 );
+
+CREATE INDEX lineitem_part_supp_fkidx ON lineitem (l_partkey, l_suppkey);
