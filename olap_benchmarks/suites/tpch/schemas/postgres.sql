@@ -1,6 +1,8 @@
--- Spec-style DDL with primary keys per TPC-H spec section 1.4.1 (no foreign
--- keys or secondary indexes), matching how the other suites declare Postgres
--- schemas.
+-- Spec-style DDL with primary keys per TPC-H spec section 1.4.1 and one index
+-- on the lineitem -> partsupp foreign key (allowed per section 1.4.2.3).
+-- Without it, the correlated scalar-aggregate subqueries in Q17 and Q20
+-- (which the Postgres planner cannot decorrelate) re-scan lineitem per outer
+-- row and run for hours even at scale factor 1.
 CREATE TABLE region (
     r_regionkey BIGINT NOT NULL,
     r_name VARCHAR(25) NOT NULL,
@@ -93,3 +95,5 @@ CREATE TABLE lineitem (
     l_comment VARCHAR(44) NOT NULL,
     PRIMARY KEY (l_orderkey, l_linenumber)
 );
+
+CREATE INDEX lineitem_part_supp_fkidx ON lineitem (l_partkey, l_suppkey);
