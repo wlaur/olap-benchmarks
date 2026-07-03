@@ -147,5 +147,9 @@ def get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
             from .time_series.config import prepare_data
         case "kaggle_airbnb":
             from .kaggle_airbnb.config import prepare_data
+        case "tpch_sf10":
+            from .tpch.config import prepare_tpch_sf10 as prepare_data
+        case "tpch_sf50":
+            from .tpch.config import prepare_tpch_sf50 as prepare_data
 
     return prepare_data

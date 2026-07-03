@@ -18,6 +18,7 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.time_series.config import TimeSeries
+from ...suites.tpch.config import Tpch
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
@@ -137,6 +138,41 @@ class StarRocksClickbench(Clickbench["StarRocks"]):
 
         if restart:
             self.db.restart_event()
+
+
+class StarRocksTpch(Tpch["StarRocks"]):
+    """Ingest the per-table source parquet directly via FILES().
+
+    The base StarRocks.insert collects LazyFrames into memory before staging;
+    at SF 50 lineitem alone is 300 M rows, which does not fit. The source data
+    is already one parquet file per table, so hardlink it into the BE-mounted
+    staging dir and ingest with INSERT INTO ... SELECT ... FROM FILES(...).
+    """
+
+    def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
+        staging = SETTINGS.temporary_directory / "starrocks/data"
+        staging.mkdir(parents=True, exist_ok=True)
+        src = SETTINGS.input_data_directory / f"{self.name}/{table_name}.parquet"
+        dst = staging / f"{table_name}.parquet"
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+        try:
+            os.link(src, dst)
+        except OSError:
+            shutil.copy2(src, dst)
+
+        # explicit column list: the lineitem/orders DDL reorders columns to
+        # satisfy the DUPLICATE KEY prefix rule
+        columns = ", ".join(f"`{name}`" for name in df.collect_schema().names())
+        sql = (
+            f"INSERT INTO `{table_name}` ({columns}) SELECT {columns} "
+            f"FROM FILES('path' = 'file:///staging/{table_name}.parquet', 'format' = 'parquet')"
+        )
+
+        try:
+            self.db.execute(sql)
+        finally:
+            dst.unlink()
 
 
 class StarRocksTimeSeries(TimeSeries["StarRocks"]):
@@ -413,4 +449,6 @@ class StarRocks(Database):
             **super().suite_registry(),
             "time_series": StarRocksTimeSeries,
             "clickbench": StarRocksClickbench,
+            "tpch_sf10": StarRocksTpch,
+            "tpch_sf50": StarRocksTpch,
         }

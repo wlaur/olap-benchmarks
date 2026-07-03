@@ -57,10 +57,32 @@ export function useHomeOverview(system: string | null): HomeOverview {
           }
         }
 
+        const worstBySuite = new Map<BenchmarkSuiteId, number>()
+        for (const suite of suites) {
+          const finite = suite.scores.map((s) => s.score).filter(Number.isFinite)
+          if (finite.length > 0) worstBySuite.set(suite.suiteId, Math.max(...finite))
+        }
+
+        const overallScores = new Map<string, number>()
+        for (const db of dbSet) {
+          let logSum = 0
+          let count = 0
+          for (const [suiteId, worst] of worstBySuite) {
+            const entry = scoresByDbAndSuite.get(db)?.get(suiteId)
+            const score = entry && Number.isFinite(entry.score) ? entry.score : worst
+            logSum += Math.log(score)
+            count += 1
+          }
+          overallScores.set(db, count > 0 ? Math.exp(logSum / count) : Number.POSITIVE_INFINITY)
+        }
+
         setOverview({
           loading: false,
           error: null,
-          databases: Array.from(dbSet).sort(),
+          databases: Array.from(dbSet).sort((a, b) => {
+            const diff = (overallScores.get(a) ?? Infinity) - (overallScores.get(b) ?? Infinity)
+            return diff !== 0 ? diff : a.localeCompare(b)
+          }),
           suites,
           scoresByDbAndSuite,
         })

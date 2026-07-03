@@ -359,18 +359,18 @@ class Database(BaseModel, ABC):
             # if we use e.g. alter database, it's important that subsequent queries use a new connection
             self.execute(stmt, reconnect=True)
 
-    def initialize_schema(self, suite: SuiteName) -> None:
-        fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite}/schemas/{self.name}.sql"
+    def initialize_schema(self, suite_directory: str) -> None:
+        fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite_directory}/schemas/{self.name}.sql"
 
         if not fpath.is_file():
-            _LOGGER.info(f"Schema definition for {self.name}:{suite} does not exist, skipping...")
+            _LOGGER.info(f"Schema definition for {self.name}:{suite_directory} does not exist, skipping...")
             return
 
         with self.phase_context("schema"):
             self.execute_schema_file(fpath)
 
         self.connect(reconnect=True)
-        _LOGGER.info(f"Initialized schema for {self.name}:{suite}")
+        _LOGGER.info(f"Initialized schema for {self.name}:{suite_directory}")
 
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...
@@ -438,12 +438,15 @@ class Database(BaseModel, ABC):
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
         from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
+        from ..suites.tpch.config import Tpch
 
         return {
             "rtabench": RTABench,
             "clickbench": Clickbench,
             "time_series": TimeSeries,
             "kaggle_airbnb": KaggleAirbnb,
+            "tpch_sf10": Tpch,
+            "tpch_sf50": Tpch,
         }
 
     @property
