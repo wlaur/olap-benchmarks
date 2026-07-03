@@ -9,8 +9,8 @@ export function HomePage() {
       <header className="space-y-3">
         <DisplayTitle as="h1">OLAP Benchmarks</DisplayTitle>
         <BodyText className="max-w-2xl text-base">
-          Run the same SQL queries against different OLAP databases on the same machine and compare
-          how they do.
+          Identical SQL workloads run against multiple OLAP databases on the same machine, measuring
+          query latency, load time, and resource usage.
         </BodyText>
       </header>
       <HomeScoreTable />

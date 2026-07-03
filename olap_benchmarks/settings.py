@@ -20,7 +20,7 @@ DatabaseName = Literal[
     "starrocks",
 ]
 
-SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb"]
+SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb", "tpch_sf10", "tpch_sf50"]
 Operation = Literal["populate", "select", "mutate"]
 Revision = Annotated[str, "Results database revision"]
 

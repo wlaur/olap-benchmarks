@@ -5,10 +5,10 @@ import { useHomeOverview } from "../../hooks/useHomeOverview"
 import { benchmarkDefinitions, type BenchmarkSuiteId } from "../../lib/benchmarks"
 import { cn } from "../../lib/cn"
 import { getDatabaseColors } from "../../lib/databaseColors"
-import { formatScore, SCORE_EXPLAINER } from "../../lib/score"
+import { formatScore } from "../../lib/score"
 import { useAppStore } from "../../stores/useAppStore"
 import { Skeleton } from "../Skeleton"
-import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+import { BodyText, SectionTitle } from "../Typography"
 
 export function HomeScoreTable() {
   const navigate = useNavigate()
@@ -23,22 +23,18 @@ export function HomeScoreTable() {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border-default bg-surface-raised">
-      <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border-default px-5 py-4">
-        <div>
-          <SectionTitle as="h2">Suite scores</SectionTitle>
-          <BodyText className="mt-1">
-            Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is
-            the leader.{" "}
-            {selectedSystem ? (
-              <>
-                System: <span className="text-slate-200">{selectedSystem}</span>.
-              </>
-            ) : null}
-          </BodyText>
-        </div>
-        <MetaLabel className="tracking-normal text-slate-400 normal-case">
-          {SCORE_EXPLAINER.body[1]}
-        </MetaLabel>
+      <div className="border-b border-border-default px-5 py-4">
+        <SectionTitle as="h2">Suite scores</SectionTitle>
+        <BodyText className="mt-1">
+          Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is the
+          leader. Rows ranked by geometric mean across suites; a missing suite counts as its worst
+          score.{" "}
+          {selectedSystem ? (
+            <>
+              System: <span className="text-slate-200">{selectedSystem}</span>.
+            </>
+          ) : null}
+        </BodyText>
       </div>
 
       <div className="overflow-x-auto">
@@ -69,14 +65,19 @@ export function HomeScoreTable() {
                   colSpan={suites.length + 1}
                   className="px-5 py-10 text-center text-sm text-slate-300"
                 >
-                  No completed runs found{selectedSystem ? ` for ${selectedSystem}` : ""}.
+                  {overview.error
+                    ? `Failed to load results: ${overview.error}`
+                    : `No completed runs found${selectedSystem ? ` for ${selectedSystem}` : ""}.`}
                 </td>
               </tr>
             ) : (
-              overview.databases.map((db) => (
+              overview.databases.map((db, index) => (
                 <tr key={db} className="border-t border-border-subtle">
                   <td className="px-5 py-3 align-middle">
                     <div className="flex items-center gap-2.5">
+                      <span className="w-4 text-right font-mono text-xs text-slate-400 tabular-nums">
+                        {index + 1}
+                      </span>
                       <span
                         className="size-2.5 rounded-full"
                         style={{ backgroundColor: databaseColors[db] ?? "#94a3b8" }}
@@ -149,6 +150,7 @@ function LoadingRows({ suiteCount }: { suiteCount: number }) {
         <tr key={rowIdx} className="border-t border-border-subtle">
           <td className="px-5 py-3">
             <div className="flex items-center gap-2.5">
+              <Skeleton className="h-3 w-4 rounded" />
               <Skeleton className="size-2.5 rounded-full" />
               <Skeleton className="h-4 w-24 rounded" />
             </div>

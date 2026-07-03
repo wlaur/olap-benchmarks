@@ -352,4 +352,14 @@ class QuestDB(Database):
         raise NotImplementedError("QuestDB does not support row-level delete")
 
     def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
-        return {**super().suite_registry(), "clickbench": QuestDBClickbench}
+        registry: dict[SuiteName, type[BenchmarkSuite[Any]]] = {
+            **super().suite_registry(),
+            "clickbench": QuestDBClickbench,
+        }
+
+        # TPC-H needs correlated subqueries and EXISTS/NOT EXISTS, which
+        # QuestDB SQL does not support
+        for tpch_suite in ("tpch_sf10", "tpch_sf50"):
+            registry.pop(tpch_suite)
+
+        return registry

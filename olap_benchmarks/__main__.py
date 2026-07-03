@@ -156,8 +156,13 @@ def benchmark(
                 _LOGGER.info(f"Omitting database {db_name}")
                 continue
             for suite_name in suite_names:
-                _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
                 db_instance = get_databases()[db_name]
+
+                if suite_name not in db_instance.benchmarks:
+                    _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
+                    continue
+
+                _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
                 db_instance._current_suite = suite_name
                 db_instance.set_queues(writer.queue, writer.result_queue)
 
