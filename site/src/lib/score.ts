@@ -94,6 +94,7 @@ export const SCORE_EXPLAINER = {
   title: "How the score is calculated",
   body: [
     "For each query in the suite, we find the fastest database and compare every other database's median time to it as a ratio (a smoothing constant of 10ms is added to both sides to avoid blow-ups on sub-millisecond queries).",
+    "Query medians include every recorded iteration from the latest completed run, including the first iteration.",
     "The score shown is the geometric mean of these ratios across all observed queries. Missing or unsupported queries are scored as the larger of 10× or 2× the slowest observed ratio for that query.",
     "1.00× means the database was the fastest on every query; 2.50× means it was on average 2.5× slower than the fastest per query after any missing-query penalties.",
     "This is the same shape of metric used by the official ClickBench rankings, just normalised to per-query so suites with very different query counts stay comparable.",
