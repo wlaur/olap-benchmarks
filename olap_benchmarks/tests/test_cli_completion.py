@@ -285,6 +285,18 @@ def test_benchmark_all_uses_suite_supported_operations(
     def fake_stop_db(_db: DummyDatabase) -> None:
         return None
 
+    validated: list[tuple[str, str, int]] = []
+
+    def fake_assert_latest_query_row_counts(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        validated.append((system, suite, suite_scale_factor))
+
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
     monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
@@ -292,7 +304,9 @@ def test_benchmark_all_uses_suite_supported_operations(
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
 
     __main__.benchmark(db="clickhouse", suite="clickbench", operation="all")
 
     assert db_instance.operations == [("clickbench", "populate", 1), ("clickbench", "select", 1)]
+    assert validated == [(__main__.SETTINGS.system, "clickbench", 1)]
