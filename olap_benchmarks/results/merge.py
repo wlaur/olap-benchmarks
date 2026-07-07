@@ -90,16 +90,16 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
     con.execute(
         f"""
         create or replace temp table matched_run as
-        select d.id from run d join src.run s on {key_join}
+        select d.id as dest_id, s.id as src_id
+        from run d join src.run s on {key_join}
         where s.status <> 'running'
         """
     )
     runs_replaced = _fetch_scalar(con, "select count(*) from matched_run")
 
-    con.execute("delete from query_execution where run_id in (select id from matched_run)")
-    con.execute("delete from run_metric where run_id in (select id from matched_run)")
-    con.execute("delete from run_step where run_id in (select id from matched_run)")
-    con.execute("delete from run where id in (select id from matched_run)")
+    con.execute("delete from query_execution where run_id in (select dest_id from matched_run)")
+    con.execute("delete from run_metric where run_id in (select dest_id from matched_run)")
+    con.execute("delete from run_step where run_id in (select dest_id from matched_run)")
 
     run_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from run")
     step_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from run_step")
@@ -107,10 +107,44 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
     query_execution_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from query_execution")
 
     con.execute(
+        """
+        create or replace temp table unmatched_source_run as
+        select s.id
+        from src.run s
+        left join matched_run m on s.id = m.src_id
+        where s.status <> 'running' and m.src_id is null
+        """
+    )
+    runs_added = _fetch_scalar(con, "select count(*) from unmatched_source_run")
+
+    con.execute(
+        """
+        update run as d
+        set
+            suite = s.suite,
+            suite_scale_factor = s.suite_scale_factor,
+            db = s.db,
+            db_version = s.db_version,
+            operation = s.operation,
+            system = s.system,
+            status = s.status,
+            started_at = s.started_at,
+            finished_at = s.finished_at,
+            error_type = s.error_type,
+            error_message = s.error_message
+        from src.run s
+        join matched_run m on s.id = m.src_id
+        where d.id = m.dest_id
+        """
+    )
+
+    con.execute(
         f"""
         create or replace temp table run_map as
+        select src_id, dest_id as new_id from matched_run
+        union all
         select s.id as src_id, {run_offset} + row_number() over (order by s.id) as new_id
-        from src.run s where s.status <> 'running'
+        from unmatched_source_run s
         """
     )
     con.execute(
@@ -127,10 +161,11 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
                          started_at, finished_at, error_type, error_message)
         select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.operation, s.system, s.status,
                s.started_at, s.finished_at, s.error_type, s.error_message
-        from src.run s join run_map m on s.id = m.src_id
+        from src.run s
+        join run_map m on s.id = m.src_id
+        join unmatched_source_run u on s.id = u.id
         """
     )
-    runs_added = _fetch_scalar(con, "select count(*) from run_map")
 
     con.execute(
         """

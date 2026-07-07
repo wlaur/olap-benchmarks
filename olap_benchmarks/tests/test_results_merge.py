@@ -156,7 +156,7 @@ def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
 
     stats = merge_results(source, dest, head_revision=get_results_head_revision())
 
-    assert stats.runs_added == 1
+    assert stats.runs_added == 0
     assert stats.runs_replaced == 1
 
     assert _query(dest, "select count(*) from run")[0][0] == 2
@@ -165,7 +165,7 @@ def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
 
     # merging the same source again is idempotent
     stats = merge_results(source, dest, head_revision=get_results_head_revision())
-    assert stats.runs_added == 1
+    assert stats.runs_added == 0
     assert stats.runs_replaced == 1
     assert _query(dest, "select count(*) from run")[0][0] == 2
     assert _query(dest, "select count(*) from run_step")[0][0] == 2
