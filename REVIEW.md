@@ -108,7 +108,10 @@ and every deviation is listed on the site."
 
 ### 1.5 Published-data hygiene (found in `site/public/data/results.db`)
 
-- [ ] Don't insert a run row when `should_populate()` skips; delete run 77 and republish
+- [x] Don't insert a run row when `should_populate()` skips; delete run 77 and republish
+      *(fixed 2026-07-07: populate preflight returns before run recording
+      when data already matches; the migrated skipped ClickHouse TPC-H
+      populate run was deleted and the published DB replaced)*
 - [ ] Re-run older suites so all DBs share iteration counts and MonetDB versions
 - [ ] Run QuestDB on rtabench/time_series/kaggle_airbnb or note why absent
 
