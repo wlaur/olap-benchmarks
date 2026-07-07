@@ -58,7 +58,10 @@ row counts currently match.
 
 ### 1.3 Tuning/physical-design asymmetry with no stated policy
 
-- [ ] Decide and document a tuning policy; publish per-db tuning notes on the site
+- [x] Decide and document a tuning policy; publish per-db tuning notes on the site
+      *(fixed 2026-07-07: `home.md` now states that documented
+      vendor-recommended settings and per-suite physical design are allowed,
+      and lists current per-engine tuning/layout notes)*
 
 Individually defensible (some mirror upstream ClickBench/StarRocks practice), but
 collectively there is no rule for who gets optimized:
