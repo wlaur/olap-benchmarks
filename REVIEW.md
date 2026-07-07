@@ -194,7 +194,9 @@ runbook). Worthwhile improvements:
       *(fixed 2026-07-07: `uq_run_natural_key` enforces
       `(system, db, db_version, suite, suite_scale_factor, operation, started_at)`;
       merge now reuses matched destination run IDs when replacing runs)*
-- [ ] `results/new.db` looks like a stale revision; delete or rename meaningfully.
+- [x] `results/new.db` looks like a stale revision; delete or rename meaningfully.
+      *(fixed 2026-07-07: removed the ignored local stale revision; only
+      `default` remains under `results/`)*
 
 ---
 
