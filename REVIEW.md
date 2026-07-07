@@ -130,7 +130,9 @@ and every deviation is listed on the site."
       `QueryHeatmapPanel.tsx:58`) — SQL never displays for tpch_sf10/tpch_sf50
       *(fixed 2026-07-07: `SuiteConfig.queriesKey` maps suite ids to queries.json keys,
       covers tpch and the new tpcds suite)*
-- [ ] Document cold-iteration inclusion (or exclude iteration 1) in scoring
+- [x] Document cold-iteration inclusion (or exclude iteration 1) in scoring
+      *(fixed 2026-07-07: home methodology and score explainer state that
+      medians include all recorded iterations, including the first iteration)*
 - [x] Penalize (or at least flag) skipped/missing queries in the score
       *(already implemented: `computeDatabaseScores` scores missing queries as
       at least 10x or 2x the slowest observed ratio, and the home/explorer score

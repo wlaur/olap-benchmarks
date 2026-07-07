@@ -18,7 +18,7 @@ All results for a given system (e.g. `macbook-pro-m4`) come from the same machin
 ### Metrics
 
 - **Populate** — time to create tables and load data
-- **Query latency** — wall-clock time per query, median over multiple iterations
+- **Query latency** — wall-clock time per query, median over all recorded iterations, including the first iteration
 - **Resources** — CPU, memory, and disk usage sampled throughout each phase
 
 ## Explorer
