@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import get_args
+from typing import Any, get_args
 
 import polars as pl
 import pytest
@@ -83,6 +83,24 @@ class DummySuite(BenchmarkSuite[CountingDatabase]):
         raise NotImplementedError
 
 
+class SkipPopulateSuite(BenchmarkSuite["SkipPopulateDatabase"]):
+    name: SuiteName = "clickbench"
+
+    def should_populate(self) -> bool:
+        return False
+
+    def populate(self) -> None:
+        raise AssertionError("populate should not run when should_populate is false")
+
+    def select(self) -> None:
+        raise NotImplementedError
+
+
+class SkipPopulateDatabase(DummyDatabase):
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {"clickbench": SkipPopulateSuite}
+
+
 def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
     assert DummySuite.supported_operations == ("populate", "select")
 
@@ -108,6 +126,14 @@ def test_database_benchmark_rejects_unsupported_operation() -> None:
 
     with pytest.raises(ValueError, match="does not support operation 'mutate'"):
         db.benchmark("clickbench", "mutate")
+
+
+def test_database_benchmark_does_not_record_skipped_populate() -> None:
+    db = SkipPopulateDatabase()
+
+    db.benchmark("clickbench", "populate")
+
+    assert db._run_id is None
 
 
 def test_suite_should_skip_populate_when_expected_data_exists() -> None:
