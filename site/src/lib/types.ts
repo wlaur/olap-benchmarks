@@ -29,6 +29,18 @@ export interface QuerySummary {
   iterations: number
 }
 
+export type RunStatus = "running" | "completed" | "failed"
+
+export interface QueryCoverage {
+  run_id: number
+  db: string
+  db_version: string
+  latest_status: Exclude<RunStatus, "running">
+  failed_query_count: number
+  attempted_query_count: number
+  completed_query_count: number
+}
+
 export type BenchmarkOperation = "populate" | "mutate" | "select"
 
 export interface MetricSample {

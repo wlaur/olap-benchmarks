@@ -7,6 +7,7 @@ import {
   fetchMutateSteps,
   fetchMutateSummaries,
   fetchOperationSummaries,
+  fetchQueryCoverage,
   fetchQueriesManifest,
   fetchQuerySteps,
   fetchQuerySummaries,
@@ -19,6 +20,7 @@ import type {
   MetricSample,
   OperationSummary,
   QueriesManifest,
+  QueryCoverage,
   QueryStep,
   QuerySummary,
   RunSummary,
@@ -31,6 +33,7 @@ export interface SuiteDataState {
   runSummaries: RunSummary[]
   operationSummaries: OperationSummary[]
   metricSamples: MetricSample[]
+  queryCoverage: QueryCoverage[]
   querySummaries: QuerySummary[]
   mutateSummaries: QuerySummary[]
   insertSteps: InsertStep[]
@@ -47,6 +50,7 @@ function createInitialState(): SuiteDataState {
     runSummaries: [],
     operationSummaries: [],
     metricSamples: [],
+    queryCoverage: [],
     querySummaries: [],
     mutateSummaries: [],
     insertSteps: [],
@@ -66,6 +70,7 @@ export interface UseSuiteDataResult {
   selectedScaleFactor: number | null
   setSelectedScaleFactor: React.Dispatch<React.SetStateAction<number | null>>
   filteredQuerySummaries: QuerySummary[]
+  filteredQueryCoverage: QueryCoverage[]
   filteredMutateSummaries: QuerySummary[]
   filteredOperationSummaries: OperationSummary[]
   isLoading: boolean
@@ -158,6 +163,7 @@ export function useSuiteData(
     Promise.all([
       fetchRunSummaries(system, suite, selectedScaleFactor),
       fetchOperationSummaries(system, suite, selectedScaleFactor),
+      fetchQueryCoverage(system, suite, selectedScaleFactor),
       fetchQuerySummaries(system, suite, selectedScaleFactor),
       hasMutate
         ? fetchMutateSummaries(system, suite, selectedScaleFactor)
@@ -165,7 +171,14 @@ export function useSuiteData(
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
-        ([runSummaries, operationSummaries, querySummaries, mutateSummaries, queriesManifest]) => {
+        ([
+          runSummaries,
+          operationSummaries,
+          queryCoverage,
+          querySummaries,
+          mutateSummaries,
+          queriesManifest,
+        ]) => {
           if (cancelled) return
 
           startTransition(() => {
@@ -174,6 +187,7 @@ export function useSuiteData(
               loading: false,
               runSummaries,
               operationSummaries,
+              queryCoverage,
               querySummaries,
               mutateSummaries,
               queriesManifest,
@@ -234,8 +248,14 @@ export function useSuiteData(
   }, [isSystemLoading, selectedScaleFactor, system, suite, suiteConfig.operations])
 
   const databases = useMemo(
-    () => Array.from(new Set(state.runSummaries.map((run) => run.db))).sort(),
-    [state.runSummaries],
+    () =>
+      Array.from(
+        new Set([
+          ...state.runSummaries.map((run) => run.db),
+          ...state.queryCoverage.map((run) => run.db),
+        ]),
+      ).sort(),
+    [state.runSummaries, state.queryCoverage],
   )
 
   useEffect(() => {
@@ -266,6 +286,10 @@ export function useSuiteData(
   const filteredQuerySummaries = useMemo(
     () => state.querySummaries.filter((row) => includedDatabaseSet.has(row.db)),
     [state.querySummaries, includedDatabaseSet],
+  )
+  const filteredQueryCoverage = useMemo(
+    () => state.queryCoverage.filter((row) => includedDatabaseSet.has(row.db)),
+    [state.queryCoverage, includedDatabaseSet],
   )
   const filteredMutateSummaries = useMemo(
     () => state.mutateSummaries.filter((row) => includedDatabaseSet.has(row.db)),
@@ -298,6 +322,7 @@ export function useSuiteData(
     selectedScaleFactor,
     setSelectedScaleFactor,
     filteredQuerySummaries,
+    filteredQueryCoverage,
     filteredMutateSummaries,
     filteredOperationSummaries,
     isLoading,

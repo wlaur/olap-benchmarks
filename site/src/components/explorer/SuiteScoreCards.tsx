@@ -3,7 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 
 import { cn } from "../../lib/cn"
 import { computeDatabaseScores, formatScore, SCORE_EXPLAINER } from "../../lib/score"
-import type { QuerySummary } from "../../lib/types"
+import type { QueryCoverage, QuerySummary } from "../../lib/types"
 import { PortalCard, useAnchoredPosition, useDismissable } from "../controls/Popover"
 import { PanelCard } from "../layout/Panel"
 import { Skeleton } from "../Skeleton"
@@ -11,16 +11,21 @@ import { MetaLabel, SectionTitle } from "../Typography"
 
 interface SuiteScoreCardsProps {
   querySummaries: QuerySummary[]
+  queryCoverage: QueryCoverage[]
   databaseColors: Record<string, string>
   isLoading: boolean
 }
 
 export function SuiteScoreCards({
   querySummaries,
+  queryCoverage,
   databaseColors,
   isLoading,
 }: SuiteScoreCardsProps) {
-  const scores = useMemo(() => computeDatabaseScores(querySummaries), [querySummaries])
+  const scores = useMemo(
+    () => computeDatabaseScores(querySummaries, queryCoverage),
+    [querySummaries, queryCoverage],
+  )
 
   return (
     <PanelCard className="p-4">
@@ -48,6 +53,9 @@ export function SuiteScoreCards({
                 wins={entry.wins}
                 queryCount={entry.queryCount}
                 missing={entry.missing}
+                failed={entry.failed}
+                neverCompleted={entry.neverCompleted}
+                latestSelectFailed={entry.latestSelectFailed}
                 accent={databaseColors[entry.db] ?? "#94a3b8"}
               />
             ))}
@@ -63,11 +71,32 @@ interface ScoreCardProps {
   wins: number
   queryCount: number
   missing: number
+  failed: number
+  neverCompleted: number
+  latestSelectFailed: boolean
   accent: string
 }
 
-function ScoreCard({ rank, db, score, wins, queryCount, missing, accent }: ScoreCardProps) {
-  const isLeader = rank === 1
+function ScoreCard({
+  rank,
+  db,
+  score,
+  wins,
+  queryCount,
+  missing,
+  failed,
+  neverCompleted,
+  latestSelectFailed,
+  accent,
+}: ScoreCardProps) {
+  const isLeader = rank === 1 && Number.isFinite(score)
+  const coverageParts = [
+    queryCount > 0 ? `${wins}/${queryCount} fastest` : "0 completed",
+    failed > 0 ? `${failed} failed` : null,
+    neverCompleted > 0 ? `${neverCompleted} not run penalized` : null,
+    latestSelectFailed && failed === 0 ? "latest run failed" : null,
+  ].filter(Boolean)
+
   return (
     <div
       className={cn(
@@ -94,7 +123,8 @@ function ScoreCard({ rank, db, score, wins, queryCount, missing, accent }: Score
         </div>
         <p className="mt-0.5 truncate text-sm font-medium text-slate-100">{db}</p>
         <p className="mt-0.5 text-[11px] text-slate-400">
-          {wins}/{queryCount} fastest{missing > 0 ? ` · ${missing} missing penalized` : ""}
+          {coverageParts.join(" · ")}
+          {missing > 0 && failed > 0 && neverCompleted === 0 ? " penalized" : ""}
         </p>
       </div>
     </div>

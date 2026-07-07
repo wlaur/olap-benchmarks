@@ -60,6 +60,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     setSelectedScaleFactor,
     setSelectedDatabases,
     filteredQuerySummaries,
+    filteredQueryCoverage,
     filteredMutateSummaries,
     filteredOperationSummaries,
     isLoading,
@@ -92,7 +93,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     )
   }
 
-  if (!isLoading && state.runSummaries.length === 0) {
+  if (!isLoading && state.runSummaries.length === 0 && state.queryCoverage.length === 0) {
     return (
       <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <div className="rounded-2xl bg-surface-raised px-6 py-5 text-sm text-slate-300">
@@ -145,6 +146,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
       >
         <SuiteScoreCards
           querySummaries={filteredQuerySummaries}
+          queryCoverage={filteredQueryCoverage}
           databaseColors={databaseColors}
           isLoading={isLoading}
         />
