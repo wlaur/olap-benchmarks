@@ -179,9 +179,12 @@ runbook). Worthwhile improvements:
       benchmarks on another host, commit or transfer that revision's results DB through a normal
       Git workflow, and merge those runs into the published `site/public/data/results.db` without
       overwriting local/published history.
-- [ ] **`olap prepare all` crashes** on clickbench's `NotImplementedError`
+- [x] **`olap prepare all` crashes** on clickbench's `NotImplementedError`
       (`clickbench/config.py:19-23`) — make manual-download suites skip with an
       instructive warning instead.
+      *(fixed 2026-07-07: manual-preparation suites raise `ManualPreparationRequired`;
+      `prepare all` skips them with a warning, explicit suite preparation still fails
+      with the manual download instructions)*
 - [ ] **Suite registry is quadruplicated**: Python `SuiteName` (`settings.py:23`),
       `site/src/lib/benchmarks.ts`, `site/src/lib/suiteConfig.ts`, and hand-written
       `home.md`. A mismatch silently yields "No completed runs". Publish a `suites.json`

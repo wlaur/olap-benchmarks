@@ -20,6 +20,10 @@ from ..settings import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class ManualPreparationRequired(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class TableRowCountCheck:
     table_name: TableName
