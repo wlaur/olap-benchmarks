@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { benchmarkDefinitions, type BenchmarkSuiteId } from "../lib/benchmarks"
-import { fetchQuerySummaries } from "../lib/queries"
+import { fetchQueryCoverage, fetchQuerySummaries } from "../lib/queries"
 import { computeDatabaseScores, type DatabaseScore } from "../lib/score"
 
 export interface SuiteOverview {
@@ -39,12 +39,11 @@ export function useHomeOverview(system: string | null): HomeOverview {
 
     Promise.all(
       benchmarkDefinitions.map(async (definition) => {
-        const summaries = await fetchQuerySummaries(
-          system,
-          definition.id,
-          definition.defaultScaleFactor,
-        )
-        return { suiteId: definition.id, scores: computeDatabaseScores(summaries) }
+        const [summaries, coverage] = await Promise.all([
+          fetchQuerySummaries(system, definition.id, definition.defaultScaleFactor),
+          fetchQueryCoverage(system, definition.id, definition.defaultScaleFactor),
+        ])
+        return { suiteId: definition.id, scores: computeDatabaseScores(summaries, coverage) }
       }),
     )
       .then((suites) => {

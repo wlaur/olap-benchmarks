@@ -116,13 +116,21 @@ interface ScoreCellProps {
 function ScoreCell({ score, rank }: ScoreCellProps) {
   if (!score) {
     return (
-      <td className="px-4 py-3 text-right align-middle font-mono text-sm text-slate-500 tabular-nums">
-        —
+      <td className="px-4 py-3 text-right align-middle">
+        <span className="font-mono text-sm text-slate-500 tabular-nums">—</span>
+        <p className="mt-0.5 text-right text-[10px] text-slate-500">not run</p>
       </td>
     )
   }
 
-  const isLeader = rank === 0
+  const isLeader = rank === 0 && Number.isFinite(score.score)
+  const coverageParts = [
+    score.queryCount > 0 ? `${score.wins}/${score.queryCount} fastest` : "0 completed",
+    score.failed > 0 ? `${score.failed} failed` : null,
+    score.neverCompleted > 0 ? `${score.neverCompleted} not run` : null,
+    score.latestSelectFailed && score.failed === 0 ? "latest failed" : null,
+  ].filter(Boolean)
+
   return (
     <td className="px-4 py-3 text-right align-middle">
       <div className="flex items-center justify-end gap-2">
@@ -137,8 +145,8 @@ function ScoreCell({ score, rank }: ScoreCellProps) {
         </span>
       </div>
       <p className="mt-0.5 text-right text-[10px] text-slate-400">
-        {score.wins}/{score.queryCount} fastest
-        {score.missing > 0 ? ` · ${score.missing} missing` : ""}
+        {coverageParts.join(" · ")}
+        {score.missing > 0 && score.failed > 0 && score.neverCompleted === 0 ? " penalized" : ""}
       </p>
     </td>
   )

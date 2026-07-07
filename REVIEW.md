@@ -152,7 +152,10 @@ and every deviation is listed on the site."
       *(already implemented: `computeDatabaseScores` scores missing queries as
       at least 10x or 2x the slowest observed ratio, and the home/explorer score
       UI shows missing-query counts)*
-- [ ] Distinguish "failed" from "never attempted" in the UI
+- [x] Distinguish "failed" from "never attempted" in the UI
+      *(fixed 2026-07-07: the site now loads latest attempted select-run
+      coverage, includes failed-only database variants in filters/scores, and
+      labels failed query steps separately from not-run/missing queries)*
 - [x] Update `site/src/content/home.md` — TPC-H suites are missing from the suite list
       *(fixed 2026-07-07: TPC-H and TPC-DS suites added to the home suite list)*
 

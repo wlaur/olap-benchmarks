@@ -9,9 +9,11 @@ import type {
   MetricSample,
   OperationSummary,
   QueriesManifest,
+  QueryCoverage,
   QueryStep,
   QuerySummary,
   RunSummary,
+  RunStatus,
 } from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -56,7 +58,7 @@ export async function fetchSuiteScaleFactors(
     .distinct()
     .where("suite", "=", suite)
     .where("system", "=", system)
-    .where("status", "=", "completed")
+    .where("status", "!=", "running")
     .where("finished_at", "is not", null)
     .orderBy("suite_scale_factor")
     .execute()
@@ -131,6 +133,48 @@ function withLatestRuns(db: ResultsDb, options: LatestRunsOptions) {
     )
 }
 
+function withLatestAttemptedSelectRuns(
+  db: ResultsDb,
+  options: Omit<LatestRunsOptions, "operations">,
+) {
+  return db
+    .with("scoped_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.db_version").as("db_version"),
+          sql<string>`case
+            when count(distinct ${eb.ref("run.db_version")}) over (partition by ${eb.ref("run.db")}) > 1
+            then ${eb.ref("run.db")} || ' ' || ${eb.ref("run.db_version")}
+            else ${eb.ref("run.db")}
+          end`.as("db_label"),
+          sql<Exclude<RunStatus, "running">>`${eb.ref("run.status")}`.as("run_status"),
+          eb.ref("run.started_at").as("run_started_at"),
+          sql<Date>`coalesce(${eb.ref("run.finished_at")}, ${eb.ref("run.started_at")})`.as(
+            "run_finished_at",
+          ),
+        ])
+        .where("run.suite", "=", options.suite)
+        .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
+        .where("run.system", "=", options.system)
+        .where("run.operation", "=", "select")
+        .where("run.status", "!=", "running"),
+    )
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("scoped_runs")
+        .selectAll("scoped_runs")
+        .select((eb) => [
+          sql<number>`row_number() over (
+            partition by ${eb.ref("scoped_runs.db")}, ${eb.ref("scoped_runs.db_version")}
+            order by ${eb.ref("scoped_runs.run_finished_at")} desc, ${eb.ref("scoped_runs.run_id")} desc
+          )`.as("run_rank"),
+        ]),
+    )
+}
+
 export async function fetchRunSummaries(
   system: string,
   suite: BenchmarkSuiteId,
@@ -174,6 +218,54 @@ export async function fetchRunSummaries(
       "latest_runs.run_finished_at",
     ])
     .orderBy(sql`run_duration_s`)
+    .orderBy("latest_runs.db_label")
+    .execute()
+}
+
+export async function fetchQueryCoverage(
+  system: string,
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<QueryCoverage[]> {
+  const db = await getKyselyDb()
+
+  return withLatestAttemptedSelectRuns(db, { system, suite, suiteScaleFactor })
+    .selectFrom("latest_runs")
+    .leftJoin("run_step", "run_step.run_id", "latest_runs.run_id")
+    .select((eb) => [
+      eb.ref("latest_runs.run_id").as("run_id"),
+      eb.ref("latest_runs.db_label").as("db"),
+      eb.ref("latest_runs.db_version").as("db_version"),
+      eb.ref("latest_runs.run_status").as("latest_status"),
+      sql<number>`cast(
+        count(distinct ${eb.ref("run_step.query_name")}) filter (
+          where ${eb.ref("run_step.step_type")} = 'query'
+            and ${eb.ref("run_step.query_name")} is not null
+            and ${eb.ref("run_step.status")} = 'failed'
+        ) as integer
+      )`.as("failed_query_count"),
+      sql<number>`cast(
+        count(distinct ${eb.ref("run_step.query_name")}) filter (
+          where ${eb.ref("run_step.step_type")} = 'query'
+            and ${eb.ref("run_step.query_name")} is not null
+            and ${eb.ref("run_step.status")} in ('completed', 'failed')
+        ) as integer
+      )`.as("attempted_query_count"),
+      sql<number>`cast(
+        count(distinct ${eb.ref("run_step.query_name")}) filter (
+          where ${eb.ref("run_step.step_type")} = 'query'
+            and ${eb.ref("run_step.query_name")} is not null
+            and ${eb.ref("run_step.status")} = 'completed'
+        ) as integer
+      )`.as("completed_query_count"),
+    ])
+    .where("latest_runs.run_rank", "=", 1)
+    .groupBy([
+      "latest_runs.run_id",
+      "latest_runs.db_label",
+      "latest_runs.db_version",
+      "latest_runs.run_status",
+    ])
     .orderBy("latest_runs.db_label")
     .execute()
 }
