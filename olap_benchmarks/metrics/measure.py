@@ -11,7 +11,7 @@ import docker
 import psutil
 from pydantic import BaseModel
 
-from ..settings import MAIN_PROCESS_TITLE, SETTINGS, DatabaseName, SuiteName
+from ..settings import MAIN_PROCESS_TITLE, SETTINGS, DatabaseName, SuiteName, format_suite_data_directory_name
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,8 +65,8 @@ def get_container_name(db: DatabaseName) -> str:
     return f"{db}-benchmark"
 
 
-def get_database_directory(db: DatabaseName, suite: SuiteName) -> Path:
-    return SETTINGS.database_directory / db / suite
+def get_database_directory(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> Path:
+    return SETTINGS.database_directory / db / format_suite_data_directory_name(suite, suite_scale_factor)
 
 
 def calculate_cpu_percent(cpu_stats: dict[str, Any], precpu_stats: dict[str, Any]) -> float:
@@ -92,7 +92,7 @@ def find_main_process() -> psutil.Process:
     raise RuntimeError(f"Process with title '{MAIN_PROCESS_TITLE}' not found")
 
 
-def get_main_process_metrics(db: DatabaseName, suite: SuiteName) -> BenchmarkMetric:
+def get_main_process_metrics(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> BenchmarkMetric:
     proc = find_main_process()
 
     proc.cpu_percent(interval=None)  # snapshot baseline
@@ -103,16 +103,18 @@ def get_main_process_metrics(db: DatabaseName, suite: SuiteName) -> BenchmarkMet
     mem_mb = int(mem_info.rss / (1024 * 1024))
 
     return BenchmarkMetric(
-        cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=get_directory_size_mb(get_database_directory(db, suite))
+        cpu_percent=cpu_percent,
+        mem_mb=mem_mb,
+        disk_mb=get_directory_size_mb(get_database_directory(db, suite, suite_scale_factor)),
     )
 
 
-def get_container_metrics(db: DatabaseName, suite: SuiteName) -> BenchmarkMetric:
+def get_container_metrics(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> BenchmarkMetric:
     if db in IN_PROCESS_DBS:
         # contains potentially significant overhead from e.g. the insert methods
         # using docker stats only shows the resource usage from the database itself, not the main process that
         # reads and processes input Parquet files
-        return get_main_process_metrics(db, suite)
+        return get_main_process_metrics(db, suite, suite_scale_factor)
 
     container = cast(Any, get_docker_client().containers).get(get_container_name(db))
 
@@ -124,7 +126,7 @@ def get_container_metrics(db: DatabaseName, suite: SuiteName) -> BenchmarkMetric
     except KeyError as e:
         _LOGGER.warning(f"docker stats output invalid (KeyError: {e}): {stats}, sleeping and retrying...")
         sleep(1)
-        return get_container_metrics(db, suite)
+        return get_container_metrics(db, suite, suite_scale_factor)
 
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))
@@ -132,7 +134,7 @@ def get_container_metrics(db: DatabaseName, suite: SuiteName) -> BenchmarkMetric
     return BenchmarkMetric(
         cpu_percent=cpu_percent,
         mem_mb=mem_mb,
-        disk_mb=get_directory_size_mb(get_database_directory(db, suite)),
+        disk_mb=get_directory_size_mb(get_database_directory(db, suite, suite_scale_factor)),
     )
 
 

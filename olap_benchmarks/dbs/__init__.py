@@ -17,7 +17,17 @@ from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
-from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
+from ..settings import (
+    REPO_ROOT,
+    SETTINGS,
+    DatabaseName,
+    Operation,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+    get_suite_scale_factor,
+    resolve_suite_scale_factor,
+)
 from ..utils import run_shell
 from .utils import tracked_commit
 
@@ -37,6 +47,7 @@ class Database(BaseModel, ABC):
 
     current_query_name: str | None = None
     _current_suite: SuiteName | None = None
+    _current_suite_scale_factor: int | None = None
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
@@ -53,8 +64,18 @@ class Database(BaseModel, ABC):
         return self._current_suite
 
     @property
+    def current_suite_scale_factor(self) -> int:
+        if self._current_suite is None:
+            raise ValueError("current_suite is not set")
+        return resolve_suite_scale_factor(self._current_suite, self._current_suite_scale_factor)
+
+    @property
     def database_directory(self) -> Path:
-        directory = SETTINGS.database_directory / self.name / self.current_suite
+        directory = (
+            SETTINGS.database_directory
+            / self.name
+            / format_suite_data_directory_name(self.current_suite, self.current_suite_scale_factor)
+        )
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
@@ -438,28 +459,36 @@ class Database(BaseModel, ABC):
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
         from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
-        from ..suites.tpcds.config import Tpcds
-        from ..suites.tpch.config import Tpch
+        from ..suites.tpc_ds.config import TpcDs
+        from ..suites.tpc_h.config import TpcH
 
         return {
             "rtabench": RTABench,
             "clickbench": Clickbench,
             "time_series": TimeSeries,
             "kaggle_airbnb": KaggleAirbnb,
-            "tpch_sf10": Tpch,
-            "tpch_sf50": Tpch,
-            "tpcds_sf1": Tpcds,
+            "tpc_h": TpcH,
+            "tpc_ds": TpcDs,
         }
 
     @property
     def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
         return {
-            suite_name: suite_class(db=self, name=suite_name)
+            suite_name: suite_class(
+                db=self,
+                name=suite_name,
+                scale_factor=(
+                    self.current_suite_scale_factor
+                    if self._current_suite == suite_name
+                    else get_suite_scale_factor(suite_name)
+                ),
+            )
             for suite_name, suite_class in self.suite_registry().items()
         }
 
-    def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+    def benchmark(self, suite: SuiteName, operation: Operation, scale_factor: int | None = None) -> None:
         self._current_suite = suite
+        self._current_suite_scale_factor = resolve_suite_scale_factor(suite, scale_factor)
         self._active_step_ids = []
         benchmark = self.benchmarks.get(suite)
 
@@ -488,6 +517,7 @@ class Database(BaseModel, ABC):
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(
             suite=suite,
+            suite_scale_factor=benchmark.scale_factor,
             db=self.name,
             db_version=self.version,
             operation=operation,
@@ -498,6 +528,7 @@ class Database(BaseModel, ABC):
         metric_process, stop_event = start_metric_sampler(
             db=self.name,
             suite=suite,
+            suite_scale_factor=benchmark.scale_factor,
             run_id=self.run_id,
             storage=self.result_storage,
             interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
@@ -510,7 +541,9 @@ class Database(BaseModel, ABC):
         t0 = perf_counter()
 
         _LOGGER.info(
-            f"Starting benchmark run {self.run_id} (database: {self.name}, suite: {suite}, operation: {operation})"
+            f"Starting benchmark run {self.run_id} "
+            f"(database: {self.name}, suite: {suite}, scale_factor: {benchmark.scale_factor}, "
+            f"operation: {operation})"
         )
 
         try:

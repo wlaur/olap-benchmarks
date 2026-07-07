@@ -21,6 +21,10 @@ const FlameGraphPanel = lazy(() =>
   import("../components/explorer/FlameGraphPanel").then((m) => ({ default: m.FlameGraphPanel })),
 )
 import { DatabaseMultiSelect } from "../components/filters/DatabaseMultiSelect"
+import {
+  ScaleFactorSelector,
+  ScaleFactorSelectorSkeleton,
+} from "../components/filters/ScaleFactorSelector"
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
 import { useSelectionState } from "../hooks/useSelectionState"
 import { useSuiteData } from "../hooks/useSuiteData"
@@ -51,6 +55,9 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     state,
     databases,
     includedDatabases,
+    scaleFactors,
+    selectedScaleFactor,
+    setSelectedScaleFactor,
     setSelectedDatabases,
     filteredQuerySummaries,
     filteredMutateSummaries,
@@ -97,21 +104,39 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
 
   return (
     <div className="flex min-h-full w-full flex-col gap-6 pb-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-300 uppercase">
-          Databases
-        </span>
-        {isLoading ? (
-          <FilterChipsSkeleton />
-        ) : (
-          <DatabaseMultiSelect
-            databases={databases}
-            selectedDatabases={includedDatabases}
-            databaseColors={databaseColors}
-            onSelectAll={() => setSelectedDatabases(databases)}
-            onToggleDatabase={toggleDatabase}
-          />
-        )}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-300 uppercase">
+            Scale
+          </span>
+          {isLoading && scaleFactors.length === 0 ? (
+            <ScaleFactorSelectorSkeleton />
+          ) : (
+            <ScaleFactorSelector
+              scaleFactors={scaleFactors}
+              selected={selectedScaleFactor}
+              onChange={setSelectedScaleFactor}
+              disabled={isLoading}
+            />
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="shrink-0 text-[0.65rem] font-semibold tracking-widest text-slate-300 uppercase">
+            Databases
+          </span>
+          {isLoading ? (
+            <FilterChipsSkeleton />
+          ) : (
+            <DatabaseMultiSelect
+              databases={databases}
+              selectedDatabases={includedDatabases}
+              databaseColors={databaseColors}
+              onSelectAll={() => setSelectedDatabases(databases)}
+              onToggleDatabase={toggleDatabase}
+            />
+          )}
+        </div>
       </div>
 
       <ExplorerSection
@@ -229,6 +254,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
                 <FlameGraphPanel
                   system={system}
                   suite={suiteId}
+                  suiteScaleFactor={selectedScaleFactor}
                   databases={includedDatabases}
                   metricSamples={state.metricSamples}
                   isLoading={deferredLoading}

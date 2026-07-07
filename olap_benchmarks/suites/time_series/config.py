@@ -11,7 +11,14 @@ import numpy as np
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
+from ...settings import (
+    REPO_ROOT,
+    SETTINGS,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+    resolve_suite_scale_factor,
+)
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,13 +38,13 @@ DatasetSize = Literal[
 ]
 
 
-TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
+BASE_TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "tall": (2_000_000, 10),
     "wide": (200_000, 1_500),
     "large": (4_000_000, 1_500),
 }
 
-assert set(TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
+assert set(BASE_TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
 
 MutateAction = Literal["insert", "upsert", "delete"]
 
@@ -87,12 +94,23 @@ def get_time_series_column_counts(n_cols: int) -> TimeSeriesColumnCounts:
     )
 
 
-def get_time_series_input_files() -> dict[TableName, Path]:
-    return {get_time_series_table_name(size): get_dataset_path(size) for size in TIME_SERIES_DATASET_SIZES}
+def get_time_series_dataset_sizes(scale_factor: int) -> dict[DatasetSize, tuple[int, int]]:
+    scale_factor = resolve_suite_scale_factor("time_series", scale_factor)
+    return {size: (rows * scale_factor, cols) for size, (rows, cols) in BASE_TIME_SERIES_DATASET_SIZES.items()}
 
 
-def get_time_series_expected_row_counts() -> dict[TableName, int]:
-    return {get_time_series_table_name(size): rows for size, (rows, _cols) in TIME_SERIES_DATASET_SIZES.items()}
+def get_time_series_input_files(scale_factor: int) -> dict[TableName, Path]:
+    return {
+        get_time_series_table_name(size): get_dataset_path(size, scale_factor)
+        for size in BASE_TIME_SERIES_DATASET_SIZES
+    }
+
+
+def get_time_series_expected_row_counts(scale_factor: int) -> dict[TableName, int]:
+    return {
+        get_time_series_table_name(size): rows
+        for size, (rows, _cols) in get_time_series_dataset_sizes(scale_factor).items()
+    }
 
 
 @dataclass(frozen=True)
@@ -386,16 +404,18 @@ def write_time_series_dataset(
             shutil.rmtree(temp_dir)
 
 
-def get_dataset_path(size: DatasetSize) -> Path:
-    return SETTINGS.input_data_directory / "time_series" / f"{get_time_series_table_name(size)}.parquet"
+def get_dataset_path(size: DatasetSize, scale_factor: int) -> Path:
+    data_directory_name = format_suite_data_directory_name("time_series", scale_factor)
+    return SETTINGS.input_data_directory / data_directory_name / f"{get_time_series_table_name(size)}.parquet"
 
 
-def prepare_data(overwrite: bool = False) -> None:
-    output_directory = SETTINGS.input_data_directory / "time_series"
+def prepare_data(scale_factor: int = 1, overwrite: bool = False) -> None:
+    scale_factor = resolve_suite_scale_factor("time_series", scale_factor)
+    output_directory = SETTINGS.input_data_directory / format_suite_data_directory_name("time_series", scale_factor)
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    for size, (rows, cols) in TIME_SERIES_DATASET_SIZES.items():
-        fpath = get_dataset_path(size)
+    for size, (rows, cols) in get_time_series_dataset_sizes(scale_factor).items():
+        fpath = get_dataset_path(size, scale_factor)
 
         if fpath.is_file() and not overwrite:
             _LOGGER.info(f"Reusing dataset {fpath.name}")
@@ -420,7 +440,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return enabled_steps, skipped_steps
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
-        return get_time_series_expected_row_counts()
+        return get_time_series_expected_row_counts(self.scale_factor)
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
@@ -450,7 +470,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
         self.db.initialize_schema("time_series")
 
-        for table_name, fpath in get_time_series_input_files().items():
+        for table_name, fpath in get_time_series_input_files(self.scale_factor).items():
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
@@ -520,7 +540,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return "time"
 
     def _get_mutate_dataset_size(self, table_name: TableName) -> DatasetSize | None:
-        for size in TIME_SERIES_DATASET_SIZES:
+        for size in BASE_TIME_SERIES_DATASET_SIZES:
             if get_time_series_table_name(size) == table_name:
                 return size
         return None
@@ -530,7 +550,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         if size is None:
             raise ValueError(f"Unsupported time-series table: {table_name}")
 
-        n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+        n_rows, n_cols = get_time_series_dataset_sizes(self.scale_factor)[size]
         spec = build_time_series_generation_spec(n_rows, n_cols, seed=1)
         return ["time", *spec.column_order]
 
@@ -539,7 +559,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         if size is None:
             raise ValueError(f"Unsupported time-series table: {step.table}")
 
-        _rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+        _rows, n_cols = get_time_series_dataset_sizes(self.scale_factor)[size]
         df = generate_time_series_data(step.row_count, n_cols, seed=seed)
         start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
         return df.select(self._get_table_column_order(step.table)).with_columns(
@@ -557,7 +577,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         if size is None:
             raise ValueError(f"Unsupported time-series table: {step.table}")
 
-        n_rows, n_cols = TIME_SERIES_DATASET_SIZES[size]
+        n_rows, n_cols = get_time_series_dataset_sizes(self.scale_factor)[size]
         df = generate_time_series_data(step.row_count, n_cols, seed=seed + 1000)
         rng = np.random.default_rng(seed)
         end = datetime(2025, 1, 1)
@@ -575,7 +595,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         if size is None:
             raise ValueError(f"Unsupported time-series table: {step.table}")
 
-        n_rows, _n_cols = TIME_SERIES_DATASET_SIZES[size]
+        n_rows, _n_cols = get_time_series_dataset_sizes(self.scale_factor)[size]
 
         rng = np.random.default_rng(seed)
         end = datetime(2025, 1, 1)

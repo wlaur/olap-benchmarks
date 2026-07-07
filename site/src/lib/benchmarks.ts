@@ -3,14 +3,14 @@ export type BenchmarkSuiteId =
   | "rtabench"
   | "clickbench"
   | "kaggle_airbnb"
-  | "tpch_sf10"
-  | "tpch_sf50"
-  | "tpcds_sf1"
+  | "tpc_h"
+  | "tpc_ds"
 
 export interface BenchmarkDefinition {
   id: BenchmarkSuiteId
   navLabel: string
   title: string
+  defaultScaleFactor: number
 }
 
 export const benchmarkDefinitions: BenchmarkDefinition[] = [
@@ -18,36 +18,37 @@ export const benchmarkDefinitions: BenchmarkDefinition[] = [
     id: "time_series",
     navLabel: "Time Series",
     title: "Time Series",
+    defaultScaleFactor: 1,
   },
   {
     id: "rtabench",
     navLabel: "RTABench",
     title: "RTABench",
+    defaultScaleFactor: 1,
   },
   {
     id: "clickbench",
     navLabel: "ClickBench",
     title: "ClickBench",
+    defaultScaleFactor: 1,
   },
   {
     id: "kaggle_airbnb",
     navLabel: "Kaggle Airbnb",
     title: "Kaggle Airbnb",
+    defaultScaleFactor: 1,
   },
   {
-    id: "tpch_sf10",
-    navLabel: "TPC-H SF10",
-    title: "TPC-H SF10",
+    id: "tpc_h",
+    navLabel: "TPC-H",
+    title: "TPC-H",
+    defaultScaleFactor: 10,
   },
   {
-    id: "tpch_sf50",
-    navLabel: "TPC-H SF50",
-    title: "TPC-H SF50",
-  },
-  {
-    id: "tpcds_sf1",
-    navLabel: "TPC-DS SF1",
-    title: "TPC-DS SF1",
+    id: "tpc_ds",
+    navLabel: "TPC-DS",
+    title: "TPC-DS",
+    defaultScaleFactor: 1,
   },
 ]
 

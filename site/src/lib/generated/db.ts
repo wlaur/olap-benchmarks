@@ -55,6 +55,7 @@ export type QueryExecutionUpdateable = Updateable<QueryExecution>
 export type Run = {
   id: Generated<number>
   suite: string
+  suite_scale_factor: number
   db: string
   db_version: string
   operation: string

@@ -135,7 +135,8 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
 
-        def benchmark(self, _suite: str, _operation: str) -> None:
+        def benchmark(self, _suite: str, _operation: str, scale_factor: int | None = None) -> None:
+            assert scale_factor == 1
             raise KeyboardInterrupt
 
     writer = DummyWriter()
@@ -148,7 +149,8 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     def fake_resolve_dbs(_db: object) -> list[str]:
         return ["timescaledb"]
 
-    def fake_check_input_data(_suite_name: str) -> None:
+    def fake_check_input_data(_suite_name: str, scale_factor: int) -> None:
+        assert scale_factor == 1
         return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
@@ -201,13 +203,13 @@ def test_benchmark_all_uses_suite_supported_operations(
         def __init__(self) -> None:
             self._current_suite = None
             self.benchmarks = {"clickbench": DummyClickbenchSuite()}
-            self.operations: list[tuple[str, str]] = []
+            self.operations: list[tuple[str, str, int | None]] = []
 
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
 
-        def benchmark(self, suite: str, operation: str) -> None:
-            self.operations.append((suite, operation))
+        def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
+            self.operations.append((suite, operation, scale_factor))
 
     writer = DummyWriter()
     db_instance = DummyDatabase()
@@ -218,7 +220,8 @@ def test_benchmark_all_uses_suite_supported_operations(
     def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
         return ["clickhouse"]
 
-    def fake_check_input_data(_suite_name: SuiteName) -> None:
+    def fake_check_input_data(_suite_name: SuiteName, scale_factor: int) -> None:
+        assert scale_factor == 1
         return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
@@ -243,4 +246,4 @@ def test_benchmark_all_uses_suite_supported_operations(
 
     __main__.benchmark(db="clickhouse", suite="clickbench", operation="all")
 
-    assert db_instance.operations == [("clickbench", "populate"), ("clickbench", "select")]
+    assert db_instance.operations == [("clickbench", "populate", 1), ("clickbench", "select", 1)]

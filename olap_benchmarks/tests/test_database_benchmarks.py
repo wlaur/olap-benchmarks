@@ -98,6 +98,9 @@ def test_database_benchmarks_resolves_all_suites() -> None:
 
     assert set(benchmarks) == set(get_args(SuiteName))
     assert benchmarks["time_series"].db is db
+    assert benchmarks["time_series"].scale_factor == 1
+    assert benchmarks["tpc_h"].scale_factor == 10
+    assert benchmarks["tpc_ds"].scale_factor == 1
 
 
 def test_database_benchmark_rejects_unsupported_operation() -> None:

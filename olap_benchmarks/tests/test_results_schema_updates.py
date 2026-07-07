@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
+import duckdb
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -80,12 +82,51 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
 
             assert session.get(Run, run.id) is not None
             assert session.get(Run, run.id).status == "completed"  # pyright: ignore[reportOptionalMemberAccess]
+            assert session.get(Run, run.id).suite_scale_factor == 1  # pyright: ignore[reportOptionalMemberAccess]
 
             with engine.begin() as connection:
                 head_revision = connection.exec_driver_sql("select version_num from alembic_version").scalar_one()
-            assert head_revision == get_results_head_revision()
+                assert head_revision == get_results_head_revision()
+
+                scale_column = next(
+                    row
+                    for row in connection.exec_driver_sql("pragma table_info('run')").mappings()
+                    if row["name"] == "suite_scale_factor"
+                )
+                assert scale_column["notnull"] is True
     finally:
         engine.dispose()
+
+
+def test_suite_scale_factor_migration_normalizes_legacy_tpc_suite_names(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="2f5d7f0e8a21")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, db, db_version, operation, system, status, started_at
+            ) values
+                ('tpch_sf50', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00'),
+                ('tpcds_sf1', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-02 00:00:00')
+            """
+        )
+        con.close()
+
+        migrate_results(db_path=db_path)
+
+        con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+        rows = con.execute("select suite, suite_scale_factor from run order by started_at").fetchall()
+        assert rows == [("tpc_h", 50), ("tpc_ds", 1)]
+
+        scale_column = next(
+            row for row in con.execute("pragma table_info('run')").fetchall() if row[1] == "suite_scale_factor"
+        )
+        assert scale_column[3] is True
+    finally:
+        con.close()
 
 
 def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Path) -> None:

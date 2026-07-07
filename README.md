@@ -41,13 +41,13 @@ The full loop for one suite/db combination:
 
 ```bash
 # 1. generate or download input data (one-time per suite, see table below)
-uv run olap prepare tpch_sf10
+uv run olap prepare tpc_h --scale-factor 10
 
 # 2. run the benchmark (populate + select [+ mutate] by default)
-uv run olap benchmark clickhouse tpch_sf10
+uv run olap benchmark clickhouse tpc_h --scale-factor 10
 
 # 3. inspect the results
-uv run olap results runs --suite tpch_sf10 --db clickhouse
+uv run olap results runs --suite tpc_h --db clickhouse
 uv run olap results query "select * from run order by started_at desc limit 5"
 
 # 4. publish to the site (merge new runs into site/public/data/results.db)
@@ -63,26 +63,27 @@ cd site && bun install && bun run dev
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `time_series`          | Generated locally                                                                        |
 | `rtabench`             | Downloaded automatically from rtadatasets.timescale.com                                  |
-| `tpch_sf10` / `tpch_sf50` | Generated locally with `tpchgen-cli`                                                  |
-| `tpcds_sf1`            | Generated locally with `tpcgen-cli` (decimals cast to spec precision and four columns renamed to spec names after generation) |
+| `tpc_h`                | Generated locally with `tpchgen-cli`; use `--scale-factor` for SF10/SF50/etc.         |
+| `tpc_ds`               | Generated locally with `tpcgen-cli`; use `--scale-factor` (decimals cast to spec precision and four columns renamed to spec names after generation) |
 | `clickbench`           | Manual: download [hits.parquet](https://datasets.clickhouse.com/hits_compatible/hits.parquet) to `data/input/clickbench/` |
 | `kaggle_airbnb`        | Manual: download the Austin CSVs from [Kaggle](https://www.kaggle.com/datasets/konradb/inside-airbnb-usa) to `data/input/kaggle_airbnb/`, then run `prepare` to convert to Parquet |
 
-### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB]`
+### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N]`
 
 - `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `questdb`, `postgres`, `starrocks`, or `all`
-- `suite`: `rtabench`, `time_series`, `clickbench`, `kaggle_airbnb`, `tpch_sf10`, `tpch_sf50`, `tpcds_sf1`, or `all`
+- `suite`: `rtabench`, `time_series`, `clickbench`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
 - `operation`: `populate`, `select`, `mutate`, or `all` (default). `mutate` is only supported by `time_series`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
 - `--omit`: skip databases when using `db=all`, e.g. `--omit questdb --omit starrocks`
+- `--scale-factor`: suite scale factor (`>= 1`). TPC-H, TPC-DS, and time-series support scaling; fixed-size suites require `1`.
 
 The container is started and stopped automatically. Populate is skipped when
 existing tables already match the expected row counts, so `olap benchmark <db>
 <suite> select` reuses previously loaded data. Examples:
 
 ```bash
-uv run olap benchmark all tpch_sf10             # every db, one suite
+uv run olap benchmark all tpc_h --scale-factor 10  # every db, one suite/scale
 uv run olap benchmark duckdb all                # one db, every suite
 uv run olap benchmark starrocks clickbench select   # re-run only the select queries
 uv run olap benchmark all all --omit questdb    # the full matrix, minus one db
@@ -91,8 +92,8 @@ uv run olap benchmark all all --omit questdb    # the full matrix, minus one db
 To start a database manually (e.g. to poke at loaded data):
 
 ```bash
-uv run olap docker clickhouse tpch_sf10 start
-uv run olap docker clickhouse tpch_sf10 stop
+uv run olap docker clickhouse tpc_h start --scale-factor 10
+uv run olap docker clickhouse tpc_h stop --scale-factor 10
 ```
 
 ### `olap results ...`
@@ -185,8 +186,8 @@ uv run pytest
 - **ClickBench** suite is based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse
 - **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale
 - **Kaggle Airbnb** suite is based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy
-- **TPC-H** suites (`tpch_sf10`, `tpch_sf50`) are derived from the [TPC-H benchmark](https://www.tpc.org/tpch/); results are not comparable to published TPC-H results. Data is generated with [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) (requires `cargo install tpchgen-cli`). Base queries come from the [DuckDB tpch extension](https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries), with per-database adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-h) and [StarRocks](https://docs.starrocks.io/docs/benchmarking/TPC-H_Benchmarking/)
-- **TPC-DS** suite (`tpcds_sf1`) is derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/); results are not comparable to published TPC-DS results. Data is generated with the `tpcgen-cli` from [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) at commit `09d609d1` (`--compat c`, conformance-tested against the reference dsdgen). Queries come from the [DuckDB tpcds extension](https://github.com/duckdb/duckdb/tree/main/extension/tpcds), with schema adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-ds) and [StarRocks](https://docs.starrocks.io/docs/3.4/benchmarking/TPC_DS_Benchmark/)
+- **TPC-H** suite (`tpc_h`) is derived from the [TPC-H benchmark](https://www.tpc.org/tpch/); results are not comparable to published TPC-H results. Data is generated with [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) (requires `cargo install tpchgen-cli`). Base queries come from the [DuckDB tpch extension](https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries), with per-database adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-h) and [StarRocks](https://docs.starrocks.io/docs/benchmarking/TPC-H_Benchmarking/)
+- **TPC-DS** suite (`tpc_ds`) is derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/); results are not comparable to published TPC-DS results. Data is generated with the `tpcgen-cli` from [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) at commit `09d609d1` (`--compat c`, conformance-tested against the reference dsdgen). Queries come from the [DuckDB tpcds extension](https://github.com/duckdb/duckdb/tree/main/extension/tpcds), with schema adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-ds) and [StarRocks](https://docs.starrocks.io/docs/3.4/benchmarking/TPC_DS_Benchmark/)
 
 ## TODO
 

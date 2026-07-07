@@ -62,12 +62,13 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                 case "insert_run":
                     row = Run(
                         suite=cast(str, msg["args"][0]),
-                        db=cast(str, msg["args"][1]),
-                        db_version=cast(str, msg["args"][2]),
-                        operation=cast(str, msg["args"][3]),
-                        system=cast(str, msg["args"][4]),
-                        status=cast(str, msg["args"][5]),
-                        started_at=cast(datetime, msg["args"][6]),
+                        suite_scale_factor=cast(int, msg["args"][1]),
+                        db=cast(str, msg["args"][2]),
+                        db_version=cast(str, msg["args"][3]),
+                        operation=cast(str, msg["args"][4]),
+                        system=cast(str, msg["args"][5]),
+                        status=cast(str, msg["args"][6]),
+                        started_at=cast(datetime, msg["args"][7]),
                     )
                     session.add(row)
                     session.commit()
@@ -202,13 +203,14 @@ class Storage:
     def insert_run(
         self,
         suite: SuiteName,
+        suite_scale_factor: int,
         db: DatabaseName,
         db_version: str,
         operation: Operation,
         system: str,
         started_at: datetime,
     ) -> int:
-        self.put("insert_run", [suite, db, db_version, operation, system, "running", started_at])
+        self.put("insert_run", [suite, suite_scale_factor, db, db_version, operation, system, "running", started_at])
         return cast(int, self.result_queue.get())
 
     def finish_run(

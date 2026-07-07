@@ -168,6 +168,10 @@ runbook). Worthwhile improvements:
       run time. Suggest: one `versions.toml` (or env overrides), verify `SELECT version()`
       against the pin at startup, fail the run on mismatch. DuckDB's version follows the
       installed package (`duckdb/__init__.py:19-21`) — fine, but document it.
+- [x] **Make suite scale factor first-class.** The run schema now stores non-null
+      `suite_scale_factor`, merge keys include it, legacy `tpch_sf*` / `tpcds_sf1`
+      rows migrate to `tpc_h` / `tpc_ds` plus scale, and the web UI filters by
+      both database version and suite scale factor.
 - [ ] **Record methodology metadata on the run**: platform (arm64/amd64/emulated), iteration
       config, tuning applied. This is what would have caught the emulation asymmetry and the
       3-vs-5 iteration drift.

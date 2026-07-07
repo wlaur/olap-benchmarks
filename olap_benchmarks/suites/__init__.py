@@ -6,10 +6,16 @@ from pathlib import Path
 from typing import ClassVar
 
 import polars as pl
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..dbs import Database
-from ..settings import Operation, SuiteName, TableName
+from ..settings import (
+    SETTINGS,
+    Operation,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +40,15 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select")
     db: DBT
     name: SuiteName
+    scale_factor: int = Field(default=1, ge=1)
+
+    @property
+    def data_directory_name(self) -> str:
+        return format_suite_data_directory_name(self.name, self.scale_factor)
+
+    @property
+    def input_data_directory(self) -> Path:
+        return SETTINGS.input_data_directory / self.data_directory_name
 
     @staticmethod
     def parquet_row_count(fpath: Path) -> int:
@@ -137,21 +152,29 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
         raise NotImplementedError(f"{type(self).__name__} does not support the mutate operation")
 
 
-def get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
+def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None]:
     match suite:
         case "rtabench":
-            from .rtabench.config import prepare_data
-        case "clickbench":
-            from .clickbench.config import prepare_data
-        case "time_series":
-            from .time_series.config import prepare_data
-        case "kaggle_airbnb":
-            from .kaggle_airbnb.config import prepare_data
-        case "tpch_sf10":
-            from .tpch.config import prepare_tpch_sf10 as prepare_data
-        case "tpch_sf50":
-            from .tpch.config import prepare_tpch_sf50 as prepare_data
-        case "tpcds_sf1":
-            from .tpcds.config import prepare_tpcds_sf1 as prepare_data
+            from .rtabench.config import prepare_data as prepare_static_data
 
-    return prepare_data
+            return prepare_static_data
+        case "clickbench":
+            from .clickbench.config import prepare_data as prepare_static_data
+
+            return prepare_static_data
+        case "time_series":
+            from .time_series.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "kaggle_airbnb":
+            from .kaggle_airbnb.config import prepare_data as prepare_static_data
+
+            return prepare_static_data
+        case "tpc_h":
+            from .tpc_h.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "tpc_ds":
+            from .tpc_ds.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)

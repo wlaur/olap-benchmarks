@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # Run rows have no stable id across database files (each file starts its
 # sequences at 1), so runs are matched by this natural key when merging.
-RUN_NATURAL_KEY = ("system", "db", "db_version", "suite", "operation", "started_at")
+RUN_NATURAL_KEY = ("system", "db", "db_version", "suite", "suite_scale_factor", "operation", "started_at")
 
 MERGE_TABLES = ("run", "run_step", "run_metric", "query_execution")
 
@@ -123,9 +123,9 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
 
     con.execute(
         """
-        insert into run (id, suite, db, db_version, operation, system, status,
+        insert into run (id, suite, suite_scale_factor, db, db_version, operation, system, status,
                          started_at, finished_at, error_type, error_message)
-        select m.new_id, s.suite, s.db, s.db_version, s.operation, s.system, s.status,
+        select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.operation, s.system, s.status,
                s.started_at, s.finished_at, s.error_type, s.error_message
         from src.run s join run_map m on s.id = m.src_id
         """

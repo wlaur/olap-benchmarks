@@ -360,7 +360,7 @@ class QuestDB(Database):
         # TPC-H and TPC-DS need correlated subqueries and EXISTS/NOT EXISTS
         # (TPC-DS additionally ROLLUP/GROUPING and INTERSECT/EXCEPT), which
         # QuestDB SQL does not support
-        for tpc_suite in ("tpch_sf10", "tpch_sf50", "tpcds_sf1"):
+        for tpc_suite in ("tpc_h", "tpc_ds"):
             registry.pop(tpc_suite)
 
         return registry

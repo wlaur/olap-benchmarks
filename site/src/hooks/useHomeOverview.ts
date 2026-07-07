@@ -39,7 +39,11 @@ export function useHomeOverview(system: string | null): HomeOverview {
 
     Promise.all(
       benchmarkDefinitions.map(async (definition) => {
-        const summaries = await fetchQuerySummaries(system, definition.id)
+        const summaries = await fetchQuerySummaries(
+          system,
+          definition.id,
+          definition.defaultScaleFactor,
+        )
         return { suiteId: definition.id, scores: computeDatabaseScores(summaries) }
       }),
     )

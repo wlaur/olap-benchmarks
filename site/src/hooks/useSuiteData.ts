@@ -11,6 +11,7 @@ import {
   fetchQuerySteps,
   fetchQuerySummaries,
   fetchRunSummaries,
+  fetchSuiteScaleFactors,
 } from "../lib/queries"
 import type { SuiteConfig } from "../lib/suiteConfig"
 import type {
@@ -61,6 +62,9 @@ export interface UseSuiteDataResult {
   selectedDatabases: string[]
   setSelectedDatabases: React.Dispatch<React.SetStateAction<string[]>>
   includedDatabases: string[]
+  scaleFactors: number[]
+  selectedScaleFactor: number | null
+  setSelectedScaleFactor: React.Dispatch<React.SetStateAction<number | null>>
   filteredQuerySummaries: QuerySummary[]
   filteredMutateSummaries: QuerySummary[]
   filteredOperationSummaries: OperationSummary[]
@@ -76,12 +80,71 @@ export function useSuiteData(
 ): UseSuiteDataResult {
   const [state, setState] = useState<SuiteDataState>(createInitialState)
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
+  const [scaleFactors, setScaleFactors] = useState<number[]>([])
+  const [selectedScaleFactor, setSelectedScaleFactor] = useState<number | null>(null)
 
   useEffect(() => {
     if (isSystemLoading || system === null) {
       startTransition(() => {
         setState(createInitialState())
+        setScaleFactors([])
+        setSelectedScaleFactor(null)
       })
+      return
+    }
+
+    let cancelled = false
+
+    setState(createInitialState())
+    setScaleFactors([])
+    setSelectedScaleFactor(null)
+
+    fetchSuiteScaleFactors(system, suite)
+      .then((nextScaleFactors) => {
+        if (cancelled) return
+
+        startTransition(() => {
+          setScaleFactors(nextScaleFactors)
+          if (nextScaleFactors.length === 0) {
+            setSelectedScaleFactor(null)
+            setState({
+              ...createInitialState(),
+              loading: false,
+              deferredLoading: false,
+            })
+            return
+          }
+
+          setSelectedScaleFactor((currentScaleFactor) => {
+            if (currentScaleFactor !== null && nextScaleFactors.includes(currentScaleFactor)) {
+              return currentScaleFactor
+            }
+            if (nextScaleFactors.includes(suiteConfig.defaultScaleFactor)) {
+              return suiteConfig.defaultScaleFactor
+            }
+            return nextScaleFactors[0]!
+          })
+        })
+      })
+      .catch((nextError) => {
+        if (cancelled) return
+        startTransition(() => {
+          setState({
+            ...createInitialState(),
+            loading: false,
+            deferredLoading: false,
+            error: String(nextError),
+          })
+        })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isSystemLoading, system, suite, suiteConfig.defaultScaleFactor])
+
+  useEffect(() => {
+    if (isSystemLoading || system === null || selectedScaleFactor === null) {
       return
     }
 
@@ -93,10 +156,12 @@ export function useSuiteData(
 
     // Phase 1: critical data for above-fold panels
     Promise.all([
-      fetchRunSummaries(system, suite),
-      fetchOperationSummaries(system, suite),
-      fetchQuerySummaries(system, suite),
-      hasMutate ? fetchMutateSummaries(system, suite) : Promise.resolve([] as QuerySummary[]),
+      fetchRunSummaries(system, suite, selectedScaleFactor),
+      fetchOperationSummaries(system, suite, selectedScaleFactor),
+      fetchQuerySummaries(system, suite, selectedScaleFactor),
+      hasMutate
+        ? fetchMutateSummaries(system, suite, selectedScaleFactor)
+        : Promise.resolve([] as QuerySummary[]),
       fetchQueriesManifest().catch(() => null),
     ])
       .then(
@@ -131,10 +196,12 @@ export function useSuiteData(
 
     // Phase 2: deferred data for below-fold panels (timeline, insert perf, resource trends)
     Promise.all([
-      fetchMetricSamples(system, suite),
-      fetchInsertSteps(system, suite),
-      fetchQuerySteps(system, suite),
-      hasMutate ? fetchMutateSteps(system, suite) : Promise.resolve([] as QueryStep[]),
+      fetchMetricSamples(system, suite, selectedScaleFactor),
+      fetchInsertSteps(system, suite, selectedScaleFactor),
+      fetchQuerySteps(system, suite, selectedScaleFactor),
+      hasMutate
+        ? fetchMutateSteps(system, suite, selectedScaleFactor)
+        : Promise.resolve([] as QueryStep[]),
     ])
       .then(([metricSamples, insertSteps, querySteps, mutateSteps]) => {
         if (cancelled) return
@@ -164,7 +231,7 @@ export function useSuiteData(
     return () => {
       cancelled = true
     }
-  }, [isSystemLoading, system, suite, suiteConfig.operations])
+  }, [isSystemLoading, selectedScaleFactor, system, suite, suiteConfig.operations])
 
   const databases = useMemo(
     () => Array.from(new Set(state.runSummaries.map((run) => run.db))).sort(),
@@ -227,6 +294,9 @@ export function useSuiteData(
     selectedDatabases,
     setSelectedDatabases,
     includedDatabases,
+    scaleFactors,
+    selectedScaleFactor,
+    setSelectedScaleFactor,
     filteredQuerySummaries,
     filteredMutateSummaries,
     filteredOperationSummaries,

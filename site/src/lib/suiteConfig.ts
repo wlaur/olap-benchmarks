@@ -11,7 +11,8 @@ export interface ParsedQueryName {
 export interface SuiteConfig {
   id: BenchmarkSuiteId
   label: string
-  /** Key into queries.json, which is keyed by suite directory name (e.g. "tpch" for tpch_sf10/tpch_sf50) */
+  defaultScaleFactor: number
+  /** Key into queries.json, which is keyed by suite source directory name. */
   queriesKey: string
   operations: BenchmarkOperation[]
   parseQueryName: (queryName: string) => ParsedQueryName
@@ -78,6 +79,7 @@ const TIME_SERIES_CONFIG: SuiteConfig = {
   id: "time_series",
   queriesKey: "time_series",
   label: "Time Series",
+  defaultScaleFactor: 1,
   operations: ["populate", "mutate", "select"],
   parseQueryName: parseTimeSeriesQueryName,
   compareQueryNames: compareTimeSeriesQueryNames,
@@ -87,6 +89,7 @@ const RTABENCH_CONFIG: SuiteConfig = {
   id: "rtabench",
   queriesKey: "rtabench",
   label: "RTABench",
+  defaultScaleFactor: 1,
   operations: ["populate", "select"],
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
@@ -96,6 +99,7 @@ const CLICKBENCH_CONFIG: SuiteConfig = {
   id: "clickbench",
   queriesKey: "clickbench",
   label: "ClickBench",
+  defaultScaleFactor: 1,
   operations: ["populate", "select"],
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
@@ -105,33 +109,27 @@ const KAGGLE_AIRBNB_CONFIG: SuiteConfig = {
   id: "kaggle_airbnb",
   queriesKey: "kaggle_airbnb",
   label: "Kaggle Airbnb",
+  defaultScaleFactor: 1,
   operations: ["populate", "select"],
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
 }
 
-const TPCH_SF10_CONFIG: SuiteConfig = {
-  id: "tpch_sf10",
-  queriesKey: "tpch",
-  label: "TPC-H SF10",
+const TPC_H_CONFIG: SuiteConfig = {
+  id: "tpc_h",
+  queriesKey: "tpc_h",
+  label: "TPC-H",
+  defaultScaleFactor: 10,
   operations: ["populate", "select"],
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
 }
 
-const TPCH_SF50_CONFIG: SuiteConfig = {
-  id: "tpch_sf50",
-  queriesKey: "tpch",
-  label: "TPC-H SF50",
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const TPCDS_SF1_CONFIG: SuiteConfig = {
-  id: "tpcds_sf1",
-  queriesKey: "tpcds",
-  label: "TPC-DS SF1",
+const TPC_DS_CONFIG: SuiteConfig = {
+  id: "tpc_ds",
+  queriesKey: "tpc_ds",
+  label: "TPC-DS",
+  defaultScaleFactor: 1,
   operations: ["populate", "select"],
   parseQueryName: parseGenericQueryName,
   compareQueryNames: compareGenericQueryNames,
@@ -142,9 +140,8 @@ const SUITE_CONFIGS: Record<BenchmarkSuiteId, SuiteConfig> = {
   rtabench: RTABENCH_CONFIG,
   clickbench: CLICKBENCH_CONFIG,
   kaggle_airbnb: KAGGLE_AIRBNB_CONFIG,
-  tpch_sf10: TPCH_SF10_CONFIG,
-  tpch_sf50: TPCH_SF50_CONFIG,
-  tpcds_sf1: TPCDS_SF1_CONFIG,
+  tpc_h: TPC_H_CONFIG,
+  tpc_ds: TPC_DS_CONFIG,
 }
 
 export function getSuiteConfig(suiteId: BenchmarkSuiteId): SuiteConfig {

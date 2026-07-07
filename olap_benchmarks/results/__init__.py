@@ -248,6 +248,7 @@ def list_runs(
                 {
                     "id": run.id,
                     "suite": run.suite,
+                    "suite_scale_factor": run.suite_scale_factor,
                     "db": run.db,
                     "operation": run.operation,
                     "status": run.status,
