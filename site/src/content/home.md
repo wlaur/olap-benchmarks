@@ -11,6 +11,8 @@
 
 All results for a given system (e.g. `macbook-pro-m4`) come from the same machine. Results from different systems are not compared.
 
+Coverage is based on completed published runs. QuestDB currently appears only for ClickBench in the published data; RTABench, time-series, and Kaggle Airbnb runs have not been published for it yet, and the TPC suites are not registered for QuestDB.
+
 - Runs are automated end to end: schema creation, data loading, query execution, metric collection
 - Database versions, configuration, and SQL are pinned per revision
 - Raw results are stored in DuckDB files checked into git
