@@ -113,7 +113,10 @@ and every deviation is listed on the site."
       when data already matches; the migrated skipped ClickHouse TPC-H
       populate run was deleted and the published DB replaced)*
 - [ ] Re-run older suites so all DBs share iteration counts and MonetDB versions
-- [ ] Run QuestDB on rtabench/time_series/kaggle_airbnb or note why absent
+- [x] Run QuestDB on rtabench/time_series/kaggle_airbnb or note why absent
+      *(fixed 2026-07-07: `home.md` now notes that QuestDB currently has
+      published ClickBench results only; RTABench/time-series/Kaggle Airbnb
+      have not been published for QuestDB, and TPC suites are unregistered)*
 
 - **ClickHouse tpch_sf10's displayed populate is a 0.5s "populate skipped" run** (run id 77;
   the real load was 35.7s in run 68). The site shows the latest completed run per
