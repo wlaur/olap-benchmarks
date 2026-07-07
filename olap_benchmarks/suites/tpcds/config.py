@@ -71,6 +71,11 @@ TPCDS_ITERATIONS = 3
 
 TPCDS_QUERY_NAMES = tuple(f"{nr:02d}" for nr in range(1, 100))
 
+BYTES_PER_GIB = 1024**3
+BYTES_PER_MIB = 1024**2
+TPCDS_PREPARE_FREE_SPACE_RESERVE_BYTES = 10 * BYTES_PER_GIB
+TPCDS_PREPARE_BYTES_PER_SCALE_FACTOR = BYTES_PER_GIB
+
 # tpcgen-cli column names that deviate from the TPC-DS spec / query references
 SPEC_COLUMN_RENAMES: dict[TableName, dict[str, str]] = {
     "income_band": {"ib_income_band_id": "ib_income_band_sk"},
@@ -83,6 +88,25 @@ SPEC_COLUMN_RENAMES: dict[TableName, dict[str, str]] = {
 DECIMAL_PRECISION_OVERRIDES = {"p_cost": 15}
 DECIMAL_PRECISION = 7
 DECIMAL_SCALE = 2
+
+
+def _format_bytes(size: int) -> str:
+    if size >= BYTES_PER_GIB:
+        return f"{size / BYTES_PER_GIB:.1f} GiB"
+    return f"{size / BYTES_PER_MIB:.1f} MiB"
+
+
+def _free_disk_bytes(path: Path) -> int:
+    return shutil.disk_usage(path).free
+
+
+def _require_free_disk_space(path: Path, required_bytes: int, context: str) -> None:
+    free_bytes = _free_disk_bytes(path)
+    if free_bytes < required_bytes:
+        raise RuntimeError(
+            f"Refusing to {context}; need at least {_format_bytes(required_bytes)} free on "
+            f"the volume containing {path}, found {_format_bytes(free_bytes)}"
+        )
 
 
 def _normalization_exprs(schema: pl.Schema, table_name: TableName) -> list[pl.Expr]:
@@ -117,8 +141,17 @@ def _normalize_tpcds_parquet(output_directory: Path) -> None:
         exprs = _normalization_exprs(lf.collect_schema(), table_name)
 
         tmp_path = fpath.with_suffix(".parquet.tmp")
-        lf.select(exprs).sink_parquet(tmp_path)
-        tmp_path.replace(fpath)
+        _require_free_disk_space(
+            output_directory,
+            TPCDS_PREPARE_FREE_SPACE_RESERVE_BYTES + fpath.stat().st_size,
+            f"normalize {fpath.name}",
+        )
+
+        try:
+            lf.select(exprs).sink_parquet(tmp_path)
+            tmp_path.replace(fpath)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     _LOGGER.info(f"Normalized tpcds Parquet files in {output_directory}")
 
@@ -127,7 +160,9 @@ def _prepare_tpcds_data(suite: SuiteName) -> None:
     output_directory = SETTINGS.input_data_directory / suite
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    existing = [table for table in TPCDS_TABLES if (output_directory / f"{table}.parquet").is_file()]
+    expected_filenames = {f"{table}.parquet" for table in TPCDS_TABLES}
+    parquet_filenames = {path.name for path in output_directory.glob("*.parquet")}
+    existing = [table for table in TPCDS_TABLES if f"{table}.parquet" in parquet_filenames]
 
     if len(existing) == len(TPCDS_TABLES):
         if not _is_normalized(output_directory):
@@ -135,8 +170,12 @@ def _prepare_tpcds_data(suite: SuiteName) -> None:
         _LOGGER.info(f"All {suite} Parquet files already exist in {output_directory}, skipping generation")
         return
 
-    if existing:
-        raise ValueError(f"{output_directory} contains a partial dataset ({', '.join(existing)}); remove it first")
+    if parquet_filenames:
+        unexpected = sorted(parquet_filenames - expected_filenames)
+        existing_details = [*existing, *unexpected]
+        raise ValueError(
+            f"{output_directory} contains a partial dataset ({', '.join(existing_details)}); remove it first"
+        )
 
     if shutil.which("tpcgen-cli") is None:
         raise RuntimeError(
@@ -145,6 +184,12 @@ def _prepare_tpcds_data(suite: SuiteName) -> None:
         )
 
     scale_factor = TPCDS_SCALE_FACTORS[suite]
+    _require_free_disk_space(
+        output_directory,
+        TPCDS_PREPARE_FREE_SPACE_RESERVE_BYTES + (TPCDS_PREPARE_BYTES_PER_SCALE_FACTOR * scale_factor),
+        f"generate {suite} data",
+    )
+
     command = [
         "tpcgen-cli",
         "tpcds",
