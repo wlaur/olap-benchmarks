@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import Callable
 
 import pytest
 from cyclopts.exceptions import CoercionError
@@ -8,6 +10,7 @@ from cyclopts.exceptions import CoercionError
 from .. import __main__
 from ..__main__ import app
 from ..settings import DatabaseArg, DatabaseName, SuiteArg, SuiteName
+from ..suites import ManualPreparationRequired
 
 
 def test_cli_registers_install_completion_command() -> None:
@@ -110,6 +113,52 @@ def test_delete_cmd_force_skips_confirmation(
     __main__.delete_cmd(status="failed", force=True)
 
     assert capsys.readouterr().out == "Deleted 1 run(s) and their associated steps and metrics.\n"
+
+
+def test_prepare_all_skips_manual_preparation_suites(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    prepared: list[tuple[SuiteName, int]] = []
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["rtabench", "clickbench", "time_series"]
+
+    def fake_get_suite_preparer(suite_name: SuiteName, scale_factor: int) -> Callable[[], None]:
+        def prepare_suite() -> None:
+            if suite_name == "clickbench":
+                raise ManualPreparationRequired("download hits.parquet")
+            prepared.append((suite_name, scale_factor))
+
+        return prepare_suite
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "get_suite_preparer", fake_get_suite_preparer)
+
+    with caplog.at_level(logging.WARNING):
+        __main__.prepare(suite="all")
+
+    assert prepared == [("rtabench", 1), ("time_series", 1)]
+    assert "Skipping clickbench: download hits.parquet" in caplog.text
+
+
+def test_prepare_explicit_manual_preparation_suite_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench"]
+
+    def fake_get_suite_preparer(_suite_name: SuiteName, _scale_factor: int) -> Callable[[], None]:
+        def prepare_suite() -> None:
+            raise ManualPreparationRequired("download hits.parquet")
+
+        return prepare_suite
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "get_suite_preparer", fake_get_suite_preparer)
+
+    with pytest.raises(SystemExit, match="download hits.parquet"):
+        __main__.prepare(suite="clickbench")
 
 
 def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(

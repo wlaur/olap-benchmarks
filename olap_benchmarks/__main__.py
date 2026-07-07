@@ -37,7 +37,7 @@ from .settings import (
     resolve_suites,
     setup_stdout_logging,
 )
-from .suites import get_suite_preparer
+from .suites import ManualPreparationRequired, get_suite_preparer
 from .utils import run_shell
 
 if TYPE_CHECKING:
@@ -121,7 +121,12 @@ def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
     for suite_name in resolve_suites(suite):
         resolved_scale_factor = resolve_suite_scale_factor(suite_name, scale_factor)
         _LOGGER.info(f"Preparing data for {suite_name} scale factor {resolved_scale_factor}")
-        get_suite_preparer(suite_name, resolved_scale_factor)()
+        try:
+            get_suite_preparer(suite_name, resolved_scale_factor)()
+        except ManualPreparationRequired as exc:
+            if suite != "all":
+                raise SystemExit(str(exc)) from exc
+            _LOGGER.warning(f"Skipping {suite_name}: {exc}")
 
 
 @app.command
