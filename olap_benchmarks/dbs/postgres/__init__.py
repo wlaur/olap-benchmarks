@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -30,6 +30,7 @@ VERSION = "18.3"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
+PostgresFetchMethod = Literal["connectorx", "python"]
 
 
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
@@ -499,8 +500,28 @@ class Postgres(Database):
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+        method: PostgresFetchMethod = "connectorx",
     ) -> pl.DataFrame:
-        return self.fetch_python(query, schema)
+        if method == "connectorx":
+            return self.fetch_connectorx(query, schema)
+        if method == "python":
+            return self.fetch_python(query, schema)
+
+        raise ValueError(f"Unknown method: {method}")
+
+    def fetch_connectorx(
+        self,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+    ) -> pl.DataFrame:
+        sql = query.strip().removesuffix(";")
+        with self.record_query_execution(query):
+            df = pl.read_database_uri(sql, self.connection_string)
+
+        if schema is not None:
+            df = df.cast(cast(pl.Schema, schema))
+
+        return df
 
     def get_table_names(self) -> set[TableName]:
         df = self.fetch(

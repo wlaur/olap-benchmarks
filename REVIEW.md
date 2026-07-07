@@ -79,8 +79,8 @@ collectively there is no rule for who gets optimized:
   (`queries/clickhouse/05_local_supplier_volume.sql`, commit `3898f29`); everyone else's
   planner is trusted with the comma-join form.
 - **MonetDB**: hand-picked binary fetch path on exactly its expensive queries
-  (`monetdb/__init__.py:46-53`, `:75-87`), while Postgres/StarRocks stay on slow
-  row-by-row fetch for the same queries.
+  (`monetdb/__init__.py:46-53`, `:75-87`); Postgres-family DBs and StarRocks now use
+  ConnectorX fetch by default, and ClickHouse/QuestDB/DuckDB already had Arrow/native paths.
 - **QuestDB**: ClickBench parquet pre-sorted by EventTime on the host before ingest
   (`questdb/__init__.py:74-79`).
 - **RTABench**: Postgres gets 3 targeted secondary indexes (`postgres/__init__.py:100-108`),
@@ -97,15 +97,18 @@ and every deviation is listed on the site."
       *(fixed 2026-07-07: `home.md` now states that DuckDB is not
       cold-started between populate and select, unlike container DBs that are
       restarted after populate)*
-- [ ] Consider Arrow-native fetch paths for Postgres/TimescaleDB/StarRocks where possible
+- [x] Consider Arrow-native fetch paths for Postgres/TimescaleDB/StarRocks where possible
+      *(fixed 2026-07-07: Postgres/TimescaleDB and StarRocks now use
+      Polars/ConnectorX by default, while retaining the Python row fetch as an
+      explicit debugging path)*
 
 - Never restarted (`start/stop/restart` are `None`, `duckdb/__init__.py:66-76`), so it is the
   only engine whose buffer manager stays warm from populate into select; every container DB
   gets a deliberate cold restart after populate (`restart_event`, `dbs/__init__.py:337`).
-- Zero-copy `con.pl()` fetch vs everyone else's network round-trip. Fetch/deserialization is
-  **inside the timed region** for all engines (`dbs/__init__.py:301-335`); Postgres,
-  TimescaleDB, and StarRocks pay row-by-row Python materialization, ClickHouse gets
-  HTTP+Arrow, QuestDB gets connectorx→Arrow.
+- Zero-copy `con.pl()` fetch vs network round-trips for container DBs. Fetch/deserialization is
+  **inside the timed region** for all engines (`dbs/__init__.py:301-335`); Postgres-family
+  DBs, StarRocks, and QuestDB use ConnectorX, ClickHouse gets HTTP+Arrow, and MonetDB has
+  selected binary fetch paths.
 - Its cpu/mem metrics come from the main Python process via psutil, not `docker stats`
   (`metrics/measure.py:18`, `:110-115`) — not comparable with the container DBs.
 
