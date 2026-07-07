@@ -27,8 +27,8 @@ export function HomeScoreTable() {
         <SectionTitle as="h2">Suite scores</SectionTitle>
         <BodyText className="mt-1">
           Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is the
-          leader. Rows ranked by geometric mean across suites; a missing suite counts as its worst
-          score.{" "}
+          leader. Missing queries are penalized, and rows are ranked by geometric mean across
+          suites; a missing suite counts as its worst score.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -138,6 +138,7 @@ function ScoreCell({ score, rank }: ScoreCellProps) {
       </div>
       <p className="mt-0.5 text-right text-[10px] text-slate-400">
         {score.wins}/{score.queryCount} fastest
+        {score.missing > 0 ? ` · ${score.missing} missing` : ""}
       </p>
     </td>
   )

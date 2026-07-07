@@ -94,7 +94,7 @@ function ScoreCard({ rank, db, score, wins, queryCount, missing, accent }: Score
         </div>
         <p className="mt-0.5 truncate text-sm font-medium text-slate-100">{db}</p>
         <p className="mt-0.5 text-[11px] text-slate-400">
-          {wins}/{queryCount} fastest{missing > 0 ? ` · ${missing} missing` : ""}
+          {wins}/{queryCount} fastest{missing > 0 ? ` · ${missing} missing penalized` : ""}
         </p>
       </div>
     </div>

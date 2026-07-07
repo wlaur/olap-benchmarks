@@ -9,6 +9,8 @@ export interface DatabaseScore {
 }
 
 const SMOOTHING_SECONDS = 0.01
+const MISSING_QUERY_MIN_RATIO = 10
+const MISSING_QUERY_WORST_MULTIPLIER = 2
 
 export function computeDatabaseScores(querySummaries: QuerySummary[]): DatabaseScore[] {
   if (querySummaries.length === 0) return []
@@ -23,9 +25,12 @@ export function computeDatabaseScores(querySummaries: QuerySummary[]): DatabaseS
     queryGroups.set(row.query_name, group)
   }
 
-  const dbStats = new Map<string, { logSum: number; count: number; wins: number }>()
+  const dbStats = new Map<
+    string,
+    { logSum: number; scoredCount: number; queryCount: number; wins: number }
+  >()
   for (const db of databases) {
-    dbStats.set(db, { logSum: 0, count: 0, wins: 0 })
+    dbStats.set(db, { logSum: 0, scoredCount: 0, queryCount: 0, wins: 0 })
   }
 
   for (const group of queryGroups.values()) {
@@ -33,12 +38,26 @@ export function computeDatabaseScores(querySummaries: QuerySummary[]): DatabaseS
     if (times.length === 0) continue
     const minTime = Math.min(...times)
     const minSmoothed = minTime + SMOOTHING_SECONDS
+    const ratios = new Map<string, number>()
 
     for (const [db, time] of group) {
+      ratios.set(db, (time + SMOOTHING_SECONDS) / minSmoothed)
+    }
+
+    const worstObservedRatio = Math.max(...ratios.values())
+    const missingRatio = Math.max(
+      MISSING_QUERY_MIN_RATIO,
+      MISSING_QUERY_WORST_MULTIPLIER * worstObservedRatio,
+    )
+
+    for (const db of databases) {
       const stats = dbStats.get(db)!
-      const ratio = (time + SMOOTHING_SECONDS) / minSmoothed
+      const time = group.get(db)
+      const ratio = ratios.get(db) ?? missingRatio
       stats.logSum += Math.log(ratio)
-      stats.count += 1
+      stats.scoredCount += 1
+      if (time === undefined) continue
+      stats.queryCount += 1
       if (time === minTime) stats.wins += 1
     }
   }
@@ -49,13 +68,15 @@ export function computeDatabaseScores(querySummaries: QuerySummary[]): DatabaseS
     .map((db) => {
       const stats = dbStats.get(db)!
       const score =
-        stats.count > 0 ? Math.exp(stats.logSum / stats.count) : Number.POSITIVE_INFINITY
+        stats.scoredCount > 0
+          ? Math.exp(stats.logSum / stats.scoredCount)
+          : Number.POSITIVE_INFINITY
       return {
         db,
         score,
-        queryCount: stats.count,
+        queryCount: stats.queryCount,
         wins: stats.wins,
-        missing: totalQueries - stats.count,
+        missing: totalQueries - stats.queryCount,
       }
     })
     .sort((a, b) => a.score - b.score)
@@ -73,7 +94,8 @@ export const SCORE_EXPLAINER = {
   title: "How the score is calculated",
   body: [
     "For each query in the suite, we find the fastest database and compare every other database's median time to it as a ratio (a smoothing constant of 10ms is added to both sides to avoid blow-ups on sub-millisecond queries).",
-    "The score shown is the geometric mean of these ratios across all queries the database completed. 1.00× means the database was the fastest on every query; 2.50× means it was on average 2.5× slower than the fastest per query.",
+    "The score shown is the geometric mean of these ratios across all observed queries. Missing or unsupported queries are scored as the larger of 10× or 2× the slowest observed ratio for that query.",
+    "1.00× means the database was the fastest on every query; 2.50× means it was on average 2.5× slower than the fastest per query after any missing-query penalties.",
     "This is the same shape of metric used by the official ClickBench rankings, just normalised to per-query so suites with very different query counts stay comparable.",
   ],
 }
