@@ -1,9 +1,9 @@
 {
-  "published_at": "2026-07-07T12:17:45.098948+00:00",
+  "published_at": "2026-07-07T12:33:10.464265+00:00",
   "revision": "default",
   "source": "/Users/williamlauren/repos/olap-benchmarks/results/default.db",
   "merged": true,
-  "schema_revision": "9c1e5f0a7b6d",
+  "schema_revision": "4d9c2b7e6f10",
   "table_counts": {
     "run": 83,
     "run_step": 6160,

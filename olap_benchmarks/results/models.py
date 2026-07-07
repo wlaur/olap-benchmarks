@@ -42,6 +42,17 @@ class Run(Base):
     __table_args__ = (
         CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
         CheckConstraint("suite_scale_factor >= 1", name="ck_run_suite_scale_factor"),
+        Index(
+            "uq_run_natural_key",
+            "system",
+            "db",
+            "db_version",
+            "suite",
+            "suite_scale_factor",
+            "operation",
+            "started_at",
+            unique=True,
+        ),
         Index("idx_run_suite_db_operation", "suite", "suite_scale_factor", "db", "operation"),
         Index("idx_run_status_started_at", "status", "started_at"),
     )

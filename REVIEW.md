@@ -189,8 +189,11 @@ runbook). Worthwhile improvements:
       `site/src/lib/benchmarks.ts`, `site/src/lib/suiteConfig.ts`, and hand-written
       `home.md`. A mismatch silently yields "No completed runs". Publish a `suites.json`
       next to `queries.json` and drive the site from it.
-- [ ] No unique constraint on the run natural key (`results/models.py:41-45`) — merge logic
+- [x] No unique constraint on the run natural key (`results/models.py:41-45`) — merge logic
       is the only guard against duplicates.
+      *(fixed 2026-07-07: `uq_run_natural_key` enforces
+      `(system, db, db_version, suite, suite_scale_factor, operation, started_at)`;
+      merge now reuses matched destination run IDs when replacing runs)*
 - [ ] `results/new.db` looks like a stale revision; delete or rename meaningfully.
 
 ---

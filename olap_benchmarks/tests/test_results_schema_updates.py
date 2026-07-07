@@ -7,6 +7,7 @@ from typing import Any, cast
 import duckdb
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..results import (
@@ -94,6 +95,66 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
                     if row["name"] == "suite_scale_factor"
                 )
                 assert scale_column["notnull"] is True
+    finally:
+        engine.dispose()
+
+
+def test_run_natural_key_is_unique_but_includes_scale_factor(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    started_at = datetime(2026, 1, 1, 12, 0, 0)
+
+    try:
+        with Session(engine) as session:
+            session.add(
+                Run(
+                    suite="time_series",
+                    suite_scale_factor=1,
+                    db="duckdb",
+                    db_version="test",
+                    operation="select",
+                    system="test",
+                    status="completed",
+                    started_at=started_at,
+                    finished_at=started_at,
+                )
+            )
+            session.commit()
+
+            session.add(
+                Run(
+                    suite="time_series",
+                    suite_scale_factor=1,
+                    db="duckdb",
+                    db_version="test",
+                    operation="select",
+                    system="test",
+                    status="completed",
+                    started_at=started_at,
+                    finished_at=started_at,
+                )
+            )
+            with pytest.raises(IntegrityError):
+                session.commit()
+
+            session.rollback()
+            session.add(
+                Run(
+                    suite="time_series",
+                    suite_scale_factor=2,
+                    db="duckdb",
+                    db_version="test",
+                    operation="select",
+                    system="test",
+                    status="completed",
+                    started_at=started_at,
+                    finished_at=started_at,
+                )
+            )
+            session.commit()
+
+            assert session.scalars(select(Run).order_by(Run.suite_scale_factor)).all()[1].suite_scale_factor == 2
     finally:
         engine.dispose()
 
