@@ -3,7 +3,7 @@
 -- ENGINE = MergeTree spelled out, integer/decimal/date types matching the
 -- normalized source Parquet instead of their UInt32/Int64 mapping, and plain
 -- String for all text columns. Primary key columns per TPC-DS spec section
--- 2.5.2 (same keys as the official init.sql); all other columns Nullable as
+-- 2.5.2 (same keys as the official init.sql), all other columns Nullable as
 -- in the official schema (data_type_default_nullable=1).
 
 DROP TABLE IF EXISTS call_center;
