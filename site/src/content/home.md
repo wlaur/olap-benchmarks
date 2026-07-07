@@ -28,6 +28,7 @@ Coverage is based on completed published runs. QuestDB currently appears only fo
 Vendor-recommended server settings, storage layout, and per-suite physical design are allowed when they are documented here. Results should be read as configured benchmark runs, not stock-default engine comparisons.
 
 - **DuckDB** runs in process with the installed Python package and no server process.
+- DuckDB is not cold-started between populate and select; its in-process buffer manager can remain warm while container databases are restarted after populate.
 - **ClickHouse** uses the pinned Docker image and suite schemas/query variants without extra server tuning.
 - **MonetDB** uses the pinned Docker image; selected large-result queries use MonetDB's binary fetch path.
 - **Postgres** uses explicit server settings for memory, WAL, and parallel workers, plus suite-specific indexes where defined by the schema.

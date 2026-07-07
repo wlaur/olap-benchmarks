@@ -93,7 +93,10 @@ and every deviation is listed on the site."
 
 ### 1.4 DuckDB's structural advantages
 
-- [ ] Cold-start DuckDB before select (reopen file / drop caches) or document the difference
+- [x] Cold-start DuckDB before select (reopen file / drop caches) or document the difference
+      *(fixed 2026-07-07: `home.md` now states that DuckDB is not
+      cold-started between populate and select, unlike container DBs that are
+      restarted after populate)*
 - [ ] Consider Arrow-native fetch paths for Postgres/TimescaleDB/StarRocks where possible
 
 - Never restarted (`start/stop/restart` are `None`, `duckdb/__init__.py:66-76`), so it is the
