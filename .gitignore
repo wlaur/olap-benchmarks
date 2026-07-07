@@ -197,7 +197,10 @@ cython_debug/
 # benchmark inputs, db files and local result revisions
 **/temp
 **/data
-/results/
+/results/*
+!/results/shared/
+!/results/shared/.gitkeep
+!/results/shared/*.db
 
 .claude
 

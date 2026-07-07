@@ -175,10 +175,13 @@ runbook). Worthwhile improvements:
 - [ ] **Record methodology metadata on the run**: platform (arm64/amd64/emulated), iteration
       config, tuning applied. This is what would have caught the emulation asymmetry and the
       3-vs-5 iteration drift.
-- [ ] **Document and support a remote-run merge workflow.** There should be a clean way to run
+- [x] **Document and support a remote-run merge workflow.** There should be a clean way to run
       benchmarks on another host, commit or transfer that revision's results DB through a normal
       Git workflow, and merge those runs into the published `site/public/data/results.db` without
       overwriting local/published history.
+      *(fixed 2026-07-07: `results/shared/*.db` is the tracked exchange lane,
+      and README documents the VM-side named revision plus publisher-side
+      `publish --merge` workflow)*
 - [x] **`olap prepare all` crashes** on clickbench's `NotImplementedError`
       (`clickbench/config.py:19-23`) — make manual-download suites skip with an
       instructive warning instead.

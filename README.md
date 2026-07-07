@@ -114,8 +114,43 @@ All `results` commands accept `--revision` (default `default`).
 Copies `results/<revision>.db` to `site/public/data/results.db` along with
 `manifest.json` and `queries.json`. With `--merge`, runs are merged into the
 already-published file instead of replacing it: runs matching an existing
-(system, db, db_version, suite, operation, started_at) are replaced, new runs
-are added, everything else is kept.
+(system, db, db_version, suite, suite_scale_factor, operation, started_at) are
+replaced, new runs are added, everything else is kept.
+
+### Remote benchmark runs
+
+Use a named revision when running benchmarks on another host, and keep the
+portable revision under `results/shared/` so it can move through Git without
+mixing with local scratch revisions.
+
+On the benchmark host:
+
+```bash
+export OLAP_BENCHMARKS_RESULTS_DIRECTORY="$PWD/results/shared"
+export OLAP_BENCHMARKS_SYSTEM="cloud-c7i-4xlarge"
+
+uv run olap benchmark clickhouse tpc_ds --revision cloud-c7i-tpcds-sf1 --scale-factor 1
+uv run olap results migrate --revision cloud-c7i-tpcds-sf1
+
+git add results/shared/cloud-c7i-tpcds-sf1.db
+git commit -m "add cloud c7i tpc ds results"
+```
+
+After merging that branch on the publishing machine:
+
+```bash
+export OLAP_BENCHMARKS_RESULTS_DIRECTORY="$PWD/results/shared"
+
+uv run olap results migrate --revision cloud-c7i-tpcds-sf1
+uv run olap publish --revision cloud-c7i-tpcds-sf1 --merge
+
+git add site/public/data/results.db site/public/data/manifest.json site/public/data/queries.json
+git commit -m "publish cloud c7i tpc ds results"
+```
+
+`publish --merge` verifies that the source and published databases are at the
+current schema revision before merging. Use a unique revision name per host/run
+so independent benchmark branches do not overwrite each other's result files.
 
 ## Database versions
 
