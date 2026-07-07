@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import NoReturn
+
+import pytest
+
+from olap_benchmarks.suites.tpcds import config as tpcds_config
+
+
+def fake_tpcgen_path(name: str) -> str:
+    return f"/bin/{name}"
+
+
+def one_free_byte(path: Path) -> int:
+    _ = path
+    return 1
+
+
+def test_tpcds_prepare_refuses_low_free_space(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_run(command: list[str], check: bool) -> NoReturn:
+        _ = command, check
+        raise AssertionError("subprocess.run should not be called")
+
+    monkeypatch.setattr(tpcds_config.SETTINGS, "input_data_directory", tmp_path)
+    monkeypatch.setattr(tpcds_config.shutil, "which", fake_tpcgen_path)
+    monkeypatch.setattr(tpcds_config, "_free_disk_bytes", one_free_byte)
+    monkeypatch.setattr(tpcds_config.subprocess, "run", fail_run)
+
+    with pytest.raises(RuntimeError, match="Refusing to generate tpcds_sf1 data"):
+        tpcds_config._prepare_tpcds_data("tpcds_sf1")
+
+
+def test_tpcds_prepare_rejects_partial_dataset_with_generator_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir = tmp_path / "tpcds_sf1"
+    input_dir.mkdir()
+    (input_dir / "dbgen_version.parquet").write_bytes(b"partial")
+
+    monkeypatch.setattr(tpcds_config.SETTINGS, "input_data_directory", tmp_path)
+
+    with pytest.raises(ValueError, match="partial dataset"):
+        tpcds_config._prepare_tpcds_data("tpcds_sf1")
+
+
+def test_tpcds_normalize_removes_tmp_file_after_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "income_band.parquet"
+    source.write_bytes(b"source")
+    tmp_file = tmp_path / "income_band.parquet.tmp"
+
+    class FakeScan:
+        def collect_schema(self) -> tpcds_config.pl.Schema:
+            return tpcds_config.pl.Schema({"ib_income_band_id": tpcds_config.pl.Int64})
+
+        def select(self, exprs: list[tpcds_config.pl.Expr]) -> FakeScan:
+            _ = exprs
+            return self
+
+        def sink_parquet(self, path: Path) -> None:
+            path.write_bytes(b"tmp")
+            raise subprocess.CalledProcessError(returncode=1, cmd="sink_parquet")
+
+    def fake_scan_parquet(path: Path) -> FakeScan:
+        _ = path
+        return FakeScan()
+
+    def enough_free_bytes(path: Path) -> int:
+        _ = path
+        return tpcds_config.TPCDS_PREPARE_FREE_SPACE_RESERVE_BYTES + 100
+
+    monkeypatch.setattr(tpcds_config, "TPCDS_TABLES", ("income_band",))
+    monkeypatch.setattr(tpcds_config.pl, "scan_parquet", fake_scan_parquet)
+    monkeypatch.setattr(tpcds_config, "_free_disk_bytes", enough_free_bytes)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        tpcds_config._normalize_tpcds_parquet(tmp_path)
+
+    assert not tmp_file.exists()
