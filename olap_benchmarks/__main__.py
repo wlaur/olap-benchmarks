@@ -23,6 +23,12 @@ from .results import (
 from .results import (
     publish as publish_results,
 )
+from .results.validation import (
+    RowCountValidationError,
+    assert_latest_query_row_counts,
+    format_row_count_mismatches,
+    validate_latest_query_row_counts,
+)
 from .settings import (
     MAIN_PROCESS_TITLE,
     SETTINGS,
@@ -209,6 +215,18 @@ def benchmark(
             if failed_runs:
                 _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
 
+    if operation in ("select", "all"):
+        try:
+            for suite_name in suite_names:
+                assert_latest_query_row_counts(
+                    revision=revision,
+                    system=SETTINGS.system,
+                    suite=suite_name,
+                    suite_scale_factor=suite_scale_factors[suite_name],
+                )
+        except RowCountValidationError as exc:
+            raise SystemExit(str(exc)) from exc
+
 
 @app.command
 def docker(
@@ -320,6 +338,25 @@ def delete_cmd(
 def query(sql: str, revision: Revision = "default") -> None:
     """Run a SQL query against the results database."""
     query_results(sql, revision=revision)
+
+
+@results_app.command(name="validate-row-counts")
+def validate_row_counts(
+    revision: Revision = "default",
+    system: str | None = None,
+    suite: SuiteName | None = None,
+    scale_factor: int | None = None,
+) -> None:
+    """Validate query row counts across latest completed select runs."""
+    mismatches = validate_latest_query_row_counts(
+        revision=revision,
+        system=system,
+        suite=suite,
+        suite_scale_factor=scale_factor,
+    )
+    if mismatches:
+        raise SystemExit(format_row_count_mismatches(mismatches))
+    print(format_row_count_mismatches(mismatches))
 
 
 @results_app.command

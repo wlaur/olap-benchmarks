@@ -31,7 +31,11 @@ each run so this can't silently recur.
 
 ### 1.2 Engines disagree on query results — nothing validates them
 
-- [ ] Add cross-engine row-count assertion after suite runs
+- [x] Add cross-engine row-count assertion after suite runs
+      *(fixed 2026-07-07: `olap benchmark ... select/all` now validates
+      latest completed select-run row counts for the same system/suite/scale
+      after the writer flushes, and `olap results validate-row-counts` exposes
+      the same check for published or shared revisions)*
 - [ ] Investigate/fix the divergent queries below, then re-run
 
 Found by comparing `row_count` per query step in `site/public/data/results.db`:
