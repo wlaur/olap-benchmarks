@@ -151,5 +151,7 @@ def get_suite_preparer(suite: SuiteName) -> Callable[[], None]:
             from .tpch.config import prepare_tpch_sf10 as prepare_data
         case "tpch_sf50":
             from .tpch.config import prepare_tpch_sf50 as prepare_data
+        case "tpcds_sf1":
+            from .tpcds.config import prepare_tpcds_sf1 as prepare_data
 
     return prepare_data

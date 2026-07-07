@@ -438,6 +438,7 @@ class Database(BaseModel, ABC):
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
         from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
+        from ..suites.tpcds.config import Tpcds
         from ..suites.tpch.config import Tpch
 
         return {
@@ -447,6 +448,7 @@ class Database(BaseModel, ABC):
             "kaggle_airbnb": KaggleAirbnb,
             "tpch_sf10": Tpch,
             "tpch_sf50": Tpch,
+            "tpcds_sf1": Tpcds,
         }
 
     @property

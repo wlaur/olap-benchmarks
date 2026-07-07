@@ -75,7 +75,8 @@ export function OperationTab({
     [deferredSelectedQuery, queryRows],
   )
 
-  const selectedSql = queriesManifest?.[suiteConfig.id]?.[deferredSelectedQuery ?? ""] ?? null
+  const selectedSql =
+    queriesManifest?.[suiteConfig.queriesKey]?.[deferredSelectedQuery ?? ""] ?? null
   const showTimeline = isTimelineLoading || querySteps.length > 0
   const isSplitLayout = !layoutMounted || deferredLayoutWidth >= DETAIL_SPLIT_MIN_WIDTH
 

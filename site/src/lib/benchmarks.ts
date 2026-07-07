@@ -5,6 +5,7 @@ export type BenchmarkSuiteId =
   | "kaggle_airbnb"
   | "tpch_sf10"
   | "tpch_sf50"
+  | "tpcds_sf1"
 
 export interface BenchmarkDefinition {
   id: BenchmarkSuiteId
@@ -42,6 +43,11 @@ export const benchmarkDefinitions: BenchmarkDefinition[] = [
     id: "tpch_sf50",
     navLabel: "TPC-H SF50",
     title: "TPC-H SF50",
+  },
+  {
+    id: "tpcds_sf1",
+    navLabel: "TPC-DS SF1",
+    title: "TPC-DS SF1",
   },
 ]
 

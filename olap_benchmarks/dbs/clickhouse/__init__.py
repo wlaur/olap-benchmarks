@@ -20,6 +20,7 @@ from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
+from ...suites.tpcds.config import Tpcds
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
@@ -108,6 +109,25 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
 
         if restart:
             self.db.restart_event()
+
+
+class ClickhouseTpcds(Tpcds["Clickhouse"]):
+    # Query-level session settings from the official ClickHouse TPC-DS kit
+    # (tests/benchmarks/tpc-ds/settings.json): standard-SQL NULL semantics for
+    # outer joins and ROLLUP grouping sets, and DISTINCT set-operation
+    # defaults. Without these, several queries return wrong results rather
+    # than fail.
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {
+            "settings": {
+                "group_by_use_nulls": 1,
+                "join_use_nulls": 1,
+                "intersect_default_mode": "DISTINCT",
+                "union_default_mode": "DISTINCT",
+                "joined_subquery_requires_alias": 0,
+            }
+        }
 
 
 class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
@@ -242,11 +262,15 @@ class Clickhouse(Database):
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
         time_columns: str | list[str] | None = None,
+        settings: Mapping[str, Any] | None = None,
     ) -> pl.DataFrame:
         query = query.strip().removesuffix(";")
 
         with self.record_query_execution(query):
-            df = cast(pl.DataFrame, cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query)))
+            df = cast(
+                pl.DataFrame,
+                cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query, settings=settings)),
+            )
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -553,4 +577,5 @@ class Clickhouse(Database):
             "rtabench": ClickHouseRTABench,
             "clickbench": ClickhouseClickbench,
             "time_series": ClickhouseTimeseries,
+            "tpcds_sf1": ClickhouseTpcds,
         }
