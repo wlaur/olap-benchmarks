@@ -21,6 +21,18 @@ All results for a given system (e.g. `macbook-pro-m4`) come from the same machin
 - **Query latency** — wall-clock time per query, median over all recorded iterations, including the first iteration
 - **Resources** — CPU, memory, and disk usage sampled throughout each phase
 
+### Tuning policy
+
+Vendor-recommended server settings, storage layout, and per-suite physical design are allowed when they are documented here. Results should be read as configured benchmark runs, not stock-default engine comparisons.
+
+- **DuckDB** runs in process with the installed Python package and no server process.
+- **ClickHouse** uses the pinned Docker image and suite schemas/query variants without extra server tuning.
+- **MonetDB** uses the pinned Docker image; selected large-result queries use MonetDB's binary fetch path.
+- **Postgres** uses explicit server settings for memory, WAL, and parallel workers, plus suite-specific indexes where defined by the schema.
+- **TimescaleDB** uses Timescale tuning, hypertables, compression/chunk options where defined, and the same Postgres-family server settings.
+- **QuestDB** uses the pinned Docker image; ClickBench input is sorted by event time before ingest.
+- **StarRocks** uses the pinned Docker image and suite schemas/query variants without extra server tuning.
+
 ## Explorer
 
 Each suite links to an explorer with per-query latency breakdowns, SQL source, and per-step resource usage. Databases can be filtered and the duration scale toggled between linear and log.
