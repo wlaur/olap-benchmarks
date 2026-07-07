@@ -112,8 +112,6 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
 
 
 class ClickhouseTpcds(Tpcds["Clickhouse"]):
-    UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, frozenset[str]]] = {"clickhouse": frozenset({"35"})}
-
     # Query-level session settings from the official ClickHouse TPC-DS kit
     # (tests/benchmarks/tpc-ds/settings.json): standard-SQL NULL semantics for
     # outer joins and ROLLUP grouping sets, and DISTINCT set-operation
