@@ -29,12 +29,19 @@ from typing import Any, ClassVar
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import (
+    REPO_ROOT,
+    SETTINGS,
+    DatabaseName,
+    TableName,
+    format_suite_data_directory_name,
+    resolve_suite_scale_factor,
+)
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
 
-TPCDS_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/tpcds/queries"
+TPC_DS_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/tpc_ds/queries"
 
 TPCDS_TABLES = (
     "call_center",
@@ -62,10 +69,6 @@ TPCDS_TABLES = (
     "web_sales",
     "web_site",
 )
-
-TPCDS_SCALE_FACTORS: dict[SuiteName, int] = {
-    "tpcds_sf1": 1,
-}
 
 TPCDS_ITERATIONS = 3
 
@@ -134,7 +137,7 @@ def _is_normalized(output_directory: Path) -> bool:
     return "ib_income_band_sk" in schema
 
 
-def _normalize_tpcds_parquet(output_directory: Path) -> None:
+def _normalize_tpc_ds_parquet(output_directory: Path) -> None:
     for table_name in TPCDS_TABLES:
         fpath = output_directory / f"{table_name}.parquet"
         lf = pl.scan_parquet(fpath)
@@ -153,11 +156,13 @@ def _normalize_tpcds_parquet(output_directory: Path) -> None:
         finally:
             tmp_path.unlink(missing_ok=True)
 
-    _LOGGER.info(f"Normalized tpcds Parquet files in {output_directory}")
+    _LOGGER.info(f"Normalized tpc_ds Parquet files in {output_directory}")
 
 
-def _prepare_tpcds_data(suite: SuiteName) -> None:
-    output_directory = SETTINGS.input_data_directory / suite
+def _prepare_tpc_ds_data(scale_factor: int) -> None:
+    scale_factor = resolve_suite_scale_factor("tpc_ds", scale_factor)
+    data_directory_name = format_suite_data_directory_name("tpc_ds", scale_factor)
+    output_directory = SETTINGS.input_data_directory / data_directory_name
     output_directory.mkdir(exist_ok=True, parents=True)
 
     expected_filenames = {f"{table}.parquet" for table in TPCDS_TABLES}
@@ -167,7 +172,9 @@ def _prepare_tpcds_data(suite: SuiteName) -> None:
     if len(existing) == len(TPCDS_TABLES):
         if not _is_normalized(output_directory):
             raise ValueError(f"{output_directory} contains an unnormalized dataset; remove it and rerun prepare")
-        _LOGGER.info(f"All {suite} Parquet files already exist in {output_directory}, skipping generation")
+        _LOGGER.info(
+            f"All {data_directory_name} Parquet files already exist in {output_directory}, skipping generation"
+        )
         return
 
     if parquet_filenames:
@@ -183,11 +190,10 @@ def _prepare_tpcds_data(suite: SuiteName) -> None:
             "https://github.com/clflushopt/tpchgen-rs --rev 09d609d13b7b45a2aa06d2b86e5a4bfa29aacb1a tpcgen-cli'"
         )
 
-    scale_factor = TPCDS_SCALE_FACTORS[suite]
     _require_free_disk_space(
         output_directory,
         TPCDS_PREPARE_FREE_SPACE_RESERVE_BYTES + (TPCDS_PREPARE_BYTES_PER_SCALE_FACTOR * scale_factor),
-        f"generate {suite} data",
+        f"generate {data_directory_name} data",
     )
 
     command = [
@@ -206,27 +212,23 @@ def _prepare_tpcds_data(suite: SuiteName) -> None:
     _LOGGER.info(f"Generating TPC-DS data at scale factor {scale_factor}: {' '.join(command)}")
     t0 = perf_counter()
     subprocess.run(command, check=True)
-    _LOGGER.info(f"Generated {suite} data in {perf_counter() - t0:_.2f} seconds")
+    _LOGGER.info(f"Generated {data_directory_name} data in {perf_counter() - t0:_.2f} seconds")
 
-    _normalize_tpcds_parquet(output_directory)
-
-
-def prepare_tpcds_sf1() -> None:
-    _prepare_tpcds_data("tpcds_sf1")
+    _normalize_tpc_ds_parquet(output_directory)
 
 
-class Tpcds[DBT: Database](BenchmarkSuite[DBT]):
+def prepare_data(scale_factor: int) -> None:
+    _prepare_tpc_ds_data(scale_factor)
+
+
+class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
     # queries an engine cannot run, with the error class documented next to
     # each entry; skipped instead of failing the whole select run
     UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, frozenset[str]]] = {}
 
-    @property
-    def scale_factor(self) -> int:
-        return TPCDS_SCALE_FACTORS[self.name]
-
     def expected_table_row_counts(self) -> dict[TableName, int]:
         return {
-            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"{self.name}/{table_name}.parquet")
+            table_name: self.parquet_row_count(self.input_data_directory / f"{table_name}.parquet")
             for table_name in TPCDS_TABLES
         }
 
@@ -242,16 +244,16 @@ class Tpcds[DBT: Database](BenchmarkSuite[DBT]):
             if not self.should_populate():
                 return
 
-        self.db.initialize_schema("tpcds")
+        self.db.initialize_schema("tpc_ds")
 
         for table_name in TPCDS_TABLES:
-            df = pl.scan_parquet(SETTINGS.input_data_directory / f"{self.name}/{table_name}.parquet")
+            df = pl.scan_parquet(self.input_data_directory / f"{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.insert_table(df, table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
-        _LOGGER.info(f"Inserted all tpcds tables for {self.name}")
+        _LOGGER.info(f"Inserted all tpc_ds tables for {self.name} scale factor {self.scale_factor}")
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
@@ -266,8 +268,8 @@ class Tpcds[DBT: Database](BenchmarkSuite[DBT]):
         return {}
 
     def load_tpcds_query(self, query_name: str) -> str:
-        db_specific = TPCDS_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = TPCDS_QUERIES_DIRECTORY / f"{query_name}.sql"
+        db_specific = TPC_DS_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
+        common = TPC_DS_QUERIES_DIRECTORY / f"{query_name}.sql"
 
         sql_source = db_specific if db_specific.is_file() else common
 

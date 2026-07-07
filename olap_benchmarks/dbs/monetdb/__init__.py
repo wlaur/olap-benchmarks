@@ -65,7 +65,7 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         # and a full ANALYZE on the 1500-column wide tables would otherwise
         # add ~3 min for ~250 ms of total query speed-up.
         with self.db.phase_context("analyze"):
-            for table_name in get_time_series_input_files():
+            for table_name in get_time_series_input_files(self.scale_factor):
                 self.db.analyze_table(table_name, columns=["time"])
 
         if restart:

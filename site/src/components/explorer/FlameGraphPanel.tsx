@@ -15,6 +15,7 @@ import { FlameGraph } from "./FlameGraph"
 interface FlameGraphPanelProps {
   system: string | null
   suite: BenchmarkSuiteId
+  suiteScaleFactor: number | null
   databases: string[]
   metricSamples: MetricSample[]
   isLoading?: boolean
@@ -30,6 +31,7 @@ interface SpanMetrics {
 export function FlameGraphPanel({
   system,
   suite,
+  suiteScaleFactor,
   databases,
   metricSamples,
   isLoading = false,
@@ -45,7 +47,7 @@ export function FlameGraphPanel({
     selectedDb && databases.includes(selectedDb) ? selectedDb : (databases[0] ?? null)
 
   useEffect(() => {
-    if (isLoading || system === null) {
+    if (isLoading || system === null || suiteScaleFactor === null) {
       setIsLoadingSpans(false)
       setSpans([])
       return
@@ -58,7 +60,7 @@ export function FlameGraphPanel({
     let cancelled = false
     setIsLoadingSpans(true)
 
-    fetchFlameSpans(system, suite, resolvedDb)
+    fetchFlameSpans(system, suite, suiteScaleFactor, resolvedDb)
       .then((result) => {
         if (!cancelled) setSpans(result)
       })
@@ -72,7 +74,7 @@ export function FlameGraphPanel({
     return () => {
       cancelled = true
     }
-  }, [isLoading, system, suite, resolvedDb])
+  }, [isLoading, system, suite, suiteScaleFactor, resolvedDb])
 
   const selectedSpan = useMemo(() => {
     if (selectedSpanId) {

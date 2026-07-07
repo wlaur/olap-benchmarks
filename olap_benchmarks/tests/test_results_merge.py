@@ -20,6 +20,7 @@ def _create_results_db(db_path: Path) -> None:
 def _insert_run_tree(
     session: Session,
     suite: str = "rtabench",
+    suite_scale_factor: int = 1,
     db: str = "monetdb",
     db_version: str = "1.0",
     status: str = "completed",
@@ -28,6 +29,7 @@ def _insert_run_tree(
 ) -> int:
     run = Run(
         suite=suite,
+        suite_scale_factor=suite_scale_factor,
         db=db,
         db_version=db_version,
         operation="select",
@@ -66,6 +68,8 @@ def _insert_run_tree(
 
 def _populate(
     db_path: Path,
+    suite: str = "rtabench",
+    suite_scale_factor: int = 1,
     db: str = "monetdb",
     status: str = "completed",
     started_at: datetime | None = None,
@@ -74,7 +78,15 @@ def _populate(
     engine = get_results_engine(read_only=False, db_path=db_path)
     try:
         with Session(engine) as session:
-            return _insert_run_tree(session, db=db, status=status, started_at=started_at, query=query)
+            return _insert_run_tree(
+                session,
+                suite=suite,
+                suite_scale_factor=suite_scale_factor,
+                db=db,
+                status=status,
+                started_at=started_at,
+                query=query,
+            )
     finally:
         engine.dispose()
 
@@ -159,6 +171,25 @@ def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
     assert _query(dest, "select count(*) from run_step")[0][0] == 2
     assert _query(dest, "select count(*) from run_metric")[0][0] == 2
     assert _query(dest, "select count(*) from query_execution")[0][0] == 2
+
+
+def test_merge_keeps_different_suite_scale_factors(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    started_at = datetime(2026, 3, 1, 12, 0, 0)
+    _populate(dest, suite="tpc_h", suite_scale_factor=10, db="duckdb", started_at=started_at, query="sf10")
+    _populate(source, suite="tpc_h", suite_scale_factor=50, db="duckdb", started_at=started_at, query="sf50")
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.runs_added == 1
+    assert stats.runs_replaced == 0
+    assert _query(dest, "select suite, suite_scale_factor from run order by suite_scale_factor") == [
+        ("tpc_h", 10),
+        ("tpc_h", 50),
+    ]
 
 
 def test_merge_skips_running_orphans(tmp_path: Path) -> None:

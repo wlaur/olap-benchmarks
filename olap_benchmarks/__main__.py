@@ -31,7 +31,9 @@ from .settings import (
     Revision,
     SuiteArg,
     SuiteName,
+    format_suite_data_directory_name,
     resolve_dbs,
+    resolve_suite_scale_factor,
     resolve_suites,
     setup_stdout_logging,
 )
@@ -70,7 +72,7 @@ def _stop_db(db_instance: "Database") -> None:
         run_shell(cmd)
 
 
-def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
+def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor: int) -> None:
     """Remove persistent db files and temp files for a (db, suite) combination.
 
     Docker (incl. OrbStack on macOS) writes data files as root inside the
@@ -78,7 +80,8 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
     delete without `sudo`. Run a throwaway alpine container with the host
     paths mounted so `rm -rf` runs as root and clears them.
     """
-    db_subdir = SETTINGS.database_directory / db_name / suite_name
+    data_directory_name = format_suite_data_directory_name(suite_name, scale_factor)
+    db_subdir = SETTINGS.database_directory / db_name / data_directory_name
     temp_subdir = SETTINGS.temporary_directory / db_name
 
     rm_paths: list[str] = []
@@ -86,7 +89,7 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
 
     if db_subdir.exists():
         mounts.append(f"-v {SETTINGS.database_directory.as_posix()}:/dbs")
-        rm_paths.append(f"/dbs/{db_name}/{suite_name}")
+        rm_paths.append(f"/dbs/{db_name}/{data_directory_name}")
 
     if temp_subdir.exists():
         mounts.append(f"-v {SETTINGS.temporary_directory.as_posix()}:/temp")
@@ -102,21 +105,23 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName) -> None:
         _LOGGER.warning(f"Cleanup for {db_name}:{suite_name} exited with code {rc}")
 
 
-def _check_input_data(suite_name: SuiteName) -> None:
-    input_dir = SETTINGS.input_data_directory / suite_name
+def _check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
+    input_dir = SETTINGS.input_data_directory / format_suite_data_directory_name(suite_name, scale_factor)
 
     if not input_dir.is_dir() or not any(input_dir.iterdir()):
         raise SystemExit(
-            f"No input data found for suite '{suite_name}' at {input_dir}\nRun 'olap prepare {suite_name}' first."
+            f"No input data found for suite '{suite_name}' scale factor {scale_factor} at {input_dir}\n"
+            f"Run 'olap prepare {suite_name} --scale-factor {scale_factor}' first."
         )
 
 
 @app.command
-def prepare(suite: SuiteArg) -> None:
+def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
     """Generate input data files for a benchmark suite (e.g. Parquet files)."""
     for suite_name in resolve_suites(suite):
-        _LOGGER.info(f"Preparing data for {suite_name}")
-        get_suite_preparer(suite_name)()
+        resolved_scale_factor = resolve_suite_scale_factor(suite_name, scale_factor)
+        _LOGGER.info(f"Preparing data for {suite_name} scale factor {resolved_scale_factor}")
+        get_suite_preparer(suite_name, resolved_scale_factor)()
 
 
 @app.command
@@ -127,6 +132,7 @@ def benchmark(
     revision: Revision = "default",
     cleanup: bool = False,
     omit: list[DatabaseName] | None = None,
+    scale_factor: int | None = None,
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically.
 
@@ -140,10 +146,16 @@ def benchmark(
 
     If `--omit` is set, the listed databases are skipped. Useful with `db=all`
     to run every database except some (e.g. `--omit questdb`).
+
+    `--scale-factor` selects the suite scale factor. Suites without a scalable
+    dataset require scale factor 1.
     """
     suite_names = resolve_suites(suite)
+    suite_scale_factors = {
+        suite_name: resolve_suite_scale_factor(suite_name, scale_factor) for suite_name in suite_names
+    }
     for suite_name in suite_names:
-        _check_input_data(suite_name)
+        _check_input_data(suite_name, suite_scale_factors[suite_name])
 
     omitted = set(omit or [])
 
@@ -162,8 +174,12 @@ def benchmark(
                     _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
                     continue
 
-                _LOGGER.info(f"Benchmarking {suite_name} on {db_name} ({operation})")
+                resolved_scale_factor = suite_scale_factors[suite_name]
+                _LOGGER.info(
+                    f"Benchmarking {suite_name} scale factor {resolved_scale_factor} on {db_name} ({operation})"
+                )
                 db_instance._current_suite = suite_name
+                db_instance._current_suite_scale_factor = resolved_scale_factor
                 db_instance.set_queues(writer.queue, writer.result_queue)
 
                 _start_db(db_instance)
@@ -171,13 +187,13 @@ def benchmark(
                 try:
                     if operation == "all":
                         for suite_operation in db_instance.benchmarks[suite_name].supported_operations:
-                            db_instance.benchmark(suite_name, suite_operation)
+                            db_instance.benchmark(suite_name, suite_operation, scale_factor=resolved_scale_factor)
                     else:
-                        db_instance.benchmark(suite_name, operation)
+                        db_instance.benchmark(suite_name, operation, scale_factor=resolved_scale_factor)
                 finally:
                     _stop_db(db_instance)
                     if cleanup:
-                        _cleanup_db_files(db_name, suite_name)
+                        _cleanup_db_files(db_name, suite_name, resolved_scale_factor)
     except KeyboardInterrupt:
         interrupted = True
         raise
@@ -190,12 +206,19 @@ def benchmark(
 
 
 @app.command
-def docker(db: DatabaseArg, suite: SuiteArg, command: Literal["start", "stop", "restart"]) -> None:
+def docker(
+    db: DatabaseArg,
+    suite: SuiteArg,
+    command: Literal["start", "stop", "restart"],
+    scale_factor: int | None = None,
+) -> None:
     """Manually start, stop, or restart a database container."""
     for db_name in resolve_dbs(db):
         for suite_name in resolve_suites(suite):
+            resolved_scale_factor = resolve_suite_scale_factor(suite_name, scale_factor)
             db_instance = get_databases()[db_name]
             db_instance._current_suite = suite_name
+            db_instance._current_suite_scale_factor = resolved_scale_factor
 
             match command:
                 case "start":
@@ -213,7 +236,7 @@ def publish(revision: Revision = "default", merge: bool = False) -> None:
 
     With `--merge`, runs from the revision are merged into the already published
     results.db instead of replacing the whole file: runs matching an existing
-    (system, db, db_version, suite, operation, started_at) are replaced, new
+    (system, db, db_version, suite, suite_scale_factor, operation, started_at) are replaced, new
     runs are added, and everything else in the published file is kept.
     """
     output_dir, merge_stats = publish_results(revision=revision, merge=merge)

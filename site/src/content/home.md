@@ -4,8 +4,8 @@
 - **RTABench** — group-bys, distinct counts, and filtered aggregations over a normalized order-tracking schema. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale. [Results](#/explorer/rtabench)
 - **ClickBench** — full-table scans, filters, and aggregations over a single wide table. Based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse. [Results](#/explorer/clickbench)
 - **Kaggle Airbnb** — multi-table joins and mixed aggregations over Airbnb listings data. Based on [a comparison](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy. [Results](#/explorer/kaggle_airbnb)
-- **TPC-H SF10 / SF50** — the 22 ad-hoc decision-support queries over a normalized order/lineitem schema, derived from the [TPC-H benchmark](https://www.tpc.org/tpch/) (not comparable to published TPC-H results). [SF10 results](#/explorer/tpch_sf10), [SF50 results](#/explorer/tpch_sf50)
-- **TPC-DS SF1** — the 99 decision-support queries over a retail snowflake schema (24 tables), derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/) (not comparable to published TPC-DS results). [Results](#/explorer/tpcds_sf1)
+- **TPC-H** — the 22 ad-hoc decision-support queries over a normalized order/lineitem schema, derived from the [TPC-H benchmark](https://www.tpc.org/tpch/) (not comparable to published TPC-H results). [Results](#/explorer/tpc_h)
+- **TPC-DS** — the 99 decision-support queries over a retail snowflake schema (24 tables), derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/) (not comparable to published TPC-DS results). [Results](#/explorer/tpc_ds)
 
 ## Methodology
 

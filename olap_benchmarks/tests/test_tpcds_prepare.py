@@ -6,7 +6,7 @@ from typing import NoReturn
 
 import pytest
 
-from olap_benchmarks.suites.tpcds import config as tpcds_config
+from olap_benchmarks.suites.tpc_ds import config as tpcds_config
 
 
 def fake_tpcgen_path(name: str) -> str:
@@ -28,21 +28,21 @@ def test_tpcds_prepare_refuses_low_free_space(tmp_path: Path, monkeypatch: pytes
     monkeypatch.setattr(tpcds_config, "_free_disk_bytes", one_free_byte)
     monkeypatch.setattr(tpcds_config.subprocess, "run", fail_run)
 
-    with pytest.raises(RuntimeError, match="Refusing to generate tpcds_sf1 data"):
-        tpcds_config._prepare_tpcds_data("tpcds_sf1")
+    with pytest.raises(RuntimeError, match="Refusing to generate tpc_ds_sf1 data"):
+        tpcds_config._prepare_tpc_ds_data(1)
 
 
 def test_tpcds_prepare_rejects_partial_dataset_with_generator_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir = tmp_path / "tpcds_sf1"
+    input_dir = tmp_path / "tpc_ds_sf1"
     input_dir.mkdir()
     (input_dir / "dbgen_version.parquet").write_bytes(b"partial")
 
     monkeypatch.setattr(tpcds_config.SETTINGS, "input_data_directory", tmp_path)
 
     with pytest.raises(ValueError, match="partial dataset"):
-        tpcds_config._prepare_tpcds_data("tpcds_sf1")
+        tpcds_config._prepare_tpc_ds_data(1)
 
 
 def test_tpcds_normalize_removes_tmp_file_after_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,6 +75,6 @@ def test_tpcds_normalize_removes_tmp_file_after_failure(tmp_path: Path, monkeypa
     monkeypatch.setattr(tpcds_config, "_free_disk_bytes", enough_free_bytes)
 
     with pytest.raises(subprocess.CalledProcessError):
-        tpcds_config._normalize_tpcds_parquet(tmp_path)
+        tpcds_config._normalize_tpc_ds_parquet(tmp_path)
 
     assert not tmp_file.exists()

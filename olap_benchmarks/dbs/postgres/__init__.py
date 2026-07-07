@@ -15,9 +15,9 @@ from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
-    TIME_SERIES_DATASET_SIZES,
     MutateStep,
     TimeSeries,
+    get_time_series_dataset_sizes,
     get_time_series_input_files,
     get_time_series_table_name,
 )
@@ -314,7 +314,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
         counts: dict[TableName, int] = {}
-        for size, (n_rows, n_cols) in TIME_SERIES_DATASET_SIZES.items():
+        for size, (n_rows, n_cols) in get_time_series_dataset_sizes(self.scale_factor).items():
             table_name = get_time_series_table_name(size)
             if table_name in self.SKIP_TABLES:
                 continue
@@ -339,7 +339,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
         return True
 
     def index_tables(self) -> None:
-        for table_name in get_time_series_input_files():
+        for table_name in get_time_series_input_files(self.scale_factor):
             if table_name in self.SKIP_TABLES:
                 continue
             if table_name in self.EAV_TABLES:
@@ -389,7 +389,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
 
         self.db.initialize_schema("time_series")
 
-        for table_name, fpath in get_time_series_input_files().items():
+        for table_name, fpath in get_time_series_input_files(self.scale_factor).items():
             if table_name in self.SKIP_TABLES:
                 _LOGGER.info(f"Skipping {table_name} for {self.name} (would not fit in disk budget)")
                 continue

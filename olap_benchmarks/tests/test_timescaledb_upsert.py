@@ -34,6 +34,7 @@ def test_timescaledb_time_series_tables_have_no_primary_keys() -> None:
     suite = TimescaleTimeSeries.model_construct(
         db=FakeTimescaleDB(FakeConnection()),
         name="time_series",
+        scale_factor=1,
     )
 
     assert suite.get_primary_key("data_tall") is None

@@ -58,14 +58,18 @@ def test_timescaledb_time_series_compresses_all_tables(
     suite = TimescaleTimeSeries.model_construct(
         db=FakeTimescaleDB(connection),
         name="time_series",
+        scale_factor=1,
     )
+
+    def fake_time_series_input_files(_scale_factor: int) -> dict[str, Path]:
+        return {
+            "data_wide": Path("data_wide.parquet"),
+            "data_tall": Path("data_tall.parquet"),
+        }
 
     monkeypatch.setattr(
         "olap_benchmarks.dbs.timescaledb.get_time_series_input_files",
-        lambda: {
-            "data_wide": Path("data_wide.parquet"),
-            "data_tall": Path("data_tall.parquet"),
-        },
+        fake_time_series_input_files,
     )
 
     suite.compress_tables()

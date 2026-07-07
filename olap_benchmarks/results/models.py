@@ -28,6 +28,7 @@ class Run(Base):
         primary_key=True,
     )
     suite: Mapped[str] = mapped_column(String, nullable=False)
+    suite_scale_factor: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     db: Mapped[str] = mapped_column(String, nullable=False)
     db_version: Mapped[str] = mapped_column(String, nullable=False)
     operation: Mapped[str] = mapped_column(String, nullable=False)
@@ -40,7 +41,8 @@ class Run(Base):
 
     __table_args__ = (
         CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
-        Index("idx_run_suite_db_operation", "suite", "db", "operation"),
+        CheckConstraint("suite_scale_factor >= 1", name="ck_run_suite_scale_factor"),
+        Index("idx_run_suite_db_operation", "suite", "suite_scale_factor", "db", "operation"),
         Index("idx_run_status_started_at", "status", "started_at"),
     )
 

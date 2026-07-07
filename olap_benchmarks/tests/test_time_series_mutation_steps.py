@@ -89,7 +89,7 @@ def test_time_series_mutate_skips_disabled_steps(
         upserted_tables=[],
         deleted_tables=[],
     )
-    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series"))
+    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
 
     monkeypatch.setattr(
         "olap_benchmarks.suites.time_series.config.TIME_SERIES_MUTATE_STEPS",

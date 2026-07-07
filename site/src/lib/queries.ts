@@ -45,6 +45,25 @@ export async function fetchSystems(): Promise<string[]> {
   return rows.map((row) => row.system)
 }
 
+export async function fetchSuiteScaleFactors(
+  system: string,
+  suite: BenchmarkSuiteId,
+): Promise<number[]> {
+  const db = await getKyselyDb()
+  const rows = await db
+    .selectFrom("run")
+    .select("suite_scale_factor")
+    .distinct()
+    .where("suite", "=", suite)
+    .where("system", "=", system)
+    .where("status", "=", "completed")
+    .where("finished_at", "is not", null)
+    .orderBy("suite_scale_factor")
+    .execute()
+
+  return rows.map((row) => row.suite_scale_factor)
+}
+
 function isoTimestamp(column: Expression<Date>) {
   return sql<string>`strftime(${column}, ${ISO_TIMESTAMP_FORMAT})`
 }
@@ -56,6 +75,7 @@ function epochSeconds(end: Expression<Date>, start: Expression<Date>) {
 interface LatestRunsOptions {
   system: string
   suite: BenchmarkSuiteId
+  suiteScaleFactor: number
   operations: readonly BenchmarkOperation[]
   /** rank runs per (db, db_version, operation) instead of per (db, db_version) */
   perOperation?: boolean
@@ -89,6 +109,7 @@ function withLatestRuns(db: ResultsDb, options: LatestRunsOptions) {
           eb.ref("run.finished_at").$notNull().as("run_finished_at"),
         ])
         .where("run.suite", "=", options.suite)
+        .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
         .where("run.system", "=", options.system)
         .where("run.operation", "in", [...BENCHMARK_OPERATIONS])
         .where("run.status", "=", "completed")
@@ -113,10 +134,11 @@ function withLatestRuns(db: ResultsDb, options: LatestRunsOptions) {
 export async function fetchRunSummaries(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
 ): Promise<RunSummary[]> {
   const db = await getKyselyDb()
 
-  return withLatestRuns(db, { system, suite, operations: ["select"] })
+  return withLatestRuns(db, { system, suite, suiteScaleFactor, operations: ["select"] })
     .selectFrom("latest_runs")
     .leftJoin("run_step", "run_step.run_id", "latest_runs.run_id")
     .select((eb) => [
@@ -159,12 +181,14 @@ export async function fetchRunSummaries(
 export async function fetchOperationSummaries(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
 ): Promise<OperationSummary[]> {
   const db = await getKyselyDb()
 
   return withLatestRuns(db, {
     system,
     suite,
+    suiteScaleFactor,
     operations: BENCHMARK_OPERATIONS,
     perOperation: true,
   })
@@ -189,12 +213,13 @@ export async function fetchOperationSummaries(
 async function fetchStepSummaries(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
   operation: BenchmarkOperation,
   stepType: "query" | "mutation",
 ): Promise<QuerySummary[]> {
   const db = await getKyselyDb()
 
-  return withLatestRuns(db, { system, suite, operations: [operation] })
+  return withLatestRuns(db, { system, suite, suiteScaleFactor, operations: [operation] })
     .selectFrom("run_step")
     .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
     .select((eb) => [
@@ -228,26 +253,30 @@ async function fetchStepSummaries(
 export function fetchQuerySummaries(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
 ): Promise<QuerySummary[]> {
-  return fetchStepSummaries(system, suite, "select", "query")
+  return fetchStepSummaries(system, suite, suiteScaleFactor, "select", "query")
 }
 
 export function fetchMutateSummaries(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
 ): Promise<QuerySummary[]> {
-  return fetchStepSummaries(system, suite, "mutate", "mutation")
+  return fetchStepSummaries(system, suite, suiteScaleFactor, "mutate", "mutation")
 }
 
 export async function fetchMetricSamples(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
 ): Promise<MetricSample[]> {
   const db = await getKyselyDb()
 
   return withLatestRuns(db, {
     system,
     suite,
+    suiteScaleFactor,
     operations: BENCHMARK_OPERATIONS,
     perOperation: true,
   })
@@ -279,10 +308,11 @@ export async function fetchMetricSamples(
 export async function fetchInsertSteps(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
 ): Promise<InsertStep[]> {
   const db = await getKyselyDb()
 
-  return withLatestRuns(db, { system, suite, operations: ["populate"] })
+  return withLatestRuns(db, { system, suite, suiteScaleFactor, operations: ["populate"] })
     .selectFrom("run_step")
     .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
     .select((eb) => [
@@ -317,12 +347,13 @@ export async function fetchInsertSteps(
 async function fetchStepsForOperation(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
   operation: BenchmarkOperation,
   stepType: "query" | "mutation",
 ): Promise<QueryStep[]> {
   const db = await getKyselyDb()
 
-  return withLatestRuns(db, { system, suite, operations: [operation] })
+  return withLatestRuns(db, { system, suite, suiteScaleFactor, operations: [operation] })
     .selectFrom("run_step")
     .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
     .select((eb) => [
@@ -354,17 +385,26 @@ async function fetchStepsForOperation(
     .execute()
 }
 
-export function fetchQuerySteps(system: string, suite: BenchmarkSuiteId): Promise<QueryStep[]> {
-  return fetchStepsForOperation(system, suite, "select", "query")
+export function fetchQuerySteps(
+  system: string,
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<QueryStep[]> {
+  return fetchStepsForOperation(system, suite, suiteScaleFactor, "select", "query")
 }
 
-export function fetchMutateSteps(system: string, suite: BenchmarkSuiteId): Promise<QueryStep[]> {
-  return fetchStepsForOperation(system, suite, "mutate", "mutation")
+export function fetchMutateSteps(
+  system: string,
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<QueryStep[]> {
+  return fetchStepsForOperation(system, suite, suiteScaleFactor, "mutate", "mutation")
 }
 
 export async function fetchFlameSpans(
   system: string,
   suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
   targetDb: string,
 ): Promise<FlameSpan[]> {
   const db = await getKyselyDb()
@@ -380,6 +420,7 @@ export async function fetchFlameSpans(
   const withOperationOffsets = withLatestRuns(db, {
     system,
     suite,
+    suiteScaleFactor,
     operations: BENCHMARK_OPERATIONS,
     perOperation: true,
   })

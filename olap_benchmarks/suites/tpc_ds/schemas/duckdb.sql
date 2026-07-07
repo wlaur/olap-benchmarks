@@ -1,6 +1,6 @@
 -- Types follow the TPC-DS spec (money columns as DECIMAL(7,2), p_cost as
 -- DECIMAL(15,2), dates as DATE) and match the normalized Parquet files
--- written by 'olap prepare tpcds_sf1', so inserts need no casts. Like the
+-- written by 'olap prepare tpc_ds --scale-factor 1', so inserts need no casts. Like the
 -- official DuckDB tpcds extension schema, no primary keys are created.
 
 CREATE TABLE call_center (

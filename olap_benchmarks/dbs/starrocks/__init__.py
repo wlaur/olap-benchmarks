@@ -18,8 +18,8 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.time_series.config import TimeSeries
-from ...suites.tpcds.config import Tpcds
-from ...suites.tpch.config import Tpch
+from ...suites.tpc_ds.config import TpcDs
+from ...suites.tpc_h.config import TpcH
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
@@ -142,7 +142,7 @@ class StarRocksClickbench(Clickbench["StarRocks"]):
 
 
 def insert_source_parquet_via_files(
-    db: "StarRocks", suite_name: SuiteName, df: pl.LazyFrame, table_name: TableName
+    db: "StarRocks", input_data_directory: Path, df: pl.LazyFrame, table_name: TableName
 ) -> None:
     """Ingest a per-table source parquet directly via FILES().
 
@@ -156,7 +156,7 @@ def insert_source_parquet_via_files(
     """
     staging = SETTINGS.temporary_directory / "starrocks/data"
     staging.mkdir(parents=True, exist_ok=True)
-    src = SETTINGS.input_data_directory / f"{suite_name}/{table_name}.parquet"
+    src = input_data_directory / f"{table_name}.parquet"
     dst = staging / f"{table_name}.parquet"
     if dst.exists() or dst.is_symlink():
         dst.unlink()
@@ -177,14 +177,14 @@ def insert_source_parquet_via_files(
         dst.unlink()
 
 
-class StarRocksTpch(Tpch["StarRocks"]):
+class StarRocksTpcH(TpcH["StarRocks"]):
     def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
-        insert_source_parquet_via_files(self.db, self.name, df, table_name)
+        insert_source_parquet_via_files(self.db, self.input_data_directory, df, table_name)
 
 
-class StarRocksTpcds(Tpcds["StarRocks"]):
+class StarRocksTpcDs(TpcDs["StarRocks"]):
     def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
-        insert_source_parquet_via_files(self.db, self.name, df, table_name)
+        insert_source_parquet_via_files(self.db, self.input_data_directory, df, table_name)
 
 
 class StarRocksTimeSeries(TimeSeries["StarRocks"]):
@@ -461,7 +461,6 @@ class StarRocks(Database):
             **super().suite_registry(),
             "time_series": StarRocksTimeSeries,
             "clickbench": StarRocksClickbench,
-            "tpch_sf10": StarRocksTpch,
-            "tpch_sf50": StarRocksTpch,
-            "tpcds_sf1": StarRocksTpcds,
+            "tpc_h": StarRocksTpcH,
+            "tpc_ds": StarRocksTpcDs,
         }

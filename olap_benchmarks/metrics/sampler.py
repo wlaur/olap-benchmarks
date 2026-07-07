@@ -17,6 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 def sampling_loop(
     db: DatabaseName,
     suite: SuiteName,
+    suite_scale_factor: int,
     run_id: int,
     stop_event: Event,
     queue: Queue[WriterMessage],
@@ -28,7 +29,7 @@ def sampling_loop(
 
     while not stop_event.is_set():
         now = datetime.now(UTC).replace(tzinfo=None)
-        metric = get_container_metrics(db, suite)
+        metric = get_container_metrics(db, suite, suite_scale_factor)
 
         storage.insert_metric(
             run_id=run_id,
@@ -47,6 +48,7 @@ def sampling_loop(
 def start_metric_sampler(
     db: DatabaseName,
     suite: SuiteName,
+    suite_scale_factor: int,
     run_id: int,
     storage: Storage,
     interval_seconds: float | None = 1.0,
@@ -55,7 +57,7 @@ def start_metric_sampler(
 
     process = Process(
         target=sampling_loop,
-        args=(db, suite, run_id, stop_event, storage.queue, storage.result_queue, interval_seconds),
+        args=(db, suite, suite_scale_factor, run_id, stop_event, storage.queue, storage.result_queue, interval_seconds),
         daemon=False,
     )
 

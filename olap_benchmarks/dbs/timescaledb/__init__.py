@@ -223,7 +223,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
         # insert path; the call below is a no-op for those (if_not_compressed
         # => true). data_tall is still loaded as one big batch and is
         # compressed here.
-        for table_name in get_time_series_input_files():
+        for table_name in get_time_series_input_files(self.scale_factor):
             self.db.execute(
                 f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i",
                 reconnect=True,
@@ -238,7 +238,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
             if not self.should_populate():
                 return
 
-        input_files = get_time_series_input_files()
+        input_files = get_time_series_input_files(self.scale_factor)
 
         # 1. Create empty tables (regular wide for tall, EAV for wide/large).
         for table_name, fpath in input_files.items():

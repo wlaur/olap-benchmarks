@@ -23,12 +23,12 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
+from ...settings import REPO_ROOT, SETTINGS, TableName, format_suite_data_directory_name, resolve_suite_scale_factor
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
 
-TPCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/tpch/queries"
+TPC_H_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/tpc_h/queries"
 
 TPCH_TABLES = (
     "region",
@@ -40,11 +40,6 @@ TPCH_TABLES = (
     "orders",
     "lineitem",
 )
-
-TPCH_SCALE_FACTORS: dict[SuiteName, int] = {
-    "tpch_sf10": 10,
-    "tpch_sf50": 50,
-}
 
 TPCH_QUERY_NAMES = {
     "01_pricing_summary": 3,
@@ -80,14 +75,18 @@ def q11_fraction(scale_factor: int) -> str:
     return f"{Decimal(Q11_SF1_FRACTION) / scale_factor:f}"
 
 
-def _prepare_tpch_data(suite: SuiteName) -> None:
-    output_directory = SETTINGS.input_data_directory / suite
+def _prepare_tpc_h_data(scale_factor: int) -> None:
+    scale_factor = resolve_suite_scale_factor("tpc_h", scale_factor)
+    data_directory_name = format_suite_data_directory_name("tpc_h", scale_factor)
+    output_directory = SETTINGS.input_data_directory / data_directory_name
     output_directory.mkdir(exist_ok=True, parents=True)
 
     existing = [table for table in TPCH_TABLES if (output_directory / f"{table}.parquet").is_file()]
 
     if len(existing) == len(TPCH_TABLES):
-        _LOGGER.info(f"All {suite} Parquet files already exist in {output_directory}, skipping generation")
+        _LOGGER.info(
+            f"All {data_directory_name} Parquet files already exist in {output_directory}, skipping generation"
+        )
         return
 
     if existing:
@@ -96,7 +95,6 @@ def _prepare_tpch_data(suite: SuiteName) -> None:
     if shutil.which("tpchgen-cli") is None:
         raise RuntimeError("tpchgen-cli not found on PATH; install it with 'cargo install tpchgen-cli'")
 
-    scale_factor = TPCH_SCALE_FACTORS[suite]
     command = [
         "tpchgen-cli",
         "parquet",
@@ -109,25 +107,17 @@ def _prepare_tpch_data(suite: SuiteName) -> None:
     _LOGGER.info(f"Generating TPC-H data at scale factor {scale_factor}: {' '.join(command)}")
     t0 = perf_counter()
     subprocess.run(command, check=True)
-    _LOGGER.info(f"Generated {suite} data in {perf_counter() - t0:_.2f} seconds")
+    _LOGGER.info(f"Generated {data_directory_name} data in {perf_counter() - t0:_.2f} seconds")
 
 
-def prepare_tpch_sf10() -> None:
-    _prepare_tpch_data("tpch_sf10")
+def prepare_data(scale_factor: int) -> None:
+    _prepare_tpc_h_data(scale_factor)
 
 
-def prepare_tpch_sf50() -> None:
-    _prepare_tpch_data("tpch_sf50")
-
-
-class Tpch[DBT: Database](BenchmarkSuite[DBT]):
-    @property
-    def scale_factor(self) -> int:
-        return TPCH_SCALE_FACTORS[self.name]
-
+class TpcH[DBT: Database](BenchmarkSuite[DBT]):
     def expected_table_row_counts(self) -> dict[TableName, int]:
         return {
-            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"{self.name}/{table_name}.parquet")
+            table_name: self.parquet_row_count(self.input_data_directory / f"{table_name}.parquet")
             for table_name in TPCH_TABLES
         }
 
@@ -143,16 +133,16 @@ class Tpch[DBT: Database](BenchmarkSuite[DBT]):
             if not self.should_populate():
                 return
 
-        self.db.initialize_schema("tpch")
+        self.db.initialize_schema("tpc_h")
 
         for table_name in TPCH_TABLES:
-            df = pl.scan_parquet(SETTINGS.input_data_directory / f"{self.name}/{table_name}.parquet")
+            df = pl.scan_parquet(self.input_data_directory / f"{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.insert_table(df, table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
-        _LOGGER.info(f"Inserted all tpch tables for {self.name}")
+        _LOGGER.info(f"Inserted all tpc_h tables for {self.name} scale factor {self.scale_factor}")
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
@@ -167,8 +157,8 @@ class Tpch[DBT: Database](BenchmarkSuite[DBT]):
         return {}
 
     def load_tpch_query(self, query_name: str) -> str:
-        db_specific = TPCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = TPCH_QUERIES_DIRECTORY / f"{query_name}.sql"
+        db_specific = TPC_H_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
+        common = TPC_H_QUERIES_DIRECTORY / f"{query_name}.sql"
 
         sql_source = db_specific if db_specific.is_file() else common
 

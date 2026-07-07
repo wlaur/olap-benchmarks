@@ -20,7 +20,7 @@ from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
-from ...suites.tpcds.config import Tpcds
+from ...suites.tpc_ds.config import TpcDs
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
@@ -111,7 +111,7 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
             self.db.restart_event()
 
 
-class ClickhouseTpcds(Tpcds["Clickhouse"]):
+class ClickhouseTpcDs(TpcDs["Clickhouse"]):
     # Query-level session settings from the official ClickHouse TPC-DS kit
     # (tests/benchmarks/tpc-ds/settings.json): standard-SQL NULL semantics for
     # outer joins and ROLLUP grouping sets, and DISTINCT set-operation
@@ -577,5 +577,5 @@ class Clickhouse(Database):
             "rtabench": ClickHouseRTABench,
             "clickbench": ClickhouseClickbench,
             "time_series": ClickhouseTimeseries,
-            "tpcds_sf1": ClickhouseTpcds,
+            "tpc_ds": ClickhouseTpcDs,
         }
