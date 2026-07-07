@@ -131,7 +131,10 @@ and every deviation is listed on the site."
       *(fixed 2026-07-07: `SuiteConfig.queriesKey` maps suite ids to queries.json keys,
       covers tpch and the new tpcds suite)*
 - [ ] Document cold-iteration inclusion (or exclude iteration 1) in scoring
-- [ ] Penalize (or at least flag) skipped/missing queries in the score
+- [x] Penalize (or at least flag) skipped/missing queries in the score
+      *(already implemented: `computeDatabaseScores` scores missing queries as
+      at least 10x or 2x the slowest observed ratio, and the home/explorer score
+      UI shows missing-query counts)*
 - [ ] Distinguish "failed" from "never attempted" in the UI
 - [x] Update `site/src/content/home.md` — TPC-H suites are missing from the suite list
       *(fixed 2026-07-07: TPC-H and TPC-DS suites added to the home suite list)*
