@@ -31,10 +31,10 @@ Vendor-recommended server settings, storage layout, and per-suite physical desig
 - DuckDB is not cold-started between populate and select; its in-process buffer manager can remain warm while container databases are restarted after populate.
 - **ClickHouse** uses the pinned Docker image and suite schemas/query variants without extra server tuning.
 - **MonetDB** uses the pinned Docker image; selected large-result queries use MonetDB's binary fetch path.
-- **Postgres** uses explicit server settings for memory, WAL, and parallel workers, plus suite-specific indexes where defined by the schema.
-- **TimescaleDB** uses Timescale tuning, hypertables, compression/chunk options where defined, and the same Postgres-family server settings.
+- **Postgres** uses explicit server settings for memory, WAL, and parallel workers, plus suite-specific indexes where defined by the schema; query results are fetched through Polars/ConnectorX.
+- **TimescaleDB** uses Timescale tuning, hypertables, compression/chunk options where defined, and the same Postgres-family server settings; query results are fetched through Polars/ConnectorX.
 - **QuestDB** uses the pinned Docker image; ClickBench input is sorted by event time before ingest.
-- **StarRocks** uses the pinned Docker image and suite schemas/query variants without extra server tuning.
+- **StarRocks** uses the pinned Docker image and suite schemas/query variants without extra server tuning; query results are fetched through Polars/ConnectorX.
 
 ## Explorer
 
