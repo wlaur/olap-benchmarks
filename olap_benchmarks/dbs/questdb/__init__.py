@@ -357,9 +357,10 @@ class QuestDB(Database):
             "clickbench": QuestDBClickbench,
         }
 
-        # TPC-H needs correlated subqueries and EXISTS/NOT EXISTS, which
+        # TPC-H and TPC-DS need correlated subqueries and EXISTS/NOT EXISTS
+        # (TPC-DS additionally ROLLUP/GROUPING and INTERSECT/EXCEPT), which
         # QuestDB SQL does not support
-        for tpch_suite in ("tpch_sf10", "tpch_sf50"):
-            registry.pop(tpch_suite)
+        for tpc_suite in ("tpch_sf10", "tpch_sf50", "tpcds_sf1"):
+            registry.pop(tpc_suite)
 
         return registry

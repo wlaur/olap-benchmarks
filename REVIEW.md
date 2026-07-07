@@ -125,13 +125,16 @@ and every deviation is listed on the site."
 
 ### 1.6 Site aggregation and display
 
-- [ ] Fix TPC-H SQL panel: `queries.json` keys TPC-H as `"tpch"` but the site looks up
+- [x] Fix TPC-H SQL panel: `queries.json` keys TPC-H as `"tpch"` but the site looks up
       `queriesManifest[suiteConfig.id]` (`site/src/components/explorer/OperationTab.tsx:78`,
       `QueryHeatmapPanel.tsx:58`) — SQL never displays for tpch_sf10/tpch_sf50
+      *(fixed 2026-07-07: `SuiteConfig.queriesKey` maps suite ids to queries.json keys,
+      covers tpch and the new tpcds suite)*
 - [ ] Document cold-iteration inclusion (or exclude iteration 1) in scoring
 - [ ] Penalize (or at least flag) skipped/missing queries in the score
 - [ ] Distinguish "failed" from "never attempted" in the UI
-- [ ] Update `site/src/content/home.md` — TPC-H suites are missing from the suite list
+- [x] Update `site/src/content/home.md` — TPC-H suites are missing from the suite list
+      *(fixed 2026-07-07: TPC-H and TPC-DS suites added to the home suite list)*
 
 Mechanics (from `site/src/lib/queries.ts`, `score.ts`, `useHomeOverview.ts`):
 

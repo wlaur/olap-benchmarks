@@ -10,6 +10,8 @@
 - Docker (OrbStack on macOS)
 - [Bun](https://bun.sh) for the web app in `site/`
 - `tpchgen-cli` for the TPC-H suites: `cargo install tpchgen-cli`
+- `tpcgen-cli` for the TPC-DS suite (not yet published to crates.io):
+  `cargo install --git https://github.com/clflushopt/tpchgen-rs --rev 09d609d13b7b45a2aa06d2b86e5a4bfa29aacb1a tpcgen-cli`
 
 ## Setup
 
@@ -62,13 +64,14 @@ cd site && bun install && bun run dev
 | `time_series`          | Generated locally                                                                        |
 | `rtabench`             | Downloaded automatically from rtadatasets.timescale.com                                  |
 | `tpch_sf10` / `tpch_sf50` | Generated locally with `tpchgen-cli`                                                  |
+| `tpcds_sf1`            | Generated locally with `tpcgen-cli` (decimals cast to spec precision and four columns renamed to spec names after generation) |
 | `clickbench`           | Manual: download [hits.parquet](https://datasets.clickhouse.com/hits_compatible/hits.parquet) to `data/input/clickbench/` |
 | `kaggle_airbnb`        | Manual: download the Austin CSVs from [Kaggle](https://www.kaggle.com/datasets/konradb/inside-airbnb-usa) to `data/input/kaggle_airbnb/`, then run `prepare` to convert to Parquet |
 
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB]`
 
 - `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `questdb`, `postgres`, `starrocks`, or `all`
-- `suite`: `rtabench`, `time_series`, `clickbench`, `kaggle_airbnb`, `tpch_sf10`, `tpch_sf50`, or `all`
+- `suite`: `rtabench`, `time_series`, `clickbench`, `kaggle_airbnb`, `tpch_sf10`, `tpch_sf50`, `tpcds_sf1`, or `all`
 - `operation`: `populate`, `select`, `mutate`, or `all` (default). `mutate` is only supported by `time_series`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
@@ -183,6 +186,7 @@ uv run pytest
 - **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale
 - **Kaggle Airbnb** suite is based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy
 - **TPC-H** suites (`tpch_sf10`, `tpch_sf50`) are derived from the [TPC-H benchmark](https://www.tpc.org/tpch/); results are not comparable to published TPC-H results. Data is generated with [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) (requires `cargo install tpchgen-cli`). Base queries come from the [DuckDB tpch extension](https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries), with per-database adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-h) and [StarRocks](https://docs.starrocks.io/docs/benchmarking/TPC-H_Benchmarking/)
+- **TPC-DS** suite (`tpcds_sf1`) is derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/); results are not comparable to published TPC-DS results. Data is generated with the `tpcgen-cli` from [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) at commit `09d609d1` (`--compat c`, conformance-tested against the reference dsdgen). Queries come from the [DuckDB tpcds extension](https://github.com/duckdb/duckdb/tree/main/extension/tpcds), with schema adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-ds) and [StarRocks](https://docs.starrocks.io/docs/3.4/benchmarking/TPC_DS_Benchmark/)
 
 ## TODO
 

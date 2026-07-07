@@ -55,7 +55,7 @@ export function QueryHeatmapPanel({
             databases={includedDatabases}
             databaseColors={databaseColors}
             selection={selection}
-            sqlBySuite={queriesManifest?.[suiteConfig.id] ?? null}
+            sqlBySuite={queriesManifest?.[suiteConfig.queriesKey] ?? null}
           />
         )}
       </div>
