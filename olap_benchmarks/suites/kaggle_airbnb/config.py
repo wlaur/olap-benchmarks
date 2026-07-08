@@ -151,7 +151,9 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
 
     def select(self) -> None:
         t0 = perf_counter()
+        failed_queries = 0
         for idx, (query_name, iterations) in enumerate(KAGGLE_AIRBNB_QUERY_NAMES.items()):
+            progress_label = f"({idx + 1:_}/{len(KAGGLE_AIRBNB_QUERY_NAMES):_})"
             if not self.include_query(query_name):
                 self.record_skipped_query_steps(
                     query_name,
@@ -161,22 +163,37 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
                 )
                 continue
 
-            with self.db.query_context(query_name):
-                query = self.load_kaggle_airbnb_query(query_name)
+            def log_success(
+                it: int,
+                df: pl.DataFrame,
+                t: float,
+                *,
+                query_name: str = query_name,
+                progress_label: str = progress_label,
+                iterations: int = iterations,
+            ) -> None:
+                _LOGGER.info(
+                    f"Executed {query_name} {progress_label} "
+                    f"iteration {it:_}/{iterations:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                )
 
-                for it in range(1, iterations + 1):
-                    df, t = self.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=it,
-                        query=query,
-                        fetch_kwargs=self.fetch_kwargs,
-                    )
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                iterations=iterations,
+                query_loader=lambda query_name=query_name: self.load_kaggle_airbnb_query(query_name),
+                fetch_kwargs=self.fetch_kwargs,
+                progress_label=progress_label,
+                log_success=log_success,
+            )
+            if not ok:
+                failed_queries += 1
 
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(KAGGLE_AIRBNB_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+        if failed_queries:
+            _LOGGER.warning(
+                f"Kaggle Airbnb select completed on {self.db.name} with {failed_queries:_} failed "
+                f"{'queries' if failed_queries != 1 else 'query'}"
+            )
 
         _LOGGER.info(
             f"Executed {len(KAGGLE_AIRBNB_QUERY_NAMES):_} queries (with repetitions) "

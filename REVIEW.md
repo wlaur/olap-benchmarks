@@ -67,9 +67,10 @@ from `RESEARCH.md`.
       Partially fixed 2026-07-08: configured disabled time-series mutation
       steps are now written as `result_status='skipped'` instead of omitted, and
       suite-excluded query steps are now recorded as `skipped`/`unsupported`.
-      The historical TimescaleDB missing insert iterations still need root-cause
-      analysis during the rerun, and unexpected non-TPC-DS aborts still need
-      broader per-step fault isolation.
+      Select-query loops now isolate per-query failures across suites and record
+      skipped remaining iterations after a failed iteration. The historical
+      TimescaleDB missing insert iterations still need root-cause analysis
+      during the rerun.
 
 ## 3. Dimensions, UI, And Data Hygiene
 
