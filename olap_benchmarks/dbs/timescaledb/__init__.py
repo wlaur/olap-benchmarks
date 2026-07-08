@@ -22,7 +22,7 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2.25.0"
+VERSION = "2.28.2"
 
 DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg18"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"

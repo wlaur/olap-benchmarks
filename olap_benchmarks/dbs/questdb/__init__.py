@@ -19,7 +19,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "9.3.5"
+VERSION = "9.4.3"
 
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}"
 
@@ -103,7 +103,7 @@ class QuestDB(Database):
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 
-    # No row-level DELETE in QuestDB 9.3.5 (`DELETE FROM t WHERE id = 1` is
+    # No row-level DELETE in QuestDB 9.4.3 (`DELETE FROM t WHERE id = 1` is
     # rejected as "unexpected token [FROM]"); only TRUNCATE TABLE and ALTER
     # TABLE DROP PARTITION are available, neither matches the row-targeted
     # mutate workload. No row-level upsert either -- the QuestDB-native path
