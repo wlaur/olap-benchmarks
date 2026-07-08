@@ -423,3 +423,49 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
     assert db_instance.operations == [("time_series", "select", 1), ("time_series", "select", 10)]
     assert validated_row_counts == [("time_series", 1), ("time_series", 10)]
     assert validated_answer_hashes == [("time_series", 1), ("time_series", 10)]
+
+
+def test_default_benchmark_plan_skips_row_store_optional_suites(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench", "tpc_h", "tpc_ds", "time_series"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["duckdb", "postgres", "timescaledb"]
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+
+    plan = __main__._resolve_benchmark_plan(db="all", suite="all", scale_factor=None)
+
+    assert ("duckdb", "tpc_h", 10) in plan
+    assert ("duckdb", "tpc_h", 50) in plan
+    assert ("duckdb", "tpc_ds", 1) in plan
+    assert ("postgres", "clickbench", 1) in plan
+    assert ("postgres", "time_series", 1) in plan
+    assert ("postgres", "time_series", 10) in plan
+    assert ("postgres", "tpc_h", 10) not in plan
+    assert ("postgres", "tpc_h", 50) not in plan
+    assert ("postgres", "tpc_ds", 1) not in plan
+    assert ("timescaledb", "tpc_h", 10) not in plan
+    assert ("timescaledb", "tpc_h", 50) not in plan
+    assert ("timescaledb", "tpc_ds", 1) not in plan
+
+
+def test_explicit_row_store_optional_suite_stays_in_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["tpc_h"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["postgres", "timescaledb"]
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+
+    assert __main__._resolve_benchmark_plan(db="all", suite="tpc_h", scale_factor=None) == [
+        ("postgres", "tpc_h", 10),
+        ("timescaledb", "tpc_h", 10),
+    ]
