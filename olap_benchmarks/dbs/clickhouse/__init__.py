@@ -26,7 +26,7 @@ from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "26.1.1.912"
+VERSION = "26.6.1.1193"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 

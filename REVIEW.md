@@ -47,6 +47,11 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       ClickHouse 26.1.1.912, and the public-run StarRocks image; PostgreSQL
       18.3 can stay, PostgreSQL 19 is still a beta-track item, and MonetDB is
       lower priority unless a newer service pack is straightforward.
+      Fixed in code 2026-07-08: DuckDB is pinned to 1.5.4, QuestDB to 9.4.3,
+      TimescaleDB to 2.28.2 with the verified `2.28.2-pg18` image, and
+      ClickHouse to the verified 26.x jammy tag `26.6.1.1193`. PostgreSQL stays
+      at 18.3, MonetDB stays at Dec2025-SP2, and StarRocks stays at 4.0.9 for
+      the Apple Silicon Docker constraint noted in `RESEARCH.md`.
 - [ ] **Classify iteration roles.** Store and report first-run/cold,
       warm/steady-state, warm median, and best warm timings separately. On an
       M-series Mac, label first-iteration numbers as first-run/lukewarm rather

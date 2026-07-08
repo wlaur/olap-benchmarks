@@ -16,7 +16,7 @@ dependencies = [
     "connectorx>=0.4.3",
     "cyclopts>=4.8.0",
     "docker>=7.1.0",
-    "duckdb==1.5.0",
+    "duckdb==1.5.4",
     "duckdb-engine>=0.17.0",
     "httpx>=0.28.1",
     "numpy>=2.3.1",
