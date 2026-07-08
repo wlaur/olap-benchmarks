@@ -3,7 +3,7 @@ import uuid
 from collections.abc import Mapping
 from math import ceil
 from pathlib import Path
-from shutil import rmtree
+from shutil import copy2, rmtree
 from time import perf_counter, sleep
 from typing import Any, ClassVar, cast
 from urllib.parse import urlparse
@@ -18,6 +18,7 @@ from sqlalchemy import Connection, create_engine
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from ...suites.tpc_ds.config import TpcDs
@@ -128,6 +129,80 @@ class ClickhouseTpcDs(TpcDs["Clickhouse"]):
                 "joined_subquery_requires_alias": 0,
             }
         }
+
+
+class ClickhouseJSONBench(JSONBench["Clickhouse"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["first_post_ts"]}
+
+    def _stage_input_files(self) -> Path:
+        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        staging_dir = temp_dir / self.data_directory_name
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        staging_dir.mkdir(parents=True)
+
+        for input_file in get_jsonbench_input_files(self.scale_factor):
+            staged_file = staging_dir / input_file.name
+            try:
+                staged_file.hardlink_to(input_file)
+            except OSError:
+                copy2(input_file, staged_file)
+
+        return staging_dir
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        ddl = """
+            CREATE TABLE bluesky
+            (
+                `data` JSON(
+                    max_dynamic_paths = 0,
+                    kind LowCardinality(String),
+                    commit.operation LowCardinality(String),
+                    commit.collection LowCardinality(String),
+                    did String,
+                    time_us UInt64) CODEC(ZSTD(1))
+            )
+            ORDER BY (
+                data.kind,
+                data.commit.operation,
+                data.commit.collection,
+                data.did,
+                fromUnixTimestamp64Micro(data.time_us))
+            SETTINGS object_serialization_version = 'v3',
+                     dynamic_serialization_version = 'v3',
+                     object_shared_data_serialization_version = 'advanced',
+                     object_shared_data_serialization_version_for_zero_level_parts = 'map_with_buckets'
+        """
+
+        with self.db.phase_context("schema", table_name="bluesky"):
+            self.db.run_sql(ddl)
+
+        staging_dir = self._stage_input_files()
+        try:
+            with self.db.phase_context("insert", table_name="bluesky"):
+                self.db.run_sql(
+                    f"""
+                    INSERT INTO bluesky
+                    SELECT *
+                    FROM file('{staging_dir.name}/file_*.json.gz', 'JSONAsObject')
+                    SETTINGS min_insert_block_size_rows = 1000000,
+                             min_insert_block_size_bytes = 0
+                    """
+                )
+        finally:
+            rmtree(staging_dir)
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
 
 
 class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
@@ -581,6 +656,7 @@ class Clickhouse(Database):
             **super().suite_registry(),
             "rtabench": ClickHouseRTABench,
             "clickbench": ClickhouseClickbench,
+            "jsonbench": ClickhouseJSONBench,
             "time_series": ClickhouseTimeseries,
             "tpc_ds": ClickhouseTpcDs,
         }
