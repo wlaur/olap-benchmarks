@@ -96,6 +96,15 @@ failed-only variants coexist in a scope.
       matrix (`settings.py:30-37,70-79`) — running tpc_h at SF10 and SF50 takes
       two invocations. Decide whether "requested SF where supported, default
       elsewhere" should work.
+      Partially fixed 2026-07-08: `suite=all` now fans out configured suite scale
+      factors, currently adding time_series SF1 and SF10, and global
+      `--scale-factor` uses fixed-suite defaults instead of crashing. Explicit
+      invalid fixed-suite or time_series scale factors still fail. time_series
+      SF10 is the previous implicit dataset size; SF1 is 10% of the previous
+      total cell count with both rows and columns reduced, while retaining the
+      referenced query columns. Static time-series lookup/filter dates were
+      moved inside the new SF1 ranges. No benchmark data was generated in this
+      fix. Caveat: TPC-H SF10+SF50 fan-out is still not configured.
 - [ ] **Cross-system comparison is not possible in the UI.** Everything is
       scoped to the single selected system and `home.md` states systems are not
       compared — right as the default, but comparing the same (db, version,
@@ -123,9 +132,9 @@ Minor: `fetchSuiteScaleFactors` requires `finished_at` non-null
 (`queries.ts:62`) while coverage tolerates failed runs without it, so an SF
 with only such runs is unselectable; `suite_scale_factor` is INTEGER ≥ 1, so
 sf0.1 is unrepresentable (fine unless sub-SF1 is ever wanted);
-`current_suite_scale_factor` guards on `_current_suite` instead of the SF
-attribute (`dbs/__init__.py:67-70`). Fixed 2026-07-08: score `wins` now uses a
-small duration tolerance instead of exact float equality.
+Fixed 2026-07-08: `current_suite_scale_factor` now guards on the SF attribute
+(`dbs/__init__.py:67-70`), and score `wins` now uses a small duration tolerance
+instead of exact float equality.
 
 ---
 

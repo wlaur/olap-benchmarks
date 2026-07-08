@@ -3,6 +3,7 @@ import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import sqrt
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal, get_args
@@ -44,7 +45,15 @@ BASE_TIME_SERIES_DATASET_SIZES: dict[DatasetSize, tuple[int, int]] = {
     "large": (4_000_000, 1_500),
 }
 
+TIME_SERIES_REFERENCE_SCALE_FACTOR = 10
+MIN_TIME_SERIES_DATASET_COLUMNS: dict[DatasetSize, int] = {
+    "tall": 8,
+    "wide": 785,
+    "large": 785,
+}
+
 assert set(BASE_TIME_SERIES_DATASET_SIZES) == set(get_args(DatasetSize))
+assert set(MIN_TIME_SERIES_DATASET_COLUMNS) == set(get_args(DatasetSize))
 
 MutateAction = Literal["insert", "upsert", "delete"]
 
@@ -96,7 +105,23 @@ def get_time_series_column_counts(n_cols: int) -> TimeSeriesColumnCounts:
 
 def get_time_series_dataset_sizes(scale_factor: int) -> dict[DatasetSize, tuple[int, int]]:
     scale_factor = resolve_suite_scale_factor("time_series", scale_factor)
-    return {size: (rows * scale_factor, cols) for size, (rows, cols) in BASE_TIME_SERIES_DATASET_SIZES.items()}
+    size_ratio = scale_factor / TIME_SERIES_REFERENCE_SCALE_FACTOR
+    return {
+        size: _scale_time_series_dataset_size(size, rows, cols, size_ratio)
+        for size, (rows, cols) in BASE_TIME_SERIES_DATASET_SIZES.items()
+    }
+
+
+def _scale_time_series_dataset_size(
+    size: DatasetSize,
+    reference_rows: int,
+    reference_cols: int,
+    size_ratio: float,
+) -> tuple[int, int]:
+    target_cells = reference_rows * reference_cols * size_ratio
+    scaled_cols = max(MIN_TIME_SERIES_DATASET_COLUMNS[size], round(reference_cols * sqrt(size_ratio)))
+    scaled_rows = max(1, round(target_cells / scaled_cols))
+    return scaled_rows, scaled_cols
 
 
 def get_time_series_input_files(scale_factor: int) -> dict[TableName, Path]:

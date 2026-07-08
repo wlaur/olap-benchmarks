@@ -36,9 +36,17 @@ DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
     "tpc_ds": 1,
 }
 
+TIME_SERIES_SCALE_FACTORS = (1, 10)
+
+ALL_SUITE_SCALE_FACTORS: dict[SuiteName, tuple[int, ...]] = {
+    suite: (scale_factor,) for suite, scale_factor in DEFAULT_SUITE_SCALE_FACTORS.items()
+}
+ALL_SUITE_SCALE_FACTORS["time_series"] = TIME_SERIES_SCALE_FACTORS
+
 SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "tpc_h", "tpc_ds"})
 
 assert set(DEFAULT_SUITE_SCALE_FACTORS) == set(get_args(SuiteName))
+assert set(ALL_SUITE_SCALE_FACTORS) == set(get_args(SuiteName))
 
 
 def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None) -> int:
@@ -50,7 +58,31 @@ def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None
     if suite not in SCALE_FACTOR_SUITES and resolved_scale_factor != 1:
         raise ValueError(f"Suite {suite} has a fixed scale factor of 1")
 
+    if suite == "time_series" and resolved_scale_factor not in TIME_SERIES_SCALE_FACTORS:
+        valid = ", ".join(str(value) for value in TIME_SERIES_SCALE_FACTORS)
+        raise ValueError(f"Suite time_series supports scale factors: {valid}")
+
     return resolved_scale_factor
+
+
+def resolve_suite_scale_factors(
+    suite: SuiteName,
+    scale_factor: int | None = None,
+    *,
+    include_all_supported: bool = False,
+    allow_fixed_default: bool = False,
+) -> tuple[int, ...]:
+    if scale_factor is None:
+        if include_all_supported:
+            return ALL_SUITE_SCALE_FACTORS[suite]
+        return (DEFAULT_SUITE_SCALE_FACTORS[suite],)
+
+    try:
+        return (resolve_suite_scale_factor(suite, scale_factor),)
+    except ValueError:
+        if allow_fixed_default and suite not in SCALE_FACTOR_SUITES:
+            return (DEFAULT_SUITE_SCALE_FACTORS[suite],)
+        raise
 
 
 def format_suite_data_directory_name(suite: SuiteName, scale_factor: int) -> str:

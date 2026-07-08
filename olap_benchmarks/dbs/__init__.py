@@ -67,6 +67,8 @@ class Database(BaseModel, ABC):
     def current_suite_scale_factor(self) -> int:
         if self._current_suite is None:
             raise ValueError("current_suite is not set")
+        if self._current_suite_scale_factor is None:
+            raise ValueError("current_suite_scale_factor is not set")
         return resolve_suite_scale_factor(self._current_suite, self._current_suite_scale_factor)
 
     @property

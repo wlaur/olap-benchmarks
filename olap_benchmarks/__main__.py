@@ -39,7 +39,7 @@ from .settings import (
     SuiteName,
     format_suite_data_directory_name,
     resolve_dbs,
-    resolve_suite_scale_factor,
+    resolve_suite_scale_factors,
     resolve_suites,
     setup_stdout_logging,
 )
@@ -125,14 +125,19 @@ def _check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
 def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
     """Generate input data files for a benchmark suite (e.g. Parquet files)."""
     for suite_name in resolve_suites(suite):
-        resolved_scale_factor = resolve_suite_scale_factor(suite_name, scale_factor)
-        _LOGGER.info(f"Preparing data for {suite_name} scale factor {resolved_scale_factor}")
-        try:
-            get_suite_preparer(suite_name, resolved_scale_factor)()
-        except ManualPreparationRequired as exc:
-            if suite != "all":
-                raise SystemExit(str(exc)) from exc
-            _LOGGER.warning(f"Skipping {suite_name}: {exc}")
+        for resolved_scale_factor in resolve_suite_scale_factors(
+            suite_name,
+            scale_factor,
+            include_all_supported=suite == "all",
+            allow_fixed_default=suite == "all",
+        ):
+            _LOGGER.info(f"Preparing data for {suite_name} scale factor {resolved_scale_factor}")
+            try:
+                get_suite_preparer(suite_name, resolved_scale_factor)()
+            except ManualPreparationRequired as exc:
+                if suite != "all":
+                    raise SystemExit(str(exc)) from exc
+                _LOGGER.warning(f"Skipping {suite_name}: {exc}")
 
 
 @app.command
@@ -158,15 +163,22 @@ def benchmark(
     If `--omit` is set, the listed databases are skipped. Useful with `db=all`
     to run every database except some (e.g. `--omit questdb`).
 
-    `--scale-factor` selects the suite scale factor. Suites without a scalable
-    dataset require scale factor 1.
+    `--scale-factor` selects the suite scale factor. With `suite=all`, fixed-size
+    suites keep their default scale factor and scalable suites use the requested
+    factor; without `--scale-factor`, suites with configured fan-out run every
+    configured factor.
     """
-    suite_names = resolve_suites(suite)
-    suite_scale_factors = {
-        suite_name: resolve_suite_scale_factor(suite_name, scale_factor) for suite_name in suite_names
-    }
-    for suite_name in suite_names:
-        _check_input_data(suite_name, suite_scale_factors[suite_name])
+    suite_scale_factor_pairs: list[tuple[SuiteName, int]] = []
+    for suite_name in resolve_suites(suite):
+        for resolved_scale_factor in resolve_suite_scale_factors(
+            suite_name,
+            scale_factor,
+            include_all_supported=suite == "all",
+            allow_fixed_default=suite == "all",
+        ):
+            suite_scale_factor_pairs.append((suite_name, resolved_scale_factor))
+    for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
+        _check_input_data(suite_name, resolved_scale_factor)
 
     omitted = set(omit or [])
 
@@ -178,14 +190,13 @@ def benchmark(
             if db_name in omitted:
                 _LOGGER.info(f"Omitting database {db_name}")
                 continue
-            for suite_name in suite_names:
+            for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
                 db_instance = get_databases()[db_name]
 
                 if suite_name not in db_instance.benchmarks:
                     _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
                     continue
 
-                resolved_scale_factor = suite_scale_factors[suite_name]
                 _LOGGER.info(
                     f"Benchmarking {suite_name} scale factor {resolved_scale_factor} on {db_name} ({operation})"
                 )
@@ -217,12 +228,12 @@ def benchmark(
 
     if operation in ("select", "all"):
         try:
-            for suite_name in suite_names:
+            for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
                 assert_latest_query_row_counts(
                     revision=revision,
                     system=SETTINGS.system,
                     suite=suite_name,
-                    suite_scale_factor=suite_scale_factors[suite_name],
+                    suite_scale_factor=resolved_scale_factor,
                 )
         except RowCountValidationError as exc:
             raise SystemExit(str(exc)) from exc
@@ -238,19 +249,23 @@ def docker(
     """Manually start, stop, or restart a database container."""
     for db_name in resolve_dbs(db):
         for suite_name in resolve_suites(suite):
-            resolved_scale_factor = resolve_suite_scale_factor(suite_name, scale_factor)
-            db_instance = get_databases()[db_name]
-            db_instance._current_suite = suite_name
-            db_instance._current_suite_scale_factor = resolved_scale_factor
+            for resolved_scale_factor in resolve_suite_scale_factors(
+                suite_name,
+                scale_factor,
+                allow_fixed_default=suite == "all",
+            ):
+                db_instance = get_databases()[db_name]
+                db_instance._current_suite = suite_name
+                db_instance._current_suite_scale_factor = resolved_scale_factor
 
-            match command:
-                case "start":
-                    _start_db(db_instance)
-                case "stop":
-                    _stop_db(db_instance)
-                case "restart":
-                    _stop_db(db_instance)
-                    _start_db(db_instance)
+                match command:
+                    case "start":
+                        _start_db(db_instance)
+                    case "stop":
+                        _stop_db(db_instance)
+                    case "restart":
+                        _stop_db(db_instance)
+                        _start_db(db_instance)
 
 
 @app.command
