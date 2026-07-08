@@ -149,6 +149,10 @@ class QuestDB(Database):
 
         return self._connection
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch("select version() as version", schema={"version": pl.String}, method="python")
+        return str(df.item(0, 0))
+
     def fetch(
         self,
         query: str,

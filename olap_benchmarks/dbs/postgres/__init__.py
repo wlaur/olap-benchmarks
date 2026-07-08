@@ -485,6 +485,10 @@ class Postgres(Database):
         ]
         return " ".join(parts)
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch("select current_setting('server_version') as version", schema={"version": pl.String})
+        return str(df.item(0, 0))
+
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
             self._connection = None

@@ -127,6 +127,14 @@ class MonetDB(Database):
 
         return self._connection
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch(
+            "select value as version from sys.env() where name = 'monet_version'",
+            schema={"version": pl.String},
+            method="pymonetdb",
+        )
+        return str(df.item(0, 0))
+
     def fetch(
         self,
         query: str,

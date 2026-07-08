@@ -223,6 +223,10 @@ class StarRocks(Database):
             },
         )
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch("select current_version() as version", schema={"version": pl.String})
+        return str(df.item(0, 0))
+
     def wait_until_accessible(self, timeout_seconds: float = 240.0, interval_seconds: float = 2.0) -> None:
         # FE + BE startup takes ~30-60s the first time. Also need to bootstrap
         # the benchmark database. Wait until BE is registered AND alive --

@@ -36,6 +36,12 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       are still hardcoded (`clickhouse`, `postgres`, `monetdb`, `questdb`,
       `starrocks`, `timescaledb`) and are not checked against `SELECT version()`
       or equivalent. DuckDB derives its value from the installed package.
+      Fixed in code 2026-07-08: benchmark runs now call
+      `verify_runtime_version()` before recording a run; ClickHouse, MonetDB,
+      Postgres, QuestDB, StarRocks, and TimescaleDB each query their runtime
+      version and fail on mismatch. DuckDB keeps its package/runtime assertion.
+      Caveat: this was unit-tested but not live-smoke-tested against every
+      container; the full rerun should confirm each engine's version query.
 - [ ] **Decide version bumps before the rerun.** `RESEARCH.md` recommends
       reviewing/updating DuckDB 1.5.0, QuestDB 9.3.5, TimescaleDB 2.25.0,
       ClickHouse 26.1.1.912, and the public-run StarRocks image; PostgreSQL

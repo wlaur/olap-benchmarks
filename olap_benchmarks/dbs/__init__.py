@@ -320,6 +320,23 @@ class Database(BaseModel, ABC):
     def is_mutation_step_enabled(self, suite: SuiteName, step_name: str) -> bool:
         return step_name not in self.DISABLED_MUTATION_STEPS.get(suite, frozenset())
 
+    def get_runtime_version(self) -> str | None:
+        return None
+
+    def is_runtime_version_expected(self, runtime_version: str) -> bool:
+        return self.version in runtime_version
+
+    def verify_runtime_version(self) -> None:
+        runtime_version = self.get_runtime_version()
+        if runtime_version is None:
+            return
+
+        if not self.is_runtime_version_expected(runtime_version):
+            raise RuntimeError(
+                f"{self.name} runtime version does not match pinned version: "
+                f"expected {self.version!r}, got {runtime_version!r}"
+            )
+
     @contextmanager
     def mutation_context(
         self,
@@ -573,6 +590,8 @@ class Database(BaseModel, ABC):
                 f"Skipping populate run recording for {suite} scale factor {benchmark.scale_factor} on {self.name}"
             )
             return
+
+        self.verify_runtime_version()
 
         self._result_storage = self.create_result_storage()
 

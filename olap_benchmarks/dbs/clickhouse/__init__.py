@@ -258,6 +258,10 @@ class Clickhouse(Database):
         self._clickhouse_client = get_clickhouse_client()
         return self._clickhouse_client
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch("select version() as version", schema={"version": pl.String})
+        return str(df.item(0, 0))
+
     def fetch(
         self,
         query: str,
