@@ -81,7 +81,7 @@ def validate_latest_query_row_counts(
           select
             *,
             row_number() over (
-              partition by system, suite, suite_scale_factor, db, db_version
+              partition by system, suite, suite_scale_factor, db
               order by finished_at desc, run_id desc
             ) as run_rank
           from scoped_runs
