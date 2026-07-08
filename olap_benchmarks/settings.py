@@ -70,7 +70,7 @@ SUITE_LABELS: dict[SuiteName, str] = {
 SUITE_NAV_LABELS: dict[SuiteName, str] = SUITE_LABELS.copy()
 
 SUITE_OPERATIONS: dict[SuiteName, tuple[Operation, ...]] = dict.fromkeys(SUITE_NAMES, ("populate", "select"))
-SUITE_OPERATIONS["time_series"] = ("populate", "mutate", "select")
+SUITE_OPERATIONS["time_series"] = ("populate", "select", "mutate")
 
 SuiteQueryNameParser = Literal["generic", "time_series"]
 

@@ -44,7 +44,9 @@ roadmap from `RESEARCH.md`.
 
       Partially fixed 2026-07-08: ClickBench Q28 now uses `$1` replacement
       backreferences for MonetDB and StarRocks; the published row counts still
-      need the final rerun.
+      need the final rerun. Time-series `operation=all` now runs select before
+      mutate so the final rerun records select correctness against the clean
+      populated dataset instead of post-mutation state.
 
       QuestDB's ClickBench rewrites still deserve value-level checks even though
       their published row counts match.
