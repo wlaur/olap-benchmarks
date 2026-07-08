@@ -292,6 +292,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
 class TimescaleDB(Postgres):
     name: DatabaseName = "timescaledb"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
 

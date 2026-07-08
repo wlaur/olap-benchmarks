@@ -223,12 +223,14 @@ export async function fetchRunSummaries(
         ) FILTER (
           WHERE ${eb.ref("run_step.step_type")} = 'query'
             AND ${eb.ref("run_step.status")} = 'completed'
+            AND ${eb.ref("run_step.result_status")} = 'ok'
             AND ${eb.ref("run_step.finished_at")} IS NOT NULL
         )`.as("median_query_duration_s"),
       sql<number>`cast(
           count(${eb.ref("run_step.id")}) FILTER (
             WHERE ${eb.ref("run_step.step_type")} = 'query'
               AND ${eb.ref("run_step.status")} = 'completed'
+              AND ${eb.ref("run_step.result_status")} = 'ok'
               AND ${eb.ref("run_step.finished_at")} IS NOT NULL
           ) as integer
         )`.as("query_count"),
@@ -266,21 +268,21 @@ export async function fetchQueryCoverage(
         count(distinct ${eb.ref("run_step.query_name")}) filter (
           where ${eb.ref("run_step.step_type")} = 'query'
             and ${eb.ref("run_step.query_name")} is not null
-            and ${eb.ref("run_step.status")} = 'failed'
+            and ${eb.ref("run_step.result_status")} in ('error', 'timeout', 'wrong_result')
         ) as integer
       )`.as("failed_query_count"),
       sql<number>`cast(
         count(distinct ${eb.ref("run_step.query_name")}) filter (
           where ${eb.ref("run_step.step_type")} = 'query'
             and ${eb.ref("run_step.query_name")} is not null
-            and ${eb.ref("run_step.status")} in ('completed', 'failed')
+            and ${eb.ref("run_step.result_status")} in ('ok', 'error', 'timeout', 'unsupported', 'wrong_result')
         ) as integer
       )`.as("attempted_query_count"),
       sql<number>`cast(
         count(distinct ${eb.ref("run_step.query_name")}) filter (
           where ${eb.ref("run_step.step_type")} = 'query'
             and ${eb.ref("run_step.query_name")} is not null
-            and ${eb.ref("run_step.status")} = 'completed'
+            and ${eb.ref("run_step.result_status")} = 'ok'
         ) as integer
       )`.as("completed_query_count"),
     ])
@@ -362,6 +364,7 @@ async function fetchStepSummaries(
     .where("latest_runs.run_rank", "=", 1)
     .where("run_step.step_type", "=", stepType)
     .where("run_step.status", "=", "completed")
+    .where("run_step.result_status", "=", "ok")
     .where("run_step.finished_at", "is not", null)
     .where("run_step.query_name", "is not", null)
     .groupBy([
@@ -502,6 +505,7 @@ async function fetchStepsForOperation(
     .where("latest_runs.run_rank", "=", 1)
     .where("run_step.step_type", "=", stepType)
     .where("run_step.status", "=", "completed")
+    .where("run_step.result_status", "=", "ok")
     .where("run_step.finished_at", "is not", null)
     .where("run_step.query_name", "is not", null)
     .where("run_step.iteration", "is not", null)
@@ -629,6 +633,9 @@ export async function fetchFlameSpans(
       sql<"step">`'step'`.as("depth"),
     ])
     .where("run_step.status", "=", "completed")
+    .where((eb) =>
+      eb.or([eb("run_step.step_type", "=", "phase"), eb("run_step.result_status", "=", "ok")]),
+    )
     .where("run_step.finished_at", "is not", null)
     .orderBy("operation_offsets.operation_order")
     .orderBy("run_step.started_at")
@@ -660,6 +667,7 @@ export async function fetchFlameSpans(
       sql<"query">`'query'`.as("depth"),
     ])
     .where("run_step.status", "=", "completed")
+    .where("run_step.result_status", "=", "ok")
     .where("run_step.finished_at", "is not", null)
     .orderBy("operation_offsets.operation_order")
     .orderBy("query_execution.start_time")

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ..results import get_results_engine
 from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep
 from ..results.schema import ensure_results_schema
+from ..run_metadata import IterationRole, StepResultStatus
 from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                         system=cast(str, msg["args"][5]),
                         status=cast(str, msg["args"][6]),
                         started_at=cast(datetime, msg["args"][7]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][8]),
                     )
                     session.add(row)
                     session.commit()
@@ -119,7 +121,9 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                         table_name=cast(str | None, msg["args"][5]),
                         started_at=cast(datetime, msg["args"][6]),
                         status=cast(str, msg["args"][7]),
-                        metadata_json=cast(dict[str, Any] | None, msg["args"][8]),
+                        result_status=cast(str | None, msg["args"][8]),
+                        iteration_role=cast(str | None, msg["args"][9]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][10]),
                     )
                     session.add(row)
                     session.commit()
@@ -129,17 +133,18 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     update_values: dict[str, Any] = {
                         "finished_at": cast(datetime, msg["args"][0]),
                         "status": cast(str, msg["args"][1]),
-                        "row_count": cast(int | None, msg["args"][2]),
-                        "error_type": cast(str | None, msg["args"][3]),
-                        "error_message": cast(str | None, msg["args"][4]),
+                        "result_status": cast(str | None, msg["args"][2]),
+                        "row_count": cast(int | None, msg["args"][3]),
+                        "error_type": cast(str | None, msg["args"][4]),
+                        "error_message": cast(str | None, msg["args"][5]),
                     }
 
-                    metadata_value = cast(dict[str, Any] | None, msg["args"][5])
+                    metadata_value = cast(dict[str, Any] | None, msg["args"][6])
                     if metadata_value is not None:
                         update_values["metadata_json"] = metadata_value
 
                     session.execute(
-                        update(RunStep).where(RunStep.id == cast(int, msg["args"][6])).values(**update_values)
+                        update(RunStep).where(RunStep.id == cast(int, msg["args"][7])).values(**update_values)
                     )
                     session.commit()
 
@@ -209,8 +214,12 @@ class Storage:
         operation: Operation,
         system: str,
         started_at: datetime,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
-        self.put("insert_run", [suite, suite_scale_factor, db, db_version, operation, system, "running", started_at])
+        self.put(
+            "insert_run",
+            [suite, suite_scale_factor, db, db_version, operation, system, "running", started_at, metadata],
+        )
         return cast(int, self.result_queue.get())
 
     def finish_run(
@@ -232,11 +241,25 @@ class Storage:
         query_name: str | None = None,
         iteration: int | None = None,
         table_name: str | None = None,
+        result_status: StepResultStatus | None = None,
+        iteration_role: IterationRole | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
         self.put(
             "start_step",
-            [run_id, step_type, step_name, query_name, iteration, table_name, started_at, "running", metadata],
+            [
+                run_id,
+                step_type,
+                step_name,
+                query_name,
+                iteration,
+                table_name,
+                started_at,
+                "running",
+                result_status,
+                iteration_role,
+                metadata,
+            ],
         )
         return cast(int, self.result_queue.get())
 
@@ -245,6 +268,7 @@ class Storage:
         step_id: int,
         finished_at: datetime,
         status: RunStatus,
+        result_status: StepResultStatus | None = None,
         row_count: int | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
@@ -252,7 +276,7 @@ class Storage:
     ) -> None:
         self.put(
             "finish_step",
-            [finished_at, status, row_count, error_type, error_message, metadata, step_id],
+            [finished_at, status, result_status, row_count, error_type, error_message, metadata, step_id],
         )
 
     def insert_metric(self, run_id: int, time: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:

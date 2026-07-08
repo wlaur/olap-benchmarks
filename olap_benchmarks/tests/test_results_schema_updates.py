@@ -199,6 +199,56 @@ def test_suite_scale_factor_migration_normalizes_legacy_tpc_suite_names(tmp_path
         con.close()
 
 
+def test_methodology_metadata_migration_backfills_step_fields(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="4d9c2b7e6f10")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, suite_scale_factor, db, db_version, operation, system, status, started_at
+            ) values
+                ('time_series', 1, 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00')
+            """
+        )
+        con.execute(
+            """
+            insert into run_step (
+                run_id, step_type, step_name, query_name, iteration, started_at, status
+            ) values
+                (1, 'query', 'query', 'q1', 1, timestamp '2026-01-01 00:00:01', 'completed'),
+                (1, 'query', 'query', 'q2', 2, timestamp '2026-01-01 00:00:02', 'failed'),
+                (1, 'phase', 'restart', null, null, timestamp '2026-01-01 00:00:03', 'completed')
+            """
+        )
+        con.close()
+
+        migrate_results(db_path=db_path)
+
+        con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+        run_columns = {row[1] for row in con.execute("pragma table_info('run')").fetchall()}
+        step_columns = {row[1] for row in con.execute("pragma table_info('run_step')").fetchall()}
+        rows = con.execute(
+            """
+            select query_name, result_status, iteration_role
+            from run_step
+            order by id
+            """
+        ).fetchall()
+
+        assert "metadata" in run_columns
+        assert {"result_status", "iteration_role"}.issubset(step_columns)
+        assert rows == [
+            ("q1", "ok", "first_run"),
+            ("q2", "error", "warm"),
+            (None, None, None),
+        ]
+    finally:
+        con.close()
+
+
 def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Path) -> None:
     engine = get_results_engine(read_only=False, db_path=tmp_path / "results.db")
 

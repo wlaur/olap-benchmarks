@@ -38,6 +38,7 @@ class Run(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     error_type: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
 
     __table_args__ = (
         CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
@@ -78,6 +79,8 @@ class RunStep(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     status: Mapped[str] = mapped_column(String, nullable=False)
+    result_status: Mapped[str | None] = mapped_column(String)
+    iteration_role: Mapped[str | None] = mapped_column(String)
     row_count: Mapped[int | None] = mapped_column(Integer)
     error_type: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)
