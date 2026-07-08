@@ -6,6 +6,7 @@ import { ExplorerSection } from "../components/explorer/ExplorerSection"
 import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
 import { OperationTabs } from "../components/explorer/OperationTabs"
 import { OverviewPanel } from "../components/explorer/OverviewPanel"
+import { RunMethodologyPanel } from "../components/explorer/RunMethodologyPanel"
 import { SuiteScoreCards } from "../components/explorer/SuiteScoreCards"
 
 const QueryHeatmapPanel = lazy(() =>
@@ -195,6 +196,13 @@ export function ExplorerPage({
             />
           ) : null}
         </div>
+
+        <RunMethodologyPanel
+          operationSummaries={filteredOperationSummaries}
+          includedDatabases={includedDatabases}
+          databaseColors={databaseColors}
+          isLoading={isLoading}
+        />
       </ExplorerSection>
 
       <ExplorerSection

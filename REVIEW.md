@@ -11,10 +11,10 @@ preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
 scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
 scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
-The version-bump work now includes MonetDB Dec2025-SP3. Remaining blockers are
+The version-bump work now includes MonetDB Dec2025-SP3, and the site now
+surfaces run methodology metadata when present. Remaining blockers are
 public-rerun quality, correctness checks, query status/correctness semantics,
-metadata surfacing, published-data hygiene, and the larger suite/engine roadmap
-from `RESEARCH.md`.
+published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
@@ -27,12 +27,6 @@ from `RESEARCH.md`.
       `OLAP_BENCHMARKS_SYSTEM=macbook-m4-pro` value and then regenerate the
       published DB. The rerun should also live-confirm each engine's runtime
       version query and the bumped image/package pins.
-- [ ] **Surface methodology metadata on the site.** New runs now persist
-      `run.metadata` with host OS/arch/memory, Python version, Docker
-      version/context/server platform, execution mode, container image/digest
-      when available, start command, and timing/cache-policy notes. Existing
-      published runs naturally have null metadata until rerun, and the site does
-      not yet expose this metadata or caveat missing metadata directly.
 - [ ] **Add first-class query status.** Results need explicit `ok`, `timeout`,
       `unsupported`, `wrong_result`, `error`, and `skipped` states. Non-`ok`
       queries should remain in aggregate scoring as missing/penalized instead

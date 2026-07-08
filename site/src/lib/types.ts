@@ -17,6 +17,7 @@ export interface OperationSummary {
   started_at: string
   finished_at: string
   run_duration_s: number
+  metadata: RunMetadata | null
 }
 
 export interface QuerySummary {
@@ -60,6 +61,37 @@ export interface QueryCoverage {
 }
 
 export type BenchmarkOperation = "populate" | "mutate" | "select"
+
+export interface RunMetadata {
+  host?: {
+    os?: string | null
+    os_release?: string | null
+    machine?: string | null
+    processor?: string | null
+    cpu_count_logical?: number | null
+    memory_total_mb?: number | null
+  } | null
+  python?: {
+    version?: string | null
+  } | null
+  docker?: {
+    version?: string | null
+    context?: string | null
+    server_platform?: string | null
+  } | null
+  execution?: {
+    mode?: "container" | "in_process" | string | null
+    container_image?: string | null
+    container_image_digest?: string | null
+    container_platform?: string | null
+    start_command?: string | null
+  } | null
+  methodology?: {
+    timed_unit?: string | null
+    iteration_roles?: string | null
+    cache_policy?: string | null
+  } | null
+}
 
 export interface SuiteScaleFactor {
   suite: string
