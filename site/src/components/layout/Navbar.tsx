@@ -2,14 +2,17 @@ import { FlaskConical, Home } from "lucide-react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 
 import {
-  benchmarkDefinitions,
-  defaultBenchmarkId,
+  getDefaultBenchmarkId,
+  isBenchmarkSuiteId,
+  type BenchmarkDefinition,
   type BenchmarkSuiteId,
 } from "../../lib/benchmarks"
 import { SuiteSelector } from "../filters/SuiteSelector"
 import { SystemSelector, SystemSelectorSkeleton } from "../filters/SystemSelector"
 
 interface NavbarProps {
+  benchmarkDefinitions: BenchmarkDefinition[]
+  suitesLoading: boolean
   systems: string[]
   selectedSystem: string | null
   onSelectSystem: (system: string) => void
@@ -24,6 +27,8 @@ const inactiveNavTextClass =
   "bg-surface-raised/88 text-slate-300 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:bg-surface-raised hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(120,154,214,0.18)]"
 
 export function Navbar({
+  benchmarkDefinitions,
+  suitesLoading,
   systems,
   selectedSystem,
   onSelectSystem,
@@ -33,9 +38,10 @@ export function Navbar({
   const navigate = useNavigate()
   const isExplorerActive = location.pathname.startsWith("/explorer")
   const suiteMatch = location.pathname.match(/^\/explorer\/([^/]+)/)
-  const resolvedSuiteId = benchmarkDefinitions.some((benchmark) => benchmark.id === suiteMatch?.[1])
-    ? (suiteMatch?.[1] as BenchmarkSuiteId)
-    : defaultBenchmarkId
+  const routeSuiteId = suiteMatch?.[1]
+  const resolvedSuiteId: BenchmarkSuiteId = isBenchmarkSuiteId(routeSuiteId, benchmarkDefinitions)
+    ? routeSuiteId
+    : getDefaultBenchmarkId(benchmarkDefinitions)
 
   return (
     <header className="border-b border-border-default bg-surface-primary/95 backdrop-blur">
@@ -75,8 +81,10 @@ export function Navbar({
           <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3">
             {isExplorerActive ? (
               <SuiteSelector
+                benchmarkDefinitions={benchmarkDefinitions}
                 selected={resolvedSuiteId}
                 onChange={(next) => navigate(`/explorer/${next}`)}
+                disabled={suitesLoading || benchmarkDefinitions.length === 0}
               />
             ) : null}
             <div className="flex shrink-0 justify-end">

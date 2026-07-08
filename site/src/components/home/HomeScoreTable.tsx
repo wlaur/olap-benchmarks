@@ -2,7 +2,6 @@ import { Trophy } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import { useHomeOverview } from "../../hooks/useHomeOverview"
-import { benchmarkDefinitions } from "../../lib/benchmarks"
 import { cn } from "../../lib/cn"
 import { getDatabaseColors } from "../../lib/databaseColors"
 import { formatScore } from "../../lib/score"
@@ -12,13 +11,25 @@ import { BodyText, SectionTitle } from "../Typography"
 
 export function HomeScoreTable() {
   const navigate = useNavigate()
+  const benchmarkDefinitions = useAppStore((s) => s.benchmarkDefinitions)
+  const suitesLoading = useAppStore((s) => s.suitesLoading)
+  const suitesError = useAppStore((s) => s.suitesError)
   const selectedSystem = useAppStore((s) => s.selectedSystem)
   const systemLoading = useAppStore((s) => s.systemLoading)
-  const overview = useHomeOverview(selectedSystem)
+  const overview = useHomeOverview(selectedSystem, benchmarkDefinitions)
 
   const databaseColors = getDatabaseColors(overview.databases.map((database) => database.label))
-  const suites = benchmarkDefinitions
-  const isLoading = systemLoading || overview.loading
+  const suites =
+    overview.suites.length > 0
+      ? overview.suites
+      : benchmarkDefinitions.map((definition) => ({
+          key: `${definition.id}:sf${definition.defaultScaleFactor}`,
+          suiteId: definition.id,
+          suiteScaleFactor: definition.defaultScaleFactor,
+          title: `${definition.title} SF${definition.defaultScaleFactor}`,
+          scores: [],
+        }))
+  const isLoading = systemLoading || suitesLoading || overview.loading
   const isEmpty = !isLoading && overview.databases.length === 0
 
   return (
@@ -28,7 +39,7 @@ export function HomeScoreTable() {
         <BodyText className="mt-1">
           Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is the
           leader. Missing queries are penalized, and rows are ranked by geometric mean across suites
-          at their default scale factor; a missing suite counts as its worst score.{" "}
+          at the scale factors shown; a missing suite/scale factor counts as its worst score.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -43,11 +54,13 @@ export function HomeScoreTable() {
             <tr>
               <th className="px-5 py-3 font-medium">Database</th>
               {suites.map((suite) => (
-                <th key={suite.id} className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                <th key={suite.key} className="px-4 py-3 text-right font-medium whitespace-nowrap">
                   <button
                     type="button"
                     className="cursor-pointer rounded-md px-1 text-slate-200 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
-                    onClick={() => navigate(`/explorer/${suite.id}`)}
+                    onClick={() =>
+                      navigate(`/explorer/${suite.suiteId}?scale=${suite.suiteScaleFactor}`)
+                    }
                     title={`Open ${suite.title} explorer`}
                   >
                     {suite.title}
@@ -67,7 +80,9 @@ export function HomeScoreTable() {
                 >
                   {overview.error
                     ? `Failed to load results: ${overview.error}`
-                    : `No completed runs found${selectedSystem ? ` for ${selectedSystem}` : ""}.`}
+                    : suitesError
+                      ? `Failed to load suites: ${suitesError}`
+                      : `No completed runs found${selectedSystem ? ` for ${selectedSystem}` : ""}.`}
                 </td>
               </tr>
             ) : (
@@ -87,11 +102,11 @@ export function HomeScoreTable() {
                   </td>
                   {suites.map((suite) => (
                     <ScoreCell
-                      key={suite.id}
-                      score={overview.scoresByDbAndSuite.get(database.key)?.get(suite.id)}
+                      key={suite.key}
+                      score={overview.scoresByDbAndSuite.get(database.key)?.get(suite.key)}
                       rank={
                         overview.suites
-                          .find((s) => s.suiteId === suite.id)
+                          .find((s) => s.key === suite.key)
                           ?.scores.findIndex((entry) => entry.dbKey === database.key) ?? -1
                       }
                     />

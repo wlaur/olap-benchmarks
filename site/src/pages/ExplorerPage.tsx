@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 
 import { CycleSelect } from "../components/controls/CycleSelect"
 import { ExplorerSection } from "../components/explorer/ExplorerSection"
@@ -28,7 +29,7 @@ import {
 import { InsertPerformancePanel } from "../components/InsertPerformancePanel"
 import { useSelectionState } from "../hooks/useSelectionState"
 import { useSuiteData } from "../hooks/useSuiteData"
-import type { BenchmarkSuiteId } from "../lib/benchmarks"
+import type { BenchmarkDefinition, BenchmarkSuiteId } from "../lib/benchmarks"
 import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
 import { getSuiteConfig } from "../lib/suiteConfig"
@@ -36,6 +37,7 @@ import { getSuiteConfig } from "../lib/suiteConfig"
 interface ExplorerPageProps {
   system: string | null
   suiteId: BenchmarkSuiteId
+  suiteDefinition: BenchmarkDefinition
   isSystemLoading?: boolean
 }
 
@@ -44,8 +46,15 @@ const QUERY_GROUP_OPTIONS: { value: "select" | "mutate"; label: string }[] = [
   { value: "select", label: "Select queries" },
 ]
 
-export function ExplorerPage({ system, suiteId, isSystemLoading = false }: ExplorerPageProps) {
-  const suiteConfig = useMemo(() => getSuiteConfig(suiteId), [suiteId])
+export function ExplorerPage({
+  system,
+  suiteId,
+  suiteDefinition,
+  isSystemLoading = false,
+}: ExplorerPageProps) {
+  const [searchParams] = useSearchParams()
+  const preferredScaleFactor = parseScaleFactor(searchParams.get("scale"))
+  const suiteConfig = useMemo(() => getSuiteConfig(suiteDefinition), [suiteDefinition])
   const hasMutateOperation = suiteConfig.operations.includes("mutate")
   const [selectedOperation, setSelectedOperation] = useState<"select" | "mutate">("select")
   const selection = useSelectionState()
@@ -65,7 +74,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
     filteredOperationSummaries,
     isLoading,
     toggleDatabase,
-  } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
+  } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading, preferredScaleFactor)
 
   const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
   const queryNames = useMemo(() => {
@@ -277,4 +286,10 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
       ) : null}
     </div>
   )
+}
+
+function parseScaleFactor(value: string | null): number | null {
+  if (value === null) return null
+  const scaleFactor = Number.parseInt(value, 10)
+  return Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : null
 }

@@ -17,7 +17,19 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 
-from ..settings import REPO_ROOT, SETTINGS, Revision
+from ..settings import (
+    ALL_SUITE_SCALE_FACTORS,
+    DEFAULT_SUITE_SCALE_FACTORS,
+    REPO_ROOT,
+    SCALE_FACTOR_SUITES,
+    SETTINGS,
+    SUITE_DISPLAY_ORDER,
+    SUITE_LABELS,
+    SUITE_NAV_LABELS,
+    SUITE_OPERATIONS,
+    SUITE_QUERY_NAME_PARSERS,
+    Revision,
+)
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from .merge import MergeStats, merge_results
 from .models import QueryExecution, Run, RunMetric, RunStep
@@ -171,7 +183,30 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
     queries_path = output_dir / "queries.json"
     queries_path.write_text(f"{json.dumps(queries_manifest, indent=2)}\n")
 
+    suites_manifest = _build_suites_manifest()
+    suites_path = output_dir / "suites.json"
+    suites_path.write_text(f"{json.dumps(suites_manifest, indent=2)}\n")
+
     return output_dir, merge_stats
+
+
+def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:
+    return {
+        "suites": [
+            {
+                "id": suite,
+                "title": SUITE_LABELS[suite],
+                "nav_label": SUITE_NAV_LABELS[suite],
+                "queries_key": suite,
+                "default_scale_factor": DEFAULT_SUITE_SCALE_FACTORS[suite],
+                "supported_scale_factors": list(ALL_SUITE_SCALE_FACTORS[suite]),
+                "scale_factor_supported": suite in SCALE_FACTOR_SUITES,
+                "operations": list(SUITE_OPERATIONS[suite]),
+                "query_name_parser": SUITE_QUERY_NAME_PARSERS[suite],
+            }
+            for suite in SUITE_DISPLAY_ORDER
+        ]
+    }
 
 
 def _build_queries_manifest() -> dict[str, dict[str, dict[str, str | None | dict[str, str]]]]:

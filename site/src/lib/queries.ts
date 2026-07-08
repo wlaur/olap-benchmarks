@@ -14,6 +14,7 @@ import type {
   QuerySummary,
   RunSummary,
   RunStatus,
+  SuiteScaleFactor,
 } from "./types"
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -64,6 +65,20 @@ export async function fetchSuiteScaleFactors(
     .execute()
 
   return rows.map((row) => row.suite_scale_factor)
+}
+
+export async function fetchSystemSuiteScaleFactors(system: string): Promise<SuiteScaleFactor[]> {
+  const db = await getKyselyDb()
+  return db
+    .selectFrom("run")
+    .select(["suite", "suite_scale_factor"])
+    .distinct()
+    .where("system", "=", system)
+    .where("status", "!=", "running")
+    .where("finished_at", "is not", null)
+    .orderBy("suite")
+    .orderBy("suite_scale_factor")
+    .execute()
 }
 
 function isoTimestamp(column: Expression<Date>) {
