@@ -454,7 +454,7 @@ class Postgres(Database):
         host_pgdata.chmod(0o777)  # macOS bind-friendly
 
         parts = [
-            "docker run --platform linux/amd64",
+            "docker run",
             f"--name {self.name}-benchmark",
             "--rm -d -p 5433:5432",
             "--user 0:0",

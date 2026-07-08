@@ -26,13 +26,10 @@ from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-# Pinned to 4.0.9 because the 4.1.0 BE binary segfaults on startup in both
-# the linux/amd64 (under OrbStack QEMU/Rosetta) and linux/arm64 images on
+# Pinned to 4.0.9 because the 4.1.0 BE binary segfaults on startup on
 # Apple Silicon -- fe-ubuntu/be-ubuntu split images crash the same way.
 # 4.0.9 is the latest 4.0.x patch (2026-04-20) and is one week older than
-# 4.1.0; the LTS-style 4.0 line is fine for benchmarking. When the bench is
-# re-run on a real x86_64 Linux host, bump VERSION to whichever 4.x is
-# current and switch the platform flag below back to linux/amd64.
+# 4.1.0; the LTS-style 4.0 line is fine for benchmarking.
 VERSION = "4.0.9"
 
 DOCKER_IMAGE = f"starrocks/allin1-ubuntu:{VERSION}"
@@ -215,8 +212,6 @@ class StarRocks(Database):
         for d in (meta_dir, storage_dir, staging_dir):
             d.mkdir(parents=True, exist_ok=True)
 
-        # See VERSION comment above for why this is arm64. On a real x86_64
-        # host, switch to linux/amd64 to match the rest of the suite.
         return self.docker_run_command(
             DOCKER_IMAGE,
             ports={"9030": "9030", "8030": "8030", "8040": "8040"},
@@ -225,7 +220,6 @@ class StarRocks(Database):
                 storage_dir.as_posix(): "/data/deploy/starrocks/be/storage",
                 staging_dir.as_posix(): "/staging",
             },
-            platform="linux/arm64",
         )
 
     def wait_until_accessible(self, timeout_seconds: float = 240.0, interval_seconds: float = 2.0) -> None:
