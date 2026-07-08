@@ -285,7 +285,8 @@ def test_benchmark_all_uses_suite_supported_operations(
     def fake_stop_db(_db: DummyDatabase) -> None:
         return None
 
-    validated: list[tuple[str, str, int]] = []
+    validated_row_counts: list[tuple[str, str, int]] = []
+    validated_answer_hashes: list[tuple[str, str, int]] = []
 
     def fake_assert_latest_query_row_counts(
         revision: str,
@@ -297,7 +298,19 @@ def test_benchmark_all_uses_suite_supported_operations(
         assert revision == "default"
         assert system == __main__.SETTINGS.system
         assert mark_wrong_results is True
-        validated.append((system, suite, suite_scale_factor))
+        validated_row_counts.append((system, suite, suite_scale_factor))
+
+    def fake_assert_latest_query_answer_hashes(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_answer_hashes.append((system, suite, suite_scale_factor))
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
@@ -307,11 +320,13 @@ def test_benchmark_all_uses_suite_supported_operations(
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
     monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
+    monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
 
     __main__.benchmark(db="clickhouse", suite="clickbench", operation="all")
 
     assert db_instance.operations == [("clickbench", "populate", 1), ("clickbench", "select", 1)]
-    assert validated == [(__main__.SETTINGS.system, "clickbench", 1)]
+    assert validated_row_counts == [(__main__.SETTINGS.system, "clickbench", 1)]
+    assert validated_answer_hashes == [(__main__.SETTINGS.system, "clickbench", 1)]
 
 
 def test_benchmark_all_fans_out_time_series_scale_factors(
@@ -344,7 +359,8 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
     writer = DummyWriter()
     db_instance = DummyDatabase()
     checked_inputs: list[tuple[SuiteName, int]] = []
-    validated: list[tuple[SuiteName, int]] = []
+    validated_row_counts: list[tuple[SuiteName, int]] = []
+    validated_answer_hashes: list[tuple[SuiteName, int]] = []
 
     def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
         return ["time_series"]
@@ -377,7 +393,19 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
         assert revision == "default"
         assert system == __main__.SETTINGS.system
         assert mark_wrong_results is True
-        validated.append((suite, suite_scale_factor))
+        validated_row_counts.append((suite, suite_scale_factor))
+
+    def fake_assert_latest_query_answer_hashes(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_answer_hashes.append((suite, suite_scale_factor))
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
@@ -387,9 +415,11 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
     monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
+    monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
 
     __main__.benchmark(db="duckdb", suite="all", operation="all")
 
     assert checked_inputs == [("time_series", 1), ("time_series", 10)]
     assert db_instance.operations == [("time_series", "select", 1), ("time_series", "select", 10)]
-    assert validated == [("time_series", 1), ("time_series", 10)]
+    assert validated_row_counts == [("time_series", 1), ("time_series", 10)]
+    assert validated_answer_hashes == [("time_series", 1), ("time_series", 10)]

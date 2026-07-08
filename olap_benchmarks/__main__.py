@@ -24,9 +24,13 @@ from .results import (
     publish as publish_results,
 )
 from .results.validation import (
+    AnswerHashValidationError,
     RowCountValidationError,
+    assert_latest_query_answer_hashes,
     assert_latest_query_row_counts,
+    format_answer_hash_mismatches,
     format_row_count_mismatches,
+    validate_latest_query_answer_hashes,
     validate_latest_query_row_counts,
 )
 from .settings import (
@@ -237,7 +241,14 @@ def benchmark(
                     suite_scale_factor=resolved_scale_factor,
                     mark_wrong_results=True,
                 )
-        except RowCountValidationError as exc:
+                assert_latest_query_answer_hashes(
+                    revision=revision,
+                    system=SETTINGS.system,
+                    suite=suite_name,
+                    suite_scale_factor=resolved_scale_factor,
+                    mark_wrong_results=True,
+                )
+        except (AnswerHashValidationError, RowCountValidationError) as exc:
             raise SystemExit(str(exc)) from exc
 
 
@@ -374,6 +385,25 @@ def validate_row_counts(
     if mismatches:
         raise SystemExit(format_row_count_mismatches(mismatches))
     print(format_row_count_mismatches(mismatches))
+
+
+@results_app.command(name="validate-answer-hashes")
+def validate_answer_hashes(
+    revision: Revision = "default",
+    system: str | None = None,
+    suite: SuiteName | None = None,
+    scale_factor: int | None = None,
+) -> None:
+    """Validate query answer hashes across latest completed select runs."""
+    mismatches = validate_latest_query_answer_hashes(
+        revision=revision,
+        system=system,
+        suite=suite,
+        suite_scale_factor=scale_factor,
+    )
+    if mismatches:
+        raise SystemExit(format_answer_hash_mismatches(mismatches))
+    print(format_answer_hash_mismatches(mismatches))
 
 
 @results_app.command

@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 from ..results import get_results_engine, migrate_results
 from ..results.models import Run, RunStep
 from ..results.validation import (
+    AnswerHashValidationError,
     RowCountValidationError,
+    assert_latest_query_answer_hashes,
     assert_latest_query_row_counts,
+    validate_latest_query_answer_hashes,
     validate_latest_query_row_counts,
 )
 
@@ -31,6 +34,7 @@ def _insert_select_run(
     query_name: str = "q1",
     iteration: int = 1,
     result_status: str | None = "ok",
+    answer_hash: str | None = None,
     started_at: datetime = datetime(2026, 1, 1, 12, 0, 0),
     finished_at: datetime = datetime(2026, 1, 1, 12, 0, 1),
 ) -> None:
@@ -62,9 +66,54 @@ def _insert_select_run(
                     status="completed",
                     result_status=result_status,
                     row_count=row_count,
+                    metadata_json={"answer_hash": answer_hash} if answer_hash is not None else None,
                 )
             )
             session.commit()
+    finally:
+        engine.dispose()
+
+
+def test_answer_hash_validation_accepts_matching_latest_runs(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10, answer_hash="hash-a")
+    _insert_select_run(db_path, "clickhouse", 10, answer_hash="hash-a")
+
+    assert validate_latest_query_answer_hashes(db_path=db_path) == []
+    assert_latest_query_answer_hashes(db_path=db_path)
+
+
+def test_answer_hash_validation_ignores_row_count_mismatches(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10, answer_hash="hash-a")
+    _insert_select_run(db_path, "clickhouse", 12, answer_hash="hash-b")
+
+    assert validate_latest_query_answer_hashes(db_path=db_path) == []
+
+
+def test_answer_hash_validation_marks_consensus_outlier_wrong_result(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10, answer_hash="hash-a")
+    _insert_select_run(db_path, "clickhouse", 10, answer_hash="hash-a")
+    _insert_select_run(db_path, "timescaledb", 10, answer_hash="hash-b")
+
+    with pytest.raises(AnswerHashValidationError, match="timescaledb"):
+        assert_latest_query_answer_hashes(db_path=db_path, mark_wrong_results=True)
+
+    engine = get_results_engine(read_only=True, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            statuses = session.query(Run.db, RunStep.result_status, RunStep.error_type).join(
+                RunStep, RunStep.run_id == Run.id
+            )
+            assert statuses.order_by(Run.db).all() == [
+                ("clickhouse", "ok", None),
+                ("duckdb", "ok", None),
+                ("timescaledb", "wrong_result", "AnswerHashMismatch"),
+            ]
     finally:
         engine.dispose()
 
