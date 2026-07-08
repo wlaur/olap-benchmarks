@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from olap_benchmarks.results import _build_suites_manifest
+from olap_benchmarks.results import _build_queries_manifest, _build_suites_manifest
 from olap_benchmarks.settings import (
     ALL_SUITE_SCALE_FACTORS,
     DEFAULT_SUITE_SCALE_FACTORS,
@@ -29,3 +29,13 @@ def test_suites_manifest_matches_suite_settings() -> None:
         assert suite["scale_factor_supported"] == (suite_name in SCALE_FACTOR_SUITES)
         assert suite["operations"] == list(SUITE_OPERATIONS[suite_name])
         assert suite["query_name_parser"] == SUITE_QUERY_NAME_PARSERS[suite_name]
+
+
+def test_clickbench_q28_uses_engine_regex_backrefs() -> None:
+    manifest = _build_queries_manifest()
+    q28 = manifest["clickbench"]["Q28"]
+    overrides = cast(dict[str, str], q28["db_overrides"])
+
+    assert "'$1'" in overrides["monetdb"]
+    assert "'$1'" in overrides["starrocks"]
+    assert "'\\1'" in overrides["postgres"]
