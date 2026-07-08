@@ -51,6 +51,16 @@ RTABENCH_QUERY_NAMES = {
     "0028_sales_volume_by_age_group": 5,
     "0029_top_product_in_age_group": 5,
     "0030_customers_with_most_orders_delivered": 5,
+    "1000_terminal_hourly_stats": 3,
+    "1004_count_delayed_orders_per_day": 5,
+    "1008_most_week_delayed_order": 5,
+    "1012_max_satisfaction_for_order_per_week": 5,
+    "1013_satisfaction_with_without_backup": 5,
+    "1017_top_selling_month_product": 5,
+    "1023_top_sales_volume_product_from_terminal": 2,
+    "1025_product_category_performance": 5,
+    "1027_country_category_performance": 5,
+    "1030_customers_with_most_orders_delivered": 5,
 }
 
 RTABENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
@@ -193,7 +203,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
             return f.read()
 
     def include_query(self, query_name: str) -> bool:
-        return True
+        return (RTABENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql").is_file()
 
     def select(self) -> None:
         t0 = perf_counter()
@@ -204,8 +214,8 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
                 self.record_skipped_query_steps(
                     query_name,
                     iterations,
-                    result_status="skipped",
-                    reason="query excluded by suite/database",
+                    result_status="unsupported",
+                    reason="query file is not defined for suite/database",
                 )
                 continue
 

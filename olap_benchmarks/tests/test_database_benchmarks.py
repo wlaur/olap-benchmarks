@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, get_args
+from typing import Any, cast, get_args
 
 import polars as pl
 import pytest
@@ -10,6 +10,7 @@ from sqlalchemy import Connection
 from ..dbs import Database
 from ..settings import DatabaseName, SuiteName, TableName, resolve_suite_scale_factor, resolve_suite_scale_factors
 from ..suites import BenchmarkSuite
+from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABench
 from ..suites.time_series.config import (
     BASE_TIME_SERIES_DATASET_SIZES,
     TimeSeries,
@@ -144,12 +145,36 @@ class RuntimeVersionDatabase(DummyDatabase):
         return {"clickbench": NoopSelectSuite}
 
 
+class ClickHouseDummyDatabase(DummyDatabase):
+    name: DatabaseName = "clickhouse"
+
+
 def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
     assert DummySuite.supported_operations == ("populate", "select")
 
 
 def test_time_series_suite_declares_mutate_support() -> None:
     assert TimeSeries.supported_operations == ("populate", "select", "mutate")
+
+
+def test_rtabench_schedules_preaggregated_upstream_queries() -> None:
+    assert "1000_terminal_hourly_stats" in RTABENCH_QUERY_NAMES
+    assert "1030_customers_with_most_orders_delivered" in RTABENCH_QUERY_NAMES
+
+
+def test_rtabench_marks_missing_db_specific_queries_unsupported() -> None:
+    duckdb_suite = cast(
+        RTABench[DummyDatabase],
+        RTABench.model_construct(db=DummyDatabase(), name="rtabench", scale_factor=1),
+    )
+    clickhouse_suite = cast(
+        RTABench[ClickHouseDummyDatabase],
+        RTABench.model_construct(db=ClickHouseDummyDatabase(), name="rtabench", scale_factor=1),
+    )
+
+    assert duckdb_suite.include_query("0000_terminal_hourly_stats")
+    assert not duckdb_suite.include_query("1000_terminal_hourly_stats")
+    assert clickhouse_suite.include_query("1000_terminal_hourly_stats")
 
 
 def test_database_benchmarks_resolves_all_suites() -> None:
