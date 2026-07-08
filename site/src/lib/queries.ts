@@ -4,6 +4,8 @@ import type { BenchmarkSuiteId } from "./benchmarks"
 import { getKyselyDb, type ResultsDb } from "./duckdb"
 import type {
   BenchmarkOperation,
+  CrossSystemQueryCoverage,
+  CrossSystemQuerySummary,
   FlameSpan,
   InsertStep,
   MetricSample,
@@ -213,6 +215,125 @@ function withLatestAttemptedSelectRuns(
     )
 }
 
+function withCrossSystemRunLabels(
+  db: ResultsDb,
+  options: { suite: BenchmarkSuiteId; suiteScaleFactor: number },
+) {
+  return db.with("run_labels", (qb) =>
+    qb
+      .selectFrom("run")
+      .select((eb) => [
+        eb.ref("run.system").as("system"),
+        eb.ref("run.db").as("db"),
+        eb.ref("run.db_version").as("db_version"),
+        sql<string>`case
+            when count(distinct ${eb.ref("run.db_version")}) over (
+              partition by ${eb.ref("run.system")}, ${eb.ref("run.db")}
+            ) > 1
+            then ${eb.ref("run.db")} || ' ' || ${eb.ref("run.db_version")}
+            else ${eb.ref("run.db")}
+          end`.as("db_label"),
+      ])
+      .distinct()
+      .where("run.suite", "=", options.suite)
+      .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
+      .where("run.operation", "in", [...BENCHMARK_OPERATIONS])
+      .where("run.status", "!=", "running"),
+  )
+}
+
+function withCrossSystemLatestSelectRuns(
+  db: ResultsDb,
+  options: { suite: BenchmarkSuiteId; suiteScaleFactor: number },
+) {
+  return withCrossSystemRunLabels(db, options)
+    .with("scoped_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .innerJoin("run_labels", (join) =>
+          join
+            .onRef("run_labels.system", "=", "run.system")
+            .onRef("run_labels.db", "=", "run.db")
+            .onRef("run_labels.db_version", "=", "run.db_version"),
+        )
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.system").as("system"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.db_version").as("db_version"),
+          eb.ref("run_labels.db_label").as("db_label"),
+          eb.ref("run.started_at").as("run_started_at"),
+          eb.ref("run.finished_at").$notNull().as("run_finished_at"),
+        ])
+        .where("run.suite", "=", options.suite)
+        .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
+        .where("run.operation", "=", "select")
+        .where("run.status", "=", "completed")
+        .where("run.finished_at", "is not", null),
+    )
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("scoped_runs")
+        .selectAll("scoped_runs")
+        .select((eb) => [
+          sql<number>`row_number() over (
+            partition by
+              ${eb.ref("scoped_runs.system")},
+              ${eb.ref("scoped_runs.db")},
+              ${eb.ref("scoped_runs.db_version")}
+            order by ${eb.ref("scoped_runs.run_finished_at")} desc, ${eb.ref("scoped_runs.run_id")} desc
+          )`.as("run_rank"),
+        ]),
+    )
+}
+
+function withCrossSystemLatestAttemptedSelectRuns(
+  db: ResultsDb,
+  options: { suite: BenchmarkSuiteId; suiteScaleFactor: number },
+) {
+  return withCrossSystemRunLabels(db, options)
+    .with("scoped_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .innerJoin("run_labels", (join) =>
+          join
+            .onRef("run_labels.system", "=", "run.system")
+            .onRef("run_labels.db", "=", "run.db")
+            .onRef("run_labels.db_version", "=", "run.db_version"),
+        )
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.system").as("system"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.db_version").as("db_version"),
+          eb.ref("run_labels.db_label").as("db_label"),
+          sql<Exclude<RunStatus, "running">>`${eb.ref("run.status")}`.as("run_status"),
+          eb.ref("run.started_at").as("run_started_at"),
+          sql<Date>`coalesce(${eb.ref("run.finished_at")}, ${eb.ref("run.started_at")})`.as(
+            "run_finished_at",
+          ),
+        ])
+        .where("run.suite", "=", options.suite)
+        .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
+        .where("run.operation", "=", "select")
+        .where("run.status", "!=", "running"),
+    )
+    .with("latest_runs", (qb) =>
+      qb
+        .selectFrom("scoped_runs")
+        .selectAll("scoped_runs")
+        .select((eb) => [
+          sql<number>`row_number() over (
+            partition by
+              ${eb.ref("scoped_runs.system")},
+              ${eb.ref("scoped_runs.db")},
+              ${eb.ref("scoped_runs.db_version")}
+            order by ${eb.ref("scoped_runs.run_finished_at")} desc, ${eb.ref("scoped_runs.run_id")} desc
+          )`.as("run_rank"),
+        ]),
+    )
+}
+
 export async function fetchRunSummaries(
   system: string,
   suite: BenchmarkSuiteId,
@@ -323,6 +444,62 @@ export async function fetchQueryCoverage(
     .execute()
 }
 
+export async function fetchCrossSystemQueryCoverage(
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<CrossSystemQueryCoverage[]> {
+  const db = await getKyselyDb()
+
+  return withCrossSystemLatestAttemptedSelectRuns(db, { suite, suiteScaleFactor })
+    .selectFrom("latest_runs")
+    .leftJoin("run_step", "run_step.run_id", "latest_runs.run_id")
+    .select((eb) => [
+      eb.ref("latest_runs.run_id").as("run_id"),
+      eb.ref("latest_runs.system").as("system"),
+      eb.ref("latest_runs.db_label").as("db"),
+      eb.ref("latest_runs.db").as("db_name"),
+      eb.ref("latest_runs.db_version").as("db_version"),
+      eb.ref("latest_runs.run_status").as("latest_status"),
+      isoTimestamp(eb.ref("latest_runs.run_started_at")).as("started_at"),
+      isoTimestamp(eb.ref("latest_runs.run_finished_at")).as("finished_at"),
+      sql<number>`cast(
+        count(distinct ${eb.ref("run_step.query_name")}) filter (
+          where ${eb.ref("run_step.step_type")} = 'query'
+            and ${eb.ref("run_step.query_name")} is not null
+            and ${eb.ref("run_step.result_status")} in ('error', 'timeout', 'wrong_result')
+        ) as integer
+      )`.as("failed_query_count"),
+      sql<number>`cast(
+        count(distinct ${eb.ref("run_step.query_name")}) filter (
+          where ${eb.ref("run_step.step_type")} = 'query'
+            and ${eb.ref("run_step.query_name")} is not null
+            and ${eb.ref("run_step.result_status")} in ('ok', 'error', 'timeout', 'unsupported', 'wrong_result')
+        ) as integer
+      )`.as("attempted_query_count"),
+      sql<number>`cast(
+        count(distinct ${eb.ref("run_step.query_name")}) filter (
+          where ${eb.ref("run_step.step_type")} = 'query'
+            and ${eb.ref("run_step.query_name")} is not null
+            and ${eb.ref("run_step.result_status")} = 'ok'
+        ) as integer
+      )`.as("completed_query_count"),
+    ])
+    .where("latest_runs.run_rank", "=", 1)
+    .groupBy([
+      "latest_runs.run_id",
+      "latest_runs.system",
+      "latest_runs.db_label",
+      "latest_runs.db",
+      "latest_runs.db_version",
+      "latest_runs.run_status",
+      "latest_runs.run_started_at",
+      "latest_runs.run_finished_at",
+    ])
+    .orderBy("latest_runs.system")
+    .orderBy("latest_runs.db_label")
+    .execute()
+}
+
 export async function fetchOperationSummaries(
   system: string,
   suite: BenchmarkSuiteId,
@@ -353,6 +530,65 @@ export async function fetchOperationSummaries(
     .where("latest_runs.run_rank", "=", 1)
     .orderBy("latest_runs.db_label")
     .orderBy("latest_runs.operation")
+    .execute()
+}
+
+export async function fetchCrossSystemQuerySummaries(
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<CrossSystemQuerySummary[]> {
+  const db = await getKyselyDb()
+
+  return withCrossSystemLatestSelectRuns(db, { suite, suiteScaleFactor })
+    .selectFrom("run_step")
+    .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
+    .select((eb) => {
+      const duration = sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))`
+      const warm = sql`${eb.ref("run_step.iteration_role")} in ('warm', 'steady_state')`
+      const firstRun = sql`${eb.ref("run_step.iteration_role")} = 'first_run'`
+
+      return [
+        eb.ref("latest_runs.system").as("system"),
+        eb.ref("run_step.query_name").$notNull().as("query_name"),
+        eb.ref("latest_runs.db_label").as("db"),
+        eb.ref("latest_runs.db").as("db_name"),
+        eb.ref("latest_runs.db_version").as("db_version"),
+        sql<number>`coalesce(median(${duration}) filter (where ${warm}), median(${duration}))`.as(
+          "median_duration_s",
+        ),
+        sql<number | null>`min(${duration}) filter (where ${firstRun})`.as("first_run_duration_s"),
+        sql<number | null>`median(${duration}) filter (where ${warm})`.as("warm_median_duration_s"),
+        sql<number | null>`min(${duration}) filter (where ${warm})`.as("best_warm_duration_s"),
+        sql<number>`median(${duration})`.as("all_iterations_median_duration_s"),
+        sql<number>`coalesce(avg(${duration}) filter (where ${warm}), avg(${duration}))`.as(
+          "avg_duration_s",
+        ),
+        sql<number>`coalesce(min(${duration}) filter (where ${warm}), min(${duration}))`.as(
+          "min_duration_s",
+        ),
+        sql<number>`coalesce(max(${duration}) filter (where ${warm}), max(${duration}))`.as(
+          "max_duration_s",
+        ),
+        sql<number>`cast(count(*) as integer)`.as("iterations"),
+        sql<number>`cast(count(*) filter (where ${warm}) as integer)`.as("warm_iterations"),
+      ]
+    })
+    .where("latest_runs.run_rank", "=", 1)
+    .where("run_step.step_type", "=", "query")
+    .where("run_step.status", "=", "completed")
+    .where("run_step.result_status", "=", "ok")
+    .where("run_step.finished_at", "is not", null)
+    .where("run_step.query_name", "is not", null)
+    .groupBy([
+      "latest_runs.system",
+      "run_step.query_name",
+      "latest_runs.db_label",
+      "latest_runs.db",
+      "latest_runs.db_version",
+    ])
+    .orderBy("latest_runs.system")
+    .orderBy("run_step.query_name")
+    .orderBy("latest_runs.db_label")
     .execute()
 }
 

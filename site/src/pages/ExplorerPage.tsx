@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 
 import { CycleSelect } from "../components/controls/CycleSelect"
+import { CrossSystemComparisonPanel } from "../components/explorer/CrossSystemComparisonPanel"
 import { ExplorerSection } from "../components/explorer/ExplorerSection"
 import { FilterChipsSkeleton } from "../components/explorer/ExplorerSkeletons"
 import { OperationTabs } from "../components/explorer/OperationTabs"
@@ -167,6 +168,14 @@ export function ExplorerPage({
           queryCoverage={filteredQueryCoverage}
           queryNames={queryNames}
           databaseColors={databaseColors}
+          isLoading={isLoading}
+        />
+
+        <CrossSystemComparisonPanel
+          suite={suiteId}
+          suiteScaleFactor={selectedScaleFactor}
+          queryNames={queryNames}
+          currentSystem={system}
           isLoading={isLoading}
         />
 
