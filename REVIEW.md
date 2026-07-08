@@ -15,9 +15,12 @@ The version-bump work now includes MonetDB Dec2025-SP3, the site now surfaces
 run methodology metadata when present, and the home page labels the current
 Apple Silicon public data as development data. Row-count validation now marks
 consensus outliers as `wrong_result`, and query steps now record bounded answer
-hashes for value-level validation. Remaining blockers are public rerun quality,
-correctness checks, published-data hygiene, and the larger suite/engine roadmap
-from `RESEARCH.md`.
+hashes for value-level validation. Shared-revision migrations now reject
+unknown legacy suite names instead of guessing scale factors, dedupe duplicate
+natural run keys before adding the unique index, clean dependent orphan rows
+from deduped runs, and implement the scale-factor downgrade. Remaining blockers
+are public rerun quality, correctness checks, published-data hygiene, and the
+larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
@@ -77,10 +80,6 @@ from `RESEARCH.md`.
 - [ ] **Cross-system comparison is still absent from the UI.** The data model
       supports comparing the same `(db, version, suite, SF)` across systems, but
       every current site view is scoped to one selected system.
-- [ ] **Migration hardening is still missing for shared revisions.** The
-      unique-index migration has no dedup/remediation path for legacy duplicate
-      keys; the scale-factor migration keeps unknown legacy suite names as SF1;
-      its downgrade is a no-op.
 - [ ] **Clean published data after the rerun.** Remove old `macbook-pro-m4`
       runs once `macbook-m4-pro` data is published, delete the 9 shadowed
       duplicate runs, resolve the Postgres TPC-DS populate-only run, and confirm
@@ -127,8 +126,7 @@ from `RESEARCH.md`.
 2. Finalize public-run policy and metadata surfacing, then run the full matrix
    within the disk budget and publish `macbook-m4-pro` data.
 3. Clean published-data leftovers and make unexpected missing steps visible.
-4. Finish remaining site/data architecture work: cross-system comparison and
-   shared-revision migration hardening.
+4. Finish remaining site/data architecture work: cross-system comparison.
 5. Add JSONBench, then Polars and Doris; handle JOB and TSBS after value-level
    checks and status-aware reporting have been exercised on the rerun.
 
