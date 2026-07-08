@@ -690,6 +690,7 @@ def get_databases() -> dict[DatabaseName, Database]:
     from .clickhouse import Clickhouse
     from .duckdb import DuckDB
     from .monetdb import MonetDB
+    from .polars import Polars
     from .postgres import Postgres
     from .questdb import QuestDB
     from .starrocks import StarRocks
@@ -700,6 +701,7 @@ def get_databases() -> dict[DatabaseName, Database]:
         "clickhouse": Clickhouse(),
         "timescaledb": TimescaleDB(),
         "duckdb": DuckDB(),
+        "polars": Polars(),
         "questdb": QuestDB(),
         "postgres": Postgres(),
         "starrocks": StarRocks(),

@@ -17,8 +17,10 @@ const KNOWN_DATABASE_COLORS: Record<string, string> = {
   clickhouse: DATABASE_COLOR_PALETTE[0],
   duckdb: DATABASE_COLOR_PALETTE[1],
   monetdb: DATABASE_COLOR_PALETTE[2],
+  polars: DATABASE_COLOR_PALETTE[5],
   postgres: DATABASE_COLOR_PALETTE[3],
   questdb: DATABASE_COLOR_PALETTE[4],
+  starrocks: DATABASE_COLOR_PALETTE[6],
   timescaledb: "#c084fc",
 }
 

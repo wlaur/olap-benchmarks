@@ -112,6 +112,9 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
 - [ ] **Add Polars as an in-process engine.** Model it as a dataframe/LazyFrame
       engine, use normal Polars APIs, keep SQL mode separate if added later,
       and label it as in-process/single-node.
+      Partially fixed 2026-07-08: Polars is registered as an in-process engine
+      for JSONBench using NDJSON-to-Parquet populate and LazyFrame expression
+      queries. ClickBench/TPC-H style Polars API ports are still open.
 - [ ] **Add Apache Doris as the next server OLAP engine.** Start with
       ClickBench and JSONBench, then RTABench after query coverage is aligned;
       defer TPC-DS until Docker/load stability is proven.
