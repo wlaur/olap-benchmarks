@@ -41,6 +41,9 @@ def upgrade() -> None:
             END
         """
     )
+    op.execute("DELETE FROM run_step WHERE run_id NOT IN (SELECT id FROM run)")
+    op.execute("DELETE FROM run_metric WHERE run_id NOT IN (SELECT id FROM run)")
+    op.execute("DELETE FROM query_execution WHERE run_id NOT IN (SELECT id FROM run)")
 
 
 def downgrade() -> None:

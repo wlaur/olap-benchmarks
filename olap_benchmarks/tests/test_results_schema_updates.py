@@ -199,6 +199,86 @@ def test_suite_scale_factor_migration_normalizes_legacy_tpc_suite_names(tmp_path
         con.close()
 
 
+def test_suite_scale_factor_migration_rejects_unknown_legacy_suite_names(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="2f5d7f0e8a21")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, db, db_version, operation, system, status, started_at
+            ) values
+                ('jsonbench', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00')
+            """
+        )
+    finally:
+        con.close()
+
+    with pytest.raises(RuntimeError, match="unknown legacy suites: jsonbench"):
+        migrate_results(db_path=db_path)
+
+
+def test_run_natural_key_migration_removes_duplicate_runs(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="9c1e5f0a7b6d")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                id, suite, suite_scale_factor, db, db_version, operation, system, status, started_at, finished_at
+            ) values
+                (
+                    1, 'time_series', 1, 'duckdb', 'test', 'select', 'test', 'failed',
+                    timestamp '2026-01-01 00:00:00', timestamp '2026-01-01 00:01:00'
+                ),
+                (
+                    2, 'time_series', 1, 'duckdb', 'test', 'select', 'test', 'completed',
+                    timestamp '2026-01-01 00:00:00', timestamp '2026-01-01 00:02:00'
+                )
+            """
+        )
+        con.execute(
+            """
+            insert into run_step (
+                id, run_id, step_type, step_name, query_name, iteration, started_at, status
+            ) values
+                (1, 1, 'query', 'query', 'q1', 1, timestamp '2026-01-01 00:00:01', 'failed'),
+                (2, 2, 'query', 'query', 'q1', 1, timestamp '2026-01-01 00:00:01', 'completed')
+            """
+        )
+        con.execute(
+            """
+            insert into run_metric (id, run_id, time, cpu_percent, mem_mb, disk_mb) values
+                (1, 1, timestamp '2026-01-01 00:00:01', 0.0, 0, 0),
+                (2, 2, timestamp '2026-01-01 00:00:01', 0.0, 0, 0)
+            """
+        )
+        con.execute(
+            """
+            insert into query_execution (id, run_id, run_step_id, query, start_time, end_time) values
+                (1, 1, 1, 'select 1', timestamp '2026-01-01 00:00:01', timestamp '2026-01-01 00:00:02'),
+                (2, 2, 2, 'select 1', timestamp '2026-01-01 00:00:01', timestamp '2026-01-01 00:00:02')
+            """
+        )
+    finally:
+        con.close()
+
+    migrate_results(db_path=db_path)
+
+    con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        assert con.execute("select id, status from run").fetchall() == [(2, "completed")]
+        assert con.execute("select run_id from run_step").fetchall() == [(2,)]
+        assert con.execute("select run_id from run_metric").fetchall() == [(2,)]
+        assert con.execute("select run_id from query_execution").fetchall() == [(2,)]
+    finally:
+        con.close()
+
+
 def test_methodology_metadata_migration_backfills_step_fields(tmp_path: Path) -> None:
     db_path = tmp_path / "results.db"
     migrate_results(db_path=db_path, target_revision="4d9c2b7e6f10")
