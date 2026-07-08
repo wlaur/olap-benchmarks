@@ -318,7 +318,7 @@ class StarRocks(Database):
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
         sql = query.strip().removesuffix(";")
-        with self.record_query_execution(query):
+        with self.record_query_execution(sql):
             df = pl.read_database_uri(sql, self._connectorx_uri())
 
         if schema is not None:
