@@ -120,5 +120,6 @@ def test_tpcds_select_continues_after_query_failure(monkeypatch: pytest.MonkeyPa
     suite.select()
 
     assert db.executed_iterations == [("01", 1), ("02", 1), ("02", 2)]
+    assert db.skipped_iterations == [("01", 2, "skipped", "query aborted after RuntimeError: 01 failed")]
     assert db.rollback_calls == 1
     assert db.current_query_name is None

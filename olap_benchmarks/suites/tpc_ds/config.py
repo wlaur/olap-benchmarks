@@ -319,6 +319,7 @@ class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
         t0 = perf_counter()
         failed_queries = 0
         for idx, query_name in enumerate(TPCDS_QUERY_NAMES):
+            progress_label = f"({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_})"
             if not self.include_query(query_name):
                 _LOGGER.info(f"Skipping unsupported query {query_name} on {self.db.name}")
                 self.record_skipped_query_steps(
@@ -329,30 +330,20 @@ class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
                 )
                 continue
 
-            try:
-                with self.db.query_context(query_name):
-                    query = self.load_tpcds_query(query_name)
-
-                    for it in range(1, TPCDS_ITERATIONS + 1):
-                        df, t = self.db.execute_query_iteration(
-                            query_name=query_name,
-                            iteration=it,
-                            query=query,
-                            fetch_kwargs=self.fetch_kwargs,
-                        )
-
-                        _LOGGER.info(
-                            f"Executed {query_name} ({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_}) "
-                            f"iteration {it:_}/{TPCDS_ITERATIONS:_} "
-                            f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                        )
-            except Exception as exc:
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                iterations=TPCDS_ITERATIONS,
+                query_loader=lambda query_name=query_name: self.load_tpcds_query(query_name),
+                fetch_kwargs=self.fetch_kwargs,
+                progress_label=progress_label,
+                log_success=lambda it, df, t, query_name=query_name, progress_label=progress_label: _LOGGER.info(
+                    f"Executed {query_name} {progress_label} "
+                    f"iteration {it:_}/{TPCDS_ITERATIONS:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                ),
+            )
+            if not ok:
                 failed_queries += 1
-                self.db.rollback()
-                _LOGGER.exception(
-                    f"Failed {query_name} ({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_}) on {self.db.name}; "
-                    f"continuing with remaining TPC-DS queries: {exc}"
-                )
 
         if failed_queries:
             _LOGGER.warning(

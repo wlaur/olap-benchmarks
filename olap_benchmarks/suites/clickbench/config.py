@@ -92,8 +92,10 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
         with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.db.name}.sql").open() as f:
             queries = f.readlines()
 
+        failed_queries = 0
         for idx, query in enumerate(queries):
             query_name = f"Q{idx}"
+            progress_label = f"({idx + 1:_}/{len(queries):_})"
 
             if not self.include_query(query_name):
                 self.record_skipped_query_steps(
@@ -104,19 +106,25 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
                 )
                 continue
 
-            with self.db.query_context(query_name):
-                for it in range(1, ITERATIONS + 1):
-                    df, t = self.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=it,
-                        query=query,
-                        fetch_kwargs=self.fetch_kwargs,
-                    )
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                iterations=ITERATIONS,
+                query_loader=lambda query=query: query,
+                fetch_kwargs=self.fetch_kwargs,
+                progress_label=progress_label,
+                log_success=lambda it, df, t, query_name=query_name, progress_label=progress_label: _LOGGER.info(
+                    f"Executed {query_name} {progress_label} "
+                    f"iteration {it:_}/{ITERATIONS:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                ),
+            )
+            if not ok:
+                failed_queries += 1
 
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "
-                        f"iteration {it:_}/{ITERATIONS:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+        if failed_queries:
+            _LOGGER.warning(
+                f"ClickBench select completed on {self.db.name} with {failed_queries:_} failed "
+                f"{'queries' if failed_queries != 1 else 'query'}"
+            )
 
         _LOGGER.info(f"Executed {len(queries):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds")

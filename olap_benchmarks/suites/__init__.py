@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import polars as pl
 from pydantic import BaseModel, Field
@@ -160,17 +160,62 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
         *,
         result_status: StepResultStatus,
         reason: str,
+        start_iteration: int = 1,
     ) -> None:
         if result_status not in ("skipped", "unsupported"):
             raise ValueError(f"Skipped query steps cannot use result_status={result_status!r}")
 
-        for iteration in range(1, iterations + 1):
+        for iteration in range(start_iteration, iterations + 1):
             self.db.record_skipped_query_step(
                 query_name=query_name,
                 iteration=iteration,
                 reason=reason,
                 result_status=result_status,
             )
+
+    def execute_query_with_isolation(
+        self,
+        *,
+        query_name: str,
+        iterations: int,
+        query_loader: Callable[[], str],
+        fetch_kwargs: Mapping[str, Any] | None,
+        progress_label: str,
+        log_success: Callable[[int, pl.DataFrame, float], None],
+    ) -> bool:
+        failed_iteration: int | None = None
+
+        try:
+            with self.db.query_context(query_name):
+                query = query_loader()
+
+                for iteration in range(1, iterations + 1):
+                    failed_iteration = iteration
+                    df, duration_seconds = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=iteration,
+                        query=query,
+                        fetch_kwargs=fetch_kwargs,
+                    )
+                    log_success(iteration, df, duration_seconds)
+                    failed_iteration = None
+        except Exception as exc:
+            self.db.rollback()
+            start_iteration = 1 if failed_iteration is None else failed_iteration + 1
+            if start_iteration <= iterations:
+                self.record_skipped_query_steps(
+                    query_name,
+                    iterations,
+                    result_status="skipped",
+                    reason=f"query aborted after {type(exc).__name__}: {exc}",
+                    start_iteration=start_iteration,
+                )
+            _LOGGER.exception(
+                f"Failed {query_name} {progress_label} on {self.db.name}; continuing with remaining queries: {exc}"
+            )
+            return False
+
+        return True
 
     def mutate(self) -> None:
         raise NotImplementedError(f"{type(self).__name__} does not support the mutate operation")
