@@ -26,6 +26,12 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       execution mode (in-process vs server), tuning settings, iteration config,
       and cache/cold/warm policy. `RESEARCH.md` makes this a prerequisite for
       public results so future platform and iteration drift are visible.
+      Partially fixed 2026-07-08: new runs now persist `run.metadata` with host
+      OS/arch/memory, Python version, Docker version/context/server platform,
+      execution mode, container image/digest when available, start command, and
+      timing/cache-policy notes. The checked-in published DB was migrated, but
+      existing runs naturally have null metadata until rerun; the site does not
+      surface this metadata yet.
 - [ ] **Verify `db_version` against the running server.** Connector constants
       are still hardcoded (`clickhouse`, `postgres`, `monetdb`, `questdb`,
       `starrocks`, `timescaledb`) and are not checked against `SELECT version()`
@@ -40,10 +46,19 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       M-series Mac, label first-iteration numbers as first-run/lukewarm rather
       than true cold-cache unless the run environment can actually control OS
       caches.
+      Partially fixed 2026-07-08: query/mutation steps now store
+      `iteration_role` (`first_run` for iteration 1, `warm` for later
+      iterations), with backfill for existing steps. Reporting still uses the
+      previous aggregate medians and does not expose warm median/best warm yet.
 - [ ] **Add first-class query status.** Results need explicit `ok`, `timeout`,
       `unsupported`, `wrong_result`, `error`, and `skipped` states. Non-`ok`
       queries should remain in aggregate scoring as missing/penalized instead
       of disappearing from validation or report surfaces.
+      Partially fixed 2026-07-08: query/mutation steps now store
+      `result_status`, existing completed/failed rows were backfilled, disabled
+      time-series mutation steps are recorded as `skipped`, and site timing
+      queries exclude non-`ok` steps. Unsupported/wrong-result statuses still
+      need to be wired into query execution and correctness validation.
 - [ ] **Make local-vs-public run policy explicit.** `RESEARCH.md` recommends a
       stable x86_64 Linux host for clean public comparisons. If the public set
       remains Apple Silicon Docker data, the site should show host and container
@@ -72,6 +87,11 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       time-series mutate run silently lacks all three
       `insert_data_large_10000` iterations (79 mutation steps vs 82 elsewhere).
       A missing step should be recorded as an explicit status.
+      Partially fixed 2026-07-08: configured disabled time-series mutation
+      steps are now written as `result_status='skipped'` instead of omitted.
+      The historical TimescaleDB missing insert iterations still need root-cause
+      analysis during the rerun, and unexpected aborts still need broader
+      per-step fault isolation.
 - [ ] **Add per-query fault isolation for `TpcDs.select()`.** The first failing
       query still aborts the whole 99-query DB run and the enclosing multi-DB
       command; the post-run validation never runs. Verify MonetDB/StarRocks

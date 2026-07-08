@@ -213,6 +213,7 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
 class Clickhouse(Database):
     name: DatabaseName = "clickhouse"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
 
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
 

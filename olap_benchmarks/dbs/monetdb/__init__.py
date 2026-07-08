@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -90,6 +90,7 @@ class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
 class MonetDB(Database):
     name: DatabaseName = "monetdb"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
 
     connection_string: str = MONETDB_CONNECTION_STRING
 

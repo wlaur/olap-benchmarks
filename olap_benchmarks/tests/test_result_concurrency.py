@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..metrics.storage import Storage, WriterMessage, start_writer_process
 from ..results import get_results_engine
-from ..results.models import QueryExecution
+from ..results.models import QueryExecution, Run, RunStep
 from ..settings import setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,5 +89,55 @@ def test_writer_persists_query_execution_rows(tmp_path: Path, monkeypatch: pytes
             assert rows[0].run_id == 123
             assert rows[0].run_step_id == 456
             assert rows[0].query == "select 1"
+    finally:
+        engine.dispose()
+
+
+def test_writer_persists_run_metadata_and_step_status_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLAP_BENCHMARKS_RESULTS_DIRECTORY", str(tmp_path))
+
+    writer = start_writer_process()
+    storage = Storage(writer.queue, writer.result_queue)
+
+    run_id = storage.insert_run(
+        suite="time_series",
+        suite_scale_factor=1,
+        db="duckdb",
+        db_version="test",
+        operation="select",
+        system="test",
+        started_at=datetime(2026, 1, 1, 12, 0, 0),
+        metadata={"execution": {"mode": "in_process"}},
+    )
+    step_id = storage.start_step(
+        run_id=run_id,
+        step_type="query",
+        step_name="query",
+        query_name="q1",
+        iteration=1,
+        started_at=datetime(2026, 1, 1, 12, 0, 1),
+        result_status=None,
+        iteration_role="first_run",
+    )
+    storage.finish_step(
+        step_id=step_id,
+        finished_at=datetime(2026, 1, 1, 12, 0, 2),
+        status="completed",
+        result_status="ok",
+        row_count=1,
+    )
+    writer.close()
+
+    engine = get_results_engine(read_only=False, db_path=tmp_path / "default.db")
+
+    try:
+        with Session(engine) as session:
+            run = session.get_one(Run, run_id)
+            step = session.get_one(RunStep, step_id)
+
+            assert run.metadata_json == {"execution": {"mode": "in_process"}}
+            assert step.result_status == "ok"
+            assert step.iteration_role == "first_run"
+            assert step.row_count == 1
     finally:
         engine.dispose()

@@ -17,6 +17,13 @@ from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
+from ..run_metadata import (
+    ExecutionMode,
+    StepResultStatus,
+    build_run_metadata,
+    classify_iteration_role,
+    classify_step_result_status,
+)
 from ..settings import (
     REPO_ROOT,
     SETTINGS,
@@ -44,6 +51,7 @@ class Database(BaseModel, ABC):
 
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
+    container_image: ClassVar[str | None] = None
 
     current_query_name: str | None = None
     _current_suite: SuiteName | None = None
@@ -53,6 +61,7 @@ class Database(BaseModel, ABC):
     _result_storage: Storage | None = None
     _run_id: int | None = None
     _active_step_ids: list[int] = []
+    _last_start_command: str | None = None
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
@@ -115,6 +124,12 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def start(self) -> str | None: ...
 
+    @property
+    def execution_mode(self) -> ExecutionMode:
+        if self.container_image is None:
+            return "in_process"
+        return "container"
+
     def docker_run_command(
         self,
         image: str,
@@ -150,6 +165,7 @@ class Database(BaseModel, ABC):
         query_name: str | None = None,
         iteration: int | None = None,
         table_name: str | None = None,
+        result_status: StepResultStatus | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
         return self.result_storage.start_step(
@@ -160,6 +176,8 @@ class Database(BaseModel, ABC):
             iteration=iteration,
             table_name=table_name,
             started_at=datetime.now(UTC).replace(tzinfo=None),
+            result_status=result_status,
+            iteration_role=classify_iteration_role(iteration) if step_type in ("query", "mutation") else None,
             metadata=metadata,
         )
 
@@ -167,15 +185,20 @@ class Database(BaseModel, ABC):
         self,
         step_id: int,
         status: RunStatus,
+        step_type: LiteralStepType,
         row_count: int | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
+        result_status: StepResultStatus | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         self.result_storage.finish_step(
             step_id=step_id,
             finished_at=datetime.now(UTC).replace(tzinfo=None),
             status=status,
+            result_status=result_status
+            if result_status is not None
+            else classify_step_result_status(step_type=step_type, status=status, error_type=error_type),
             row_count=row_count,
             error_type=error_type,
             error_message=error_message,
@@ -251,6 +274,7 @@ class Database(BaseModel, ABC):
             self._finish_step(
                 step_id=step_id,
                 status="failed",
+                step_type="phase",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -258,7 +282,7 @@ class Database(BaseModel, ABC):
         finally:
             self._pop_active_step(step_id)
 
-        self._finish_step(step_id=step_id, status="completed")
+        self._finish_step(step_id=step_id, status="completed", step_type="phase")
 
     @contextmanager
     def query_context(self, query_name: str) -> Generator[None]:
@@ -273,19 +297,23 @@ class Database(BaseModel, ABC):
         self,
         step_id: int,
         status: RunStatus,
+        step_type: LiteralStepType,
         row_count: int | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
         duration_ms: float | None = None,
+        result_status: StepResultStatus | None = None,
     ) -> None:
         metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
 
         self._finish_step(
             step_id=step_id,
             status=status,
+            step_type=step_type,
             row_count=row_count,
             error_type=error_type,
             error_message=error_message,
+            result_status=result_status,
             metadata=metadata,
         )
 
@@ -311,6 +339,7 @@ class Database(BaseModel, ABC):
             self._finish_timed_step(
                 step_id=step_id,
                 status="failed",
+                step_type="mutation",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -321,7 +350,27 @@ class Database(BaseModel, ABC):
         self._finish_timed_step(
             step_id=step_id,
             status="completed",
+            step_type="mutation",
             duration_ms=1_000 * duration_seconds,
+        )
+
+    def record_skipped_mutation_step(self, query_name: str, iteration: int, table_name: str, reason: str) -> None:
+        metadata = {"skip_reason": reason, "duration_ms": 0.0}
+        step_id = self._start_step(
+            "mutation",
+            "mutation",
+            query_name=query_name,
+            iteration=iteration,
+            table_name=table_name,
+            result_status="skipped",
+            metadata=metadata,
+        )
+        self._finish_step(
+            step_id=step_id,
+            status="completed",
+            step_type="mutation",
+            result_status="skipped",
+            metadata=metadata,
         )
 
     def execute_query_iteration(
@@ -344,6 +393,7 @@ class Database(BaseModel, ABC):
             self._finish_timed_step(
                 step_id=step_id,
                 status="failed",
+                step_type="query",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -354,6 +404,7 @@ class Database(BaseModel, ABC):
         self._finish_timed_step(
             step_id=step_id,
             status="completed",
+            step_type="query",
             row_count=df.shape[0],
             duration_ms=1_000 * duration_seconds,
         )
@@ -534,6 +585,11 @@ class Database(BaseModel, ABC):
             operation=operation,
             system=SETTINGS.system,
             started_at=started_at,
+            metadata=build_run_metadata(
+                execution_mode=self.execution_mode,
+                container_image=self.container_image,
+                start_command=self._last_start_command,
+            ),
         )
 
         metric_process, stop_event = start_metric_sampler(

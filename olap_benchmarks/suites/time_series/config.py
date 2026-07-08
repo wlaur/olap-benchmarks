@@ -652,6 +652,14 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         if skipped_steps:
             skipped_names = ", ".join(step.name for step in skipped_steps)
             _LOGGER.info(f"Skipping {len(skipped_steps):_} mutation steps for {self.db.name}: {skipped_names}")
+            for step in skipped_steps:
+                for iteration in range(1, MUTATE_ITERATIONS + 1):
+                    self.db.record_skipped_mutation_step(
+                        query_name=step.name,
+                        iteration=iteration,
+                        table_name=step.table,
+                        reason=f"{self.db.name} disables this mutation step",
+                    )
 
         if not steps:
             _LOGGER.info(f"No mutation steps enabled for {self.name} on {self.db.name}")

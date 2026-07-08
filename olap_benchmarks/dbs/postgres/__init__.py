@@ -435,6 +435,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
 class Postgres(Database):
     name: DatabaseName = "postgres"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 

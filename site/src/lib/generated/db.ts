@@ -65,6 +65,7 @@ export type Run = {
   finished_at: ColumnType<Date, Date | string, Date | string> | null
   error_type: string | null
   error_message: string | null
+  metadata: Json | null
 }
 
 export type RunInsertable = Insertable<Run>
@@ -103,6 +104,8 @@ export type RunStep = {
   error_type: string | null
   error_message: string | null
   metadata: Json | null
+  result_status: string | null
+  iteration_role: string | null
 }
 
 export type RunStepInsertable = Insertable<RunStep>

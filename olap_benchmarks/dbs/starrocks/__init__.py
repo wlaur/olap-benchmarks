@@ -5,7 +5,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -197,6 +197,7 @@ class StarRocksTimeSeries(TimeSeries["StarRocks"]):
 class StarRocks(Database):
     name: DatabaseName = "starrocks"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
 
     connection_string: str = STARROCKS_CONNECTION_STRING
 

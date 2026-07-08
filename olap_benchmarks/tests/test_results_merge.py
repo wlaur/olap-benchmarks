@@ -36,6 +36,7 @@ def _insert_run_tree(
         system="test-system",
         status=status,
         started_at=started_at or datetime(2026, 1, 1),
+        metadata_json={"source": db},
     )
     session.add(run)
     session.commit()
@@ -47,6 +48,8 @@ def _insert_run_tree(
         query_name="q1",
         started_at=datetime(2026, 1, 1),
         status=status,
+        result_status="ok" if status == "completed" else "error",
+        iteration_role="first_run",
     )
     session.add(step)
     session.commit()
@@ -171,6 +174,19 @@ def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
     assert _query(dest, "select count(*) from run_step")[0][0] == 2
     assert _query(dest, "select count(*) from run_metric")[0][0] == 2
     assert _query(dest, "select count(*) from query_execution")[0][0] == 2
+
+
+def test_merge_preserves_run_metadata_and_step_status_fields(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    _populate(source, db="monetdb")
+
+    merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert _query(dest, """select "metadata"->>'source' from run""") == [("monetdb",)]
+    assert _query(dest, "select result_status, iteration_role from run_step") == [("ok", "first_run")]
 
 
 def test_merge_keeps_different_suite_scale_factors(tmp_path: Path) -> None:

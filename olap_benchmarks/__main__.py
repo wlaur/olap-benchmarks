@@ -64,6 +64,7 @@ app.command(results_app)
 
 def _start_db(db_instance: "Database") -> None:
     cmd = db_instance.start
+    db_instance._last_start_command = cmd
     if cmd is not None:
         _stop_db(db_instance)
         _LOGGER.info(f"Starting {db_instance.name}: {cmd}")

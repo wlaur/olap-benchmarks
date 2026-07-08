@@ -131,7 +131,8 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
             started_at = s.started_at,
             finished_at = s.finished_at,
             error_type = s.error_type,
-            error_message = s.error_message
+            error_message = s.error_message,
+            "metadata" = s."metadata"
         from src.run s
         join matched_run m on s.id = m.src_id
         where d.id = m.dest_id
@@ -158,9 +159,9 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
     con.execute(
         """
         insert into run (id, suite, suite_scale_factor, db, db_version, operation, system, status,
-                         started_at, finished_at, error_type, error_message)
+                         started_at, finished_at, error_type, error_message, "metadata")
         select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.operation, s.system, s.status,
-               s.started_at, s.finished_at, s.error_type, s.error_message
+               s.started_at, s.finished_at, s.error_type, s.error_message, s."metadata"
         from src.run s
         join run_map m on s.id = m.src_id
         join unmatched_source_run u on s.id = u.id
@@ -170,9 +171,11 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
     con.execute(
         """
         insert into run_step (id, run_id, step_type, step_name, query_name, iteration, table_name,
-                              started_at, finished_at, status, row_count, error_type, error_message, "metadata")
+                              started_at, finished_at, status, result_status, iteration_role,
+                              row_count, error_type, error_message, "metadata")
         select sm.new_id, rm.new_id, s.step_type, s.step_name, s.query_name, s.iteration, s.table_name,
-               s.started_at, s.finished_at, s.status, s.row_count, s.error_type, s.error_message, s."metadata"
+               s.started_at, s.finished_at, s.status, s.result_status, s.iteration_role,
+               s.row_count, s.error_type, s.error_message, s."metadata"
         from src.run_step s
         join run_map rm on s.run_id = rm.src_id
         join step_map sm on s.id = sm.src_id

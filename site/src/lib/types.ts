@@ -33,6 +33,16 @@ export interface QuerySummary {
 
 export type RunStatus = "running" | "completed" | "failed"
 
+export type StepResultStatus =
+  | "ok"
+  | "timeout"
+  | "unsupported"
+  | "wrong_result"
+  | "error"
+  | "skipped"
+
+export type IterationRole = "first_run" | "warm" | "steady_state"
+
 export interface QueryCoverage {
   run_id: number
   db: string

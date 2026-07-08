@@ -99,6 +99,7 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 class QuestDB(Database):
     name: DatabaseName = "questdb"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 
