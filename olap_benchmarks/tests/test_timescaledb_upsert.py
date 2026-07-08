@@ -46,6 +46,20 @@ def test_timescaledb_time_series_tables_have_no_primary_keys() -> None:
     assert suite.get_not_null("data_large") == ["time", "metric_name"]
 
 
+def test_timescaledb_time_series_marks_wide_export_shape_unsupported() -> None:
+    suite = TimescaleTimeSeries.model_construct(
+        db=FakeTimescaleDB(FakeConnection()),
+        name="time_series",
+        scale_factor=1,
+    )
+
+    assert suite.query_skip("large_23_batch_export") == (
+        "unsupported",
+        "query requires wide-row export shape, but this database stores data_large as EAV",
+    )
+    assert suite.query_skip("large_09_raw_filtered") is None
+
+
 def test_timescaledb_upsert_uses_on_conflict_instead_of_delete_insert(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

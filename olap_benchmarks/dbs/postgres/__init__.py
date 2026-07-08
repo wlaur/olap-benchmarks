@@ -10,6 +10,7 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
+from ...run_metadata import StepResultStatus
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
@@ -307,6 +308,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
     # large_* select queries and *_data_large_* mutation steps. The EAV insert
     # code path is still wired up so re-enabling is just emptying this set.
     SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
+    UNSUPPORTED_EAV_QUERIES: ClassVar[frozenset[str]] = frozenset({"large_23_batch_export"})
 
     # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
     # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch. Each
@@ -338,6 +340,16 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
             if query_name.startswith(f"{size}_"):
                 return False
         return True
+
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        skipped = super().query_skip(query_name)
+        if skipped is not None:
+            return skipped
+
+        if query_name in self.UNSUPPORTED_EAV_QUERIES:
+            return ("unsupported", "query requires wide-row export shape, but this database stores data_large as EAV")
+
+        return None
 
     def index_tables(self) -> None:
         for table_name in get_time_series_input_files(self.scale_factor):

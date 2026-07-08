@@ -150,7 +150,7 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["time", "time_", "max(time)"]}
+        return {"time_columns": ["time", "time_", "max(time)", "hr", "d"]}
 
     def _column_codec(self, name: str, dtype: pl.DataType | type[pl.DataType]) -> str:
         if name == "time":

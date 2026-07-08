@@ -12,6 +12,7 @@ import numpy as np
 import polars as pl
 
 from ...dbs import Database
+from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
     SETTINGS,
@@ -531,17 +532,24 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return True
 
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        if self.include_query(query_name):
+            return None
+        return ("skipped", "query excluded by suite/database")
+
     def select(self) -> None:
         t0 = perf_counter()
         failed_queries = 0
         for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
             progress_label = f"({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_})"
-            if not self.include_query(query_name):
+            skip = self.query_skip(query_name)
+            if skip is not None:
+                result_status, reason = skip
                 self.record_skipped_query_steps(
                     query_name,
                     iterations,
-                    result_status="skipped",
-                    reason="query excluded by suite/database",
+                    result_status=result_status,
+                    reason=reason,
                 )
                 continue
 
