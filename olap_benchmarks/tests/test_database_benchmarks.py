@@ -182,7 +182,7 @@ def test_database_benchmarks_resolves_all_suites() -> None:
 
     benchmarks = db.benchmarks
 
-    assert set(benchmarks) == set(get_args(SuiteName))
+    assert set(benchmarks) == set(get_args(SuiteName)) - {"jsonbench"}
     assert benchmarks["time_series"].db is db
     assert benchmarks["time_series"].scale_factor == 1
     assert benchmarks["tpc_h"].scale_factor == 10
@@ -220,8 +220,16 @@ def test_time_series_restricts_supported_scale_factors() -> None:
         resolve_suite_scale_factor("time_series", 2)
 
 
+def test_jsonbench_restricts_supported_scale_factors() -> None:
+    assert resolve_suite_scale_factor("jsonbench") == 10
+
+    with pytest.raises(ValueError, match="supports scale factors: 10"):
+        resolve_suite_scale_factor("jsonbench", 100)
+
+
 def test_all_suite_scale_factor_resolution_fans_out_time_series() -> None:
     assert resolve_suite_scale_factors("time_series", include_all_supported=True) == (1, 10)
+    assert resolve_suite_scale_factors("jsonbench", include_all_supported=True) == (10,)
     assert resolve_suite_scale_factors("tpc_h", include_all_supported=True) == (10, 50)
     assert resolve_suite_scale_factors("clickbench", 10, allow_fixed_default=True) == (1,)
 

@@ -231,6 +231,10 @@ def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None
             from .clickbench.config import prepare_data as prepare_static_data
 
             return prepare_static_data
+        case "jsonbench":
+            from .jsonbench.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
         case "time_series":
             from .time_series.config import prepare_data as prepare_scaled_data
 

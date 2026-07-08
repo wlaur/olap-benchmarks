@@ -20,7 +20,7 @@ DatabaseName = Literal[
     "starrocks",
 ]
 
-SuiteName = Literal["rtabench", "time_series", "clickbench", "kaggle_airbnb", "tpc_h", "tpc_ds"]
+SuiteName = Literal["rtabench", "time_series", "clickbench", "jsonbench", "kaggle_airbnb", "tpc_h", "tpc_ds"]
 Operation = Literal["populate", "select", "mutate"]
 Revision = Annotated[str, "Results database revision"]
 
@@ -34,6 +34,7 @@ SUITE_DISPLAY_ORDER: tuple[SuiteName, ...] = (
     "time_series",
     "rtabench",
     "clickbench",
+    "jsonbench",
     "kaggle_airbnb",
     "tpc_h",
     "tpc_ds",
@@ -43,26 +44,30 @@ DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
     "rtabench": 1,
     "time_series": 1,
     "clickbench": 1,
+    "jsonbench": 10,
     "kaggle_airbnb": 1,
     "tpc_h": 10,
     "tpc_ds": 1,
 }
 
 TIME_SERIES_SCALE_FACTORS = (1, 10)
+JSONBENCH_SCALE_FACTORS = (10,)
 TPCH_SCALE_FACTORS = (10, 50)
 
 ALL_SUITE_SCALE_FACTORS: dict[SuiteName, tuple[int, ...]] = {
     suite: (scale_factor,) for suite, scale_factor in DEFAULT_SUITE_SCALE_FACTORS.items()
 }
 ALL_SUITE_SCALE_FACTORS["time_series"] = TIME_SERIES_SCALE_FACTORS
+ALL_SUITE_SCALE_FACTORS["jsonbench"] = JSONBENCH_SCALE_FACTORS
 ALL_SUITE_SCALE_FACTORS["tpc_h"] = TPCH_SCALE_FACTORS
 
-SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "tpc_h", "tpc_ds"})
+SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "jsonbench", "tpc_h", "tpc_ds"})
 
 SUITE_LABELS: dict[SuiteName, str] = {
     "rtabench": "RTABench",
     "time_series": "Time Series",
     "clickbench": "ClickBench",
+    "jsonbench": "JSONBench",
     "kaggle_airbnb": "Kaggle Airbnb",
     "tpc_h": "TPC-H",
     "tpc_ds": "TPC-DS",
@@ -108,6 +113,10 @@ def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None
     if suite == "time_series" and resolved_scale_factor not in TIME_SERIES_SCALE_FACTORS:
         valid = ", ".join(str(value) for value in TIME_SERIES_SCALE_FACTORS)
         raise ValueError(f"Suite time_series supports scale factors: {valid}")
+
+    if suite == "jsonbench" and resolved_scale_factor not in JSONBENCH_SCALE_FACTORS:
+        valid = ", ".join(str(value) for value in JSONBENCH_SCALE_FACTORS)
+        raise ValueError(f"Suite jsonbench supports scale factors: {valid}")
 
     return resolved_scale_factor
 
