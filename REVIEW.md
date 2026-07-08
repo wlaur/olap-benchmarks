@@ -59,8 +59,11 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       caches.
       Partially fixed 2026-07-08: query/mutation steps now store
       `iteration_role` (`first_run` for iteration 1, `warm` for later
-      iterations), with backfill for existing steps. Reporting still uses the
-      previous aggregate medians and does not expose warm median/best warm yet.
+      iterations), with backfill for existing steps. Site scoring and per-query
+      latency now use warm/steady-state medians when available, with first-run,
+      all-iteration median, and best-warm values exposed in query details.
+      Caveat: true cold-cache measurement still requires a controlled public
+      benchmark host; local macOS first iterations remain first-run/lukewarm.
 - [ ] **Add first-class query status.** Results need explicit `ok`, `timeout`,
       `unsupported`, `wrong_result`, `error`, and `skipped` states. Non-`ok`
       queries should remain in aggregate scoring as missing/penalized instead

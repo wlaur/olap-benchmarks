@@ -218,13 +218,24 @@ export async function fetchRunSummaries(
       epochSeconds(eb.ref("latest_runs.run_finished_at"), eb.ref("latest_runs.run_started_at")).as(
         "run_duration_s",
       ),
-      sql<number | null>`median(
-          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
-        ) FILTER (
-          WHERE ${eb.ref("run_step.step_type")} = 'query'
-            AND ${eb.ref("run_step.status")} = 'completed'
-            AND ${eb.ref("run_step.result_status")} = 'ok'
-            AND ${eb.ref("run_step.finished_at")} IS NOT NULL
+      sql<number | null>`coalesce(
+          median(
+            EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
+          ) FILTER (
+            WHERE ${eb.ref("run_step.step_type")} = 'query'
+              AND ${eb.ref("run_step.status")} = 'completed'
+              AND ${eb.ref("run_step.result_status")} = 'ok'
+              AND ${eb.ref("run_step.iteration_role")} in ('warm', 'steady_state')
+              AND ${eb.ref("run_step.finished_at")} IS NOT NULL
+          ),
+          median(
+            EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
+          ) FILTER (
+            WHERE ${eb.ref("run_step.step_type")} = 'query'
+              AND ${eb.ref("run_step.status")} = 'completed'
+              AND ${eb.ref("run_step.result_status")} = 'ok'
+              AND ${eb.ref("run_step.finished_at")} IS NOT NULL
+          )
         )`.as("median_query_duration_s"),
       sql<number>`cast(
           count(${eb.ref("run_step.id")}) FILTER (
@@ -342,25 +353,36 @@ async function fetchStepSummaries(
   return withLatestRuns(db, { system, suite, suiteScaleFactor, operations: [operation] })
     .selectFrom("run_step")
     .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
-    .select((eb) => [
-      eb.ref("run_step.query_name").$notNull().as("query_name"),
-      eb.ref("latest_runs.db_label").as("db"),
-      eb.ref("latest_runs.db").as("db_name"),
-      eb.ref("latest_runs.db_version").as("db_version"),
-      sql<number>`median(
-          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
-        )`.as("median_duration_s"),
-      sql<number>`avg(
-          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
-        )`.as("avg_duration_s"),
-      sql<number>`min(
-          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
-        )`.as("min_duration_s"),
-      sql<number>`max(
-          EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
-        )`.as("max_duration_s"),
-      sql<number>`cast(count(*) as integer)`.as("iterations"),
-    ])
+    .select((eb) => {
+      const duration = sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))`
+      const warm = sql`${eb.ref("run_step.iteration_role")} in ('warm', 'steady_state')`
+      const firstRun = sql`${eb.ref("run_step.iteration_role")} = 'first_run'`
+
+      return [
+        eb.ref("run_step.query_name").$notNull().as("query_name"),
+        eb.ref("latest_runs.db_label").as("db"),
+        eb.ref("latest_runs.db").as("db_name"),
+        eb.ref("latest_runs.db_version").as("db_version"),
+        sql<number>`coalesce(median(${duration}) filter (where ${warm}), median(${duration}))`.as(
+          "median_duration_s",
+        ),
+        sql<number | null>`min(${duration}) filter (where ${firstRun})`.as("first_run_duration_s"),
+        sql<number | null>`median(${duration}) filter (where ${warm})`.as("warm_median_duration_s"),
+        sql<number | null>`min(${duration}) filter (where ${warm})`.as("best_warm_duration_s"),
+        sql<number>`median(${duration})`.as("all_iterations_median_duration_s"),
+        sql<number>`coalesce(avg(${duration}) filter (where ${warm}), avg(${duration}))`.as(
+          "avg_duration_s",
+        ),
+        sql<number>`coalesce(min(${duration}) filter (where ${warm}), min(${duration}))`.as(
+          "min_duration_s",
+        ),
+        sql<number>`coalesce(max(${duration}) filter (where ${warm}), max(${duration}))`.as(
+          "max_duration_s",
+        ),
+        sql<number>`cast(count(*) as integer)`.as("iterations"),
+        sql<number>`cast(count(*) filter (where ${warm}) as integer)`.as("warm_iterations"),
+      ]
+    })
     .where("latest_runs.run_rank", "=", 1)
     .where("run_step.step_type", "=", stepType)
     .where("run_step.status", "=", "completed")

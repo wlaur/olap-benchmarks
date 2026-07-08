@@ -119,10 +119,15 @@ export function buildQueryComparisonRows(
         byDatabase[row.db] = row.median_duration_s
         statsByDatabase[row.db] = {
           median_duration_s: row.median_duration_s,
+          first_run_duration_s: row.first_run_duration_s,
+          warm_median_duration_s: row.warm_median_duration_s,
+          best_warm_duration_s: row.best_warm_duration_s,
+          all_iterations_median_duration_s: row.all_iterations_median_duration_s,
           avg_duration_s: row.avg_duration_s,
           min_duration_s: row.min_duration_s,
           max_duration_s: row.max_duration_s,
           iterations: row.iterations,
+          warm_iterations: row.warm_iterations,
         }
       }
 
