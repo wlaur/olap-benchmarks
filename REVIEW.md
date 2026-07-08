@@ -29,6 +29,7 @@ roadmap from `RESEARCH.md`.
       `OLAP_BENCHMARKS_SYSTEM=macbook-m4-pro` value and then regenerate the
       published DB. The rerun should also live-confirm each engine's runtime
       version query and the bumped image/package pins.
+
 ## 2. Correctness And Validation
 
 - [ ] **Investigate/fix divergent query results, then rerun.**
@@ -40,6 +41,10 @@ roadmap from `RESEARCH.md`.
       | time_series | `*_19_null_gap_detection` | TimescaleDB differs materially; ClickHouse is also off by 1-2 rows |
       | time_series | `*_09/22_raw_filtered`, `large_23_batch_export` | TimescaleDB is short by dozens |
       | time_series | `*_06_daily_resample` | ClickHouse and TimescaleDB disagree on date-bucket boundaries |
+
+      Partially fixed 2026-07-08: ClickBench Q28 now uses `$1` replacement
+      backreferences for MonetDB and StarRocks; the published row counts still
+      need the final rerun.
 
       QuestDB's ClickBench rewrites still deserve value-level checks even though
       their published row counts match.
