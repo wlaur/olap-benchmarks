@@ -35,6 +35,8 @@ from .results.validation import (
 )
 from .settings import (
     MAIN_PROCESS_TITLE,
+    ROW_STORE_DATABASES,
+    ROW_STORE_OPTIONAL_SUITE_NAMES,
     SETTINGS,
     DatabaseArg,
     DatabaseName,
@@ -126,9 +128,8 @@ def _check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
         )
 
 
-@app.command
-def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
-    """Generate input data files for a benchmark suite (e.g. Parquet files)."""
+def _resolve_suite_scale_factor_pairs(suite: SuiteArg, scale_factor: int | None) -> list[tuple[SuiteName, int]]:
+    suite_scale_factor_pairs: list[tuple[SuiteName, int]] = []
     for suite_name in resolve_suites(suite):
         for resolved_scale_factor in resolve_suite_scale_factors(
             suite_name,
@@ -136,13 +137,63 @@ def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
             include_all_supported=suite == "all",
             allow_fixed_default=suite == "all",
         ):
-            _LOGGER.info(f"Preparing data for {suite_name} scale factor {resolved_scale_factor}")
-            try:
-                get_suite_preparer(suite_name, resolved_scale_factor)()
-            except ManualPreparationRequired as exc:
-                if suite != "all":
-                    raise SystemExit(str(exc)) from exc
-                _LOGGER.warning(f"Skipping {suite_name}: {exc}")
+            suite_scale_factor_pairs.append((suite_name, resolved_scale_factor))
+    return suite_scale_factor_pairs
+
+
+def _should_skip_default_benchmark_pair(db_name: DatabaseName, suite_name: SuiteName, suite_arg: SuiteArg) -> bool:
+    return suite_arg == "all" and db_name in ROW_STORE_DATABASES and suite_name in ROW_STORE_OPTIONAL_SUITE_NAMES
+
+
+def _resolve_benchmark_plan(
+    db: DatabaseArg,
+    suite: SuiteArg,
+    scale_factor: int | None,
+    omit: list[DatabaseName] | None = None,
+) -> list[tuple[DatabaseName, SuiteName, int]]:
+    omitted = set(omit or [])
+    suite_scale_factor_pairs = _resolve_suite_scale_factor_pairs(suite, scale_factor)
+    plan: list[tuple[DatabaseName, SuiteName, int]] = []
+
+    for db_name in resolve_dbs(db):
+        if db_name in omitted:
+            continue
+
+        for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
+            if _should_skip_default_benchmark_pair(db_name, suite_name, suite):
+                continue
+            plan.append((db_name, suite_name, resolved_scale_factor))
+
+    return plan
+
+
+def _unique_suite_scale_factor_pairs(
+    plan: list[tuple[DatabaseName, SuiteName, int]],
+) -> list[tuple[SuiteName, int]]:
+    seen: set[tuple[SuiteName, int]] = set()
+    pairs: list[tuple[SuiteName, int]] = []
+
+    for _, suite_name, resolved_scale_factor in plan:
+        pair = (suite_name, resolved_scale_factor)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        pairs.append(pair)
+
+    return pairs
+
+
+@app.command
+def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
+    """Generate input data files for a benchmark suite (e.g. Parquet files)."""
+    for suite_name, resolved_scale_factor in _resolve_suite_scale_factor_pairs(suite, scale_factor):
+        _LOGGER.info(f"Preparing data for {suite_name} scale factor {resolved_scale_factor}")
+        try:
+            get_suite_preparer(suite_name, resolved_scale_factor)()
+        except ManualPreparationRequired as exc:
+            if suite != "all":
+                raise SystemExit(str(exc)) from exc
+            _LOGGER.warning(f"Skipping {suite_name}: {exc}")
 
 
 @app.command
@@ -171,56 +222,46 @@ def benchmark(
     `--scale-factor` selects the suite scale factor. With `suite=all`, fixed-size
     suites keep their default scale factor and scalable suites use the requested
     factor; without `--scale-factor`, suites with configured fan-out run every
-    configured factor.
+    configured factor. With `suite=all`, row-store databases skip optional
+    TPC-H/TPC-DS runs by default; select those suites explicitly to include them.
     """
-    suite_scale_factor_pairs: list[tuple[SuiteName, int]] = []
-    for suite_name in resolve_suites(suite):
-        for resolved_scale_factor in resolve_suite_scale_factors(
-            suite_name,
-            scale_factor,
-            include_all_supported=suite == "all",
-            allow_fixed_default=suite == "all",
-        ):
-            suite_scale_factor_pairs.append((suite_name, resolved_scale_factor))
+    plan = _resolve_benchmark_plan(db, suite, scale_factor, omit)
+    suite_scale_factor_pairs = _unique_suite_scale_factor_pairs(plan)
+
+    if not plan:
+        raise SystemExit("No benchmark runs selected.")
+
     for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
         _check_input_data(suite_name, resolved_scale_factor)
-
-    omitted = set(omit or [])
 
     writer = start_writer_process(revision=revision)
     interrupted = False
 
     try:
-        for db_name in resolve_dbs(db):
-            if db_name in omitted:
-                _LOGGER.info(f"Omitting database {db_name}")
+        for db_name, suite_name, resolved_scale_factor in plan:
+            db_instance = get_databases()[db_name]
+
+            if suite_name not in db_instance.benchmarks:
+                _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
                 continue
-            for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
-                db_instance = get_databases()[db_name]
 
-                if suite_name not in db_instance.benchmarks:
-                    _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
-                    continue
+            _LOGGER.info(f"Benchmarking {suite_name} scale factor {resolved_scale_factor} on {db_name} ({operation})")
+            db_instance._current_suite = suite_name
+            db_instance._current_suite_scale_factor = resolved_scale_factor
+            db_instance.set_queues(writer.queue, writer.result_queue)
 
-                _LOGGER.info(
-                    f"Benchmarking {suite_name} scale factor {resolved_scale_factor} on {db_name} ({operation})"
-                )
-                db_instance._current_suite = suite_name
-                db_instance._current_suite_scale_factor = resolved_scale_factor
-                db_instance.set_queues(writer.queue, writer.result_queue)
+            _start_db(db_instance)
 
-                _start_db(db_instance)
-
-                try:
-                    if operation == "all":
-                        for suite_operation in db_instance.benchmarks[suite_name].supported_operations:
-                            db_instance.benchmark(suite_name, suite_operation, scale_factor=resolved_scale_factor)
-                    else:
-                        db_instance.benchmark(suite_name, operation, scale_factor=resolved_scale_factor)
-                finally:
-                    _stop_db(db_instance)
-                    if cleanup:
-                        _cleanup_db_files(db_name, suite_name, resolved_scale_factor)
+            try:
+                if operation == "all":
+                    for suite_operation in db_instance.benchmarks[suite_name].supported_operations:
+                        db_instance.benchmark(suite_name, suite_operation, scale_factor=resolved_scale_factor)
+                else:
+                    db_instance.benchmark(suite_name, operation, scale_factor=resolved_scale_factor)
+            finally:
+                _stop_db(db_instance)
+                if cleanup:
+                    _cleanup_db_files(db_name, suite_name, resolved_scale_factor)
     except KeyboardInterrupt:
         interrupted = True
         raise

@@ -23,9 +23,11 @@ includes a cross-system comparison panel for the selected suite and scale
 factor. Kaggle Airbnb is now marked as a smoke suite and excluded from the home
 aggregate ranking while staying explorable. RTABench now schedules the
 upstream 1000-series pre-aggregated query variants where db-specific files
-exist and records explicit unsupported steps elsewhere. Remaining blockers are
-public rerun quality, correctness checks, published-data hygiene, and the larger
-suite/engine roadmap from `RESEARCH.md`.
+exist and records explicit unsupported steps elsewhere. The default benchmark
+matrix now keeps row-store TPC-H/TPC-DS runs opt-in while preserving explicit
+low-scale commands. Remaining blockers are public rerun quality, correctness
+checks, published-data hygiene, and the larger suite/engine roadmap from
+`RESEARCH.md`.
 
 ---
 
@@ -100,10 +102,6 @@ suite/engine roadmap from `RESEARCH.md`.
 - [ ] **Add Apache Doris as the next server OLAP engine.** Start with
       ClickBench and JSONBench, then RTABench after query coverage is aligned;
       defer TPC-DS until Docker/load stability is proven.
-- [ ] **Narrow row-store matrix.** Keep PostgreSQL and TimescaleDB as useful
-      row-store/hybrid baselines, but default them to RTABench, custom
-      time-series, JSONBench small/medium, and ClickBench with status handling;
-      treat TPC-H SF10 and TPC-DS SF1 as optional low-scale runs.
 - [ ] **Add JOB only after status handling.** It is the best optimizer-heavy
       follow-up, but unsupported/null statuses need to exist before porting it
       across engines.
@@ -132,6 +130,8 @@ suite/engine roadmap from `RESEARCH.md`.
   client round trip, result transfer, and materialization.
 - Current default SFs: ClickBench 1, Kaggle Airbnb 1, RTABench 1, time-series 1
   (also configured at SF10), TPC-H 10, TPC-DS 1.
+- With `suite=all`, PostgreSQL and TimescaleDB skip optional TPC-H/TPC-DS runs
+  by default; explicit `tpc_h`/`tpc_ds` commands still include those engines.
 - Current published coverage is still the old `macbook-pro-m4` data:
   clickbench SF1 x 7 DBs; kaggle_airbnb/rtabench/time_series SF1 x 6 DBs;
   TPC-H SF10 x 6 DBs; TPC-DS SF1 with DuckDB and ClickHouse selects plus a

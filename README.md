@@ -80,13 +80,15 @@ cd site && bun install && bun run dev
 
 The container is started and stopped automatically. Populate is skipped when
 existing tables already match the expected row counts, so `olap benchmark <db>
-<suite> select` reuses previously loaded data. Examples:
+<suite> select` reuses previously loaded data. With `suite=all`, PostgreSQL and
+TimescaleDB skip optional TPC-H/TPC-DS runs by default; select those suites
+explicitly to include row-store low-scale runs. Examples:
 
 ```bash
-uv run olap benchmark all tpc_h --scale-factor 10  # every db, one suite/scale
-uv run olap benchmark duckdb all                # one db, every suite
+uv run olap benchmark all tpc_h --scale-factor 10  # every db, explicit suite/scale
+uv run olap benchmark duckdb all                # one db, every default suite/scale
 uv run olap benchmark starrocks clickbench select   # re-run only the select queries
-uv run olap benchmark all all --omit questdb    # the full matrix, minus one db
+uv run olap benchmark all all --omit questdb    # the default matrix, minus one db
 ```
 
 To start a database manually (e.g. to poke at loaded data):
