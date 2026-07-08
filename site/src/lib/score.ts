@@ -147,8 +147,8 @@ export function formatScore(score: number): string {
 export const SCORE_EXPLAINER = {
   title: "How the score is calculated",
   body: [
-    "For each query in the suite, we find the fastest database and compare every other database's median time to it as a ratio (a smoothing constant of 10ms is added to both sides to avoid blow-ups on sub-millisecond queries).",
-    "Query medians include every recorded iteration from the latest completed run, including the first iteration.",
+    "For each query in the suite, we find the fastest database and compare every other database's warm median time to it as a ratio (a smoothing constant of 10ms is added to both sides to avoid blow-ups on sub-millisecond queries).",
+    "Query medians use warm or steady-state iterations when available. Queries with only one recorded iteration fall back to the all-iteration median.",
     "The score shown is the geometric mean of these ratios across the suite's query manifest. Missing or unsupported queries are scored as the larger of 10× or 2× the slowest observed ratio for that query.",
     "When the latest attempted select run recorded failed query steps, those failures are shown separately from queries that were never completed or not recorded.",
     "1.00× means the database was the fastest on every query; 2.50× means it was on average 2.5× slower than the fastest per query after any missing-query penalties.",

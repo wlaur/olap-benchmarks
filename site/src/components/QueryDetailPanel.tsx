@@ -183,16 +183,34 @@ export function QueryDetailPanel({
                           Min {formatDurationSeconds(entry.stats.min_duration_s)}
                         </p>
                         <p className="text-accent-300">
-                          Median {formatDurationSeconds(entry.stats.median_duration_s)}
+                          Warm median {formatDurationSeconds(entry.stats.median_duration_s)}
                         </p>
                         <p className="text-slate-300">
                           Max {formatDurationSeconds(entry.stats.max_duration_s)}
                         </p>
                         <p className="text-slate-400">
-                          Median / max{" "}
+                          First run{" "}
+                          {entry.stats.first_run_duration_s === null
+                            ? "—"
+                            : formatDurationSeconds(entry.stats.first_run_duration_s)}
+                        </p>
+                        <p className="text-slate-400">
+                          Best warm{" "}
+                          {entry.stats.best_warm_duration_s === null
+                            ? "—"
+                            : formatDurationSeconds(entry.stats.best_warm_duration_s)}
+                        </p>
+                        <p className="text-slate-500">
+                          All median{" "}
+                          {formatDurationSeconds(entry.stats.all_iterations_median_duration_s)}
+                        </p>
+                        <p className="text-slate-400">
+                          Warm median / max{" "}
                           {(entry.stats.max_duration_s / entry.stats.median_duration_s).toFixed(2)}x
                         </p>
-                        <p className="mt-1 text-slate-500">{entry.stats.iterations} runs</p>
+                        <p className="mt-1 text-slate-500">
+                          {entry.stats.warm_iterations} warm / {entry.stats.iterations} total
+                        </p>
                       </div>
                     )
                   }}

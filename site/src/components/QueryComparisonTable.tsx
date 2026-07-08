@@ -20,10 +20,15 @@ import { InlineDurationBars } from "./InlineDurationBars"
 
 export interface QueryDurationStats {
   median_duration_s: number
+  first_run_duration_s: number | null
+  warm_median_duration_s: number | null
+  best_warm_duration_s: number | null
+  all_iterations_median_duration_s: number
   avg_duration_s: number
   min_duration_s: number
   max_duration_s: number
   iterations: number
+  warm_iterations: number
 }
 
 export interface QueryComparisonRow {
@@ -132,7 +137,7 @@ export function QueryComparisonTable({
         header: "Best",
         meta: {
           tooltip:
-            "Lowest median query time across the selected databases. For each database we take the median of the iterations from its latest completed run for this query, then keep the fastest median.",
+            "Lowest warm median query time across the selected databases. Single-iteration queries fall back to the all-iteration median.",
           tooltipLabel: "Explain best median",
         } satisfies HeaderMeta,
         sortingFn: bestMedianSort,
@@ -147,7 +152,7 @@ export function QueryComparisonTable({
         header: "Gap",
         meta: {
           tooltip:
-            "Slowest median divided by fastest median for this query across the selected databases. 1.0x means a tie. Higher values mean a wider latency gap.",
+            "Slowest warm median divided by fastest warm median for this query across the selected databases. 1.0x means a tie.",
           tooltipLabel: "Explain gap",
         } satisfies HeaderMeta,
         cell: (info) => formatMultiplier(info.getValue()),

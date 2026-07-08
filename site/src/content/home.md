@@ -20,7 +20,7 @@ Coverage is based on completed published runs. QuestDB currently appears only fo
 ### Metrics
 
 - **Populate** — time to create tables and load data
-- **Query latency** — wall-clock time per query, median over all recorded iterations, including the first iteration
+- **Query latency** — wall-clock time per query, warm median when repeated iterations exist; one-iteration queries fall back to their single recorded run
 - **Resources** — CPU, memory, and disk usage sampled throughout each phase
 
 ### Tuning policy
