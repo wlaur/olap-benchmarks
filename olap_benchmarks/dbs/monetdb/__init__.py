@@ -26,7 +26,7 @@ from .utils import get_pymonetdb_connection
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "Dec2025-SP2"
+VERSION = "Dec2025-SP3"
 DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"

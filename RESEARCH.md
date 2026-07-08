@@ -108,7 +108,7 @@ Several pins are already stale enough to matter. Recommended version actions:
 | StarRocks | 4.0.9 | Keep locally if needed for Apple Silicon Docker constraints; use a newer 4.0.x or 4.1.x image for a real x86_64 Linux run. |
 | ClickHouse | 26.1.1.912 | Check current stable/LTS tags before rerunning and update to the latest appropriate 26.x release. |
 | PostgreSQL | 18.3 | Keep for the next full run. PostgreSQL 19 is still beta as of June 2026 and expected later in 2026. |
-| MonetDB | Dec2025-SP2 | Lower priority; update only if a newer service pack is straightforward. |
+| MonetDB | Dec2025-SP3 | Updated to the latest straightforward Dec2025 service-pack baseline before the next run. |
 | Polars | 1.42.1 dependency only | Current enough as a dependency, but it is not yet modeled as an engine. |
 
 The PostgreSQL 19 beta is worth tracking because it includes async I/O,

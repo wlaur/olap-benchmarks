@@ -10,9 +10,10 @@ the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
 preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
 scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
-scale-factor discovery issues. Remaining blockers are public-rerun quality,
-correctness checks, query status/correctness semantics, metadata surfacing,
-published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
+scale-factor discovery issues. The version-bump work now includes MonetDB
+Dec2025-SP3. Remaining blockers are public-rerun quality, correctness checks,
+query status/correctness semantics, metadata surfacing, published-data hygiene,
+and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
