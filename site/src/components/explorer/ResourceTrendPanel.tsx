@@ -10,7 +10,13 @@ import {
   type StepTimeWindow,
 } from "../../lib/resourceTrendTransforms"
 import { METRIC_SAMPLE_RATE_S, type SuiteConfig } from "../../lib/suiteConfig"
-import type { BenchmarkOperation, InsertStep, MetricSample, QueryStep } from "../../lib/types"
+import type {
+  BenchmarkOperation,
+  InsertStep,
+  MetricSample,
+  QueryAnalysisOperation,
+  QueryStep,
+} from "../../lib/types"
 import { ControlChip, QuietButton, SegmentedButton } from "../controls/Control"
 import { DatabaseLegend } from "../DatabaseLegend"
 import { PanelCard } from "../layout/Panel"
@@ -18,12 +24,13 @@ import { MetricTrendChart } from "../MetricTrendChart"
 import { MetaLabel, SectionTitle } from "../Typography"
 
 interface ResourceTrendPanelProps {
-  selectedOperation?: "select" | "mutate"
+  selectedOperation?: QueryAnalysisOperation
   suiteConfig: SuiteConfig
   metricSamples: MetricSample[]
   insertSteps: InsertStep[]
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
+  concurrentSteps: QueryStep[]
   databases: string[]
   isLoading?: boolean
 }
@@ -32,6 +39,7 @@ const OPERATION_LABEL: Record<BenchmarkOperation, string> = {
   populate: "Populate",
   mutate: "Mutate",
   select: "Select",
+  concurrent: "Concurrent",
 }
 
 const MAX_COLLAPSED_STEP_OPTIONS = 12
@@ -44,6 +52,7 @@ export function ResourceTrendPanel({
   insertSteps,
   querySteps,
   mutateSteps,
+  concurrentSteps,
   databases,
   isLoading = false,
 }: ResourceTrendPanelProps) {
@@ -53,7 +62,9 @@ export function ResourceTrendPanel({
 
   const availableOperations = suiteConfig.operations
   const parentOperation: BenchmarkOperation =
-    selectedOperation === "mutate" && availableOperations.includes("mutate") ? "mutate" : "select"
+    selectedOperation && availableOperations.includes(selectedOperation)
+      ? selectedOperation
+      : "select"
 
   const [panelOperation, setPanelOperation] = useState<BenchmarkOperation>(parentOperation)
   // Track whether the user has manually picked an operation inside the panel.
@@ -85,10 +96,19 @@ export function ResourceTrendPanel({
         insertSteps,
         querySteps,
         mutateSteps,
+        concurrentSteps,
         databases,
         suiteConfig.compareQueryNames,
       ),
-    [resolvedOperation, insertSteps, querySteps, mutateSteps, databases, suiteConfig],
+    [
+      resolvedOperation,
+      insertSteps,
+      querySteps,
+      mutateSteps,
+      concurrentSteps,
+      databases,
+      suiteConfig,
+    ],
   )
 
   const availableStepWindows = useMemo(
@@ -99,9 +119,18 @@ export function ResourceTrendPanel({
         insertSteps,
         querySteps,
         mutateSteps,
+        concurrentSteps,
         databases,
       ),
-    [resolvedOperation, metricSamples, insertSteps, querySteps, mutateSteps, databases],
+    [
+      resolvedOperation,
+      metricSamples,
+      insertSteps,
+      querySteps,
+      mutateSteps,
+      concurrentSteps,
+      databases,
+    ],
   )
 
   const stepOptions = useMemo(

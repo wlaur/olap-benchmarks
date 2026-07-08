@@ -43,7 +43,7 @@ The full loop for one suite/db combination:
 # 1. generate or download input data (one-time per suite, see table below)
 uv run olap prepare tpc_h --scale-factor 10
 
-# 2. run the benchmark (populate + select [+ mutate] by default)
+# 2. run the benchmark (populate + select [+ mutate/concurrent] by default)
 uv run olap benchmark clickhouse tpc_h --scale-factor 10
 
 # 3. inspect the results
@@ -73,7 +73,7 @@ cd site && bun install && bun run dev
 
 - `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, or `all`
 - `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
-- `operation`: `populate`, `select`, `mutate`, or `all` (default). `mutate` is only supported by `time_series`.
+- `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
 - `--omit`: skip databases when using `db=all`, e.g. `--omit questdb --omit starrocks`

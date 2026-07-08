@@ -8,11 +8,12 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from multiprocessing import Queue
 from pathlib import Path
+from threading import get_ident
 from time import perf_counter, sleep
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 import polars as pl
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
@@ -46,6 +47,10 @@ _LOGGER = logging.getLogger(__name__)
 LiteralStepType = Literal["phase", "query", "mutation"]
 
 
+def _new_active_step_stacks() -> dict[int, list[int]]:
+    return {}
+
+
 class Database(BaseModel, ABC):
     name: DatabaseName
     version: str
@@ -61,11 +66,11 @@ class Database(BaseModel, ABC):
     _connection: Connection | None = None
     _result_storage: Storage | None = None
     _run_id: int | None = None
-    _active_step_ids: list[int] = []
     _last_start_command: str | None = None
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
+    _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
 
     @property
     def current_suite(self) -> SuiteName:
@@ -117,9 +122,10 @@ class Database(BaseModel, ABC):
 
     @property
     def active_step_id(self) -> int | None:
-        if not self._active_step_ids:
+        stack = self._active_step_ids_by_thread.get(get_ident())
+        if not stack:
             return None
-        return self._active_step_ids[-1]
+        return stack[-1]
 
     @property
     @abstractmethod
@@ -207,19 +213,30 @@ class Database(BaseModel, ABC):
         )
 
     def _push_active_step(self, step_id: int) -> None:
-        self._active_step_ids.append(step_id)
+        thread_id = get_ident()
+        stack = self._active_step_ids_by_thread.get(thread_id)
+        if stack is None:
+            stack = []
+            self._active_step_ids_by_thread[thread_id] = stack
+        stack.append(step_id)
 
     def _pop_active_step(self, step_id: int) -> None:
-        if not self._active_step_ids:
+        thread_id = get_ident()
+        stack = self._active_step_ids_by_thread.get(thread_id)
+        if not stack:
             return
 
-        if self._active_step_ids[-1] == step_id:
-            self._active_step_ids.pop()
+        if stack[-1] == step_id:
+            stack.pop()
+            if not stack:
+                del self._active_step_ids_by_thread[thread_id]
             return
 
-        self._active_step_ids = [
-            active_step_id for active_step_id in self._active_step_ids if active_step_id != step_id
-        ]
+        remaining = [active_step_id for active_step_id in stack if active_step_id != step_id]
+        if remaining:
+            self._active_step_ids_by_thread[thread_id] = remaining
+        else:
+            del self._active_step_ids_by_thread[thread_id]
 
     def bind_query_recorder(self, connection: Connection) -> Connection:
         connection.info["olap_query_recorder"] = self.record_query_execution
@@ -591,7 +608,7 @@ class Database(BaseModel, ABC):
     def benchmark(self, suite: SuiteName, operation: Operation, scale_factor: int | None = None) -> None:
         self._current_suite = suite
         self._current_suite_scale_factor = resolve_suite_scale_factor(suite, scale_factor)
-        self._active_step_ids = []
+        self._active_step_ids_by_thread = {}
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:
@@ -611,6 +628,8 @@ class Database(BaseModel, ABC):
                 benchmark_func = benchmark.select
             case "mutate":
                 benchmark_func = benchmark.mutate
+            case "concurrent":
+                benchmark_func = benchmark.concurrent
             case _:
                 raise ValueError(f"Invalid operation '{operation}'")
 

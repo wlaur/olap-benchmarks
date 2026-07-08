@@ -215,7 +215,7 @@ def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
 def benchmark(
     db: DatabaseArg,
     suite: SuiteArg,
-    operation: Literal["populate", "select", "mutate", "all"] = "all",
+    operation: Literal["populate", "select", "mutate", "concurrent", "all"] = "all",
     revision: Revision = "default",
     cleanup: bool = False,
     omit: list[DatabaseName] | None = None,

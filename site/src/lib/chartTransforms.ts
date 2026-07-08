@@ -10,10 +10,12 @@ export interface OverviewChartRow {
   populate_duration_s: number
   select_duration_s: number
   mutate_duration_s: number
+  concurrent_duration_s: number
   total_duration_s: number
   populate_chart_duration_s: number
   select_chart_duration_s: number
   mutate_chart_duration_s: number
+  concurrent_chart_duration_s: number
 }
 
 export type OverviewOperationVisibility = Record<BenchmarkOperation, boolean>
@@ -32,6 +34,7 @@ export function buildOverviewChartData(
       populate_duration_s: number
       select_duration_s: number
       mutate_duration_s: number
+      concurrent_duration_s: number
     }
   >()
 
@@ -42,6 +45,7 @@ export function buildOverviewChartData(
       populate_duration_s: 0,
       select_duration_s: 0,
       mutate_duration_s: 0,
+      concurrent_duration_s: 0,
     }
 
     existing.db_version = summary.db_version
@@ -51,6 +55,8 @@ export function buildOverviewChartData(
       existing.select_duration_s = summary.run_duration_s
     } else if (summary.operation === "mutate") {
       existing.mutate_duration_s = summary.run_duration_s
+    } else if (summary.operation === "concurrent") {
+      existing.concurrent_duration_s = summary.run_duration_s
     }
 
     summariesByDatabase.set(summary.db, existing)
@@ -65,17 +71,20 @@ export function buildOverviewChartData(
         populate_duration_s: 0,
         select_duration_s: 0,
         mutate_duration_s: 0,
+        concurrent_duration_s: 0,
         total_duration_s: 0,
         populate_chart_duration_s: 0,
         mutate_chart_duration_s: 0,
         select_chart_duration_s: 0,
+        concurrent_chart_duration_s: 0,
       }
     }
 
     const visiblePopulate = visibleOperations.populate ? entry.populate_duration_s : 0
     const visibleSelect = visibleOperations.select ? entry.select_duration_s : 0
     const visibleMutate = visibleOperations.mutate ? entry.mutate_duration_s : 0
-    const totalDuration = visiblePopulate + visibleSelect + visibleMutate
+    const visibleConcurrent = visibleOperations.concurrent ? entry.concurrent_duration_s : 0
+    const totalDuration = visiblePopulate + visibleSelect + visibleMutate + visibleConcurrent
 
     return {
       db: entry.db,
@@ -83,10 +92,12 @@ export function buildOverviewChartData(
       populate_duration_s: entry.populate_duration_s,
       select_duration_s: entry.select_duration_s,
       mutate_duration_s: entry.mutate_duration_s,
+      concurrent_duration_s: entry.concurrent_duration_s,
       total_duration_s: totalDuration,
       populate_chart_duration_s: scaleDurationForChart(visiblePopulate, scaleMode),
       mutate_chart_duration_s: scaleDurationForChart(visibleMutate, scaleMode),
       select_chart_duration_s: scaleDurationForChart(visibleSelect, scaleMode),
+      concurrent_chart_duration_s: scaleDurationForChart(visibleConcurrent, scaleMode),
     }
   })
 }

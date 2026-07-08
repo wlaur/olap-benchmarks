@@ -13,7 +13,7 @@ interface RunMethodologyPanelProps {
   isLoading: boolean
 }
 
-const OPERATION_PREFERENCE = ["select", "mutate", "populate"] as const
+const OPERATION_PREFERENCE = ["select", "concurrent", "mutate", "populate"] as const
 
 export function RunMethodologyPanel({
   operationSummaries,

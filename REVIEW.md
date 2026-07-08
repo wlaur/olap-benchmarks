@@ -127,12 +127,6 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
 - [ ] **Add TSBS/InfluxDB 3 only with a broader time-series push.** TSBS should
       come with ingest, compression, recent-window queries, and concurrent
       read/write behavior; otherwise it is just more suite surface area.
-- [ ] **Add a concurrent time-series mutate+select workload.** The README TODO
-      called for a workload where one writer inserts rows into the large table
-      as quickly as possible while multiple clients run a small fixed set of
-      selects against it. Decide the operation name before changing the CLI,
-      result schema, and site display.
-
 ## 5. Suggested Priority Order
 
 1. Fix known divergent queries and add value-level validation before trusting

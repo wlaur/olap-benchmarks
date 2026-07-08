@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast, get_args
 
 import polars as pl
@@ -154,7 +155,7 @@ def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
 
 
 def test_time_series_suite_declares_mutate_support() -> None:
-    assert TimeSeries.supported_operations == ("populate", "select", "mutate")
+    assert TimeSeries.supported_operations == ("populate", "select", "mutate", "concurrent")
 
 
 def test_rtabench_schedules_preaggregated_upstream_queries() -> None:
@@ -265,6 +266,24 @@ def test_docker_run_command_allows_explicit_platform_override() -> None:
     command = DummyDatabase().docker_run_command("example:latest", platform="linux/amd64")
 
     assert command.startswith("docker run --platform linux/amd64")
+
+
+def test_active_step_stack_is_thread_local() -> None:
+    db = DummyDatabase()
+    db._push_active_step(11)
+
+    def worker() -> tuple[int | None, int | None]:
+        db._push_active_step(22)
+        active_inside_step = db.active_step_id
+        db._pop_active_step(22)
+        return active_inside_step, db.active_step_id
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        assert executor.submit(worker).result() == (22, None)
+
+    assert db.active_step_id == 11
+    db._pop_active_step(11)
+    assert db.active_step_id is None
 
 
 def test_database_benchmark_rejects_unsupported_operation() -> None:

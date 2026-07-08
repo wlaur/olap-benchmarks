@@ -8,7 +8,7 @@
       "default_scale_factor": 1,
       "supported_scale_factors": [1, 10],
       "scale_factor_supported": true,
-      "operations": ["populate", "select", "mutate"],
+      "operations": ["populate", "select", "mutate", "concurrent"],
       "query_name_parser": "time_series",
       "public_role": "benchmark"
     },
