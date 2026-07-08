@@ -37,6 +37,10 @@ export interface QuerySummary {
   warm_iterations: number
 }
 
+export interface CrossSystemQuerySummary extends QuerySummary {
+  system: string
+}
+
 export type RunStatus = "running" | "completed" | "failed"
 
 export type StepResultStatus =
@@ -58,6 +62,12 @@ export interface QueryCoverage {
   failed_query_count: number
   attempted_query_count: number
   completed_query_count: number
+}
+
+export interface CrossSystemQueryCoverage extends QueryCoverage {
+  system: string
+  started_at: string
+  finished_at: string
 }
 
 export type BenchmarkOperation = "populate" | "mutate" | "select"

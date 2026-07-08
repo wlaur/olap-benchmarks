@@ -18,9 +18,10 @@ consensus outliers as `wrong_result`, and query steps now record bounded answer
 hashes for value-level validation. Shared-revision migrations now reject
 unknown legacy suite names instead of guessing scale factors, dedupe duplicate
 natural run keys before adding the unique index, clean dependent orphan rows
-from deduped runs, and implement the scale-factor downgrade. Remaining blockers
-are public rerun quality, correctness checks, published-data hygiene, and the
-larger suite/engine roadmap from `RESEARCH.md`.
+from deduped runs, and implement the scale-factor downgrade. The explorer now
+includes a cross-system comparison panel for the selected suite and scale
+factor. Remaining blockers are public rerun quality, correctness checks,
+published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
@@ -77,9 +78,6 @@ larger suite/engine roadmap from `RESEARCH.md`.
 
 ## 3. Dimensions, UI, And Data Hygiene
 
-- [ ] **Cross-system comparison is still absent from the UI.** The data model
-      supports comparing the same `(db, version, suite, SF)` across systems, but
-      every current site view is scoped to one selected system.
 - [ ] **Clean published data after the rerun.** Remove old `macbook-pro-m4`
       runs once `macbook-m4-pro` data is published, delete the 9 shadowed
       duplicate runs, resolve the Postgres TPC-DS populate-only run, and confirm
@@ -126,8 +124,7 @@ larger suite/engine roadmap from `RESEARCH.md`.
 2. Finalize public-run policy and metadata surfacing, then run the full matrix
    within the disk budget and publish `macbook-m4-pro` data.
 3. Clean published-data leftovers and make unexpected missing steps visible.
-4. Finish remaining site/data architecture work: cross-system comparison.
-5. Add JSONBench, then Polars and Doris; handle JOB and TSBS after value-level
+4. Add JSONBench, then Polars and Doris; handle JOB and TSBS after value-level
    checks and status-aware reporting have been exercised on the rerun.
 
 ## Reference Facts
