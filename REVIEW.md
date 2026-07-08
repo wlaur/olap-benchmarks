@@ -75,8 +75,11 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
       where practical.
       Partially fixed 2026-07-08: query steps now record deterministic
       answer hashes for results up to the configured cell limit, and validation
-      compares latest-run hashes after row counts agree. The published data
-      needs the final rerun before these hashes exist across engines.
+      compares latest-run hashes after row counts agree. Answer hashing now
+      canonicalizes equivalent integer widths, float widths, timestamp
+      precision/time zones, and categorical string values before hashing. The
+      published data needs the final rerun before these hashes exist across
+      engines.
 - [ ] **Make unrecorded steps impossible or visible.** TimescaleDB's published
       time-series mutate run silently lacks all three
       `insert_data_large_10000` iterations (79 mutation steps vs 82 elsewhere).
