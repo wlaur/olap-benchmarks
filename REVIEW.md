@@ -244,11 +244,15 @@ hypertables, QuestDB unregistered with a documented reason. Prepare has
 disk-space guards, stray-file rejection, and atomic per-table normalization,
 covered by `test_tpcds_prepare.py`.
 
-- [ ] **`_is_normalized()` only checks `income_band`**
+- [x] **`_is_normalized()` only checks `income_band`**
       (`tpc_ds/config.py:135-137`). A crash mid-normalization (income_band is
       table 10 of 24) leaves later tables unrenamed/uncast, and the rerun then
       skips normalization because the marker table passes. Check all 24 tables
       or write a completion marker after the loop.
+      Fixed 2026-07-08: `_is_normalized()` now checks every TPC-DS table for
+      expected spec renames and normalized decimal widths. Verified with
+      `uv run pyright`, `uv run ruff check ...`, and
+      `uv run pytest olap_benchmarks/tests/test_tpcds_prepare.py`.
 - [ ] **No per-query fault isolation in `TpcDs.select()`**
       (`tpc_ds/config.py:282-304`): the first failing query aborts that db's
       whole 99-query run *and* the enclosing multi-db command

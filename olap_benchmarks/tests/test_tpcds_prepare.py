@@ -78,3 +78,40 @@ def test_tpcds_normalize_removes_tmp_file_after_failure(tmp_path: Path, monkeypa
         tpcds_config._normalize_tpc_ds_parquet(tmp_path)
 
     assert not tmp_file.exists()
+
+
+def test_tpcds_is_normalized_checks_all_renamed_tables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    schemas = {
+        "income_band": tpcds_config.pl.Schema({"ib_income_band_sk": tpcds_config.pl.Int64}),
+        "reason": tpcds_config.pl.Schema({"r_reason_description": tpcds_config.pl.String}),
+    }
+
+    class FakeScan:
+        def __init__(self, schema: tpcds_config.pl.Schema) -> None:
+            self.schema = schema
+
+        def collect_schema(self) -> tpcds_config.pl.Schema:
+            return self.schema
+
+    def fake_scan_parquet(path: Path) -> FakeScan:
+        return FakeScan(schemas[path.stem])
+
+    monkeypatch.setattr(tpcds_config, "TPCDS_TABLES", ("income_band", "reason"))
+    monkeypatch.setattr(tpcds_config.pl, "scan_parquet", fake_scan_parquet)
+
+    assert tpcds_config._is_normalized(tmp_path) is False
+
+
+def test_tpcds_is_normalized_checks_decimal_widths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeScan:
+        def collect_schema(self) -> tpcds_config.pl.Schema:
+            return tpcds_config.pl.Schema({"ss_net_paid": tpcds_config.pl.Decimal(38, 2)})
+
+    def fake_scan_parquet(path: Path) -> FakeScan:
+        _ = path
+        return FakeScan()
+
+    monkeypatch.setattr(tpcds_config, "TPCDS_TABLES", ("store_sales",))
+    monkeypatch.setattr(tpcds_config.pl, "scan_parquet", fake_scan_parquet)
+
+    assert tpcds_config._is_normalized(tmp_path) is False
