@@ -16,8 +16,49 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
+    assert left["answer_hash_version"] == "canonical-v1"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_equivalent_numeric_dtypes() -> None:
+    narrow = pl.DataFrame(
+        {
+            "id": pl.Series([1, 2], dtype=pl.Int32),
+            "count": pl.Series([3, 4], dtype=pl.UInt32),
+            "value": pl.Series([1.5, 2.5], dtype=pl.Float32),
+        }
+    )
+    wide = pl.DataFrame(
+        {
+            "id": pl.Series([1, 2], dtype=pl.Int64),
+            "count": pl.Series([3, 4], dtype=pl.Int64),
+            "value": pl.Series([1.5, 2.5], dtype=pl.Float64),
+        }
+    )
+
+    assert hashing.build_answer_metadata(narrow)["answer_hash"] == hashing.build_answer_metadata(wide)["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_datetimes_to_naive_milliseconds() -> None:
+    utc = pl.DataFrame(
+        {
+            "ts": pl.Series(
+                ["2026-01-01T00:00:00.123456+00:00"],
+                dtype=pl.Datetime("us", time_zone="UTC"),
+            )
+        }
+    )
+    naive_ms = pl.DataFrame(
+        {
+            "ts": pl.Series(
+                ["2026-01-01T00:00:00.123"],
+                dtype=pl.Datetime("ms"),
+            )
+        }
+    )
+
+    assert hashing.build_answer_metadata(utc)["answer_hash"] == hashing.build_answer_metadata(naive_ms)["answer_hash"]
 
 
 def test_answer_metadata_skips_large_results(monkeypatch: pytest.MonkeyPatch) -> None:
