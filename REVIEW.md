@@ -13,9 +13,10 @@ scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
 scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
 The version-bump work now includes MonetDB Dec2025-SP3, the site now surfaces
 run methodology metadata when present, and the home page labels the current
-Apple Silicon public data as development data. Remaining blockers are public
-rerun quality, correctness checks, query status/correctness semantics,
-published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
+Apple Silicon public data as development data. Row-count validation now marks
+consensus outliers as `wrong_result`. Remaining blockers are public rerun
+quality, correctness checks, published-data hygiene, and the larger suite/engine
+roadmap from `RESEARCH.md`.
 
 ---
 
@@ -28,16 +29,6 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       `OLAP_BENCHMARKS_SYSTEM=macbook-m4-pro` value and then regenerate the
       published DB. The rerun should also live-confirm each engine's runtime
       version query and the bumped image/package pins.
-- [ ] **Add first-class query status.** Results need explicit `ok`, `timeout`,
-      `unsupported`, `wrong_result`, `error`, and `skipped` states. Non-`ok`
-      queries should remain in aggregate scoring as missing/penalized instead
-      of disappearing from validation or report surfaces.
-      Partially fixed 2026-07-08: query/mutation steps now store
-      `result_status`, existing completed/failed rows were backfilled, disabled
-      time-series mutation steps are recorded as `skipped`, and site timing
-      queries exclude non-`ok` steps. Suite-excluded query steps are now
-      recorded as `skipped`, and TPC-DS unsupported-list queries are recorded as
-      `unsupported`. `wrong_result` still needs correctness-validation wiring.
 ## 2. Correctness And Validation
 
 - [ ] **Investigate/fix divergent query results, then rerun.**
@@ -118,17 +109,15 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ## 5. Suggested Priority Order
 
-1. Finish query-status semantics: wrong-result wiring, status-aware validation,
-   and broader per-step fault isolation outside TPC-DS.
-2. Fix known divergent queries and add value-level validation before trusting
+1. Fix known divergent queries and add value-level validation before trusting
    the rerun.
-3. Finalize public-run policy and metadata surfacing, then run the full matrix
+2. Finalize public-run policy and metadata surfacing, then run the full matrix
    within the disk budget and publish `macbook-m4-pro` data.
-4. Clean published-data leftovers and make unexpected missing steps visible.
-5. Finish remaining site/data architecture work: cross-system comparison and
+3. Clean published-data leftovers and make unexpected missing steps visible.
+4. Finish remaining site/data architecture work: cross-system comparison and
    shared-revision migration hardening.
-6. Add JSONBench, then Polars and Doris; handle JOB and TSBS after the result
-   status model exists.
+5. Add JSONBench, then Polars and Doris; handle JOB and TSBS after value-level
+   checks and status-aware reporting have been exercised on the rerun.
 
 ## Reference Facts
 
@@ -142,4 +131,6 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
   Postgres populate-only run.
 - Current validation: populate table row counts vs source parquet, then
   cross-engine per-query row counts after select runs within one
-  `(system, suite, scale factor)` scope. There is no value-level comparison.
+  `(system, suite, scale factor)` scope. Consensus row-count outliers are marked
+  as `wrong_result`; ambiguous splits still fail validation without guessing.
+  There is no value-level comparison.

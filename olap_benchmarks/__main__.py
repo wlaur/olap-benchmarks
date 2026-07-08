@@ -235,6 +235,7 @@ def benchmark(
                     system=SETTINGS.system,
                     suite=suite_name,
                     suite_scale_factor=resolved_scale_factor,
+                    mark_wrong_results=True,
                 )
         except RowCountValidationError as exc:
             raise SystemExit(str(exc)) from exc
