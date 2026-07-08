@@ -345,6 +345,13 @@ class TimescaleDB(Postgres):
 
         return " ".join(parts)
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch(
+            "select extversion as version from pg_extension where extname = 'timescaledb'",
+            schema={"version": pl.String},
+        )
+        return str(df.item(0, 0))
+
     def _dml_session_setup(self, con: Connection) -> None:
         # Compressed chunks cap how many tuples a DML transaction may
         # decompress; the mutation benchmarks need that limit lifted.

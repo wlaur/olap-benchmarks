@@ -124,6 +124,26 @@ class BrokenShouldPopulateDatabase(DummyDatabase):
         return {"clickbench": BrokenShouldPopulateSuite}
 
 
+class NoopSelectSuite(BenchmarkSuite["RuntimeVersionDatabase"]):
+    name: SuiteName = "clickbench"
+
+    def populate(self) -> None:
+        raise NotImplementedError
+
+    def select(self) -> None:
+        raise AssertionError("select should not run before result storage is configured")
+
+
+class RuntimeVersionDatabase(DummyDatabase):
+    runtime_version: str | None = None
+
+    def get_runtime_version(self) -> str | None:
+        return self.runtime_version
+
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {"clickbench": NoopSelectSuite}
+
+
 def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
     assert DummySuite.supported_operations == ("populate", "select")
 
@@ -220,6 +240,21 @@ def test_database_benchmark_propagates_should_populate_errors() -> None:
 
     with pytest.raises(RuntimeError, match="schema probe failed"):
         db.benchmark("clickbench", "populate")
+
+    assert db._run_id is None
+
+
+def test_runtime_version_verification_accepts_matching_version() -> None:
+    db = RuntimeVersionDatabase(runtime_version="test build 1")
+
+    db.verify_runtime_version()
+
+
+def test_runtime_version_verification_rejects_mismatched_version_before_recording() -> None:
+    db = RuntimeVersionDatabase(runtime_version="other build")
+
+    with pytest.raises(RuntimeError, match="runtime version does not match pinned version"):
+        db.benchmark("clickbench", "select")
 
     assert db._run_id is None
 
