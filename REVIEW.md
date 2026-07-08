@@ -11,9 +11,10 @@ preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
 scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
 scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
-The version-bump work now includes MonetDB Dec2025-SP3, and the site now
-surfaces run methodology metadata when present. Remaining blockers are
-public-rerun quality, correctness checks, query status/correctness semantics,
+The version-bump work now includes MonetDB Dec2025-SP3, the site now surfaces
+run methodology metadata when present, and the home page labels the current
+Apple Silicon public data as development data. Remaining blockers are public
+rerun quality, correctness checks, query status/correctness semantics,
 published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
@@ -37,11 +38,6 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       queries exclude non-`ok` steps. Suite-excluded query steps are now
       recorded as `skipped`, and TPC-DS unsupported-list queries are recorded as
       `unsupported`. `wrong_result` still needs correctness-validation wiring.
-- [ ] **Make local-vs-public run policy explicit.** `RESEARCH.md` recommends a
-      stable x86_64 Linux host for clean public comparisons. If the public set
-      remains Apple Silicon Docker data, the site should show host and container
-      platform caveats directly.
-
 ## 2. Correctness And Validation
 
 - [ ] **Investigate/fix divergent query results, then rerun.**

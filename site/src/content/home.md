@@ -9,7 +9,9 @@
 
 ## Methodology
 
-All results for a given system (e.g. `macbook-pro-m4`) come from the same machine. Results from different systems are not compared.
+All results for a given system (e.g. `macbook-m4-pro`) come from the same machine. Results from different systems are not compared.
+
+The current public data still contains older local Apple Silicon runs under `macbook-pro-m4`. Treat those as development data: Docker engines ran inside the macOS Docker VM, while DuckDB ran in process. Clean public comparisons should be rerun on a controlled x86_64 Linux host, or clearly labeled with the selected system and per-run methodology metadata.
 
 Coverage is based on completed published runs. QuestDB currently appears only for ClickBench in the published data; RTABench, time-series, and Kaggle Airbnb runs have not been published for it yet, and the TPC suites are not registered for QuestDB.
 
