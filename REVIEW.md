@@ -57,7 +57,14 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
       backreferences for MonetDB and StarRocks; the published row counts still
       need the final rerun. Time-series `operation=all` now runs select before
       mutate so the final rerun records select correctness against the clean
-      populated dataset instead of post-mutation state.
+      populated dataset instead of post-mutation state. Postgres/TimescaleDB
+      EAV time-series queries now anchor row-per-timestamp semantics on
+      `binary_1` before left-joining selected metric values, so null-valued
+      metrics no longer remove scalar, raw, bucket, rolling, rate, or null-gap
+      rows. TimescaleDB marks the all-column `large_23_batch_export` query
+      unsupported because its EAV layout cannot return the same wide-row shape
+      without a static full-table pivot. ClickHouse now normalizes `hr`/`d`
+      bucket aliases on fetch for answer hashing.
 
       QuestDB's ClickBench rewrites still deserve value-level checks even though
       their published row counts match.
