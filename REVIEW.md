@@ -110,11 +110,17 @@ failed-only variants coexist in a scope.
       compared — right as the default, but comparing the same (db, version,
       suite, SF) across systems is a stated goal. Needs an explicit compare
       view; the data model already supports it.
-- [ ] **Row-count validation compares every (db, version) with a completed
+- [x] **Row-count validation compares every (db, version) with a completed
       run, not the latest version per db** (`validation.py:82-88`). An old run
       from a since-fixed version will keep failing validation against fresh
       runs with no way to retire it. Confirm the intent; add a
       same-db-different-version test either way.
+      Fixed 2026-07-08: validation now ranks latest select runs by
+      `(system, suite, scale factor, db)`, retaining `db_version` only as
+      observation metadata. Added tests for stale-version retirement and latest
+      version mismatches. Verified with `uv run pyright`, targeted
+      `uv run ruff check`, and
+      `uv run pytest olap_benchmarks/tests/test_results_validation.py`.
 - [x] **Test gaps on the new dimensions.** Nothing asserts that different
       scale factors or systems are *not* compared by validation
       (`tests/test_results_validation.py` fixtures all use one system and
