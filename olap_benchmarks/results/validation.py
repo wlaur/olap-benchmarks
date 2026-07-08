@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +15,7 @@ class RowCountObservation:
     db: str
     db_version: str
     row_count: int
+    run_step_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,21 @@ def validate_latest_query_row_counts(
 ) -> list[RowCountMismatch]:
     path = _resolve_results_path(revision, db_path)
 
+    return _load_latest_query_row_count_mismatches(
+        path=path,
+        system=system,
+        suite=suite,
+        suite_scale_factor=suite_scale_factor,
+    )
+
+
+def _load_latest_query_row_count_mismatches(
+    *,
+    path: Path,
+    system: str | None,
+    suite: SuiteName | None,
+    suite_scale_factor: int | None,
+) -> list[RowCountMismatch]:
     where_clauses = [
         "r.operation = 'select'",
         "r.status = 'completed'",
@@ -93,6 +110,7 @@ def validate_latest_query_row_counts(
             lr.suite_scale_factor,
             s.query_name,
             s.iteration,
+            s.id as run_step_id,
             lr.db,
             lr.db_version,
             s.row_count
@@ -123,6 +141,7 @@ def validate_latest_query_row_counts(
           qc.suite_scale_factor,
           qc.query_name,
           qc.iteration,
+          qc.run_step_id,
           qc.db,
           qc.db_version,
           qc.row_count
@@ -162,9 +181,10 @@ def validate_latest_query_row_counts(
         observations = grouped.setdefault(key, [])
         observations.append(
             RowCountObservation(
-                db=str(row[5]),
-                db_version=str(row[6]),
-                row_count=int(row[7]),
+                db=str(row[6]),
+                db_version=str(row[7]),
+                row_count=int(row[8]),
+                run_step_id=int(row[5]),
             )
         )
 
@@ -179,6 +199,82 @@ def validate_latest_query_row_counts(
         )
         for (system, suite_name, scale_factor, query_name, iteration), observations in grouped.items()
     ]
+
+
+def _consensus_row_count(mismatch: RowCountMismatch) -> int | None:
+    counts = Counter(observation.row_count for observation in mismatch.observations)
+    if not counts:
+        return None
+
+    highest_count = max(counts.values())
+    consensus_values = [row_count for row_count, count in counts.items() if count == highest_count]
+    if len(consensus_values) != 1 or highest_count == 1:
+        return None
+
+    return consensus_values[0]
+
+
+def _format_wrong_result_message(mismatch: RowCountMismatch, expected_row_count: int) -> str:
+    values = ", ".join(
+        f"{observation.db} {observation.db_version}: {observation.row_count}" for observation in mismatch.observations
+    )
+    return (
+        "Row count differs from latest completed select-run consensus: "
+        f"{mismatch.system} {mismatch.suite} sf{mismatch.suite_scale_factor} "
+        f"{mismatch.query_name} iteration {mismatch.iteration}; "
+        f"expected {expected_row_count}; observed {values}"
+    )
+
+
+def mark_latest_query_row_count_mismatches_as_wrong_results(
+    revision: Revision = "default",
+    db_path: Path | None = None,
+    system: str | None = None,
+    suite: SuiteName | None = None,
+    suite_scale_factor: int | None = None,
+) -> list[RowCountMismatch]:
+    path = _resolve_results_path(revision, db_path)
+    mismatches = _load_latest_query_row_count_mismatches(
+        path=path,
+        system=system,
+        suite=suite,
+        suite_scale_factor=suite_scale_factor,
+    )
+    updates: list[tuple[int, str]] = []
+
+    for mismatch in mismatches:
+        expected_row_count = _consensus_row_count(mismatch)
+        if expected_row_count is None:
+            continue
+
+        message = _format_wrong_result_message(mismatch, expected_row_count)
+        updates.extend(
+            (observation.run_step_id, message)
+            for observation in mismatch.observations
+            if observation.run_step_id is not None and observation.row_count != expected_row_count
+        )
+
+    if not updates:
+        return mismatches
+
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(path), read_only=False)
+    try:
+        for run_step_id, message in updates:
+            con.execute(
+                """
+                update run_step
+                set
+                  result_status = 'wrong_result',
+                  error_type = coalesce(error_type, 'RowCountMismatch'),
+                  error_message = coalesce(error_message, ?)
+                where id = ?
+                """,
+                [message, run_step_id],
+            )
+    finally:
+        con.close()
+
+    return mismatches
 
 
 def format_row_count_mismatches(mismatches: list[RowCountMismatch], limit: int = 20) -> str:
@@ -210,8 +306,14 @@ def assert_latest_query_row_counts(
     system: str | None = None,
     suite: SuiteName | None = None,
     suite_scale_factor: int | None = None,
+    mark_wrong_results: bool = False,
 ) -> None:
-    mismatches = validate_latest_query_row_counts(
+    validate = (
+        mark_latest_query_row_count_mismatches_as_wrong_results
+        if mark_wrong_results
+        else validate_latest_query_row_counts
+    )
+    mismatches = validate(
         revision=revision,
         db_path=db_path,
         system=system,

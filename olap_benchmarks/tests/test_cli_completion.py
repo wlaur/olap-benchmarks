@@ -292,9 +292,11 @@ def test_benchmark_all_uses_suite_supported_operations(
         system: str,
         suite: SuiteName,
         suite_scale_factor: int,
+        mark_wrong_results: bool = False,
     ) -> None:
         assert revision == "default"
         assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
         validated.append((system, suite, suite_scale_factor))
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
@@ -370,9 +372,11 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
         system: str,
         suite: SuiteName,
         suite_scale_factor: int,
+        mark_wrong_results: bool = False,
     ) -> None:
         assert revision == "default"
         assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
         validated.append((suite, suite_scale_factor))
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)

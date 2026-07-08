@@ -30,6 +30,7 @@ def _insert_select_run(
     system: str = "test-system",
     query_name: str = "q1",
     iteration: int = 1,
+    result_status: str | None = "ok",
     started_at: datetime = datetime(2026, 1, 1, 12, 0, 0),
     finished_at: datetime = datetime(2026, 1, 1, 12, 0, 1),
 ) -> None:
@@ -59,6 +60,7 @@ def _insert_select_run(
                     started_at=started_at,
                     finished_at=finished_at,
                     status="completed",
+                    result_status=result_status,
                     row_count=row_count,
                 )
             )
@@ -192,3 +194,51 @@ def test_row_count_validation_reports_latest_version_mismatch(tmp_path: Path) ->
         ("clickhouse", "1.0", 10),
         ("duckdb", "new", 12),
     ]
+
+
+def test_row_count_validation_marks_consensus_outlier_wrong_result(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10)
+    _insert_select_run(db_path, "clickhouse", 10)
+    _insert_select_run(db_path, "timescaledb", 12)
+
+    with pytest.raises(RowCountValidationError, match="timescaledb"):
+        assert_latest_query_row_counts(db_path=db_path, mark_wrong_results=True)
+
+    engine = get_results_engine(read_only=True, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            statuses = session.query(Run.db, RunStep.result_status, RunStep.error_type).join(
+                RunStep, RunStep.run_id == Run.id
+            )
+            assert statuses.order_by(Run.db).all() == [
+                ("clickhouse", "ok", None),
+                ("duckdb", "ok", None),
+                ("timescaledb", "wrong_result", "RowCountMismatch"),
+            ]
+    finally:
+        engine.dispose()
+
+
+def test_row_count_validation_does_not_mark_ambiguous_mismatch(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10)
+    _insert_select_run(db_path, "clickhouse", 12)
+
+    with pytest.raises(RowCountValidationError, match="q1 iteration 1"):
+        assert_latest_query_row_counts(db_path=db_path, mark_wrong_results=True)
+
+    engine = get_results_engine(read_only=True, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            statuses = session.query(Run.db, RunStep.result_status, RunStep.error_type).join(
+                RunStep, RunStep.run_id == Run.id
+            )
+            assert statuses.order_by(Run.db).all() == [
+                ("clickhouse", "ok", None),
+                ("duckdb", "ok", None),
+            ]
+    finally:
+        engine.dispose()
