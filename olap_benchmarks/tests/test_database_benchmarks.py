@@ -197,6 +197,7 @@ def test_time_series_restricts_supported_scale_factors() -> None:
 
 def test_all_suite_scale_factor_resolution_fans_out_time_series() -> None:
     assert resolve_suite_scale_factors("time_series", include_all_supported=True) == (1, 10)
+    assert resolve_suite_scale_factors("tpc_h", include_all_supported=True) == (10, 50)
     assert resolve_suite_scale_factors("clickbench", 10, allow_fixed_default=True) == (1,)
 
 
