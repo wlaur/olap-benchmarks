@@ -149,7 +149,7 @@ def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
 
 
 def test_time_series_suite_declares_mutate_support() -> None:
-    assert TimeSeries.supported_operations == ("populate", "mutate", "select")
+    assert TimeSeries.supported_operations == ("populate", "select", "mutate")
 
 
 def test_database_benchmarks_resolves_all_suites() -> None:
