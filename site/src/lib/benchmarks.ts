@@ -4,6 +4,7 @@ export type BenchmarkSuiteId =
   | "time_series"
   | "rtabench"
   | "clickbench"
+  | "jsonbench"
   | "kaggle_airbnb"
   | "tpc_h"
   | "tpc_ds"
@@ -45,6 +46,7 @@ const KNOWN_SUITE_IDS: readonly BenchmarkSuiteId[] = [
   "time_series",
   "rtabench",
   "clickbench",
+  "jsonbench",
   "kaggle_airbnb",
   "tpc_h",
   "tpc_ds",

@@ -41,3 +41,16 @@ def test_clickbench_q28_uses_engine_regex_backrefs() -> None:
     assert "'$1'" in overrides["monetdb"]
     assert "'$1'" in overrides["starrocks"]
     assert "'\\1'" in overrides["postgres"]
+
+
+def test_queries_manifest_includes_registered_suites() -> None:
+    manifest = _build_queries_manifest()
+
+    assert set(SUITE_DISPLAY_ORDER).issubset(manifest)
+    assert set(manifest["jsonbench"]) == {
+        "01_events_by_collection",
+        "02_create_events_by_collection",
+        "03_create_events_by_hour",
+        "04_first_post_users",
+        "05_longest_post_activity",
+    }
