@@ -178,6 +178,12 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
         t0 = perf_counter()
         for idx, (query_name, iterations) in enumerate(TPCH_QUERY_NAMES.items()):
             if not self.include_query(query_name):
+                self.record_skipped_query_steps(
+                    query_name,
+                    iterations,
+                    result_status="skipped",
+                    reason="query excluded by suite/database",
+                )
                 continue
 
             with self.db.query_context(query_name):

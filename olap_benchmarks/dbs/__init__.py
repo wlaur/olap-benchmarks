@@ -390,6 +390,30 @@ class Database(BaseModel, ABC):
             metadata=metadata,
         )
 
+    def record_skipped_query_step(
+        self,
+        query_name: str,
+        iteration: int,
+        reason: str,
+        result_status: Literal["skipped", "unsupported"] = "skipped",
+    ) -> None:
+        metadata = {"skip_reason": reason, "duration_ms": 0.0}
+        step_id = self._start_step(
+            "query",
+            "query",
+            query_name=query_name,
+            iteration=iteration,
+            result_status=result_status,
+            metadata=metadata,
+        )
+        self._finish_step(
+            step_id=step_id,
+            status="completed",
+            step_type="query",
+            result_status=result_status,
+            metadata=metadata,
+        )
+
     def execute_query_iteration(
         self,
         query_name: str,

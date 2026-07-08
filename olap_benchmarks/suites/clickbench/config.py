@@ -96,6 +96,12 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
             query_name = f"Q{idx}"
 
             if not self.include_query(query_name):
+                self.record_skipped_query_steps(
+                    query_name,
+                    ITERATIONS,
+                    result_status="skipped",
+                    reason="query excluded by suite/database",
+                )
                 continue
 
             with self.db.query_context(query_name):

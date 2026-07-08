@@ -37,8 +37,9 @@ surfacing, published-data hygiene, and the larger suite/engine roadmap from
       Partially fixed 2026-07-08: query/mutation steps now store
       `result_status`, existing completed/failed rows were backfilled, disabled
       time-series mutation steps are recorded as `skipped`, and site timing
-      queries exclude non-`ok` steps. Unsupported/wrong-result statuses still
-      need to be wired into query execution and correctness validation.
+      queries exclude non-`ok` steps. Suite-excluded query steps are now
+      recorded as `skipped`, and TPC-DS unsupported-list queries are recorded as
+      `unsupported`. `wrong_result` still needs correctness-validation wiring.
 - [ ] **Make local-vs-public run policy explicit.** `RESEARCH.md` recommends a
       stable x86_64 Linux host for clean public comparisons. If the public set
       remains Apple Silicon Docker data, the site should show host and container
@@ -68,15 +69,11 @@ surfacing, published-data hygiene, and the larger suite/engine roadmap from
       `insert_data_large_10000` iterations (79 mutation steps vs 82 elsewhere).
       A missing step should be recorded as an explicit status.
       Partially fixed 2026-07-08: configured disabled time-series mutation
-      steps are now written as `result_status='skipped'` instead of omitted.
+      steps are now written as `result_status='skipped'` instead of omitted, and
+      suite-excluded query steps are now recorded as `skipped`/`unsupported`.
       The historical TimescaleDB missing insert iterations still need root-cause
-      analysis during the rerun, and unexpected aborts still need broader
-      per-step fault isolation.
-- [ ] **Add per-query fault isolation for `TpcDs.select()`.** The first failing
-      query still aborts the whole 99-query DB run and the enclosing multi-DB
-      command; the post-run validation never runs. Verify MonetDB/StarRocks
-      TPC-DS query support or add explicit unsupported lists before running
-      them.
+      analysis during the rerun, and unexpected non-TPC-DS aborts still need
+      broader per-step fault isolation.
 - [ ] **Harden TPC-DS decimal normalization.** `_normalization_exprs` still
       blanket-casts decimals to `(7,2)` except `p_cost`; assert source widths so
       out-of-range values fail loudly.
@@ -138,8 +135,8 @@ surfacing, published-data hygiene, and the larger suite/engine roadmap from
 
 ## 5. Suggested Priority Order
 
-1. Finish query-status semantics: unsupported/wrong-result wiring, status-aware
-   validation, and broader per-step fault isolation.
+1. Finish query-status semantics: wrong-result wiring, status-aware validation,
+   and broader per-step fault isolation outside TPC-DS.
 2. Fix known divergent queries and add value-level validation before trusting
    the rerun.
 3. Finalize public-run policy and metadata surfacing, then run the full matrix
