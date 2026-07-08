@@ -170,8 +170,11 @@ def test_suite_scale_factor_migration_normalizes_legacy_tpc_suite_names(tmp_path
             insert into run (
                 suite, db, db_version, operation, system, status, started_at
             ) values
-                ('tpch_sf50', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00'),
-                ('tpcds_sf1', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-02 00:00:00')
+                ('tpch', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00'),
+                ('tpch_sf10', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-02 00:00:00'),
+                ('tpch_sf50', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-03 00:00:00'),
+                ('tpcds', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-04 00:00:00'),
+                ('tpcds_sf1', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-05 00:00:00')
             """
         )
         con.close()
@@ -180,7 +183,13 @@ def test_suite_scale_factor_migration_normalizes_legacy_tpc_suite_names(tmp_path
 
         con = cast(Any, duckdb).connect(str(db_path), read_only=True)
         rows = con.execute("select suite, suite_scale_factor from run order by started_at").fetchall()
-        assert rows == [("tpc_h", 50), ("tpc_ds", 1)]
+        assert rows == [
+            ("tpc_h", 10),
+            ("tpc_h", 10),
+            ("tpc_h", 50),
+            ("tpc_ds", 1),
+            ("tpc_ds", 1),
+        ]
 
         scale_column = next(
             row for row in con.execute("pragma table_info('run')").fetchall() if row[1] == "suite_scale_factor"

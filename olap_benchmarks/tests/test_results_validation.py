@@ -100,6 +100,24 @@ def test_row_count_validation_reports_cross_engine_mismatch(tmp_path: Path) -> N
         assert_latest_query_row_counts(db_path=db_path)
 
 
+def test_row_count_validation_does_not_compare_across_scale_factors(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10, suite_scale_factor=1)
+    _insert_select_run(db_path, "clickhouse", 12, suite_scale_factor=10)
+
+    assert validate_latest_query_row_counts(db_path=db_path) == []
+
+
+def test_row_count_validation_does_not_compare_across_systems(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10, system="laptop")
+    _insert_select_run(db_path, "clickhouse", 12, system="workstation")
+
+    assert validate_latest_query_row_counts(db_path=db_path) == []
+
+
 def test_row_count_validation_uses_latest_completed_run_per_database(tmp_path: Path) -> None:
     db_path = tmp_path / "results.db"
     _create_results_db(db_path)

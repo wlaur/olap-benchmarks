@@ -115,11 +115,16 @@ failed-only variants coexist in a scope.
       from a since-fixed version will keep failing validation against fresh
       runs with no way to retire it. Confirm the intent; add a
       same-db-different-version test either way.
-- [ ] **Test gaps on the new dimensions.** Nothing asserts that different
+- [x] **Test gaps on the new dimensions.** Nothing asserts that different
       scale factors or systems are *not* compared by validation
       (`tests/test_results_validation.py` fixtures all use one system and
       SF=1), and the SF migration tests cover only the `tpch_sf50` and
       `tpcds_sf1` branches (`tests/test_results_schema_updates.py:162-190`).
+      Fixed 2026-07-08: validation tests now assert cross-SF and cross-system
+      row counts are partitioned apart, and migration tests cover `tpch`,
+      `tpch_sf10`, `tpch_sf50`, `tpcds`, and `tpcds_sf1`. Verified with
+      `uv run pyright`, `uv run ruff check ...`, and focused pytest for
+      validation/schema updates.
 - [ ] **Migration hardening for the shared-revision lane.** The unique-index
       migration hard-fails with no dedup/remediation on legacy duplicate keys
       (`alembic/versions/4d9c2b7e6f10…:30-31`); the SF migration's ELSE branch
