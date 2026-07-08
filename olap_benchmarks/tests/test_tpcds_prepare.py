@@ -115,3 +115,20 @@ def test_tpcds_is_normalized_checks_decimal_widths(tmp_path: Path, monkeypatch: 
     monkeypatch.setattr(tpcds_config.pl, "scan_parquet", fake_scan_parquet)
 
     assert tpcds_config._is_normalized(tmp_path) is False
+
+
+def test_tpcds_normalization_accepts_tpcgen_decimal_width() -> None:
+    exprs = tpcds_config._normalization_exprs(
+        tpcds_config.pl.Schema({"ss_net_paid": tpcds_config.pl.Decimal(38, 2)}),
+        "store_sales",
+    )
+
+    assert len(exprs) == 1
+
+
+def test_tpcds_normalization_rejects_unexpected_decimal_width() -> None:
+    with pytest.raises(ValueError, match="Unexpected TPC-DS decimal width for ss_net_paid"):
+        tpcds_config._normalization_exprs(
+            tpcds_config.pl.Schema({"ss_net_paid": tpcds_config.pl.Decimal(12, 2)}),
+            "store_sales",
+        )
