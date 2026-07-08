@@ -8,10 +8,10 @@ removed. This document tracks only remaining work and caveats.
 the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
 preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
-scale-factor, suite-registry, and TPC-DS decimal-normalization hardening issues.
-Remaining blockers are public-rerun quality, correctness checks, query
-status/correctness semantics, metadata surfacing, published-data hygiene, and
-the larger suite/engine roadmap from `RESEARCH.md`.
+scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
+scale-factor discovery issues. Remaining blockers are public-rerun quality,
+correctness checks, query status/correctness semantics, metadata surfacing,
+published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
@@ -91,11 +91,6 @@ the larger suite/engine roadmap from `RESEARCH.md`.
       duplicate runs, resolve the Postgres TPC-DS populate-only run, and confirm
       TimescaleDB mutate coverage. Do not delete `site/public/data/results.db`
       until the replacement has been generated and validated.
-- [ ] **Minor site data edge cases.** `fetchSuiteScaleFactors` requires
-      `finished_at` non-null, so an SF with only failed attempts is
-      unselectable; `suite_scale_factor` is integer-only, which is fine unless
-      sub-SF1 workloads are added.
-
 ## 4. Suite And Engine Roadmap From Research
 
 - [ ] **Add JSONBench next, starting small.** Use 10M rows first, then 100M only
