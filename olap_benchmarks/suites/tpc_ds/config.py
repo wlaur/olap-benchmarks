@@ -132,9 +132,27 @@ def _normalization_exprs(schema: pl.Schema, table_name: TableName) -> list[pl.Ex
     return exprs
 
 
+def _schema_is_normalized(schema: pl.Schema, table_name: TableName) -> bool:
+    for source_name, spec_name in SPEC_COLUMN_RENAMES.get(table_name, {}).items():
+        if source_name in schema or spec_name not in schema:
+            return False
+
+    for name, dtype in schema.items():
+        if not isinstance(dtype, pl.Decimal):
+            continue
+
+        precision = DECIMAL_PRECISION_OVERRIDES.get(name, DECIMAL_PRECISION)
+        if (dtype.precision, dtype.scale) != (precision, DECIMAL_SCALE):
+            return False
+
+    return True
+
+
 def _is_normalized(output_directory: Path) -> bool:
-    schema = pl.scan_parquet(output_directory / "income_band.parquet").collect_schema()
-    return "ib_income_band_sk" in schema
+    return all(
+        _schema_is_normalized(pl.scan_parquet(output_directory / f"{table_name}.parquet").collect_schema(), table_name)
+        for table_name in TPCDS_TABLES
+    )
 
 
 def _normalize_tpc_ds_parquet(output_directory: Path) -> None:
