@@ -9,6 +9,7 @@ from olap_benchmarks.settings import (
     SUITE_LABELS,
     SUITE_NAMES,
     SUITE_OPERATIONS,
+    SUITE_PUBLIC_ROLES,
     SUITE_QUERY_NAME_PARSERS,
 )
 
@@ -29,6 +30,7 @@ def test_suites_manifest_matches_suite_settings() -> None:
         assert suite["scale_factor_supported"] == (suite_name in SCALE_FACTOR_SUITES)
         assert suite["operations"] == list(SUITE_OPERATIONS[suite_name])
         assert suite["query_name_parser"] == SUITE_QUERY_NAME_PARSERS[suite_name]
+        assert suite["public_role"] == SUITE_PUBLIC_ROLES[suite_name]
 
 
 def test_clickbench_q28_uses_engine_regex_backrefs() -> None:

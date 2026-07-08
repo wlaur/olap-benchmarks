@@ -27,6 +27,7 @@ export function HomeScoreTable() {
           suiteId: definition.id,
           suiteScaleFactor: definition.defaultScaleFactor,
           title: `${definition.title} SF${definition.defaultScaleFactor}`,
+          publicRole: definition.publicRole,
           scores: [],
         }))
   const isLoading = systemLoading || suitesLoading || overview.loading
@@ -39,7 +40,8 @@ export function HomeScoreTable() {
         <BodyText className="mt-1">
           Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is the
           leader. Missing queries are penalized, and rows are ranked by geometric mean across suites
-          at the scale factors shown; a missing suite/scale factor counts as its worst score.{" "}
+          at the scale factors shown; smoke suites are shown but excluded from aggregate ordering. A
+          missing suite/scale factor counts as its worst score.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -63,7 +65,12 @@ export function HomeScoreTable() {
                     }
                     title={`Open ${suite.title} explorer`}
                   >
-                    {suite.title}
+                    <span>{suite.title}</span>
+                    {suite.publicRole === "smoke" ? (
+                      <span className="ml-1 text-[10px] font-semibold text-slate-500 uppercase">
+                        smoke
+                      </span>
+                    ) : null}
                   </button>
                 </th>
               ))}

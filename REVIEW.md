@@ -20,8 +20,10 @@ unknown legacy suite names instead of guessing scale factors, dedupe duplicate
 natural run keys before adding the unique index, clean dependent orphan rows
 from deduped runs, and implement the scale-factor downgrade. The explorer now
 includes a cross-system comparison panel for the selected suite and scale
-factor. Remaining blockers are public rerun quality, correctness checks,
-published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
+factor. Kaggle Airbnb is now marked as a smoke suite and excluded from the home
+aggregate ranking while staying explorable. Remaining blockers are public rerun
+quality, correctness checks, published-data hygiene, and the larger suite/engine
+roadmap from `RESEARCH.md`.
 
 ---
 
@@ -99,8 +101,6 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 - [ ] **Align RTABench with upstream coverage.** Research found the local suite
       appears to have 31 base query files while upstream documents 33; verify
       the difference before making strong RTABench claims.
-- [ ] **Demote Kaggle Airbnb in public interpretation.** Keep it as a smoke or
-      example suite, but do not let it anchor engine-comparison conclusions.
 - [ ] **Narrow row-store matrix.** Keep PostgreSQL and TimescaleDB as useful
       row-store/hybrid baselines, but default them to RTABench, custom
       time-series, JSONBench small/medium, and ClickBench with status handling;

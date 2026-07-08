@@ -3,13 +3,13 @@
 - **Time Series** — time-series ingestion and analytical queries across wide, tall, and large table shapes. [Results](#/explorer/time_series)
 - **RTABench** — group-bys, distinct counts, and filtered aggregations over a normalized order-tracking schema. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale. [Results](#/explorer/rtabench)
 - **ClickBench** — full-table scans, filters, and aggregations over a single wide table. Based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse. [Results](#/explorer/clickbench)
-- **Kaggle Airbnb** — multi-table joins and mixed aggregations over Airbnb listings data. Based on [a comparison](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy. [Results](#/explorer/kaggle_airbnb)
+- **Kaggle Airbnb** — small smoke/example coverage for multi-table joins and mixed aggregations over Airbnb listings data. Based on [a comparison](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy. [Results](#/explorer/kaggle_airbnb)
 - **TPC-H** — the 22 ad-hoc decision-support queries over a normalized order/lineitem schema, derived from the [TPC-H benchmark](https://www.tpc.org/tpch/) (not comparable to published TPC-H results). [Results](#/explorer/tpc_h)
 - **TPC-DS** — the 99 decision-support queries over a retail snowflake schema (24 tables), derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/) (not comparable to published TPC-DS results). [Results](#/explorer/tpc_ds)
 
 ## Methodology
 
-All results for a given system (e.g. `macbook-m4-pro`) come from the same machine. Results from different systems are not compared.
+All results for a given system (e.g. `macbook-m4-pro`) come from the same machine. The main suite-score table is scoped to the selected system; explorer pages also include a cross-system panel for comparing the same suite and scale factor across recorded systems.
 
 The current public data still contains older local Apple Silicon runs under `macbook-pro-m4`. Treat those as development data: Docker engines ran inside the macOS Docker VM, while DuckDB ran in process. Clean public comparisons should be rerun on a controlled x86_64 Linux host, or clearly labeled with the selected system and per-run methodology metadata.
 

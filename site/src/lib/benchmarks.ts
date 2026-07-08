@@ -9,6 +9,7 @@ export type BenchmarkSuiteId =
   | "tpc_ds"
 
 export type QueryNameParserId = "generic" | "time_series"
+export type BenchmarkPublicRole = "benchmark" | "smoke"
 
 export interface BenchmarkDefinition {
   id: BenchmarkSuiteId
@@ -20,6 +21,7 @@ export interface BenchmarkDefinition {
   queriesKey: string
   operations: BenchmarkOperation[]
   queryNameParser: QueryNameParserId
+  publicRole: BenchmarkPublicRole
 }
 
 interface SuiteManifestEntry {
@@ -32,6 +34,7 @@ interface SuiteManifestEntry {
   queries_key: string
   operations: BenchmarkOperation[]
   query_name_parser: QueryNameParserId
+  public_role: BenchmarkPublicRole
 }
 
 interface SuitesManifest {
@@ -93,5 +96,6 @@ function parseSuiteManifestEntry(entry: SuiteManifestEntry): BenchmarkDefinition
     queriesKey: entry.queries_key,
     operations: entry.operations,
     queryNameParser: entry.query_name_parser,
+    publicRole: entry.public_role,
   }
 }

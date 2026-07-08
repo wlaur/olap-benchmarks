@@ -22,6 +22,7 @@ export interface SuiteOverview {
   suiteId: BenchmarkSuiteId
   suiteScaleFactor: number
   title: string
+  publicRole: BenchmarkDefinition["publicRole"]
   scores: DatabaseScore[]
 }
 
@@ -75,6 +76,7 @@ export function useHomeOverview(
               suiteId: column.suiteId,
               suiteScaleFactor: column.suiteScaleFactor,
               title: column.title,
+              publicRole: column.definition.publicRole,
               scores: computeDatabaseScores(summaries, coverage, Object.keys(suiteQueries)),
             }
           }),
@@ -99,7 +101,10 @@ export function useHomeOverview(
         }
 
         const worstBySuite = new Map<string, number>()
-        for (const suite of suites) {
+        const aggregateSuites = suites.filter((suite) => suite.publicRole === "benchmark")
+        const rankedSuites = aggregateSuites.length > 0 ? aggregateSuites : suites
+
+        for (const suite of rankedSuites) {
           const finite = suite.scores.map((s) => s.score).filter(Number.isFinite)
           if (finite.length > 0) worstBySuite.set(suite.key, Math.max(...finite))
         }
