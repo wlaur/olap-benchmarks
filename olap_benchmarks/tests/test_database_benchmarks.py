@@ -189,6 +189,19 @@ def test_database_benchmarks_resolves_all_suites() -> None:
     assert benchmarks["tpc_ds"].scale_factor == 1
 
 
+def test_jsonbench_registered_for_first_implemented_engines() -> None:
+    from ..dbs.clickhouse import Clickhouse
+    from ..dbs.duckdb import DuckDB
+
+    duckdb_benchmarks = DuckDB().benchmarks
+    clickhouse_benchmarks = Clickhouse().benchmarks
+
+    assert "jsonbench" in duckdb_benchmarks
+    assert duckdb_benchmarks["jsonbench"].scale_factor == 10
+    assert "jsonbench" in clickhouse_benchmarks
+    assert clickhouse_benchmarks["jsonbench"].scale_factor == 10
+
+
 def test_time_series_scale_factor_10_matches_reference_size() -> None:
     assert get_time_series_dataset_sizes(10) == BASE_TIME_SERIES_DATASET_SIZES
 

@@ -103,6 +103,10 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
       if storage/runtime are acceptable; avoid the full 1B-row dataset on the
       current 200 GB free-space budget. Start with ClickHouse, DuckDB,
       PostgreSQL, and StarRocks; add Doris once the engine exists.
+      Partially fixed 2026-07-08: the suite scaffold, 10M scale-factor
+      metadata, upstream five-query workload, DuckDB load path, and ClickHouse
+      native-JSON load/query path are in place. PostgreSQL and StarRocks are
+      still open.
 - [ ] **Add Polars as an in-process engine.** Model it as a dataframe/LazyFrame
       engine, use normal Polars APIs, keep SQL mode separate if added later,
       and label it as in-process/single-node.

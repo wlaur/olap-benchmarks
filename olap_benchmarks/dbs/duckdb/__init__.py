@@ -10,7 +10,9 @@ from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
 from .. import Database
 from ..utils import normalize_columns, require_columns, tracked_commit
 
@@ -54,6 +56,36 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
         if dtype == pl_type:
             return duck_type
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
+
+
+def duckdb_string_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+class DuckDBJSONBench(JSONBench["DuckDB"]):
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        input_files = ", ".join(
+            duckdb_string_literal(fpath.as_posix()) for fpath in get_jsonbench_input_files(self.scale_factor)
+        )
+
+        with self.db.phase_context("insert", table_name="bluesky"):
+            self.db.execute(
+                f"""
+                CREATE TABLE bluesky AS
+                SELECT json AS j
+                FROM read_ndjson_objects([{input_files}])
+                """
+            )
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
 
 
 class DuckDB(Database):
@@ -188,3 +220,9 @@ class DuckDB(Database):
 
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
         self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM delete_keys)")
+
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "jsonbench": DuckDBJSONBench,
+        }
