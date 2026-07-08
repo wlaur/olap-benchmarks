@@ -21,9 +21,11 @@ natural run keys before adding the unique index, clean dependent orphan rows
 from deduped runs, and implement the scale-factor downgrade. The explorer now
 includes a cross-system comparison panel for the selected suite and scale
 factor. Kaggle Airbnb is now marked as a smoke suite and excluded from the home
-aggregate ranking while staying explorable. Remaining blockers are public rerun
-quality, correctness checks, published-data hygiene, and the larger suite/engine
-roadmap from `RESEARCH.md`.
+aggregate ranking while staying explorable. RTABench now schedules the
+upstream 1000-series pre-aggregated query variants where db-specific files
+exist and records explicit unsupported steps elsewhere. Remaining blockers are
+public rerun quality, correctness checks, published-data hygiene, and the larger
+suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
@@ -98,9 +100,6 @@ roadmap from `RESEARCH.md`.
 - [ ] **Add Apache Doris as the next server OLAP engine.** Start with
       ClickBench and JSONBench, then RTABench after query coverage is aligned;
       defer TPC-DS until Docker/load stability is proven.
-- [ ] **Align RTABench with upstream coverage.** Research found the local suite
-      appears to have 31 base query files while upstream documents 33; verify
-      the difference before making strong RTABench claims.
 - [ ] **Narrow row-store matrix.** Keep PostgreSQL and TimescaleDB as useful
       row-store/hybrid baselines, but default them to RTABench, custom
       time-series, JSONBench small/medium, and ClickBench with status handling;
@@ -143,3 +142,7 @@ roadmap from `RESEARCH.md`.
   as `wrong_result`; ambiguous splits still fail validation without guessing.
   New select runs also store bounded answer hashes, and consensus hash outliers
   are marked as `wrong_result` when row counts agree.
+- RTABench upstream currently documents 33 queries in its README, but the
+  current upstream Postgres query directory has 31 base files; TimescaleDB and
+  ClickHouse also include 10 `1000+` pre-aggregated variants, and upstream
+  `run.sh` executes every `*.sql` file in the database query directory.
