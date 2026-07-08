@@ -1,8 +1,9 @@
 # Project review - 2026-07-08
 
 Status after fixes through the 2026-07-08 methodology, version, warm-reporting,
-and suite-registry work. Completed findings from the prior review have been
-removed. This document tracks only remaining work and caveats.
+suite-registry, TPC-DS, and scale-factor-discovery work. Completed findings
+from the prior review have been removed. This document tracks only remaining
+work and caveats.
 
 **Current answer:** no, not all review items are addressed. The code fixes closed
 the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
@@ -74,6 +75,7 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       The historical TimescaleDB missing insert iterations still need root-cause
       analysis during the rerun, and unexpected non-TPC-DS aborts still need
       broader per-step fault isolation.
+
 ## 3. Dimensions, UI, And Data Hygiene
 
 - [ ] **TPC-H SF10+SF50 fanout is still not configured.** `suite=all` now fans
@@ -91,6 +93,7 @@ published-data hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       duplicate runs, resolve the Postgres TPC-DS populate-only run, and confirm
       TimescaleDB mutate coverage. Do not delete `site/public/data/results.db`
       until the replacement has been generated and validated.
+
 ## 4. Suite And Engine Roadmap From Research
 
 - [ ] **Add JSONBench next, starting small.** Use 10M rows first, then 100M only
