@@ -60,7 +60,6 @@ export async function fetchSuiteScaleFactors(
     .where("suite", "=", suite)
     .where("system", "=", system)
     .where("status", "!=", "running")
-    .where("finished_at", "is not", null)
     .orderBy("suite_scale_factor")
     .execute()
 
@@ -75,7 +74,6 @@ export async function fetchSystemSuiteScaleFactors(system: string): Promise<Suit
     .distinct()
     .where("system", "=", system)
     .where("status", "!=", "running")
-    .where("finished_at", "is not", null)
     .orderBy("suite")
     .orderBy("suite_scale_factor")
     .execute()
