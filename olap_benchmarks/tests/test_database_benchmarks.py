@@ -8,9 +8,14 @@ import pytest
 from sqlalchemy import Connection
 
 from ..dbs import Database
-from ..settings import DatabaseName, SuiteName, TableName
+from ..settings import DatabaseName, SuiteName, TableName, resolve_suite_scale_factor, resolve_suite_scale_factors
 from ..suites import BenchmarkSuite
-from ..suites.time_series.config import TimeSeries
+from ..suites.time_series.config import (
+    BASE_TIME_SERIES_DATASET_SIZES,
+    TimeSeries,
+    get_time_series_column_counts,
+    get_time_series_dataset_sizes,
+)
 
 
 class DummyDatabase(Database):
@@ -119,6 +124,50 @@ def test_database_benchmarks_resolves_all_suites() -> None:
     assert benchmarks["time_series"].scale_factor == 1
     assert benchmarks["tpc_h"].scale_factor == 10
     assert benchmarks["tpc_ds"].scale_factor == 1
+
+
+def test_time_series_scale_factor_10_matches_reference_size() -> None:
+    assert get_time_series_dataset_sizes(10) == BASE_TIME_SERIES_DATASET_SIZES
+
+
+def test_time_series_scale_factor_1_is_tenth_size_with_reduced_rows_and_columns() -> None:
+    sizes = get_time_series_dataset_sizes(1)
+
+    for size, (rows, cols) in sizes.items():
+        reference_rows, reference_cols = BASE_TIME_SERIES_DATASET_SIZES[size]
+        assert rows < reference_rows
+        assert cols < reference_cols
+        assert rows * cols == pytest.approx(reference_rows * reference_cols * 0.1, rel=0.001)
+
+    tall_counts = get_time_series_column_counts(sizes["tall"][1])
+    assert tall_counts.binary >= 1
+    assert tall_counts.ratio >= 1
+    assert tall_counts.deviation >= 1
+    assert tall_counts.process >= 5
+
+    wide_counts = get_time_series_column_counts(sizes["wide"][1])
+    assert wide_counts.binary >= 22
+    assert wide_counts.ratio >= 12
+    assert wide_counts.deviation >= 39
+    assert wide_counts.process >= 667
+
+
+def test_time_series_restricts_supported_scale_factors() -> None:
+    with pytest.raises(ValueError, match="supports scale factors: 1, 10"):
+        resolve_suite_scale_factor("time_series", 2)
+
+
+def test_all_suite_scale_factor_resolution_fans_out_time_series() -> None:
+    assert resolve_suite_scale_factors("time_series", include_all_supported=True) == (1, 10)
+    assert resolve_suite_scale_factors("clickbench", 10, allow_fixed_default=True) == (1,)
+
+
+def test_current_suite_scale_factor_requires_explicit_value() -> None:
+    db = DummyDatabase()
+    db._current_suite = "time_series"
+
+    with pytest.raises(ValueError, match="current_suite_scale_factor is not set"):
+        _ = db.current_suite_scale_factor
 
 
 def test_database_benchmark_rejects_unsupported_operation() -> None:

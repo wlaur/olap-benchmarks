@@ -138,7 +138,7 @@ def test_prepare_all_skips_manual_preparation_suites(
     with caplog.at_level(logging.WARNING):
         __main__.prepare(suite="all")
 
-    assert prepared == [("rtabench", 1), ("time_series", 1)]
+    assert prepared == [("rtabench", 1), ("time_series", 1), ("time_series", 10)]
     assert "Skipping clickbench: download hits.parquet" in caplog.text
 
 
@@ -310,3 +310,82 @@ def test_benchmark_all_uses_suite_supported_operations(
 
     assert db_instance.operations == [("clickbench", "populate", 1), ("clickbench", "select", 1)]
     assert validated == [(__main__.SETTINGS.system, "clickbench", 1)]
+
+
+def test_benchmark_all_fans_out_time_series_scale_factors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyTimeSeriesSuite:
+        supported_operations = ("select",)
+
+    class DummyWriter:
+        def __init__(self) -> None:
+            self.queue = object()
+            self.result_queue = object()
+
+        def close(self) -> None:
+            return None
+
+    class DummyDatabase:
+        def __init__(self) -> None:
+            self._current_suite = None
+            self._current_suite_scale_factor = None
+            self.benchmarks = {"time_series": DummyTimeSeriesSuite()}
+            self.operations: list[tuple[str, str, int | None]] = []
+
+        def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
+            self.operations.append((suite, operation, scale_factor))
+
+    writer = DummyWriter()
+    db_instance = DummyDatabase()
+    checked_inputs: list[tuple[SuiteName, int]] = []
+    validated: list[tuple[SuiteName, int]] = []
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["time_series"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["duckdb"]
+
+    def fake_check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
+        checked_inputs.append((suite_name, scale_factor))
+
+    def fake_start_writer_process(revision: str = "default") -> DummyWriter:
+        return writer
+
+    def fake_get_databases() -> dict[DatabaseName, DummyDatabase]:
+        return {"duckdb": db_instance}
+
+    def fake_start_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_stop_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_assert_latest_query_row_counts(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        validated.append((suite, suite_scale_factor))
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
+    monkeypatch.setattr(__main__, "_start_db", fake_start_db)
+    monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
+
+    __main__.benchmark(db="duckdb", suite="all", operation="all")
+
+    assert checked_inputs == [("time_series", 1), ("time_series", 10)]
+    assert db_instance.operations == [("time_series", "select", 1), ("time_series", "select", 10)]
+    assert validated == [("time_series", 1), ("time_series", 10)]

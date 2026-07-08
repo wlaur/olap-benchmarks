@@ -4,5 +4,5 @@ select
 from
     data_wide
 where
-    time > '2024-09-01'
+    time > '2024-12-10'
     and time < '2024-12-15'
