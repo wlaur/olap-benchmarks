@@ -164,6 +164,7 @@ version pins live in each connector:
 | ----------- | -------------------------------------------------- |
 | clickhouse  | `olap_benchmarks/dbs/clickhouse/__init__.py` (`VERSION`, Docker image tag) |
 | monetdb     | `olap_benchmarks/dbs/monetdb/__init__.py`          |
+| polars      | `pyproject.toml` (runs in-process; version follows the installed `polars` package) |
 | postgres    | `olap_benchmarks/dbs/postgres/__init__.py`         |
 | timescaledb | `olap_benchmarks/dbs/timescaledb/__init__.py`      |
 | questdb     | `olap_benchmarks/dbs/questdb/__init__.py`          |

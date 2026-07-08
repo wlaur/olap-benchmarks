@@ -15,6 +15,7 @@ DatabaseName = Literal[
     "clickhouse",
     "timescaledb",
     "duckdb",
+    "polars",
     "questdb",
     "postgres",
     "starrocks",
