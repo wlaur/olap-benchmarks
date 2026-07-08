@@ -2,7 +2,7 @@ import { Trophy } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import { useHomeOverview } from "../../hooks/useHomeOverview"
-import { benchmarkDefinitions, type BenchmarkSuiteId } from "../../lib/benchmarks"
+import { benchmarkDefinitions } from "../../lib/benchmarks"
 import { cn } from "../../lib/cn"
 import { getDatabaseColors } from "../../lib/databaseColors"
 import { formatScore } from "../../lib/score"
@@ -16,7 +16,7 @@ export function HomeScoreTable() {
   const systemLoading = useAppStore((s) => s.systemLoading)
   const overview = useHomeOverview(selectedSystem)
 
-  const databaseColors = getDatabaseColors(overview.databases)
+  const databaseColors = getDatabaseColors(overview.databases.map((database) => database.label))
   const suites = benchmarkDefinitions
   const isLoading = systemLoading || overview.loading
   const isEmpty = !isLoading && overview.databases.length === 0
@@ -71,8 +71,8 @@ export function HomeScoreTable() {
                 </td>
               </tr>
             ) : (
-              overview.databases.map((db, index) => (
-                <tr key={db} className="border-t border-border-subtle">
+              overview.databases.map((database, index) => (
+                <tr key={database.key} className="border-t border-border-subtle">
                   <td className="px-5 py-3 align-middle">
                     <div className="flex items-center gap-2.5">
                       <span className="w-4 text-right font-mono text-xs text-slate-400 tabular-nums">
@@ -80,20 +80,19 @@ export function HomeScoreTable() {
                       </span>
                       <span
                         className="size-2.5 rounded-full"
-                        style={{ backgroundColor: databaseColors[db] ?? "#94a3b8" }}
+                        style={{ backgroundColor: databaseColors[database.label] ?? "#94a3b8" }}
                       />
-                      <span className="font-medium text-slate-100">{db}</span>
+                      <span className="font-medium text-slate-100">{database.label}</span>
                     </div>
                   </td>
                   {suites.map((suite) => (
                     <ScoreCell
                       key={suite.id}
-                      suiteId={suite.id}
-                      score={overview.scoresByDbAndSuite.get(db)?.get(suite.id)}
+                      score={overview.scoresByDbAndSuite.get(database.key)?.get(suite.id)}
                       rank={
                         overview.suites
                           .find((s) => s.suiteId === suite.id)
-                          ?.scores.findIndex((entry) => entry.db === db) ?? -1
+                          ?.scores.findIndex((entry) => entry.dbKey === database.key) ?? -1
                       }
                     />
                   ))}
@@ -108,7 +107,6 @@ export function HomeScoreTable() {
 }
 
 interface ScoreCellProps {
-  suiteId: BenchmarkSuiteId
   score: ReturnType<typeof useHomeOverview>["suites"][number]["scores"][number] | undefined
   rank: number
 }
