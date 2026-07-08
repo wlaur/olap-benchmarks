@@ -167,6 +167,21 @@ def _resolve_benchmark_plan(
     return plan
 
 
+def _filter_supported_benchmark_plan(
+    plan: list[tuple[DatabaseName, SuiteName, int]],
+) -> list[tuple[DatabaseName, SuiteName, int]]:
+    databases = get_databases()
+    supported_plan: list[tuple[DatabaseName, SuiteName, int]] = []
+
+    for db_name, suite_name, resolved_scale_factor in plan:
+        if suite_name not in databases[db_name].benchmarks:
+            _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
+            continue
+        supported_plan.append((db_name, suite_name, resolved_scale_factor))
+
+    return supported_plan
+
+
 def _unique_suite_scale_factor_pairs(
     plan: list[tuple[DatabaseName, SuiteName, int]],
 ) -> list[tuple[SuiteName, int]]:
@@ -225,7 +240,7 @@ def benchmark(
     configured factor. With `suite=all`, row-store databases skip optional
     TPC-H/TPC-DS runs by default; select those suites explicitly to include them.
     """
-    plan = _resolve_benchmark_plan(db, suite, scale_factor, omit)
+    plan = _filter_supported_benchmark_plan(_resolve_benchmark_plan(db, suite, scale_factor, omit))
     suite_scale_factor_pairs = _unique_suite_scale_factor_pairs(plan)
 
     if not plan:
@@ -240,10 +255,6 @@ def benchmark(
     try:
         for db_name, suite_name, resolved_scale_factor in plan:
             db_instance = get_databases()[db_name]
-
-            if suite_name not in db_instance.benchmarks:
-                _LOGGER.info(f"Skipping {suite_name} on {db_name}; suite is not registered for this database")
-                continue
 
             _LOGGER.info(f"Benchmarking {suite_name} scale factor {resolved_scale_factor} on {db_name} ({operation})")
             db_instance._current_suite = suite_name
