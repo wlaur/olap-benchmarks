@@ -8,10 +8,10 @@ removed. This document tracks only remaining work and caveats.
 the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
 preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
-scale-factor, and suite-registry issues. Remaining blockers are public-rerun
-quality, correctness checks, query status/correctness semantics, metadata
-surfacing, published-data hygiene, and the larger suite/engine roadmap from
-`RESEARCH.md`.
+scale-factor, suite-registry, and TPC-DS decimal-normalization hardening issues.
+Remaining blockers are public-rerun quality, correctness checks, query
+status/correctness semantics, metadata surfacing, published-data hygiene, and
+the larger suite/engine roadmap from `RESEARCH.md`.
 
 ---
 
@@ -74,10 +74,6 @@ surfacing, published-data hygiene, and the larger suite/engine roadmap from
       The historical TimescaleDB missing insert iterations still need root-cause
       analysis during the rerun, and unexpected non-TPC-DS aborts still need
       broader per-step fault isolation.
-- [ ] **Harden TPC-DS decimal normalization.** `_normalization_exprs` still
-      blanket-casts decimals to `(7,2)` except `p_cost`; assert source widths so
-      out-of-range values fail loudly.
-
 ## 3. Dimensions, UI, And Data Hygiene
 
 - [ ] **TPC-H SF10+SF50 fanout is still not configured.** `suite=all` now fans

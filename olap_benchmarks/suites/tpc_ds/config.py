@@ -91,6 +91,8 @@ SPEC_COLUMN_RENAMES: dict[TableName, dict[str, str]] = {
 DECIMAL_PRECISION_OVERRIDES = {"p_cost": 15}
 DECIMAL_PRECISION = 7
 DECIMAL_SCALE = 2
+TPCGEN_DECIMAL_PRECISION = 38
+TPCGEN_DECIMAL_SCALE = 2
 
 
 def _format_bytes(size: int) -> str:
@@ -120,9 +122,7 @@ def _normalization_exprs(schema: pl.Schema, table_name: TableName) -> list[pl.Ex
         expr = pl.col(name)
 
         if isinstance(dtype, pl.Decimal):
-            precision = DECIMAL_PRECISION_OVERRIDES.get(name, DECIMAL_PRECISION)
-            if (dtype.precision, dtype.scale) != (precision, DECIMAL_SCALE):
-                expr = expr.cast(pl.Decimal(precision=precision, scale=DECIMAL_SCALE))
+            expr = _normalize_decimal_expr(expr, name, dtype)
 
         if name in renames:
             expr = expr.alias(renames[name])
@@ -130,6 +130,24 @@ def _normalization_exprs(schema: pl.Schema, table_name: TableName) -> list[pl.Ex
         exprs.append(expr)
 
     return exprs
+
+
+def _normalize_decimal_expr(expr: pl.Expr, name: str, dtype: pl.Decimal) -> pl.Expr:
+    target_precision = DECIMAL_PRECISION_OVERRIDES.get(name, DECIMAL_PRECISION)
+    target_width = (target_precision, DECIMAL_SCALE)
+    source_width = (TPCGEN_DECIMAL_PRECISION, TPCGEN_DECIMAL_SCALE)
+    current_width = (dtype.precision, dtype.scale)
+
+    if current_width == target_width:
+        return expr
+
+    if current_width != source_width:
+        raise ValueError(
+            f"Unexpected TPC-DS decimal width for {name}: DECIMAL{current_width}; "
+            f"expected DECIMAL{source_width} from tpcgen-cli or normalized DECIMAL{target_width}"
+        )
+
+    return expr.cast(pl.Decimal(precision=target_precision, scale=DECIMAL_SCALE), strict=True)
 
 
 def _schema_is_normalized(schema: pl.Schema, table_name: TableName) -> bool:
