@@ -2,6 +2,8 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from "reac
 
 import type { BenchmarkSuiteId } from "../lib/benchmarks"
 import {
+  fetchConcurrentSteps,
+  fetchConcurrentSummaries,
   fetchInsertSteps,
   fetchMetricSamples,
   fetchMutateSteps,
@@ -36,9 +38,11 @@ export interface SuiteDataState {
   queryCoverage: QueryCoverage[]
   querySummaries: QuerySummary[]
   mutateSummaries: QuerySummary[]
+  concurrentSummaries: QuerySummary[]
   insertSteps: InsertStep[]
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
+  concurrentSteps: QueryStep[]
   queriesManifest: QueriesManifest | null
 }
 
@@ -53,9 +57,11 @@ function createInitialState(): SuiteDataState {
     queryCoverage: [],
     querySummaries: [],
     mutateSummaries: [],
+    concurrentSummaries: [],
     insertSteps: [],
     querySteps: [],
     mutateSteps: [],
+    concurrentSteps: [],
     queriesManifest: null,
   }
 }
@@ -72,6 +78,7 @@ export interface UseSuiteDataResult {
   filteredQuerySummaries: QuerySummary[]
   filteredQueryCoverage: QueryCoverage[]
   filteredMutateSummaries: QuerySummary[]
+  filteredConcurrentSummaries: QuerySummary[]
   filteredOperationSummaries: OperationSummary[]
   isLoading: boolean
   toggleDatabase: (database: string) => void
@@ -162,6 +169,7 @@ export function useSuiteData(
     setState(createInitialState())
 
     const hasMutate = suiteConfig.operations.includes("mutate")
+    const hasConcurrent = suiteConfig.operations.includes("concurrent")
 
     // Phase 1: critical data for above-fold panels
     Promise.all([
@@ -172,6 +180,9 @@ export function useSuiteData(
       hasMutate
         ? fetchMutateSummaries(system, suite, selectedScaleFactor)
         : Promise.resolve([] as QuerySummary[]),
+      hasConcurrent
+        ? fetchConcurrentSummaries(system, suite, selectedScaleFactor)
+        : Promise.resolve([] as QuerySummary[]),
       fetchQueriesManifest(),
     ])
       .then(
@@ -181,6 +192,7 @@ export function useSuiteData(
           queryCoverage,
           querySummaries,
           mutateSummaries,
+          concurrentSummaries,
           queriesManifest,
         ]) => {
           if (cancelled) return
@@ -194,6 +206,7 @@ export function useSuiteData(
               queryCoverage,
               querySummaries,
               mutateSummaries,
+              concurrentSummaries,
               queriesManifest,
             }))
           })
@@ -220,8 +233,11 @@ export function useSuiteData(
       hasMutate
         ? fetchMutateSteps(system, suite, selectedScaleFactor)
         : Promise.resolve([] as QueryStep[]),
+      hasConcurrent
+        ? fetchConcurrentSteps(system, suite, selectedScaleFactor)
+        : Promise.resolve([] as QueryStep[]),
     ])
-      .then(([metricSamples, insertSteps, querySteps, mutateSteps]) => {
+      .then(([metricSamples, insertSteps, querySteps, mutateSteps, concurrentSteps]) => {
         if (cancelled) return
 
         startTransition(() => {
@@ -232,6 +248,7 @@ export function useSuiteData(
             insertSteps,
             querySteps,
             mutateSteps,
+            concurrentSteps,
           }))
         })
       })
@@ -257,9 +274,10 @@ export function useSuiteData(
         new Set([
           ...state.runSummaries.map((run) => run.db),
           ...state.queryCoverage.map((run) => run.db),
+          ...state.operationSummaries.map((run) => run.db),
         ]),
       ).sort(),
-    [state.runSummaries, state.queryCoverage],
+    [state.runSummaries, state.queryCoverage, state.operationSummaries],
   )
 
   useEffect(() => {
@@ -299,6 +317,10 @@ export function useSuiteData(
     () => state.mutateSummaries.filter((row) => includedDatabaseSet.has(row.db)),
     [state.mutateSummaries, includedDatabaseSet],
   )
+  const filteredConcurrentSummaries = useMemo(
+    () => state.concurrentSummaries.filter((row) => includedDatabaseSet.has(row.db)),
+    [state.concurrentSummaries, includedDatabaseSet],
+  )
   const filteredOperationSummaries = useMemo(
     () => state.operationSummaries.filter((run) => includedDatabaseSet.has(run.db)),
     [state.operationSummaries, includedDatabaseSet],
@@ -328,6 +350,7 @@ export function useSuiteData(
     filteredQuerySummaries,
     filteredQueryCoverage,
     filteredMutateSummaries,
+    filteredConcurrentSummaries,
     filteredOperationSummaries,
     isLoading,
     toggleDatabase,

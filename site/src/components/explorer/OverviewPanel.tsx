@@ -46,8 +46,9 @@ interface OverviewPanelProps {
 
 const OPERATION_CHIPS: ReadonlyArray<readonly [BenchmarkOperation, string, string]> = [
   ["populate", "Populate", "rgba(245, 158, 11, 0.92)"],
-  ["mutate", "Mutate", "rgba(139, 92, 246, 0.94)"],
   ["select", "Select", "rgba(96, 165, 250, 0.94)"],
+  ["mutate", "Mutate", "rgba(139, 92, 246, 0.94)"],
+  ["concurrent", "Concurrent", "rgba(20, 184, 166, 0.94)"],
 ]
 
 export function OverviewPanel({
@@ -64,11 +65,13 @@ export function OverviewPanel({
     populate: true,
     select: true,
     mutate: true,
+    concurrent: true,
   })
   const visibleOperations: OverviewOperationVisibility = {
     populate: suiteConfig.operations.includes("populate") && operationVisibility.populate,
-    mutate: suiteConfig.operations.includes("mutate") && operationVisibility.mutate,
     select: suiteConfig.operations.includes("select") && operationVisibility.select,
+    mutate: suiteConfig.operations.includes("mutate") && operationVisibility.mutate,
+    concurrent: suiteConfig.operations.includes("concurrent") && operationVisibility.concurrent,
   }
 
   const runChartData = buildOverviewChartData(
@@ -88,8 +91,9 @@ export function OverviewPanel({
           ...runChartData.map((run) => {
             let sum = 0
             if (visibleOperations.populate) sum += run.populate_chart_duration_s
-            if (visibleOperations.mutate) sum += run.mutate_chart_duration_s
             if (visibleOperations.select) sum += run.select_chart_duration_s
+            if (visibleOperations.mutate) sum += run.mutate_chart_duration_s
+            if (visibleOperations.concurrent) sum += run.concurrent_chart_duration_s
             return sum
           }),
         )
@@ -98,8 +102,9 @@ export function OverviewPanel({
           ...runChartData.flatMap((run) => {
             const durations: number[] = []
             if (visibleOperations.populate) durations.push(run.populate_duration_s)
-            if (visibleOperations.mutate) durations.push(run.mutate_duration_s)
             if (visibleOperations.select) durations.push(run.select_duration_s)
+            if (visibleOperations.mutate) durations.push(run.mutate_duration_s)
+            if (visibleOperations.concurrent) durations.push(run.concurrent_duration_s)
             return durations
           }),
         )
@@ -241,7 +246,12 @@ function OverviewBarChart({
           {...CHART_TOOLTIP_STYLES}
           contentStyle={{ ...CHART_TOOLTIP_STYLES.contentStyle, borderRadius: 10, fontSize: 12 }}
           itemSorter={(item) => {
-            const order: Record<string, number> = { Populate: 0, Mutate: 1, Select: 2 }
+            const order: Record<string, number> = {
+              Populate: 0,
+              Select: 1,
+              Mutate: 2,
+              Concurrent: 3,
+            }
             return order[item.name ?? ""] ?? 3
           }}
           formatter={(_value, name, item) => {
@@ -251,7 +261,9 @@ function OverviewBarChart({
                 ? row.populate_duration_s
                 : name === "Select"
                   ? row.select_duration_s
-                  : row.mutate_duration_s
+                  : name === "Mutate"
+                    ? row.mutate_duration_s
+                    : row.concurrent_duration_s
 
             return [formatDurationSeconds(duration), name ?? ""] as const
           }}
@@ -286,6 +298,20 @@ function OverviewBarChart({
           )}
         />
         <Bar
+          dataKey="select_chart_duration_s"
+          hide={!operationVisibility.select}
+          stackId={stackId}
+          radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
+          name="Select"
+          isAnimationActive={false}
+          shape={(props) => (
+            <Rectangle
+              {...props}
+              fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
+            />
+          )}
+        />
+        <Bar
           dataKey="mutate_chart_duration_s"
           hide={!operationVisibility.mutate}
           stackId={stackId}
@@ -303,16 +329,19 @@ function OverviewBarChart({
           )}
         />
         <Bar
-          dataKey="select_chart_duration_s"
-          hide={!operationVisibility.select}
+          dataKey="concurrent_chart_duration_s"
+          hide={!operationVisibility.concurrent}
           stackId={stackId}
           radius={barMode === "stacked" ? undefined : [3, 3, 0, 0]}
-          name="Select"
+          name="Concurrent"
           isAnimationActive={false}
           shape={(props) => (
             <Rectangle
               {...props}
-              fill={(props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8"}
+              fill={withAlpha(
+                (props.payload as { fill?: string } | undefined)?.fill ?? "#94a3b8",
+                0.72,
+              )}
             />
           )}
         />

@@ -21,7 +21,12 @@ import type {
 
 const ISO_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-const BENCHMARK_OPERATIONS: readonly BenchmarkOperation[] = ["populate", "mutate", "select"]
+const BENCHMARK_OPERATIONS: readonly BenchmarkOperation[] = [
+  "populate",
+  "select",
+  "mutate",
+  "concurrent",
+]
 
 let queriesCache: QueriesManifest | null = null
 
@@ -597,7 +602,7 @@ async function fetchStepSummaries(
   suite: BenchmarkSuiteId,
   suiteScaleFactor: number,
   operation: BenchmarkOperation,
-  stepType: "query" | "mutation",
+  stepTypes: readonly ["query" | "mutation", ...("query" | "mutation")[]],
 ): Promise<QuerySummary[]> {
   const db = await getKyselyDb()
 
@@ -635,7 +640,7 @@ async function fetchStepSummaries(
       ]
     })
     .where("latest_runs.run_rank", "=", 1)
-    .where("run_step.step_type", "=", stepType)
+    .where("run_step.step_type", "in", [...stepTypes])
     .where("run_step.status", "=", "completed")
     .where("run_step.result_status", "=", "ok")
     .where("run_step.finished_at", "is not", null)
@@ -656,7 +661,7 @@ export function fetchQuerySummaries(
   suite: BenchmarkSuiteId,
   suiteScaleFactor: number,
 ): Promise<QuerySummary[]> {
-  return fetchStepSummaries(system, suite, suiteScaleFactor, "select", "query")
+  return fetchStepSummaries(system, suite, suiteScaleFactor, "select", ["query"])
 }
 
 export function fetchMutateSummaries(
@@ -664,7 +669,15 @@ export function fetchMutateSummaries(
   suite: BenchmarkSuiteId,
   suiteScaleFactor: number,
 ): Promise<QuerySummary[]> {
-  return fetchStepSummaries(system, suite, suiteScaleFactor, "mutate", "mutation")
+  return fetchStepSummaries(system, suite, suiteScaleFactor, "mutate", ["mutation"])
+}
+
+export function fetchConcurrentSummaries(
+  system: string,
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<QuerySummary[]> {
+  return fetchStepSummaries(system, suite, suiteScaleFactor, "concurrent", ["query", "mutation"])
 }
 
 export async function fetchMetricSamples(
@@ -750,7 +763,7 @@ async function fetchStepsForOperation(
   suite: BenchmarkSuiteId,
   suiteScaleFactor: number,
   operation: BenchmarkOperation,
-  stepType: "query" | "mutation",
+  stepTypes: readonly ["query" | "mutation", ...("query" | "mutation")[]],
 ): Promise<QueryStep[]> {
   const db = await getKyselyDb()
 
@@ -776,7 +789,7 @@ async function fetchStepsForOperation(
       ).as("elapsed_end_s"),
     ])
     .where("latest_runs.run_rank", "=", 1)
-    .where("run_step.step_type", "=", stepType)
+    .where("run_step.step_type", "in", [...stepTypes])
     .where("run_step.status", "=", "completed")
     .where("run_step.result_status", "=", "ok")
     .where("run_step.finished_at", "is not", null)
@@ -792,7 +805,7 @@ export function fetchQuerySteps(
   suite: BenchmarkSuiteId,
   suiteScaleFactor: number,
 ): Promise<QueryStep[]> {
-  return fetchStepsForOperation(system, suite, suiteScaleFactor, "select", "query")
+  return fetchStepsForOperation(system, suite, suiteScaleFactor, "select", ["query"])
 }
 
 export function fetchMutateSteps(
@@ -800,7 +813,18 @@ export function fetchMutateSteps(
   suite: BenchmarkSuiteId,
   suiteScaleFactor: number,
 ): Promise<QueryStep[]> {
-  return fetchStepsForOperation(system, suite, suiteScaleFactor, "mutate", "mutation")
+  return fetchStepsForOperation(system, suite, suiteScaleFactor, "mutate", ["mutation"])
+}
+
+export function fetchConcurrentSteps(
+  system: string,
+  suite: BenchmarkSuiteId,
+  suiteScaleFactor: number,
+): Promise<QueryStep[]> {
+  return fetchStepsForOperation(system, suite, suiteScaleFactor, "concurrent", [
+    "query",
+    "mutation",
+  ])
 }
 
 export async function fetchFlameSpans(
@@ -813,9 +837,10 @@ export async function fetchFlameSpans(
 
   const operationOrder = sql<number>`CASE
     WHEN ${sql.ref("latest_runs.operation")} = 'populate' THEN 0
-    WHEN ${sql.ref("latest_runs.operation")} = 'mutate'   THEN 1
-    WHEN ${sql.ref("latest_runs.operation")} = 'select'   THEN 2
-    ELSE 3
+    WHEN ${sql.ref("latest_runs.operation")} = 'select'   THEN 1
+    WHEN ${sql.ref("latest_runs.operation")} = 'mutate'   THEN 2
+    WHEN ${sql.ref("latest_runs.operation")} = 'concurrent' THEN 3
+    ELSE 4
   END`
 
   // `targetDb` is the database variant label from the UI.
@@ -985,8 +1010,9 @@ function collapseQueryStepIterations(stepSpans: FlameSpan[]): FlameSpan[] {
 function compareOperationOrder(left: BenchmarkOperation, right: BenchmarkOperation): number {
   const operationOrder: Record<BenchmarkOperation, number> = {
     populate: 0,
-    mutate: 1,
-    select: 2,
+    select: 1,
+    mutate: 2,
+    concurrent: 3,
   }
 
   return operationOrder[left] - operationOrder[right]

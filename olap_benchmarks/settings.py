@@ -22,7 +22,7 @@ DatabaseName = Literal[
 ]
 
 SuiteName = Literal["rtabench", "time_series", "clickbench", "jsonbench", "kaggle_airbnb", "tpc_h", "tpc_ds"]
-Operation = Literal["populate", "select", "mutate"]
+Operation = Literal["populate", "select", "mutate", "concurrent"]
 Revision = Annotated[str, "Results database revision"]
 
 type DatabaseArg = DatabaseName | Literal["all"]
@@ -77,7 +77,7 @@ SUITE_LABELS: dict[SuiteName, str] = {
 SUITE_NAV_LABELS: dict[SuiteName, str] = SUITE_LABELS.copy()
 
 SUITE_OPERATIONS: dict[SuiteName, tuple[Operation, ...]] = dict.fromkeys(SUITE_NAMES, ("populate", "select"))
-SUITE_OPERATIONS["time_series"] = ("populate", "select", "mutate")
+SUITE_OPERATIONS["time_series"] = ("populate", "select", "mutate", "concurrent")
 
 SuiteQueryNameParser = Literal["generic", "time_series"]
 

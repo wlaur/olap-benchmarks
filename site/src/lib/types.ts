@@ -70,7 +70,8 @@ export interface CrossSystemQueryCoverage extends QueryCoverage {
   finished_at: string
 }
 
-export type BenchmarkOperation = "populate" | "mutate" | "select"
+export type BenchmarkOperation = "populate" | "mutate" | "select" | "concurrent"
+export type QueryAnalysisOperation = Exclude<BenchmarkOperation, "populate">
 
 export interface RunMetadata {
   host?: {

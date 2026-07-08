@@ -74,6 +74,11 @@ const OPERATION_COLORS: Partial<
     fillHover: "rgba(249, 115, 22, 0.5)",
     stroke: "rgba(249, 115, 22, 0.5)",
   },
+  concurrent: {
+    fill: "rgba(20, 184, 166, 0.3)",
+    fillHover: "rgba(45, 212, 191, 0.5)",
+    stroke: "rgba(45, 212, 191, 0.5)",
+  },
   select: {
     fill: "rgba(99, 102, 241, 0.35)",
     fillHover: "rgba(99, 102, 241, 0.55)",

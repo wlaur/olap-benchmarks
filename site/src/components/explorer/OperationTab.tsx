@@ -80,11 +80,14 @@ export function OperationTab({
   const showTimeline = isTimelineLoading || querySteps.length > 0
   const isSplitLayout = !layoutMounted || deferredLayoutWidth >= DETAIL_SPLIT_MIN_WIDTH
 
-  const timelineTitle = operation === "mutate" ? "Mutate timeline" : "Select timeline"
+  const operationLabel = getOperationLabel(operation)
+  const timelineTitle = `${operationLabel} timeline`
   const timelineDescription =
     operation === "mutate"
       ? "Insert, upsert, and delete mutation execution timeline per database. Each segment represents one mutation iteration."
-      : "Full select query execution timeline per database. Each segment represents one query iteration. Click to inspect."
+      : operation === "concurrent"
+        ? "Reader select and writer insert execution timeline per database. Each segment represents one workload step."
+        : "Full select query execution timeline per database. Each segment represents one query iteration. Click to inspect."
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -133,11 +136,10 @@ export function OperationTab({
         >
           <div className="flex min-h-[5.5rem] shrink-0 flex-col items-start justify-between gap-3 border-b border-border-default px-5 py-4 sm:flex-row sm:gap-4">
             <div>
-              <SectionTitle as="h3">
-                {operation === "mutate" ? "Mutation" : "Select"} latency comparison
-              </SectionTitle>
+              <SectionTitle as="h3">{operationLabel} latency comparison</SectionTitle>
               <BodyText className="mt-1">
-                Click a row to inspect its latency spread{operation === "select" ? " and SQL" : ""}.
+                Click a row to inspect its latency spread
+                {operation !== "mutate" ? " and SQL when available" : ""}.
               </BodyText>
             </div>
             {isLoading ? (
@@ -216,7 +218,7 @@ interface InspectorPlaceholderProps {
 }
 
 function InspectorPlaceholder({ rowCount, databaseCount, operation }: InspectorPlaceholderProps) {
-  const label = operation === "mutate" ? "mutation" : "query"
+  const label = getOperationItemLabel(operation)
   return (
     <div className="flex h-full min-h-0 flex-col justify-between rounded-2xl bg-surface-raised p-5">
       <div>
@@ -226,7 +228,7 @@ function InspectorPlaceholder({ rowCount, databaseCount, operation }: InspectorP
         </FeatureTitle>
         <BodyText className="mt-3 max-w-md leading-6">
           The detail pane stays pinned on the right. Select any {label} to inspect latency by
-          database{operation === "select" ? " and compare the SQL variants" : ""} for only the
+          database{operation !== "mutate" ? " and compare SQL when available" : ""} for only the
           databases currently included.
         </BodyText>
       </div>
@@ -243,4 +245,16 @@ function InspectorPlaceholder({ rowCount, databaseCount, operation }: InspectorP
       </div>
     </div>
   )
+}
+
+function getOperationLabel(operation: BenchmarkOperation): string {
+  if (operation === "mutate") return "Mutation"
+  if (operation === "concurrent") return "Concurrent"
+  return "Select"
+}
+
+function getOperationItemLabel(operation: BenchmarkOperation): string {
+  if (operation === "mutate") return "mutation"
+  if (operation === "concurrent") return "workload step"
+  return "query"
 }

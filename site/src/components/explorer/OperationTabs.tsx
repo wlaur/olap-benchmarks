@@ -1,15 +1,22 @@
 import type { SelectionState } from "../../hooks/useSelectionState"
 import type { SuiteConfig } from "../../lib/suiteConfig"
-import type { QueriesManifest, QueryStep, QuerySummary } from "../../lib/types"
+import type {
+  QueriesManifest,
+  QueryAnalysisOperation,
+  QueryStep,
+  QuerySummary,
+} from "../../lib/types"
 import { OperationTab } from "./OperationTab"
 
 interface OperationTabsProps {
-  activeOperation: "select" | "mutate"
+  activeOperation: QueryAnalysisOperation
   suiteConfig: SuiteConfig
   querySummaries: QuerySummary[]
   mutateSummaries: QuerySummary[]
+  concurrentSummaries: QuerySummary[]
   querySteps: QueryStep[]
   mutateSteps: QueryStep[]
+  concurrentSteps: QueryStep[]
   databases: string[]
   includedDatabases: string[]
   queriesManifest: QueriesManifest | null
@@ -18,15 +25,15 @@ interface OperationTabsProps {
   isTimelineLoading: boolean
 }
 
-type TabOperation = "select" | "mutate"
-
 export function OperationTabs({
   activeOperation,
   suiteConfig,
   querySummaries,
   mutateSummaries,
+  concurrentSummaries,
   querySteps,
   mutateSteps,
+  concurrentSteps,
   databases,
   includedDatabases,
   queriesManifest,
@@ -34,39 +41,38 @@ export function OperationTabs({
   isLoading,
   isTimelineLoading,
 }: OperationTabsProps) {
-  const resolvedTab: TabOperation =
-    activeOperation === "mutate" && suiteConfig.operations.includes("mutate") ? "mutate" : "select"
+  const resolvedTab: QueryAnalysisOperation =
+    activeOperation !== "select" && suiteConfig.operations.includes(activeOperation)
+      ? activeOperation
+      : "select"
+  const resolvedSummaries =
+    resolvedTab === "mutate"
+      ? mutateSummaries
+      : resolvedTab === "concurrent"
+        ? concurrentSummaries
+        : querySummaries
+  const resolvedSteps =
+    resolvedTab === "mutate"
+      ? mutateSteps
+      : resolvedTab === "concurrent"
+        ? concurrentSteps
+        : querySteps
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1">
-        {resolvedTab === "select" ? (
-          <OperationTab
-            operation="select"
-            suiteConfig={suiteConfig}
-            querySummaries={querySummaries}
-            querySteps={querySteps}
-            databases={databases}
-            includedDatabases={includedDatabases}
-            queriesManifest={queriesManifest}
-            selection={selection}
-            isLoading={isLoading}
-            isTimelineLoading={isTimelineLoading}
-          />
-        ) : (
-          <OperationTab
-            operation="mutate"
-            suiteConfig={suiteConfig}
-            querySummaries={mutateSummaries}
-            querySteps={mutateSteps}
-            databases={databases}
-            includedDatabases={includedDatabases}
-            queriesManifest={queriesManifest}
-            selection={selection}
-            isLoading={isLoading}
-            isTimelineLoading={isTimelineLoading}
-          />
-        )}
+        <OperationTab
+          operation={resolvedTab}
+          suiteConfig={suiteConfig}
+          querySummaries={resolvedSummaries}
+          querySteps={resolvedSteps}
+          databases={databases}
+          includedDatabases={includedDatabases}
+          queriesManifest={queriesManifest}
+          selection={selection}
+          isLoading={isLoading}
+          isTimelineLoading={isTimelineLoading}
+        />
       </div>
     </div>
   )

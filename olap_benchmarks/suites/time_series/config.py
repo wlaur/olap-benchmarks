@@ -1,12 +1,14 @@
 import logging
 import shutil
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from math import sqrt
 from pathlib import Path
+from threading import Barrier
 from time import perf_counter
-from typing import Any, Literal, get_args
+from typing import Any, Literal, cast, get_args
 
 import numpy as np
 import polars as pl
@@ -62,6 +64,16 @@ MUTATE_ROW_COUNTS = [1, 100, 10_000]
 MUTATE_ACTIONS: list[MutateAction] = ["insert", "upsert", "delete"]
 MUTATE_TABLES: list[TableName] = ["data_tall", "data_wide", "data_large"]
 MUTATE_ITERATIONS = 3
+CONCURRENT_QUERY_NAMES: tuple[str, ...] = (
+    "large_01_max_time",
+    "large_02_latest_50",
+    "large_03_aggregate_filtered",
+)
+CONCURRENT_READER_CLIENTS = 4
+CONCURRENT_READER_ITERATIONS = 5
+CONCURRENT_WRITER_BATCH_ROWS = 100
+CONCURRENT_WRITER_ITERATIONS = 20
+CONCURRENT_WRITER_SEED_OFFSET = 100_000
 
 
 @dataclass(frozen=True)
@@ -450,7 +462,7 @@ def prepare_data(scale_factor: int = 1, overwrite: bool = False) -> None:
 
 
 class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
-    supported_operations = ("populate", "select", "mutate")
+    supported_operations = ("populate", "select", "mutate", "concurrent")
     name: SuiteName = "time_series"
 
     def get_mutate_steps(self) -> tuple[list[MutateStep], list[MutateStep]]:
@@ -675,6 +687,103 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def _apply_delete(self, step: MutateStep, keys: pl.DataFrame) -> None:
         pk = self._get_mutate_primary_key(step.table)
         self.db.delete(step.table, primary_key=pk, keys=keys)
+
+    def _create_concurrent_worker_suite(self) -> "TimeSeries[DBT]":
+        db_type = type(self.db)
+        worker_db = db_type.model_construct()
+        worker_db._current_suite = self.name
+        worker_db._current_suite_scale_factor = self.scale_factor
+        worker_db._result_storage = self.db.result_storage
+        worker_db._run_id = self.db.run_id
+        worker_db._last_start_command = self.db._last_start_command
+        return cast(
+            TimeSeries[DBT],
+            type(self).model_construct(db=worker_db, name=self.name, scale_factor=self.scale_factor),
+        )
+
+    def _run_concurrent_writer(self, start_barrier: Barrier) -> None:
+        suite = self._create_concurrent_worker_suite()
+        step = MutateStep(action="insert", table="data_large", row_count=CONCURRENT_WRITER_BATCH_ROWS)
+        step_name = f"concurrent_{step.name}"
+        start_barrier.wait()
+
+        if not suite.db.is_mutation_step_enabled(self.name, step.name):
+            _LOGGER.info(f"Skipping concurrent writer step for {suite.db.name}: {step.name} is disabled")
+            for iteration in range(1, CONCURRENT_WRITER_ITERATIONS + 1):
+                suite.db.record_skipped_mutation_step(
+                    query_name=step_name,
+                    iteration=iteration,
+                    table_name=step.table,
+                    reason=f"{suite.db.name} disables {step.name}",
+                )
+            return
+
+        for iteration in range(1, CONCURRENT_WRITER_ITERATIONS + 1):
+            seed = CONCURRENT_WRITER_SEED_OFFSET + iteration
+            with suite.db.mutation_context(
+                query_name=step_name,
+                iteration=iteration,
+                table_name=step.table,
+            ):
+                suite._apply_insert(step, suite._generate_insert_data(step, seed))
+
+            _LOGGER.info(f"Executed {step_name} iteration {iteration:_}/{CONCURRENT_WRITER_ITERATIONS:_}")
+
+    def _run_concurrent_reader(self, reader_id: int, start_barrier: Barrier) -> None:
+        suite = self._create_concurrent_worker_suite()
+        start_barrier.wait()
+
+        for iteration in range(1, CONCURRENT_READER_ITERATIONS + 1):
+            for query_name in CONCURRENT_QUERY_NAMES:
+                skip = suite.query_skip(query_name)
+                if skip is not None:
+                    result_status, reason = skip
+                    suite.record_skipped_query_steps(
+                        query_name,
+                        iteration,
+                        result_status=result_status,
+                        reason=reason,
+                        start_iteration=iteration,
+                    )
+                    continue
+
+                with suite.db.query_context(query_name):
+                    query = suite.load_time_series_query(query_name)
+                    df, duration_seconds = suite.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=iteration,
+                        query=query,
+                        fetch_kwargs=suite.fetch_kwargs,
+                    )
+
+                _LOGGER.info(
+                    f"Executed concurrent reader {reader_id:_} query {query_name} "
+                    f"iteration {iteration:_}/{CONCURRENT_READER_ITERATIONS:_} "
+                    f"in {1_000 * duration_seconds:_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})"
+                )
+
+    def concurrent(self) -> None:
+        t0 = perf_counter()
+        worker_count = CONCURRENT_READER_CLIENTS + 1
+        start_barrier = Barrier(worker_count)
+
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix=f"{self.db.name}-time-series") as executor:
+            futures = [
+                executor.submit(self._run_concurrent_writer, start_barrier),
+                *(
+                    executor.submit(self._run_concurrent_reader, reader_id, start_barrier)
+                    for reader_id in range(1, CONCURRENT_READER_CLIENTS + 1)
+                ),
+            ]
+
+            for future in as_completed(futures):
+                future.result()
+
+        _LOGGER.info(
+            f"Executed concurrent time-series workload with {CONCURRENT_READER_CLIENTS:_} reader clients, "
+            f"{len(CONCURRENT_QUERY_NAMES):_} queries, and {CONCURRENT_WRITER_ITERATIONS:_} writer batches "
+            f"in {perf_counter() - t0:_.2f} seconds"
+        )
 
     def mutate(self) -> None:
         t0 = perf_counter()

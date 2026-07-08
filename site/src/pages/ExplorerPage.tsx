@@ -35,6 +35,7 @@ import type { BenchmarkDefinition, BenchmarkSuiteId } from "../lib/benchmarks"
 import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
 import { getSuiteConfig } from "../lib/suiteConfig"
+import type { QueryAnalysisOperation } from "../lib/types"
 
 interface ExplorerPageProps {
   system: string | null
@@ -43,9 +44,10 @@ interface ExplorerPageProps {
   isSystemLoading?: boolean
 }
 
-const QUERY_GROUP_OPTIONS: { value: "select" | "mutate"; label: string }[] = [
-  { value: "mutate", label: "Mutate queries" },
+const QUERY_GROUP_OPTIONS: { value: QueryAnalysisOperation; label: string }[] = [
   { value: "select", label: "Select queries" },
+  { value: "mutate", label: "Mutate queries" },
+  { value: "concurrent", label: "Concurrent workload" },
 ]
 
 export function ExplorerPage({
@@ -57,8 +59,14 @@ export function ExplorerPage({
   const [searchParams] = useSearchParams()
   const preferredScaleFactor = parseScaleFactor(searchParams.get("scale"))
   const suiteConfig = useMemo(() => getSuiteConfig(suiteDefinition), [suiteDefinition])
-  const hasMutateOperation = suiteConfig.operations.includes("mutate")
-  const [selectedOperation, setSelectedOperation] = useState<"select" | "mutate">("select")
+  const queryGroupOptions = useMemo(
+    () =>
+      QUERY_GROUP_OPTIONS.filter(
+        (option) => option.value === "select" || suiteConfig.operations.includes(option.value),
+      ),
+    [suiteConfig.operations],
+  )
+  const [selectedOperation, setSelectedOperation] = useState<QueryAnalysisOperation>("select")
   const selection = useSelectionState()
   const { resetSelection } = selection
 
@@ -73,6 +81,7 @@ export function ExplorerPage({
     filteredQuerySummaries,
     filteredQueryCoverage,
     filteredMutateSummaries,
+    filteredConcurrentSummaries,
     filteredOperationSummaries,
     isLoading,
     toggleDatabase,
@@ -92,11 +101,18 @@ export function ExplorerPage({
   const showFlameGraphPanel = deferredLoading || system !== null
   const showResourceTrendPanel = deferredLoading || state.metricSamples.length > 0
 
+  const selectedOperationSummaries =
+    selectedOperation === "mutate"
+      ? filteredMutateSummaries
+      : selectedOperation === "concurrent"
+        ? filteredConcurrentSummaries
+        : filteredQuerySummaries
+
   useEffect(() => {
-    if (!hasMutateOperation) {
+    if (!queryGroupOptions.some((option) => option.value === selectedOperation)) {
       setSelectedOperation("select")
     }
-  }, [hasMutateOperation])
+  }, [queryGroupOptions, selectedOperation])
 
   useEffect(() => {
     resetSelection()
@@ -112,7 +128,12 @@ export function ExplorerPage({
     )
   }
 
-  if (!isLoading && state.runSummaries.length === 0 && state.queryCoverage.length === 0) {
+  if (
+    !isLoading &&
+    state.runSummaries.length === 0 &&
+    state.queryCoverage.length === 0 &&
+    state.operationSummaries.length === 0
+  ) {
     return (
       <section className="flex h-full min-h-0 w-full flex-1 items-center justify-center">
         <div className="rounded-2xl bg-surface-raised px-6 py-5 text-sm text-slate-300">
@@ -218,11 +239,11 @@ export function ExplorerPage({
         title="Query analysis"
         description="Per-query latency, timeline, and detail inspector."
         trailing={
-          hasMutateOperation ? (
+          queryGroupOptions.length > 1 ? (
             <CycleSelect
               label="Query Group"
               value={selectedOperation}
-              options={QUERY_GROUP_OPTIONS}
+              options={queryGroupOptions}
               onChange={setSelectedOperation}
             />
           ) : null
@@ -234,8 +255,10 @@ export function ExplorerPage({
             suiteConfig={suiteConfig}
             querySummaries={filteredQuerySummaries}
             mutateSummaries={filteredMutateSummaries}
+            concurrentSummaries={filteredConcurrentSummaries}
             querySteps={state.querySteps}
             mutateSteps={state.mutateSteps}
+            concurrentSteps={state.concurrentSteps}
             databases={databases}
             includedDatabases={includedDatabases}
             queriesManifest={state.queriesManifest}
@@ -247,9 +270,7 @@ export function ExplorerPage({
           <Suspense>
             <QueryHeatmapPanel
               suiteConfig={suiteConfig}
-              querySummaries={
-                selectedOperation === "mutate" ? filteredMutateSummaries : filteredQuerySummaries
-              }
+              querySummaries={selectedOperationSummaries}
               includedDatabases={includedDatabases}
               databaseColors={databaseColors}
               selection={selection}
@@ -282,6 +303,7 @@ export function ExplorerPage({
                   insertSteps={state.insertSteps}
                   querySteps={state.querySteps}
                   mutateSteps={state.mutateSteps}
+                  concurrentSteps={state.concurrentSteps}
                   databases={includedDatabases}
                   isLoading={deferredLoading}
                 />

@@ -43,6 +43,7 @@ export function getStepOptions(
   insertSteps: InsertStep[],
   querySteps: QueryStep[],
   mutateSteps: QueryStep[],
+  concurrentSteps: QueryStep[],
   databases: string[],
   compareQueryNames: (left: string, right: string) => number,
 ): StepOption[] {
@@ -64,8 +65,9 @@ export function getStepOptions(
       .sort(compareQueryNames)
       .map((name) => ({ label: toTitleCase(name.replace(/_/g, " ")), value: name }))
   }
+  const steps = operation === "concurrent" ? concurrentSteps : querySteps
   const queryNames = new Set(
-    querySteps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
+    steps.filter((s) => includedDatabases.has(s.db)).map((s) => s.query_name),
   )
   return Array.from(queryNames)
     .sort(compareQueryNames)
@@ -77,6 +79,7 @@ function getStepInstances(
   insertSteps: InsertStep[],
   querySteps: QueryStep[],
   mutateSteps: QueryStep[],
+  concurrentSteps: QueryStep[],
   databases: string[],
 ): StepInstance[] {
   const includedDatabases = new Set(databases)
@@ -93,7 +96,8 @@ function getStepInstances(
       }))
   }
 
-  const steps = operation === "mutate" ? mutateSteps : querySteps
+  const steps =
+    operation === "mutate" ? mutateSteps : operation === "concurrent" ? concurrentSteps : querySteps
   return steps
     .filter((step) => includedDatabases.has(step.db))
     .map((step) => ({
@@ -111,9 +115,17 @@ export function getAvailableStepWindows(
   insertSteps: InsertStep[],
   querySteps: QueryStep[],
   mutateSteps: QueryStep[],
+  concurrentSteps: QueryStep[],
   databases: string[],
 ): Map<string, Map<string, StepTimeWindow>> {
-  const stepInstances = getStepInstances(operation, insertSteps, querySteps, mutateSteps, databases)
+  const stepInstances = getStepInstances(
+    operation,
+    insertSteps,
+    querySteps,
+    mutateSteps,
+    concurrentSteps,
+    databases,
+  )
   const samplesByDb = new Map<string, number[]>()
 
   for (const sample of metricSamples) {

@@ -220,6 +220,9 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     def mutate(self) -> None:
         raise NotImplementedError(f"{type(self).__name__} does not support the mutate operation")
 
+    def concurrent(self) -> None:
+        raise NotImplementedError(f"{type(self).__name__} does not support the concurrent operation")
+
 
 def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None]:
     match suite:

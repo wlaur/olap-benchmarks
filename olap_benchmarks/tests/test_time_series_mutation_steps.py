@@ -25,6 +25,7 @@ class FakeMutationDB(Database):
     inserted_tables: list[str] = []
     upserted_tables: list[str] = []
     deleted_tables: list[str] = []
+    query_iterations: list[tuple[str, int, str]] = []
 
     @property
     def start(self) -> None:
@@ -39,6 +40,17 @@ class FakeMutationDB(Database):
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
         raise NotImplementedError
+
+    def execute_query_iteration(
+        self,
+        query_name: str,
+        iteration: int,
+        query: str,
+        fetch_kwargs: Mapping[str, Any] | None = None,
+    ) -> tuple[pl.DataFrame, float]:
+        _ = fetch_kwargs
+        self.query_iterations.append((query_name, iteration, query))
+        return pl.DataFrame({"value": [1]}), 0.001
 
     def get_table_names(self) -> set[TableName]:
         raise NotImplementedError
@@ -81,6 +93,15 @@ def _fake_delete_keys(self: TimeSeries[Any], step: MutateStep, seed: int) -> pl.
     return pl.DataFrame({"time": [datetime(2025, 1, 1)]})
 
 
+def _fake_load_time_series_query(self: TimeSeries[Any], query_name: str) -> str:
+    _ = self
+    return f"select '{query_name}'"
+
+
+def _same_concurrent_worker_suite(self: TimeSeries[Any]) -> TimeSeries[Any]:
+    return self
+
+
 @pytest.mark.parametrize("disabled_step", ["insert_data_large_1", "insert_data_wide_1"])
 def test_time_series_mutate_skips_disabled_steps(
     monkeypatch: pytest.MonkeyPatch,
@@ -93,6 +114,7 @@ def test_time_series_mutate_skips_disabled_steps(
         inserted_tables=[],
         upserted_tables=[],
         deleted_tables=[],
+        query_iterations=[],
     )
     suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
 
@@ -121,3 +143,68 @@ def test_time_series_mutate_skips_disabled_steps(
         assert db.inserted_tables == ["data_wide"]
     else:
         assert db.inserted_tables == ["data_large"]
+
+
+def test_time_series_concurrent_runs_writer_and_readers(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeMutationDB(
+        disabled_steps=set(),
+        executed_steps=[],
+        skipped_steps=[],
+        inserted_tables=[],
+        upserted_tables=[],
+        deleted_tables=[],
+        query_iterations=[],
+    )
+    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
+
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_QUERY_NAMES", ("large_01_max_time",))
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_READER_CLIENTS", 2)
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_READER_ITERATIONS", 2)
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_WRITER_BATCH_ROWS", 1)
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_WRITER_ITERATIONS", 2)
+    monkeypatch.setattr(TimeSeries, "_generate_insert_data", _fake_insert_data)
+    monkeypatch.setattr(TimeSeries, "load_time_series_query", _fake_load_time_series_query)
+    monkeypatch.setattr(TimeSeries, "_create_concurrent_worker_suite", _same_concurrent_worker_suite)
+
+    suite.concurrent()
+
+    assert db.inserted_tables == ["data_large", "data_large"]
+    assert db.deleted_tables == []
+    assert [step for step, _iteration, _table in db.executed_steps] == [
+        "concurrent_insert_data_large_1",
+        "concurrent_insert_data_large_1",
+    ]
+    assert sorted(db.query_iterations) == [
+        ("large_01_max_time", 1, "select 'large_01_max_time'"),
+        ("large_01_max_time", 1, "select 'large_01_max_time'"),
+        ("large_01_max_time", 2, "select 'large_01_max_time'"),
+        ("large_01_max_time", 2, "select 'large_01_max_time'"),
+    ]
+
+
+def test_time_series_concurrent_skips_disabled_writer(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeMutationDB(
+        disabled_steps={"insert_data_large_1"},
+        executed_steps=[],
+        skipped_steps=[],
+        inserted_tables=[],
+        upserted_tables=[],
+        deleted_tables=[],
+        query_iterations=[],
+    )
+    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
+
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_QUERY_NAMES", ())
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_READER_CLIENTS", 1)
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_WRITER_BATCH_ROWS", 1)
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_WRITER_ITERATIONS", 2)
+    monkeypatch.setattr(TimeSeries, "_create_concurrent_worker_suite", _same_concurrent_worker_suite)
+
+    suite.concurrent()
+
+    assert db.inserted_tables == []
+    assert db.executed_steps == []
+    assert [step for step, _iteration, _table, _reason in db.skipped_steps] == [
+        "concurrent_insert_data_large_1",
+        "concurrent_insert_data_large_1",
+    ]

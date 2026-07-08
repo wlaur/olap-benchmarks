@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Process, Queue
 from queue import Empty
+from threading import Lock
 from typing import Any, Literal, TypedDict, cast
 
 from sqlalchemy import update
@@ -201,9 +202,15 @@ class Storage:
     def __init__(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self.queue = queue
         self.result_queue = result_queue
+        self._response_lock = Lock()
 
     def put(self, type: MessageType, args: list[Any]) -> None:
         self.queue.put({"type": type, "args": args})
+
+    def put_and_get_id(self, type: MessageType, args: list[Any]) -> int:
+        with self._response_lock:
+            self.put(type, args)
+            return cast(int, self.result_queue.get())
 
     def insert_run(
         self,
@@ -216,11 +223,10 @@ class Storage:
         started_at: datetime,
         metadata: dict[str, Any] | None = None,
     ) -> int:
-        self.put(
+        return self.put_and_get_id(
             "insert_run",
             [suite, suite_scale_factor, db, db_version, operation, system, "running", started_at, metadata],
         )
-        return cast(int, self.result_queue.get())
 
     def finish_run(
         self,
@@ -245,7 +251,7 @@ class Storage:
         iteration_role: IterationRole | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
-        self.put(
+        return self.put_and_get_id(
             "start_step",
             [
                 run_id,
@@ -261,7 +267,6 @@ class Storage:
                 metadata,
             ],
         )
-        return cast(int, self.result_queue.get())
 
     def finish_step(
         self,
@@ -296,8 +301,7 @@ class Storage:
         if content is None:
             content = uuid.uuid4().hex
 
-        self.put("debug", [content])
-        return cast(int, self.result_queue.get())
+        return self.put_and_get_id("debug", [content])
 
     def shutdown(self, timeout_seconds: float = 10.0) -> None:
         self.put("shutdown", [])
