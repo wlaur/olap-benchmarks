@@ -299,27 +299,48 @@ class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
 
     def select(self) -> None:
         t0 = perf_counter()
+        failed_queries = 0
         for idx, query_name in enumerate(TPCDS_QUERY_NAMES):
             if not self.include_query(query_name):
                 _LOGGER.info(f"Skipping unsupported query {query_name} on {self.db.name}")
+                self.record_skipped_query_steps(
+                    query_name,
+                    TPCDS_ITERATIONS,
+                    result_status="unsupported",
+                    reason=f"query is unsupported by {self.db.name}",
+                )
                 continue
 
-            with self.db.query_context(query_name):
-                query = self.load_tpcds_query(query_name)
+            try:
+                with self.db.query_context(query_name):
+                    query = self.load_tpcds_query(query_name)
 
-                for it in range(1, TPCDS_ITERATIONS + 1):
-                    df, t = self.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=it,
-                        query=query,
-                        fetch_kwargs=self.fetch_kwargs,
-                    )
+                    for it in range(1, TPCDS_ITERATIONS + 1):
+                        df, t = self.db.execute_query_iteration(
+                            query_name=query_name,
+                            iteration=it,
+                            query=query,
+                            fetch_kwargs=self.fetch_kwargs,
+                        )
 
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{TPCDS_ITERATIONS:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+                        _LOGGER.info(
+                            f"Executed {query_name} ({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_}) "
+                            f"iteration {it:_}/{TPCDS_ITERATIONS:_} "
+                            f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                        )
+            except Exception as exc:
+                failed_queries += 1
+                self.db.rollback()
+                _LOGGER.exception(
+                    f"Failed {query_name} ({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_}) on {self.db.name}; "
+                    f"continuing with remaining TPC-DS queries: {exc}"
+                )
+
+        if failed_queries:
+            _LOGGER.warning(
+                f"TPC-DS select completed on {self.db.name} with {failed_queries:_} failed "
+                f"{'queries' if failed_queries != 1 else 'query'}"
+            )
 
         _LOGGER.info(
             f"Executed {len(TPCDS_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"

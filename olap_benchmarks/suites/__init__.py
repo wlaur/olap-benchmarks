@@ -9,6 +9,7 @@ import polars as pl
 from pydantic import BaseModel, Field
 
 from ..dbs import Database
+from ..run_metadata import StepResultStatus
 from ..settings import (
     SETTINGS,
     Operation,
@@ -151,6 +152,25 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
 
     @abstractmethod
     def select(self) -> None: ...
+
+    def record_skipped_query_steps(
+        self,
+        query_name: str,
+        iterations: int,
+        *,
+        result_status: StepResultStatus,
+        reason: str,
+    ) -> None:
+        if result_status not in ("skipped", "unsupported"):
+            raise ValueError(f"Skipped query steps cannot use result_status={result_status!r}")
+
+        for iteration in range(1, iterations + 1):
+            self.db.record_skipped_query_step(
+                query_name=query_name,
+                iteration=iteration,
+                reason=reason,
+                result_status=result_status,
+            )
 
     def mutate(self) -> None:
         raise NotImplementedError(f"{type(self).__name__} does not support the mutate operation")

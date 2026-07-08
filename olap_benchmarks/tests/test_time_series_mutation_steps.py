@@ -21,6 +21,7 @@ class FakeMutationDB(Database):
 
     disabled_steps: set[str] = set()
     executed_steps: list[tuple[str, int, str | None]] = []
+    skipped_steps: list[tuple[str, int, str, str]] = []
     inserted_tables: list[str] = []
     upserted_tables: list[str] = []
     deleted_tables: list[str] = []
@@ -50,6 +51,9 @@ class FakeMutationDB(Database):
     def mutation_context(self, query_name: str, iteration: int, table_name: str | None = None) -> Generator[None]:
         self.executed_steps.append((query_name, iteration, table_name))
         yield
+
+    def record_skipped_mutation_step(self, query_name: str, iteration: int, table_name: str, reason: str) -> None:
+        self.skipped_steps.append((query_name, iteration, table_name, reason))
 
     def insert(
         self,
@@ -85,6 +89,7 @@ def test_time_series_mutate_skips_disabled_steps(
     db = FakeMutationDB(
         disabled_steps={disabled_step},
         executed_steps=[],
+        skipped_steps=[],
         inserted_tables=[],
         upserted_tables=[],
         deleted_tables=[],
@@ -108,6 +113,7 @@ def test_time_series_mutate_skips_disabled_steps(
     executed_query_names = [query_name for query_name, _iteration, _table_name in db.executed_steps]
 
     assert disabled_step not in executed_query_names
+    assert [query_name for query_name, _iteration, _table_name, _reason in db.skipped_steps] == [disabled_step]
     assert len(executed_query_names) == 2
     assert db.deleted_tables == ["data_tall"]
 
