@@ -50,7 +50,7 @@
       "nav_label": "TPC-H",
       "queries_key": "tpc_h",
       "default_scale_factor": 10,
-      "supported_scale_factors": [10],
+      "supported_scale_factors": [10, 50],
       "scale_factor_supported": true,
       "operations": ["populate", "select"],
       "query_name_parser": "generic"

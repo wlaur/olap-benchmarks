@@ -10,10 +10,11 @@ the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
 preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
 scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
-scale-factor discovery issues. The version-bump work now includes MonetDB
-Dec2025-SP3. Remaining blockers are public-rerun quality, correctness checks,
-query status/correctness semantics, metadata surfacing, published-data hygiene,
-and the larger suite/engine roadmap from `RESEARCH.md`.
+scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
+The version-bump work now includes MonetDB Dec2025-SP3. Remaining blockers are
+public-rerun quality, correctness checks, query status/correctness semantics,
+metadata surfacing, published-data hygiene, and the larger suite/engine roadmap
+from `RESEARCH.md`.
 
 ---
 
@@ -79,9 +80,6 @@ and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ## 3. Dimensions, UI, And Data Hygiene
 
-- [ ] **TPC-H SF10+SF50 fanout is still not configured.** `suite=all` now fans
-      out configured suite scale factors, and time-series has SF1/SF10, but
-      TPC-H still only participates at its default SF unless invoked separately.
 - [ ] **Cross-system comparison is still absent from the UI.** The data model
       supports comparing the same `(db, version, suite, SF)` across systems, but
       every current site view is scoped to one selected system.

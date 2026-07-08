@@ -48,11 +48,13 @@ DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
 }
 
 TIME_SERIES_SCALE_FACTORS = (1, 10)
+TPCH_SCALE_FACTORS = (10, 50)
 
 ALL_SUITE_SCALE_FACTORS: dict[SuiteName, tuple[int, ...]] = {
     suite: (scale_factor,) for suite, scale_factor in DEFAULT_SUITE_SCALE_FACTORS.items()
 }
 ALL_SUITE_SCALE_FACTORS["time_series"] = TIME_SERIES_SCALE_FACTORS
+ALL_SUITE_SCALE_FACTORS["tpc_h"] = TPCH_SCALE_FACTORS
 
 SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "tpc_h", "tpc_ds"})
 
