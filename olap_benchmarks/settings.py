@@ -26,6 +26,7 @@ Revision = Annotated[str, "Results database revision"]
 
 type DatabaseArg = DatabaseName | Literal["all"]
 type SuiteArg = SuiteName | Literal["all"]
+SuitePublicRole = Literal["benchmark", "smoke"]
 
 SUITE_NAMES = cast(tuple[SuiteName, ...], get_args(SuiteName))
 
@@ -77,6 +78,9 @@ SuiteQueryNameParser = Literal["generic", "time_series"]
 SUITE_QUERY_NAME_PARSERS: dict[SuiteName, SuiteQueryNameParser] = dict.fromkeys(SUITE_NAMES, "generic")
 SUITE_QUERY_NAME_PARSERS["time_series"] = "time_series"
 
+SUITE_PUBLIC_ROLES = cast(dict[SuiteName, SuitePublicRole], dict.fromkeys(SUITE_NAMES, "benchmark"))
+SUITE_PUBLIC_ROLES["kaggle_airbnb"] = "smoke"
+
 assert set(DEFAULT_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
 assert set(ALL_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
 assert set(SUITE_DISPLAY_ORDER) == set(SUITE_NAMES)
@@ -84,6 +88,7 @@ assert set(SUITE_LABELS) == set(SUITE_NAMES)
 assert set(SUITE_NAV_LABELS) == set(SUITE_NAMES)
 assert set(SUITE_OPERATIONS) == set(SUITE_NAMES)
 assert set(SUITE_QUERY_NAME_PARSERS) == set(SUITE_NAMES)
+assert set(SUITE_PUBLIC_ROLES) == set(SUITE_NAMES)
 
 
 def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None) -> int:

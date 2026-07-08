@@ -27,6 +27,7 @@ from ..settings import (
     SUITE_LABELS,
     SUITE_NAV_LABELS,
     SUITE_OPERATIONS,
+    SUITE_PUBLIC_ROLES,
     SUITE_QUERY_NAME_PARSERS,
     Revision,
 )
@@ -203,6 +204,7 @@ def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:
                 "scale_factor_supported": suite in SCALE_FACTOR_SUITES,
                 "operations": list(SUITE_OPERATIONS[suite]),
                 "query_name_parser": SUITE_QUERY_NAME_PARSERS[suite],
+                "public_role": SUITE_PUBLIC_ROLES[suite],
             }
             for suite in SUITE_DISPLAY_ORDER
         ]
