@@ -158,6 +158,14 @@ three other drifts in one sweep: the clickbench iteration mix, the MonetDB
 SP1/SP2 split (both in §2.5), and the fetch-path discontinuity — `8703ed0`
 switched Postgres/TimescaleDB/StarRocks to ConnectorX, so their timed client
 path no longer matches the already-published runs.
+Partially fixed 2026-07-08: Docker starts now use the host-native platform by
+default; Postgres/TimescaleDB no longer force `linux/amd64`, StarRocks no
+longer forces `linux/arm64`, and the shared Docker helper only emits
+`--platform` for explicit overrides. Verified with `uv run pyright`,
+`uv run ruff check ...`, and
+`uv run pytest olap_benchmarks/tests/test_database_benchmarks.py`. Caveat:
+the full native benchmark rerun is still pending and no published DB was
+updated.
 
 ### 2.2 Engines still disagree on query results
 

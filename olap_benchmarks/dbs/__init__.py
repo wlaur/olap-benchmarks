@@ -122,9 +122,12 @@ class Database(BaseModel, ABC):
         mounts: Mapping[str, str] | None = None,
         env: Mapping[str, str] | None = None,
         args: Sequence[str] = (),
-        platform: str = "linux/amd64",
+        platform: str | None = None,
     ) -> str:
-        parts = [f"docker run --platform {platform} --name {self.name}-benchmark --rm -d"]
+        parts = ["docker run"]
+        if platform is not None:
+            parts.extend(["--platform", platform])
+        parts.append(f"--name {self.name}-benchmark --rm -d")
         parts.extend(f"-p {host}:{container}" for host, container in (ports or {}).items())
         parts.extend(f"-v {src}:{dst}" for src, dst in (mounts or {}).items())
         parts.extend(f"-e {key}={value}" for key, value in (env or {}).items())

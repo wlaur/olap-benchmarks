@@ -188,6 +188,18 @@ def test_current_suite_scale_factor_requires_explicit_value() -> None:
         _ = db.current_suite_scale_factor
 
 
+def test_docker_run_command_uses_native_platform_by_default() -> None:
+    command = DummyDatabase().docker_run_command("example:latest")
+
+    assert "--platform" not in command
+
+
+def test_docker_run_command_allows_explicit_platform_override() -> None:
+    command = DummyDatabase().docker_run_command("example:latest", platform="linux/amd64")
+
+    assert command.startswith("docker run --platform linux/amd64")
+
+
 def test_database_benchmark_rejects_unsupported_operation() -> None:
     db = DummyDatabase()
 
