@@ -271,10 +271,15 @@ covered by `test_tpcds_prepare.py`.
 
 ## 4. Architecture / refactor cleanups
 
-- [ ] **`should_populate()` swallows all exceptions**
+- [x] **`should_populate()` swallows all exceptions**
       (`dbs/__init__.py:516-519`): any error → "populate anyway", hiding real
       schema/connection faults behind the fallback. Catch only the expected
       "no tables yet" cases.
+      Fixed 2026-07-08: the outer blanket catch was removed; suite-level
+      missing-table detection still returns `True`, while real
+      `should_populate()` errors now propagate before a populate run is
+      recorded. Verified with `uv run pyright`, `uv run ruff check ...`, and
+      `uv run pytest olap_benchmarks/tests/test_database_benchmarks.py`.
 - [ ] **Suite registry still quadruplicated, now with scale factors.** Python
       `SuiteName` + `DEFAULT_SUITE_SCALE_FACTORS` (`settings.py:23-37`),
       `site/src/lib/benchmarks.ts`, `site/src/lib/suiteConfig.ts` (both now

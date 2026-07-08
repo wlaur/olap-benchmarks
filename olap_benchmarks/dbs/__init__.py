@@ -514,16 +514,11 @@ class Database(BaseModel, ABC):
             case _:
                 raise ValueError(f"Invalid operation '{operation}'")
 
-        if operation == "populate":
-            try:
-                should_populate = benchmark.should_populate()
-            except Exception:
-                should_populate = True
-            if not should_populate:
-                _LOGGER.info(
-                    f"Skipping populate run recording for {suite} scale factor {benchmark.scale_factor} on {self.name}"
-                )
-                return
+        if operation == "populate" and not benchmark.should_populate():
+            _LOGGER.info(
+                f"Skipping populate run recording for {suite} scale factor {benchmark.scale_factor} on {self.name}"
+            )
+            return
 
         self._result_storage = self.create_result_storage()
 

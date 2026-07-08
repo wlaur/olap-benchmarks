@@ -106,6 +106,24 @@ class SkipPopulateDatabase(DummyDatabase):
         return {"clickbench": SkipPopulateSuite}
 
 
+class BrokenShouldPopulateSuite(BenchmarkSuite["BrokenShouldPopulateDatabase"]):
+    name: SuiteName = "clickbench"
+
+    def should_populate(self) -> bool:
+        raise RuntimeError("schema probe failed")
+
+    def populate(self) -> None:
+        raise AssertionError("populate should not run when should_populate fails")
+
+    def select(self) -> None:
+        raise NotImplementedError
+
+
+class BrokenShouldPopulateDatabase(DummyDatabase):
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {"clickbench": BrokenShouldPopulateSuite}
+
+
 def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
     assert DummySuite.supported_operations == ("populate", "select")
 
@@ -181,6 +199,15 @@ def test_database_benchmark_does_not_record_skipped_populate() -> None:
     db = SkipPopulateDatabase()
 
     db.benchmark("clickbench", "populate")
+
+    assert db._run_id is None
+
+
+def test_database_benchmark_propagates_should_populate_errors() -> None:
+    db = BrokenShouldPopulateDatabase()
+
+    with pytest.raises(RuntimeError, match="schema probe failed"):
+        db.benchmark("clickbench", "populate")
 
     assert db._run_id is None
 
