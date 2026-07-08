@@ -1,8 +1,11 @@
+import json
 import logging
 import os
 import shutil
+import subprocess
 import uuid
 from collections.abc import Mapping
+from gzip import open as gzip_open
 from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, Literal, cast
@@ -18,6 +21,7 @@ from ...suites.clickbench.config import (
     CLICKBENCH_TIMESTAMP_COLUMNS,
     Clickbench,
 )
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
 from ...suites.time_series.config import TimeSeries
 from ...suites.tpc_ds.config import TpcDs
 from ...suites.tpc_h.config import TpcH
@@ -192,6 +196,91 @@ class StarRocksTimeSeries(TimeSeries["StarRocks"]):
     # with subqueries, which the mutate path relies on.
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:  # noqa: ARG002
         return "time"
+
+
+class StarRocksJSONBench(JSONBench["StarRocks"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        with self.db.phase_context("schema", table_name="bluesky"):
+            self.db.execute(
+                """
+                CREATE TABLE bluesky (
+                    `id` BIGINT AUTO_INCREMENT,
+                    `data` JSON NOT NULL COMMENT "Primary JSON object, optimized for field access using FlatJSON",
+                    sort_key VARBINARY AS encode_sort_key(
+                        get_json_string(data, 'kind'),
+                        get_json_string(data, 'commit.operation'),
+                        get_json_string(data, 'commit.collection'),
+                        get_json_string(data, 'did')
+                    )
+                )
+                ORDER BY (sort_key)
+                """
+            )
+
+        with self.db.phase_context("insert", table_name="bluesky"):
+            for input_file in get_jsonbench_input_files(self.scale_factor):
+                staged_file = self._write_uncompressed_input_file(input_file)
+                try:
+                    self._stream_load_file(staged_file)
+                finally:
+                    staged_file.unlink(missing_ok=True)
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+    def _write_uncompressed_input_file(self, input_file: Path) -> Path:
+        staging = SETTINGS.temporary_directory / "starrocks/data"
+        staging.mkdir(parents=True, exist_ok=True)
+        staged_file = staging / f"bluesky_{uuid.uuid4().hex}.json"
+
+        with gzip_open(input_file, "rb") as source, staged_file.open("wb") as out:
+            shutil.copyfileobj(source, out)
+
+        return staged_file
+
+    def _stream_load_file(self, staged_file: Path) -> None:
+        url = f"http://{STARROCKS_HOST}:{STARROCKS_HTTP_PORT}/api/{STARROCKS_DATABASE}/bluesky/_stream_load"
+        command = [
+            "curl",
+            "-sS",
+            "--location-trusted",
+            "-u",
+            f"{STARROCKS_USER}:{STARROCKS_PASSWORD}",
+            "-H",
+            "max_filter_ratio: 0.00001",
+            "-H",
+            "strict_mode: true",
+            "-H",
+            "Expect:100-continue",
+            "-T",
+            staged_file.as_posix(),
+            "-XPUT",
+            url,
+        ]
+        label = f"STREAM LOAD bluesky FROM {staged_file.name}"
+
+        with self.db.record_query_execution(label):
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            raise RuntimeError(f"StarRocks stream load failed for {staged_file.name}: {result.stderr.strip()}")
+
+        response = json.loads(result.stdout)
+        if response.get("Status") != "Success":
+            raise RuntimeError(f"StarRocks stream load failed for {staged_file.name}: {response}")
+
+        _LOGGER.info(f"Stream-loaded JSONBench file {staged_file.name}: {response}")
 
 
 class StarRocks(Database):
@@ -493,6 +582,7 @@ class StarRocks(Database):
             **super().suite_registry(),
             "time_series": StarRocksTimeSeries,
             "clickbench": StarRocksClickbench,
+            "jsonbench": StarRocksJSONBench,
             "tpc_h": StarRocksTpcH,
             "tpc_ds": StarRocksTpcDs,
         }

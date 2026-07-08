@@ -105,8 +105,10 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
       PostgreSQL, and StarRocks; add Doris once the engine exists.
       Partially fixed 2026-07-08: the suite scaffold, 10M scale-factor
       metadata, upstream five-query workload, DuckDB load path, and ClickHouse
-      native-JSON load/query path are in place. PostgreSQL and StarRocks are
-      still open.
+      native-JSON load/query path are in place. PostgreSQL JSONB and StarRocks
+      native-JSON load/query paths are also wired. The suite still needs
+      engine smoke runs before the final full rerun, and 100M should wait until
+      10M storage/runtime are known.
 - [ ] **Add Polars as an in-process engine.** Model it as a dataframe/LazyFrame
       engine, use normal Polars APIs, keep SQL mode separate if added later,
       and label it as in-process/single-node.

@@ -1,6 +1,6 @@
 SELECT
   j ->> '$.did' AS user_id,
-  to_timestamp(CAST(min(j ->> '$.time_us') AS BIGINT) / 1000000) AS first_post_ts
+  CAST(to_timestamp(CAST(min(j ->> '$.time_us') AS BIGINT) / 1000000) AS TIMESTAMP_MS) AS first_post_ts
 FROM bluesky
 WHERE
   j ->> '$.kind' = 'commit'

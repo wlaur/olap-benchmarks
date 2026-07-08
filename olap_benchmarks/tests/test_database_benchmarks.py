@@ -189,17 +189,17 @@ def test_database_benchmarks_resolves_all_suites() -> None:
     assert benchmarks["tpc_ds"].scale_factor == 1
 
 
-def test_jsonbench_registered_for_first_implemented_engines() -> None:
+def test_jsonbench_registered_for_initial_engines() -> None:
     from ..dbs.clickhouse import Clickhouse
     from ..dbs.duckdb import DuckDB
+    from ..dbs.postgres import Postgres
+    from ..dbs.starrocks import StarRocks
 
-    duckdb_benchmarks = DuckDB().benchmarks
-    clickhouse_benchmarks = Clickhouse().benchmarks
+    for db in (Clickhouse(), DuckDB(), Postgres(), StarRocks()):
+        benchmarks = db.benchmarks
 
-    assert "jsonbench" in duckdb_benchmarks
-    assert duckdb_benchmarks["jsonbench"].scale_factor == 10
-    assert "jsonbench" in clickhouse_benchmarks
-    assert clickhouse_benchmarks["jsonbench"].scale_factor == 10
+        assert "jsonbench" in benchmarks
+        assert benchmarks["jsonbench"].scale_factor == 10
 
 
 def test_time_series_scale_factor_10_matches_reference_size() -> None:

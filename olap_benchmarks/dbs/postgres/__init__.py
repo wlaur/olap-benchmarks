@@ -2,6 +2,7 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from gzip import open as gzip_open
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
@@ -14,6 +15,7 @@ from ...run_metadata import StepResultStatus
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
     MutateStep,
@@ -444,6 +446,68 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
         return df_wide
 
 
+class PostgresJSONBench(JSONBench["Postgres"]):
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        with self.db.phase_context("schema", table_name="bluesky"):
+            self.db.execute(
+                """
+                CREATE TABLE bluesky (
+                    data JSONB COMPRESSION lz4 NOT NULL
+                )
+                """
+            )
+
+        with self.db.phase_context("insert", table_name="bluesky"):
+            for input_file in get_jsonbench_input_files(self.scale_factor):
+                self._copy_json_file(input_file)
+
+        with self.db.phase_context("index", table_name="bluesky"):
+            self.db.execute(
+                """
+                CREATE INDEX idx_bluesky
+                ON bluesky (
+                    (data ->> 'kind'),
+                    (data -> 'commit' ->> 'operation'),
+                    (data -> 'commit' ->> 'collection'),
+                    (data ->> 'did'),
+                    (TO_TIMESTAMP((data ->> 'time_us')::BIGINT / 1000000.0))
+                )
+                """
+            )
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+    def _copy_json_file(self, input_file: Path) -> None:
+        con = self.db.connect()
+        raw_conn = con.connection.dbapi_connection
+        assert raw_conn is not None
+        cursor = raw_conn.cursor()
+        temp_file = self.db._staging_directory / f"bluesky_{uuid.uuid4().hex}.json"
+        copy_sql = "COPY bluesky FROM STDIN WITH (FORMAT csv, QUOTE E'\\x01', DELIMITER E'\\x02', ESCAPE E'\\x01')"
+
+        try:
+            with gzip_open(input_file, "rt", encoding="utf-8") as source, temp_file.open("w", encoding="utf-8") as out:
+                for line in source:
+                    out.write(line.replace("\\u0000", ""))
+
+            with temp_file.open(encoding="utf-8") as f, self.db.record_query_execution(copy_sql):
+                cursor.copy_expert(copy_sql, f)
+
+            tracked_commit(con)
+            _LOGGER.info(f"Copied JSONBench file {input_file.name} into bluesky")
+        finally:
+            cursor.close()
+            temp_file.unlink(missing_ok=True)
+
+
 class Postgres(Database):
     name: DatabaseName = "postgres"
     version: str = VERSION
@@ -720,5 +784,6 @@ class Postgres(Database):
             **super().suite_registry(),
             "rtabench": PostgresRTABench,
             "clickbench": PostgresClickbench,
+            "jsonbench": PostgresJSONBench,
             "time_series": PostgresTimeSeries,
         }

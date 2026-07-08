@@ -521,31 +521,41 @@
     "01_events_by_collection": {
       "sql": "SELECT\n  j ->> '$.commit.collection' AS event,\n  count(*) AS count\nFROM bluesky\nGROUP BY event\nORDER BY count DESC;\n",
       "db_overrides": {
-        "clickhouse": "SELECT\n  data.commit.collection AS event,\n  count() AS count\nFROM bluesky\nGROUP BY event\nORDER BY count DESC;\n"
+        "clickhouse": "SELECT\n  data.commit.collection AS event,\n  count() AS count\nFROM bluesky\nGROUP BY event\nORDER BY count DESC;\n",
+        "postgres": "SELECT\n  data -> 'commit' ->> 'collection' AS event,\n  count(*) AS count\nFROM bluesky\nGROUP BY event\nORDER BY count DESC;\n",
+        "starrocks": "SELECT\n  get_json_string(data, 'commit.collection') AS event,\n  count() AS count\nFROM bluesky\nGROUP BY event\nORDER BY count DESC;\n"
       }
     },
     "02_create_events_by_collection": {
       "sql": "SELECT\n  j ->> '$.commit.collection' AS event,\n  count(*) AS count,\n  count(DISTINCT j ->> '$.did') AS users\nFROM bluesky\nWHERE\n  j ->> '$.kind' = 'commit'\n  AND j ->> '$.commit.operation' = 'create'\nGROUP BY event\nORDER BY count DESC;\n",
       "db_overrides": {
-        "clickhouse": "SELECT\n  data.commit.collection AS event,\n  count() AS count,\n  uniqExact(data.did) AS users\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\nGROUP BY event\nORDER BY count DESC;\n"
+        "clickhouse": "SELECT\n  data.commit.collection AS event,\n  count() AS count,\n  uniqExact(data.did) AS users\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\nGROUP BY event\nORDER BY count DESC;\n",
+        "postgres": "SELECT\n  data -> 'commit' ->> 'collection' AS event,\n  count(*) AS count,\n  count(DISTINCT data ->> 'did') AS users\nFROM bluesky\nWHERE\n  data ->> 'kind' = 'commit'\n  AND data -> 'commit' ->> 'operation' = 'create'\nGROUP BY event\nORDER BY count DESC;\n",
+        "starrocks": "SELECT\n  get_json_string(data, 'commit.collection') AS event,\n  count() AS count,\n  count(DISTINCT get_json_string(data, 'did')) AS users\nFROM bluesky\nWHERE\n  get_json_string(data, 'kind') = 'commit'\n  AND get_json_string(data, 'commit.operation') = 'create'\nGROUP BY event\nORDER BY count DESC;\n"
       }
     },
     "03_create_events_by_hour": {
       "sql": "SELECT\n  j ->> '$.commit.collection' AS event,\n  hour(to_timestamp(CAST(j ->> '$.time_us' AS BIGINT) / 1000000)) AS hour_of_day,\n  count(*) AS count\nFROM bluesky\nWHERE\n  j ->> '$.kind' = 'commit'\n  AND j ->> '$.commit.operation' = 'create'\n  AND j ->> '$.commit.collection' IN (\n    'app.bsky.feed.post',\n    'app.bsky.feed.repost',\n    'app.bsky.feed.like'\n  )\nGROUP BY event, hour_of_day\nORDER BY hour_of_day, event;\n",
       "db_overrides": {
-        "clickhouse": "SELECT\n  data.commit.collection AS event,\n  toHour(fromUnixTimestamp64Micro(data.time_us)) AS hour_of_day,\n  count() AS count\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\n  AND data.commit.collection IN [\n    'app.bsky.feed.post',\n    'app.bsky.feed.repost',\n    'app.bsky.feed.like'\n  ]\nGROUP BY event, hour_of_day\nORDER BY hour_of_day, event;\n"
+        "clickhouse": "SELECT\n  data.commit.collection AS event,\n  toHour(fromUnixTimestamp64Micro(data.time_us)) AS hour_of_day,\n  count() AS count\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\n  AND data.commit.collection IN [\n    'app.bsky.feed.post',\n    'app.bsky.feed.repost',\n    'app.bsky.feed.like'\n  ]\nGROUP BY event, hour_of_day\nORDER BY hour_of_day, event;\n",
+        "postgres": "SELECT\n  data -> 'commit' ->> 'collection' AS event,\n  EXTRACT(HOUR FROM to_timestamp((data ->> 'time_us')::BIGINT / 1000000)) AS hour_of_day,\n  count(*) AS count\nFROM bluesky\nWHERE\n  data ->> 'kind' = 'commit'\n  AND data -> 'commit' ->> 'operation' = 'create'\n  AND data -> 'commit' ->> 'collection' IN (\n    'app.bsky.feed.post',\n    'app.bsky.feed.repost',\n    'app.bsky.feed.like'\n  )\nGROUP BY event, hour_of_day\nORDER BY hour_of_day, event;\n",
+        "starrocks": "SELECT\n  get_json_string(data, 'commit.collection') AS event,\n  hour_from_unixtime(get_json_int(data, 'time_us') / 1000000) AS hour_of_day,\n  count() AS count\nFROM bluesky\nWHERE\n  get_json_string(data, 'kind') = 'commit'\n  AND get_json_string(data, 'commit.operation') = 'create'\n  AND array_contains(\n    ['app.bsky.feed.post', 'app.bsky.feed.repost', 'app.bsky.feed.like'],\n    get_json_string(data, 'commit.collection')\n  )\nGROUP BY event, hour_of_day\nORDER BY hour_of_day, event;\n"
       }
     },
     "04_first_post_users": {
-      "sql": "SELECT\n  j ->> '$.did' AS user_id,\n  to_timestamp(CAST(min(j ->> '$.time_us') AS BIGINT) / 1000000) AS first_post_ts\nFROM bluesky\nWHERE\n  j ->> '$.kind' = 'commit'\n  AND j ->> '$.commit.operation' = 'create'\n  AND j ->> '$.commit.collection' = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY first_post_ts ASC\nLIMIT 3;\n",
+      "sql": "SELECT\n  j ->> '$.did' AS user_id,\n  CAST(to_timestamp(CAST(min(j ->> '$.time_us') AS BIGINT) / 1000000) AS TIMESTAMP_MS) AS first_post_ts\nFROM bluesky\nWHERE\n  j ->> '$.kind' = 'commit'\n  AND j ->> '$.commit.operation' = 'create'\n  AND j ->> '$.commit.collection' = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY first_post_ts ASC\nLIMIT 3;\n",
       "db_overrides": {
-        "clickhouse": "SELECT\n  data.did::String AS user_id,\n  min(fromUnixTimestamp64Micro(data.time_us)) AS first_post_ts\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\n  AND data.commit.collection = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY first_post_ts ASC\nLIMIT 3;\n"
+        "clickhouse": "SELECT\n  data.did::String AS user_id,\n  min(fromUnixTimestamp64Micro(data.time_us)) AS first_post_ts\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\n  AND data.commit.collection = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY first_post_ts ASC\nLIMIT 3;\n",
+        "postgres": "SELECT\n  data ->> 'did' AS user_id,\n  min(\n    (\n      TIMESTAMP WITH TIME ZONE 'epoch'\n      + INTERVAL '1 microsecond' * (data ->> 'time_us')::BIGINT\n    ) AT TIME ZONE 'UTC'\n  )::timestamp(3) AS first_post_ts\nFROM bluesky\nWHERE\n  data ->> 'kind' = 'commit'\n  AND data -> 'commit' ->> 'operation' = 'create'\n  AND data -> 'commit' ->> 'collection' = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY first_post_ts ASC\nLIMIT 3;\n",
+        "starrocks": "SELECT\n  get_json_string(data, 'did') AS user_id,\n  to_datetime(min(get_json_int(data, 'time_us')), 6) AS first_post_ts\nFROM bluesky\nWHERE\n  get_json_string(data, 'kind') = 'commit'\n  AND get_json_string(data, 'commit.operation') = 'create'\n  AND get_json_string(data, 'commit.collection') = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY first_post_ts ASC\nLIMIT 3;\n"
       }
     },
     "05_longest_post_activity": {
       "sql": "SELECT\n  j ->> '$.did' AS user_id,\n  date_diff(\n    'milliseconds',\n    to_timestamp(CAST(min(j ->> '$.time_us') AS BIGINT) / 1000000),\n    to_timestamp(CAST(max(j ->> '$.time_us') AS BIGINT) / 1000000)\n  ) AS activity_span\nFROM bluesky\nWHERE\n  j ->> '$.kind' = 'commit'\n  AND j ->> '$.commit.operation' = 'create'\n  AND j ->> '$.commit.collection' = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY activity_span DESC\nLIMIT 3;\n",
       "db_overrides": {
-        "clickhouse": "SELECT\n  data.did::String AS user_id,\n  date_diff(\n    'milliseconds',\n    min(fromUnixTimestamp64Micro(data.time_us)),\n    max(fromUnixTimestamp64Micro(data.time_us))\n  ) AS activity_span\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\n  AND data.commit.collection = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY activity_span DESC\nLIMIT 3;\n"
+        "clickhouse": "SELECT\n  data.did::String AS user_id,\n  date_diff(\n    'milliseconds',\n    min(fromUnixTimestamp64Micro(data.time_us)),\n    max(fromUnixTimestamp64Micro(data.time_us))\n  ) AS activity_span\nFROM bluesky\nWHERE\n  data.kind = 'commit'\n  AND data.commit.operation = 'create'\n  AND data.commit.collection = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY activity_span DESC\nLIMIT 3;\n",
+        "postgres": "SELECT\n  data ->> 'did' AS user_id,\n  EXTRACT(\n    EPOCH FROM (\n      max(TIMESTAMP WITH TIME ZONE 'epoch' + INTERVAL '1 microsecond' * (data ->> 'time_us')::BIGINT)\n      - min(TIMESTAMP WITH TIME ZONE 'epoch' + INTERVAL '1 microsecond' * (data ->> 'time_us')::BIGINT)\n    )\n  ) * 1000 AS activity_span\nFROM bluesky\nWHERE\n  data ->> 'kind' = 'commit'\n  AND data -> 'commit' ->> 'operation' = 'create'\n  AND data -> 'commit' ->> 'collection' = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY activity_span DESC\nLIMIT 3;\n",
+        "starrocks": "SELECT\n  get_json_string(data, 'did') AS user_id,\n  date_diff(\n    'millisecond',\n    to_datetime(min(get_json_int(data, 'time_us')), 6),\n    to_datetime(max(get_json_int(data, 'time_us')), 6)\n  ) AS activity_span\nFROM bluesky\nWHERE\n  get_json_string(data, 'kind') = 'commit'\n  AND get_json_string(data, 'commit.operation') = 'create'\n  AND get_json_string(data, 'commit.collection') = 'app.bsky.feed.post'\nGROUP BY user_id\nORDER BY activity_span DESC\nLIMIT 3;\n"
       }
     }
   },
