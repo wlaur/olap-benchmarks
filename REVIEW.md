@@ -11,6 +11,7 @@ preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
 scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
 scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
+The time-series suite now includes an explicit concurrent read/write operation.
 The version-bump work now includes MonetDB Dec2025-SP3, the site now surfaces
 run methodology metadata when present, and the home page labels the current
 Apple Silicon public data as development data. Row-count validation now marks
@@ -121,12 +122,24 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
 - [ ] **Add Apache Doris as the next server OLAP engine.** Start with
       ClickBench and JSONBench, then RTABench after query coverage is aligned;
       defer TPC-DS until Docker/load stability is proven.
+
+      Investigation progress 2026-07-08: official Doris 4.x docs confirm the
+      quick-start MySQL endpoint on port 9030, FE HTTP Stream Load on port
+      8030, Stream Load support for JSON and Parquet, and JSON extraction
+      functions such as `GET_JSON_STRING`. Docker Hub currently exposes
+      split 4.1.x images (`fe-4.1.3`, `be-4.1.3`, `ms-4.1.3`) and a 4.x
+      single-container tag `4.0.3-all-slim`; the obvious `all-in-one-4.1.3`
+      tag is not published. Next continuation should decide whether to keep
+      the repo's one-container lifecycle by starting with `4.0.3-all-slim`, or
+      add first-class multi-container lifecycle/metrics for the split 4.1.x
+      FE/BE setup. No Doris code was committed yet.
 - [ ] **Add JOB only after status handling.** It is the best optimizer-heavy
       follow-up, but unsupported/null statuses need to exist before porting it
       across engines.
 - [ ] **Add TSBS/InfluxDB 3 only with a broader time-series push.** TSBS should
       come with ingest, compression, recent-window queries, and concurrent
       read/write behavior; otherwise it is just more suite surface area.
+
 ## 5. Suggested Priority Order
 
 1. Fix known divergent queries and add value-level validation before trusting
@@ -134,8 +147,10 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
 2. Finalize public-run policy and metadata surfacing, then run the full matrix
    within the disk budget and publish `macbook-m4-pro` data.
 3. Clean published-data leftovers and make unexpected missing steps visible.
-4. Add JSONBench, then Polars and Doris; handle JOB and TSBS after value-level
-   checks and status-aware reporting have been exercised on the rerun.
+4. Smoke JSONBench for the already-wired engines, then continue Doris once the
+   Docker lifecycle decision above is made. Handle JOB and TSBS after
+   value-level checks and status-aware reporting have been exercised on the
+   rerun.
 
 ## Reference Facts
 
