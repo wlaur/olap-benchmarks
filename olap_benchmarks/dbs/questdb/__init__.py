@@ -361,6 +361,6 @@ class QuestDB(Database):
         # (TPC-DS additionally ROLLUP/GROUPING and INTERSECT/EXCEPT), which
         # QuestDB SQL does not support
         for tpc_suite in ("tpc_h", "tpc_ds"):
-            registry.pop(tpc_suite)
+            registry.pop(tpc_suite, None)
 
         return registry

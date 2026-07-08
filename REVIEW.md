@@ -286,10 +286,14 @@ covered by `test_tpcds_prepare.py`.
       also carry per-suite default SFs), and hand-written `home.md`. A mismatch
       still silently yields "No completed runs". Publish a `suites.json` next
       to `queries.json` and drive the site from it.
-- [ ] Minor: `questdb` deregisters TPC suites with `registry.pop(tpc_suite)`
+- [x] Minor: `questdb` deregisters TPC suites with `registry.pop(tpc_suite)`
       and no default (`questdb/__init__.py:364`) — a registry change turns it
       into a KeyError; `fetch_connectorx` records the unstripped query text
       while executing the stripped SQL (`postgres/__init__.py:517-519`).
+      Fixed 2026-07-08: QuestDB uses tolerant `pop(..., None)`, and both
+      Postgres-family and StarRocks ConnectorX paths record the stripped SQL
+      they execute. Verified with `uv run pyright`, `uv run ruff check ...`,
+      and `uv run pytest olap_benchmarks/tests/test_connectorx_fetch.py`.
 
 ---
 

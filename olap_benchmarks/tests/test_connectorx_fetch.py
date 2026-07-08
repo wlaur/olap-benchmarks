@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
+
 import polars as pl
 import pytest
 
@@ -9,6 +12,13 @@ from ..dbs.starrocks import StarRocks
 
 def test_postgres_fetch_uses_connectorx_uri(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
+    recorded_queries: list[str] = []
+
+    class RecordingPostgres(Postgres):
+        @contextmanager
+        def record_query_execution(self, query: str) -> Generator[None]:
+            recorded_queries.append(query)
+            yield
 
     def fake_read_database_uri(query: str, uri: str) -> pl.DataFrame:
         calls.append((query, uri))
@@ -16,14 +26,22 @@ def test_postgres_fetch_uses_connectorx_uri(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(pl, "read_database_uri", fake_read_database_uri)
 
-    df = Postgres().fetch("select 1 as one;", schema={"one": pl.Int64})
+    df = RecordingPostgres().fetch("select 1 as one;", schema={"one": pl.Int64})
 
     assert df.to_dict(as_series=False) == {"one": [1]}
     assert calls == [("select 1 as one", POSTGRES_CONNECTION_STRING)]
+    assert recorded_queries == ["select 1 as one"]
 
 
 def test_starrocks_fetch_uses_connectorx_mysql_uri(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
+    recorded_queries: list[str] = []
+
+    class RecordingStarRocks(StarRocks):
+        @contextmanager
+        def record_query_execution(self, query: str) -> Generator[None]:
+            recorded_queries.append(query)
+            yield
 
     def fake_read_database_uri(query: str, uri: str) -> pl.DataFrame:
         calls.append((query, uri))
@@ -31,7 +49,8 @@ def test_starrocks_fetch_uses_connectorx_mysql_uri(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(pl, "read_database_uri", fake_read_database_uri)
 
-    df = StarRocks().fetch("select 1 as one;", schema={"one": pl.Int64})
+    df = RecordingStarRocks().fetch("select 1 as one;", schema={"one": pl.Int64})
 
     assert df.to_dict(as_series=False) == {"one": [1]}
     assert calls == [("select 1 as one", "mysql://root@localhost:9030/benchmark")]
+    assert recorded_queries == ["select 1 as one"]
