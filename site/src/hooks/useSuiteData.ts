@@ -168,7 +168,7 @@ export function useSuiteData(
       hasMutate
         ? fetchMutateSummaries(system, suite, selectedScaleFactor)
         : Promise.resolve([] as QuerySummary[]),
-      fetchQueriesManifest().catch(() => null),
+      fetchQueriesManifest(),
     ])
       .then(
         ([

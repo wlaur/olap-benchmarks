@@ -92,20 +92,43 @@ interface LatestRunsOptions {
  * computed over the whole scope (not per operation) so every panel of a suite
  * page labels the same variant identically.
  */
-function withLatestRuns(db: ResultsDb, options: LatestRunsOptions) {
-  return db
-    .with("scoped_runs", (qb) =>
-      qb
-        .selectFrom("run")
-        .select((eb) => [
-          eb.ref("run.id").as("run_id"),
-          eb.ref("run.db").as("db"),
-          eb.ref("run.db_version").as("db_version"),
-          sql<string>`case
+function withRunLabels(db: ResultsDb, options: Omit<LatestRunsOptions, "operations">) {
+  return db.with("run_labels", (qb) =>
+    qb
+      .selectFrom("run")
+      .select((eb) => [
+        eb.ref("run.db").as("db"),
+        eb.ref("run.db_version").as("db_version"),
+        sql<string>`case
             when count(distinct ${eb.ref("run.db_version")}) over (partition by ${eb.ref("run.db")}) > 1
             then ${eb.ref("run.db")} || ' ' || ${eb.ref("run.db_version")}
             else ${eb.ref("run.db")}
           end`.as("db_label"),
+      ])
+      .distinct()
+      .where("run.suite", "=", options.suite)
+      .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
+      .where("run.system", "=", options.system)
+      .where("run.operation", "in", [...BENCHMARK_OPERATIONS])
+      .where("run.status", "!=", "running"),
+  )
+}
+
+function withLatestRuns(db: ResultsDb, options: LatestRunsOptions) {
+  return withRunLabels(db, options)
+    .with("scoped_runs", (qb) =>
+      qb
+        .selectFrom("run")
+        .innerJoin("run_labels", (join) =>
+          join
+            .onRef("run_labels.db", "=", "run.db")
+            .onRef("run_labels.db_version", "=", "run.db_version"),
+        )
+        .select((eb) => [
+          eb.ref("run.id").as("run_id"),
+          eb.ref("run.db").as("db"),
+          eb.ref("run.db_version").as("db_version"),
+          eb.ref("run_labels.db_label").as("db_label"),
           sql<BenchmarkOperation>`${eb.ref("run.operation")}`.as("operation"),
           eb.ref("run.started_at").as("run_started_at"),
           eb.ref("run.finished_at").$notNull().as("run_finished_at"),
@@ -137,19 +160,20 @@ function withLatestAttemptedSelectRuns(
   db: ResultsDb,
   options: Omit<LatestRunsOptions, "operations">,
 ) {
-  return db
+  return withRunLabels(db, options)
     .with("scoped_runs", (qb) =>
       qb
         .selectFrom("run")
+        .innerJoin("run_labels", (join) =>
+          join
+            .onRef("run_labels.db", "=", "run.db")
+            .onRef("run_labels.db_version", "=", "run.db_version"),
+        )
         .select((eb) => [
           eb.ref("run.id").as("run_id"),
           eb.ref("run.db").as("db"),
           eb.ref("run.db_version").as("db_version"),
-          sql<string>`case
-            when count(distinct ${eb.ref("run.db_version")}) over (partition by ${eb.ref("run.db")}) > 1
-            then ${eb.ref("run.db")} || ' ' || ${eb.ref("run.db_version")}
-            else ${eb.ref("run.db")}
-          end`.as("db_label"),
+          eb.ref("run_labels.db_label").as("db_label"),
           sql<Exclude<RunStatus, "running">>`${eb.ref("run.status")}`.as("run_status"),
           eb.ref("run.started_at").as("run_started_at"),
           sql<Date>`coalesce(${eb.ref("run.finished_at")}, ${eb.ref("run.started_at")})`.as(
@@ -235,6 +259,7 @@ export async function fetchQueryCoverage(
     .select((eb) => [
       eb.ref("latest_runs.run_id").as("run_id"),
       eb.ref("latest_runs.db_label").as("db"),
+      eb.ref("latest_runs.db").as("db_name"),
       eb.ref("latest_runs.db_version").as("db_version"),
       eb.ref("latest_runs.run_status").as("latest_status"),
       sql<number>`cast(
@@ -263,6 +288,7 @@ export async function fetchQueryCoverage(
     .groupBy([
       "latest_runs.run_id",
       "latest_runs.db_label",
+      "latest_runs.db",
       "latest_runs.db_version",
       "latest_runs.run_status",
     ])
@@ -317,6 +343,8 @@ async function fetchStepSummaries(
     .select((eb) => [
       eb.ref("run_step.query_name").$notNull().as("query_name"),
       eb.ref("latest_runs.db_label").as("db"),
+      eb.ref("latest_runs.db").as("db_name"),
+      eb.ref("latest_runs.db_version").as("db_version"),
       sql<number>`median(
           EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))
         )`.as("median_duration_s"),
@@ -336,7 +364,12 @@ async function fetchStepSummaries(
     .where("run_step.status", "=", "completed")
     .where("run_step.finished_at", "is not", null)
     .where("run_step.query_name", "is not", null)
-    .groupBy(["run_step.query_name", "latest_runs.db_label"])
+    .groupBy([
+      "run_step.query_name",
+      "latest_runs.db_label",
+      "latest_runs.db",
+      "latest_runs.db_version",
+    ])
     .orderBy("run_step.query_name")
     .orderBy("latest_runs.db_label")
     .execute()

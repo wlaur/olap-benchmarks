@@ -12,6 +12,7 @@ import { MetaLabel, SectionTitle } from "../Typography"
 interface SuiteScoreCardsProps {
   querySummaries: QuerySummary[]
   queryCoverage: QueryCoverage[]
+  queryNames: string[]
   databaseColors: Record<string, string>
   isLoading: boolean
 }
@@ -19,12 +20,13 @@ interface SuiteScoreCardsProps {
 export function SuiteScoreCards({
   querySummaries,
   queryCoverage,
+  queryNames,
   databaseColors,
   isLoading,
 }: SuiteScoreCardsProps) {
   const scores = useMemo(
-    () => computeDatabaseScores(querySummaries, queryCoverage),
-    [querySummaries, queryCoverage],
+    () => computeDatabaseScores(querySummaries, queryCoverage, queryNames),
+    [querySummaries, queryCoverage, queryNames],
   )
 
   return (
@@ -46,7 +48,7 @@ export function SuiteScoreCards({
             ))
           : scores.map((entry, index) => (
               <ScoreCard
-                key={entry.db}
+                key={entry.dbKey}
                 rank={index + 1}
                 db={entry.db}
                 score={entry.score}

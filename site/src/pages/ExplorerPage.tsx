@@ -68,6 +68,14 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
   } = useSuiteData(system, suiteId, suiteConfig, isSystemLoading)
 
   const databaseColors = useMemo(() => getDatabaseColors(databases), [databases])
+  const queryNames = useMemo(() => {
+    if (state.queriesManifest === null) return []
+    const suiteQueries = state.queriesManifest[suiteConfig.queriesKey]
+    if (!suiteQueries) {
+      throw new Error(`queries.json is missing suite ${suiteConfig.queriesKey}`)
+    }
+    return Object.keys(suiteQueries)
+  }, [state.queriesManifest, suiteConfig.queriesKey])
   const deferredLoading = isLoading || state.deferredLoading
   const showInsertPerformancePanel = deferredLoading || state.insertSteps.length > 0
   const showFlameGraphPanel = deferredLoading || system !== null
@@ -147,6 +155,7 @@ export function ExplorerPage({ system, suiteId, isSystemLoading = false }: Explo
         <SuiteScoreCards
           querySummaries={filteredQuerySummaries}
           queryCoverage={filteredQueryCoverage}
+          queryNames={queryNames}
           databaseColors={databaseColors}
           isLoading={isLoading}
         />

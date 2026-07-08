@@ -56,7 +56,7 @@ failed-only variants coexist in a scope.
       drift silently corrupts the natural key. One `versions.toml` (or env
       overrides) plus a startup assertion still recommended. DuckDB correctly
       derives its version from the installed package.
-- [ ] **Site: `db_label` is computed over two different run scopes.**
+- [x] **Site: `db_label` is computed over two different run scopes.**
       `withLatestRuns` builds the version-disambiguation window over *completed
       populate/mutate/select* runs (`queries.ts:104-108`) while
       `withLatestAttemptedSelectRuns` builds it over *attempted select* runs
@@ -67,7 +67,10 @@ failed-only variants coexist in a scope.
       scored set, `score.ts:34-36`), and the filter chips list the same variant
       twice (`useSuiteData.ts:250-259`). Compute the label window once over a
       shared scope.
-- [ ] **Home table still keys rows by scope-local label.** `useHomeOverview`
+      Fixed 2026-07-08: labels now come from one non-running run-label CTE
+      shared by completed-run and attempted-select paths. `queries.json` is now
+      required for the explorer score path instead of silently falling back.
+- [x] **Home table still keys rows by scope-local label.** `useHomeOverview`
       keys scores by `entry.db` (`useHomeOverview.ts:52-60`). With one version
       per suite scope the label collapses to bare `monetdb`, silently mixing
       Dec2025-SP1 (the four sf1 suites) with Dec2025-SP2 (tpc_h sf10) in a
@@ -75,6 +78,10 @@ failed-only variants coexist in a scope.
       published data. Conversely, two versions inside one suite would split
       into rows that don't align across suites. Key by (db, db_version) and
       derive the label at render time.
+      Fixed 2026-07-08: score rows carry stable `(db, db_version)` keys, the
+      home overview indexes by those keys, and home labels are rendered from
+      the global home-scope version set. Existing `site/public/data/results.db`
+      was not regenerated.
 - [ ] **Home shows each suite at its default scale factor only**
       (`useHomeOverview.ts:43-44`); a system whose data exists at a non-default
       SF shows "not run". The per-suite default SF is also now duplicated
@@ -117,8 +124,8 @@ Minor: `fetchSuiteScaleFactors` requires `finished_at` non-null
 with only such runs is unselectable; `suite_scale_factor` is INTEGER ≥ 1, so
 sf0.1 is unrepresentable (fine unless sub-SF1 is ever wanted);
 `current_suite_scale_factor` guards on `_current_suite` instead of the SF
-attribute (`dbs/__init__.py:67-70`); score `wins` still uses exact float
-equality (`score.ts:71`).
+attribute (`dbs/__init__.py:67-70`). Fixed 2026-07-08: score `wins` now uses a
+small duration tolerance instead of exact float equality.
 
 ---
 
@@ -172,13 +179,16 @@ step and is invisible to validation — it relies on the scoring penalty alone.
 
 ### 2.4 Score universe is "queries somebody completed"
 
-- [ ] Score against the suite's full query list from `queries.json`
+- [x] Score against the suite's full query list from `queries.json`
 
 `computeDatabaseScores` builds the query universe from observed summaries
 (`score.ts:24-33`), so a query that *no* scored db completed silently drops
 out — no penalty, no display. With sparse suites (TPC-DS currently has two
 engines) one shared unsupported query would simply vanish. `queries.json`
 already carries the canonical per-suite query list.
+Fixed 2026-07-08: `computeDatabaseScores` now requires the suite query list,
+and both the home overview and explorer score cards pass the manifest-derived
+names. Verified with `bun run verify` in `site/`.
 
 ### 2.5 Published-data hygiene (re-audited)
 

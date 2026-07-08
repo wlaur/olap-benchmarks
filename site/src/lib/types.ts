@@ -22,6 +22,8 @@ export interface OperationSummary {
 export interface QuerySummary {
   query_name: string
   db: string
+  db_name: string
+  db_version: string
   median_duration_s: number
   avg_duration_s: number
   min_duration_s: number
@@ -34,6 +36,7 @@ export type RunStatus = "running" | "completed" | "failed"
 export interface QueryCoverage {
   run_id: number
   db: string
+  db_name: string
   db_version: string
   latest_status: Exclude<RunStatus, "running">
   failed_query_count: number
