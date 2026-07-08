@@ -145,6 +145,7 @@ function withLatestRuns(db: ResultsDb, options: LatestRunsOptions) {
           sql<BenchmarkOperation>`${eb.ref("run.operation")}`.as("operation"),
           eb.ref("run.started_at").as("run_started_at"),
           eb.ref("run.finished_at").$notNull().as("run_finished_at"),
+          eb.ref("run.metadata").as("metadata"),
         ])
         .where("run.suite", "=", options.suite)
         .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
@@ -347,6 +348,7 @@ export async function fetchOperationSummaries(
       epochSeconds(eb.ref("latest_runs.run_finished_at"), eb.ref("latest_runs.run_started_at")).as(
         "run_duration_s",
       ),
+      sql<OperationSummary["metadata"]>`${eb.ref("latest_runs.metadata")}`.as("metadata"),
     ])
     .where("latest_runs.run_rank", "=", 1)
     .orderBy("latest_runs.db_label")
