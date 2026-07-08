@@ -1,4 +1,4 @@
-import type { BenchmarkSuiteId } from "./benchmarks"
+import type { BenchmarkDefinition, BenchmarkSuiteId } from "./benchmarks"
 import { toTitleCase } from "./format"
 import type { BenchmarkOperation } from "./types"
 
@@ -75,77 +75,26 @@ function compareGenericQueryNames(left: string, right: string): number {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })
 }
 
-const TIME_SERIES_CONFIG: SuiteConfig = {
-  id: "time_series",
-  queriesKey: "time_series",
-  label: "Time Series",
-  defaultScaleFactor: 1,
-  operations: ["populate", "mutate", "select"],
-  parseQueryName: parseTimeSeriesQueryName,
-  compareQueryNames: compareTimeSeriesQueryNames,
-}
+export function getSuiteConfig(definition: BenchmarkDefinition): SuiteConfig {
+  const parser =
+    definition.queryNameParser === "time_series"
+      ? {
+          parseQueryName: parseTimeSeriesQueryName,
+          compareQueryNames: compareTimeSeriesQueryNames,
+        }
+      : {
+          parseQueryName: parseGenericQueryName,
+          compareQueryNames: compareGenericQueryNames,
+        }
 
-const RTABENCH_CONFIG: SuiteConfig = {
-  id: "rtabench",
-  queriesKey: "rtabench",
-  label: "RTABench",
-  defaultScaleFactor: 1,
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const CLICKBENCH_CONFIG: SuiteConfig = {
-  id: "clickbench",
-  queriesKey: "clickbench",
-  label: "ClickBench",
-  defaultScaleFactor: 1,
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const KAGGLE_AIRBNB_CONFIG: SuiteConfig = {
-  id: "kaggle_airbnb",
-  queriesKey: "kaggle_airbnb",
-  label: "Kaggle Airbnb",
-  defaultScaleFactor: 1,
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const TPC_H_CONFIG: SuiteConfig = {
-  id: "tpc_h",
-  queriesKey: "tpc_h",
-  label: "TPC-H",
-  defaultScaleFactor: 10,
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const TPC_DS_CONFIG: SuiteConfig = {
-  id: "tpc_ds",
-  queriesKey: "tpc_ds",
-  label: "TPC-DS",
-  defaultScaleFactor: 1,
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const SUITE_CONFIGS: Record<BenchmarkSuiteId, SuiteConfig> = {
-  time_series: TIME_SERIES_CONFIG,
-  rtabench: RTABENCH_CONFIG,
-  clickbench: CLICKBENCH_CONFIG,
-  kaggle_airbnb: KAGGLE_AIRBNB_CONFIG,
-  tpc_h: TPC_H_CONFIG,
-  tpc_ds: TPC_DS_CONFIG,
-}
-
-export function getSuiteConfig(suiteId: BenchmarkSuiteId): SuiteConfig {
-  return SUITE_CONFIGS[suiteId]
+  return {
+    id: definition.id,
+    queriesKey: definition.queriesKey,
+    label: definition.title,
+    defaultScaleFactor: definition.defaultScaleFactor,
+    operations: definition.operations,
+    ...parser,
+  }
 }
 
 export const METRIC_SAMPLE_RATE_S = 2

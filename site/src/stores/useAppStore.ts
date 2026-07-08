@@ -1,11 +1,16 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
+import { fetchBenchmarkDefinitions, type BenchmarkDefinition } from "../lib/benchmarks"
 import { fetchSystems } from "../lib/queries"
 
-const STORE_VERSION = 7
+const STORE_VERSION = 8
 
-interface SystemSlice {
+interface AppSlice {
+  benchmarkDefinitions: BenchmarkDefinition[]
+  suitesLoading: boolean
+  suitesError: string | null
+  loadSuites: () => Promise<void>
   systems: string[]
   selectedSystem: string | null
   systemLoading: boolean
@@ -14,13 +19,30 @@ interface SystemSlice {
   loadSystems: () => Promise<void>
 }
 
-export const useAppStore = create<SystemSlice>()(
+export const useAppStore = create<AppSlice>()(
   persist(
     (set, get) => ({
+      benchmarkDefinitions: [],
+      suitesLoading: true,
+      suitesError: null,
+
       systems: [],
       selectedSystem: null,
       systemLoading: true,
       systemError: null,
+
+      loadSuites: async () => {
+        try {
+          const benchmarkDefinitions = await fetchBenchmarkDefinitions()
+          set({
+            benchmarkDefinitions,
+            suitesError: null,
+            suitesLoading: false,
+          })
+        } catch (error) {
+          set({ suitesError: String(error), suitesLoading: false })
+        }
+      },
 
       setSelectedSystem: (system) => set({ selectedSystem: system }),
 

@@ -1,15 +1,17 @@
 # Project review - 2026-07-08
 
-Status after fixes through `124160d` and the `RESEARCH.md` synthesis. Completed
-findings from the prior review have been removed. This document tracks only
-remaining work and caveats.
+Status after fixes through the 2026-07-08 methodology, version, warm-reporting,
+and suite-registry work. Completed findings from the prior review have been
+removed. This document tracks only remaining work and caveats.
 
 **Current answer:** no, not all review items are addressed. The code fixes closed
 the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
-preflight-error masking, ConnectorX recording, validation partitioning, and
-Docker platform-flag issues. Remaining blockers are methodology/public-run
-quality, correctness checks, version/metadata verification, published-data
-hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
+preflight-error masking, ConnectorX recording, validation partitioning, Docker
+platform-flag, runtime-version verification, version-bump, warm-reporting, home
+scale-factor, and suite-registry issues. Remaining blockers are public-rerun
+quality, correctness checks, query status/correctness semantics, metadata
+surfacing, published-data hygiene, and the larger suite/engine roadmap from
+`RESEARCH.md`.
 
 ---
 
@@ -20,50 +22,14 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
       contains the old published runs from `macbook-pro-m4`, before the platform
       and ConnectorX fixes. The next full rerun should use the intended
       `OLAP_BENCHMARKS_SYSTEM=macbook-m4-pro` value and then regenerate the
-      published DB.
-- [ ] **Record methodology metadata on each run.** The `run` table still lacks
-      host CPU/memory/OS, Docker version, image tag/digest, container platform,
-      execution mode (in-process vs server), tuning settings, iteration config,
-      and cache/cold/warm policy. `RESEARCH.md` makes this a prerequisite for
-      public results so future platform and iteration drift are visible.
-      Partially fixed 2026-07-08: new runs now persist `run.metadata` with host
-      OS/arch/memory, Python version, Docker version/context/server platform,
-      execution mode, container image/digest when available, start command, and
-      timing/cache-policy notes. The checked-in published DB was migrated, but
-      existing runs naturally have null metadata until rerun; the site does not
-      surface this metadata yet.
-- [ ] **Verify `db_version` against the running server.** Connector constants
-      are still hardcoded (`clickhouse`, `postgres`, `monetdb`, `questdb`,
-      `starrocks`, `timescaledb`) and are not checked against `SELECT version()`
-      or equivalent. DuckDB derives its value from the installed package.
-      Fixed in code 2026-07-08: benchmark runs now call
-      `verify_runtime_version()` before recording a run; ClickHouse, MonetDB,
-      Postgres, QuestDB, StarRocks, and TimescaleDB each query their runtime
-      version and fail on mismatch. DuckDB keeps its package/runtime assertion.
-      Caveat: this was unit-tested but not live-smoke-tested against every
-      container; the full rerun should confirm each engine's version query.
-- [ ] **Decide version bumps before the rerun.** `RESEARCH.md` recommends
-      reviewing/updating DuckDB 1.5.0, QuestDB 9.3.5, TimescaleDB 2.25.0,
-      ClickHouse 26.1.1.912, and the public-run StarRocks image; PostgreSQL
-      18.3 can stay, PostgreSQL 19 is still a beta-track item, and MonetDB is
-      lower priority unless a newer service pack is straightforward.
-      Fixed in code 2026-07-08: DuckDB is pinned to 1.5.4, QuestDB to 9.4.3,
-      TimescaleDB to 2.28.2 with the verified `2.28.2-pg18` image, and
-      ClickHouse to the verified 26.x jammy tag `26.6.1.1193`. PostgreSQL stays
-      at 18.3, MonetDB stays at Dec2025-SP2, and StarRocks stays at 4.0.9 for
-      the Apple Silicon Docker constraint noted in `RESEARCH.md`.
-- [ ] **Classify iteration roles.** Store and report first-run/cold,
-      warm/steady-state, warm median, and best warm timings separately. On an
-      M-series Mac, label first-iteration numbers as first-run/lukewarm rather
-      than true cold-cache unless the run environment can actually control OS
-      caches.
-      Partially fixed 2026-07-08: query/mutation steps now store
-      `iteration_role` (`first_run` for iteration 1, `warm` for later
-      iterations), with backfill for existing steps. Site scoring and per-query
-      latency now use warm/steady-state medians when available, with first-run,
-      all-iteration median, and best-warm values exposed in query details.
-      Caveat: true cold-cache measurement still requires a controlled public
-      benchmark host; local macOS first iterations remain first-run/lukewarm.
+      published DB. The rerun should also live-confirm each engine's runtime
+      version query and the bumped image/package pins.
+- [ ] **Surface methodology metadata on the site.** New runs now persist
+      `run.metadata` with host OS/arch/memory, Python version, Docker
+      version/context/server platform, execution mode, container image/digest
+      when available, start command, and timing/cache-policy notes. Existing
+      published runs naturally have null metadata until rerun, and the site does
+      not yet expose this metadata or caveat missing metadata directly.
 - [ ] **Add first-class query status.** Results need explicit `ok`, `timeout`,
       `unsupported`, `wrong_result`, `error`, and `skipped` states. Non-`ok`
       queries should remain in aggregate scoring as missing/penalized instead
@@ -117,20 +83,12 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ## 3. Dimensions, UI, And Data Hygiene
 
-- [ ] **Home still shows each suite at its default scale factor only.** A system
-      with data only at a non-default SF appears "not run"; home column headers
-      also do not expose which SF is being scored. Fold this into the suite
-      registry work.
 - [ ] **TPC-H SF10+SF50 fanout is still not configured.** `suite=all` now fans
       out configured suite scale factors, and time-series has SF1/SF10, but
       TPC-H still only participates at its default SF unless invoked separately.
 - [ ] **Cross-system comparison is still absent from the UI.** The data model
       supports comparing the same `(db, version, suite, SF)` across systems, but
       every current site view is scoped to one selected system.
-- [ ] **Suite registry remains duplicated.** Python `SuiteName` and scale-factor
-      maps, `site/src/lib/benchmarks.ts`, `site/src/lib/suiteConfig.ts`, and
-      `home.md` still duplicate suite metadata. Publish a `suites.json` next to
-      `queries.json` and drive the site from it.
 - [ ] **Migration hardening is still missing for shared revisions.** The
       unique-index migration has no dedup/remediation path for legacy duplicate
       keys; the scale-factor migration keeps unknown legacy suite names as SF1;
@@ -180,16 +138,15 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 
 ## 5. Suggested Priority Order
 
-1. Methodology schema first: query status, iteration role, execution mode,
-   platform/host metadata, and server-version verification.
-2. Decide version bumps and rerun policy, then run the full matrix within the
-   disk budget and publish `macbook-m4-pro` data.
-3. Fix known divergent queries and add value-level validation before trusting
+1. Finish query-status semantics: unsupported/wrong-result wiring, status-aware
+   validation, and broader per-step fault isolation.
+2. Fix known divergent queries and add value-level validation before trusting
    the rerun.
-4. Clean published-data leftovers and make missing/unsupported steps visible.
-5. Finish site/data architecture work: scale-factor home display,
-   cross-system comparison, `suites.json`, and shared-revision migration
-   hardening.
+3. Finalize public-run policy and metadata surfacing, then run the full matrix
+   within the disk budget and publish `macbook-m4-pro` data.
+4. Clean published-data leftovers and make unexpected missing steps visible.
+5. Finish remaining site/data architecture work: cross-system comparison and
+   shared-revision migration hardening.
 6. Add JSONBench, then Polars and Doris; handle JOB and TSBS after the result
    status model exists.
 
@@ -198,7 +155,7 @@ hygiene, and the larger suite/engine roadmap from `RESEARCH.md`.
 - Timed unit: `perf_counter` around `fetch()` into Polars, so timings include
   client round trip, result transfer, and materialization.
 - Current default SFs: ClickBench 1, Kaggle Airbnb 1, RTABench 1, time-series 1
-  and 10, TPC-H 10, TPC-DS 1.
+  (also configured at SF10), TPC-H 10, TPC-DS 1.
 - Current published coverage is still the old `macbook-pro-m4` data:
   clickbench SF1 x 7 DBs; kaggle_airbnb/rtabench/time_series SF1 x 6 DBs;
   TPC-H SF10 x 6 DBs; TPC-DS SF1 with DuckDB and ClickHouse selects plus a

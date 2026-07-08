@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal, cast, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
@@ -27,6 +27,17 @@ Revision = Annotated[str, "Results database revision"]
 type DatabaseArg = DatabaseName | Literal["all"]
 type SuiteArg = SuiteName | Literal["all"]
 
+SUITE_NAMES = cast(tuple[SuiteName, ...], get_args(SuiteName))
+
+SUITE_DISPLAY_ORDER: tuple[SuiteName, ...] = (
+    "time_series",
+    "rtabench",
+    "clickbench",
+    "kaggle_airbnb",
+    "tpc_h",
+    "tpc_ds",
+)
+
 DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
     "rtabench": 1,
     "time_series": 1,
@@ -45,8 +56,32 @@ ALL_SUITE_SCALE_FACTORS["time_series"] = TIME_SERIES_SCALE_FACTORS
 
 SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "tpc_h", "tpc_ds"})
 
-assert set(DEFAULT_SUITE_SCALE_FACTORS) == set(get_args(SuiteName))
-assert set(ALL_SUITE_SCALE_FACTORS) == set(get_args(SuiteName))
+SUITE_LABELS: dict[SuiteName, str] = {
+    "rtabench": "RTABench",
+    "time_series": "Time Series",
+    "clickbench": "ClickBench",
+    "kaggle_airbnb": "Kaggle Airbnb",
+    "tpc_h": "TPC-H",
+    "tpc_ds": "TPC-DS",
+}
+
+SUITE_NAV_LABELS: dict[SuiteName, str] = SUITE_LABELS.copy()
+
+SUITE_OPERATIONS: dict[SuiteName, tuple[Operation, ...]] = dict.fromkeys(SUITE_NAMES, ("populate", "select"))
+SUITE_OPERATIONS["time_series"] = ("populate", "mutate", "select")
+
+SuiteQueryNameParser = Literal["generic", "time_series"]
+
+SUITE_QUERY_NAME_PARSERS: dict[SuiteName, SuiteQueryNameParser] = dict.fromkeys(SUITE_NAMES, "generic")
+SUITE_QUERY_NAME_PARSERS["time_series"] = "time_series"
+
+assert set(DEFAULT_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
+assert set(ALL_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
+assert set(SUITE_DISPLAY_ORDER) == set(SUITE_NAMES)
+assert set(SUITE_LABELS) == set(SUITE_NAMES)
+assert set(SUITE_NAV_LABELS) == set(SUITE_NAMES)
+assert set(SUITE_OPERATIONS) == set(SUITE_NAMES)
+assert set(SUITE_QUERY_NAME_PARSERS) == set(SUITE_NAMES)
 
 
 def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None) -> int:
@@ -107,7 +142,7 @@ def resolve_dbs(arg: DatabaseArg) -> list[DatabaseName]:
 
 def resolve_suites(arg: SuiteArg) -> list[SuiteName]:
     if arg == "all":
-        return list(get_args(SuiteName))
+        return list(SUITE_NAMES)
     return [arg]
 
 

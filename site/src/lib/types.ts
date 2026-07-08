@@ -61,6 +61,11 @@ export interface QueryCoverage {
 
 export type BenchmarkOperation = "populate" | "mutate" | "select"
 
+export interface SuiteScaleFactor {
+  suite: string
+  suite_scale_factor: number
+}
+
 export interface MetricSample {
   run_id: number
   db: string

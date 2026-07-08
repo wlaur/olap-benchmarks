@@ -82,6 +82,7 @@ export function useSuiteData(
   suite: BenchmarkSuiteId,
   suiteConfig: SuiteConfig,
   isSystemLoading: boolean,
+  preferredScaleFactor: number | null = null,
 ): UseSuiteDataResult {
   const [state, setState] = useState<SuiteDataState>(createInitialState)
   const [selectedDatabases, setSelectedDatabases] = useState<string[]>([])
@@ -121,6 +122,9 @@ export function useSuiteData(
           }
 
           setSelectedScaleFactor((currentScaleFactor) => {
+            if (preferredScaleFactor !== null && nextScaleFactors.includes(preferredScaleFactor)) {
+              return preferredScaleFactor
+            }
             if (currentScaleFactor !== null && nextScaleFactors.includes(currentScaleFactor)) {
               return currentScaleFactor
             }
@@ -146,7 +150,7 @@ export function useSuiteData(
     return () => {
       cancelled = true
     }
-  }, [isSystemLoading, system, suite, suiteConfig.defaultScaleFactor])
+  }, [isSystemLoading, preferredScaleFactor, system, suite, suiteConfig.defaultScaleFactor])
 
   useEffect(() => {
     if (isSystemLoading || system === null || selectedScaleFactor === null) {

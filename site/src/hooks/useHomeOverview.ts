@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react"
 
-import { benchmarkDefinitions, type BenchmarkSuiteId } from "../lib/benchmarks"
-import { fetchQueriesManifest, fetchQueryCoverage, fetchQuerySummaries } from "../lib/queries"
+import type { BenchmarkDefinition, BenchmarkSuiteId } from "../lib/benchmarks"
+import {
+  fetchQueriesManifest,
+  fetchQueryCoverage,
+  fetchQuerySummaries,
+  fetchSystemSuiteScaleFactors,
+} from "../lib/queries"
 import { computeDatabaseScores, type DatabaseScore } from "../lib/score"
 import { getSuiteConfig } from "../lib/suiteConfig"
 
@@ -13,7 +18,10 @@ export interface HomeDatabase {
 }
 
 export interface SuiteOverview {
+  key: string
   suiteId: BenchmarkSuiteId
+  suiteScaleFactor: number
+  title: string
   scores: DatabaseScore[]
 }
 
@@ -22,7 +30,7 @@ export interface HomeOverview {
   error: string | null
   databases: HomeDatabase[]
   suites: SuiteOverview[]
-  scoresByDbAndSuite: Map<string, Map<BenchmarkSuiteId, DatabaseScore>>
+  scoresByDbAndSuite: Map<string, Map<string, DatabaseScore>>
 }
 
 const EMPTY_OVERVIEW: HomeOverview = {
@@ -33,47 +41,49 @@ const EMPTY_OVERVIEW: HomeOverview = {
   scoresByDbAndSuite: new Map(),
 }
 
-export function useHomeOverview(system: string | null): HomeOverview {
+export function useHomeOverview(
+  system: string | null,
+  benchmarkDefinitions: readonly BenchmarkDefinition[],
+): HomeOverview {
   const [overview, setOverview] = useState<HomeOverview>(EMPTY_OVERVIEW)
 
   useEffect(() => {
-    if (system === null) {
-      setOverview(EMPTY_OVERVIEW)
+    if (system === null || benchmarkDefinitions.length === 0) {
+      setOverview({ ...EMPTY_OVERVIEW, loading: false })
       return
     }
 
     let cancelled = false
     setOverview({ ...EMPTY_OVERVIEW, loading: true })
 
-    Promise.all([
-      fetchQueriesManifest(),
-      Promise.all(
-        benchmarkDefinitions.map(async (definition) => {
-          const [summaries, coverage] = await Promise.all([
-            fetchQuerySummaries(system, definition.id, definition.defaultScaleFactor),
-            fetchQueryCoverage(system, definition.id, definition.defaultScaleFactor),
-          ])
-          return { definition, summaries, coverage }
-        }),
-      ),
-    ])
-      .then(([queriesManifest, suiteRows]) =>
-        suiteRows.map(({ definition, summaries, coverage }) => {
-          const suiteConfig = getSuiteConfig(definition.id)
-          const suiteQueries = queriesManifest[suiteConfig.queriesKey]
-          if (!suiteQueries) {
-            throw new Error(`queries.json is missing suite ${suiteConfig.queriesKey}`)
-          }
-          return {
-            suiteId: definition.id,
-            scores: computeDatabaseScores(summaries, coverage, Object.keys(suiteQueries)),
-          }
-        }),
-      )
+    Promise.all([fetchQueriesManifest(), fetchSystemSuiteScaleFactors(system)])
+      .then(async ([queriesManifest, availableScaleFactors]) => {
+        const suiteColumns = buildSuiteColumns(benchmarkDefinitions, availableScaleFactors)
+        return Promise.all(
+          suiteColumns.map(async (column) => {
+            const [summaries, coverage] = await Promise.all([
+              fetchQuerySummaries(system, column.suiteId, column.suiteScaleFactor),
+              fetchQueryCoverage(system, column.suiteId, column.suiteScaleFactor),
+            ])
+            const suiteConfig = getSuiteConfig(column.definition)
+            const suiteQueries = queriesManifest[suiteConfig.queriesKey]
+            if (!suiteQueries) {
+              throw new Error(`queries.json is missing suite ${suiteConfig.queriesKey}`)
+            }
+            return {
+              key: column.key,
+              suiteId: column.suiteId,
+              suiteScaleFactor: column.suiteScaleFactor,
+              title: column.title,
+              scores: computeDatabaseScores(summaries, coverage, Object.keys(suiteQueries)),
+            }
+          }),
+        )
+      })
       .then((suites) => {
         if (cancelled) return
 
-        const scoresByDbAndSuite = new Map<string, Map<BenchmarkSuiteId, DatabaseScore>>()
+        const scoresByDbAndSuite = new Map<string, Map<string, DatabaseScore>>()
         const databasesByKey = new Map<string, { key: string; dbName: string; dbVersion: string }>()
         for (const suite of suites) {
           for (const entry of suite.scores) {
@@ -83,15 +93,15 @@ export function useHomeOverview(system: string | null): HomeOverview {
               dbVersion: entry.dbVersion,
             })
             const inner = scoresByDbAndSuite.get(entry.dbKey) ?? new Map()
-            inner.set(suite.suiteId, entry)
+            inner.set(suite.key, entry)
             scoresByDbAndSuite.set(entry.dbKey, inner)
           }
         }
 
-        const worstBySuite = new Map<BenchmarkSuiteId, number>()
+        const worstBySuite = new Map<string, number>()
         for (const suite of suites) {
           const finite = suite.scores.map((s) => s.score).filter(Number.isFinite)
-          if (finite.length > 0) worstBySuite.set(suite.suiteId, Math.max(...finite))
+          if (finite.length > 0) worstBySuite.set(suite.key, Math.max(...finite))
         }
 
         const overallScores = new Map<string, number>()
@@ -142,7 +152,51 @@ export function useHomeOverview(system: string | null): HomeOverview {
     return () => {
       cancelled = true
     }
-  }, [system])
+  }, [system, benchmarkDefinitions])
 
   return overview
+}
+
+interface SuiteColumn {
+  key: string
+  suiteId: BenchmarkSuiteId
+  suiteScaleFactor: number
+  title: string
+  definition: BenchmarkDefinition
+}
+
+interface AvailableScaleFactor {
+  suite: string
+  suite_scale_factor: number
+}
+
+function buildSuiteColumns(
+  benchmarkDefinitions: readonly BenchmarkDefinition[],
+  availableScaleFactors: readonly AvailableScaleFactor[],
+): SuiteColumn[] {
+  const scaleFactorsBySuite = new Map<string, Set<number>>()
+  for (const row of availableScaleFactors) {
+    const scaleFactors = scaleFactorsBySuite.get(row.suite) ?? new Set<number>()
+    scaleFactors.add(row.suite_scale_factor)
+    scaleFactorsBySuite.set(row.suite, scaleFactors)
+  }
+
+  return benchmarkDefinitions.flatMap((definition) => {
+    const available = Array.from(scaleFactorsBySuite.get(definition.id) ?? []).sort(
+      (left, right) => left - right,
+    )
+    const scaleFactors = available.length > 0 ? available : [definition.defaultScaleFactor]
+
+    return scaleFactors.map((scaleFactor) => ({
+      key: formatSuiteScoreKey(definition.id, scaleFactor),
+      suiteId: definition.id,
+      suiteScaleFactor: scaleFactor,
+      title: `${definition.title} SF${scaleFactor}`,
+      definition,
+    }))
+  })
+}
+
+function formatSuiteScoreKey(suiteId: BenchmarkSuiteId, scaleFactor: number): string {
+  return `${suiteId}:sf${scaleFactor}`
 }
