@@ -17,6 +17,7 @@ from sqlalchemy import Connection, text
 
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
+from ..results.hashing import build_answer_metadata
 from ..run_metadata import (
     ExecutionMode,
     StepResultStatus,
@@ -303,8 +304,11 @@ class Database(BaseModel, ABC):
         error_message: str | None = None,
         duration_ms: float | None = None,
         result_status: StepResultStatus | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
+        step_metadata = dict(metadata or {})
+        if duration_ms is not None:
+            step_metadata["duration_ms"] = duration_ms
 
         self._finish_step(
             step_id=step_id,
@@ -314,7 +318,7 @@ class Database(BaseModel, ABC):
             error_type=error_type,
             error_message=error_message,
             result_status=result_status,
-            metadata=metadata,
+            metadata=step_metadata or None,
         )
 
     def is_mutation_step_enabled(self, suite: SuiteName, step_name: str) -> bool:
@@ -448,6 +452,7 @@ class Database(BaseModel, ABC):
             step_type="query",
             row_count=df.shape[0],
             duration_ms=1_000 * duration_seconds,
+            metadata=build_answer_metadata(df),
         )
 
         return df, duration_seconds

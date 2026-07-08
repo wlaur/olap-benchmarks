@@ -14,9 +14,10 @@ scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
 The version-bump work now includes MonetDB Dec2025-SP3, the site now surfaces
 run methodology metadata when present, and the home page labels the current
 Apple Silicon public data as development data. Row-count validation now marks
-consensus outliers as `wrong_result`. Remaining blockers are public rerun
-quality, correctness checks, published-data hygiene, and the larger suite/engine
-roadmap from `RESEARCH.md`.
+consensus outliers as `wrong_result`, and query steps now record bounded answer
+hashes for value-level validation. Remaining blockers are public rerun quality,
+correctness checks, published-data hygiene, and the larger suite/engine roadmap
+from `RESEARCH.md`.
 
 ---
 
@@ -55,6 +56,10 @@ roadmap from `RESEARCH.md`.
       rewrite can still return 100 rows. Add deterministic answer hashes or
       equivalent reference checks for ClickBench, TPC-H, TPC-DS, and RTABench
       where practical.
+      Partially fixed 2026-07-08: query steps now record deterministic
+      answer hashes for results up to the configured cell limit, and validation
+      compares latest-run hashes after row counts agree. The published data
+      needs the final rerun before these hashes exist across engines.
 - [ ] **Make unrecorded steps impossible or visible.** TimescaleDB's published
       time-series mutate run silently lacks all three
       `insert_data_large_10000` iterations (79 mutation steps vs 82 elsewhere).
@@ -140,4 +145,5 @@ roadmap from `RESEARCH.md`.
   cross-engine per-query row counts after select runs within one
   `(system, suite, scale factor)` scope. Consensus row-count outliers are marked
   as `wrong_result`; ambiguous splits still fail validation without guessing.
-  There is no value-level comparison.
+  New select runs also store bounded answer hashes, and consensus hash outliers
+  are marked as `wrong_result` when row counts agree.
