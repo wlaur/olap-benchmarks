@@ -13,7 +13,7 @@ metrics as (
 select
     times.time,
     max(metrics.value) filter (where metrics.metric_name = 'process_667') as value_1,
-    max(metrics.value) filter (where metrics.metric_name = 'binary_22') as value_2,
+    cast(max(metrics.value) filter (where metrics.metric_name = 'binary_22') as integer) as value_2,
     max(metrics.value) filter (where metrics.metric_name = 'ratio_12') as value_3,
     max(metrics.value) filter (where metrics.metric_name = 'process_259') as value_4,
     max(metrics.value) filter (where metrics.metric_name = 'process_242') as value_5,

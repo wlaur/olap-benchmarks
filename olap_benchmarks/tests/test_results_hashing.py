@@ -16,7 +16,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v2"
+    assert left["answer_hash_version"] == "canonical-v3"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -45,6 +45,15 @@ def test_answer_metadata_canonicalizes_booleans_to_integer_values() -> None:
     ints = pl.DataFrame({"flag": pl.Series([1, 0, None], dtype=pl.Int64)})
 
     assert hashing.build_answer_metadata(bools)["answer_hash"] == hashing.build_answer_metadata(ints)["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_decimal_float_equivalents() -> None:
+    decimals = pl.DataFrame({"value": pl.Series(["0.8974358974", "0.5500000000"], dtype=pl.Decimal(38, 10))})
+    floats = pl.DataFrame({"value": [0.8974358974, 0.55]})
+
+    assert (
+        hashing.build_answer_metadata(decimals)["answer_hash"] == hashing.build_answer_metadata(floats)["answer_hash"]
+    )
 
 
 def test_answer_metadata_quantizes_float_roundoff() -> None:

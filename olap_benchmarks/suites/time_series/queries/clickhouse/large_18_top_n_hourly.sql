@@ -6,6 +6,6 @@ from
 group by
     hr
 order by
-    avg_value desc
+    avg_value desc nulls last
 limit
     10

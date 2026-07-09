@@ -1,5 +1,5 @@
 with b as (
-    select time, value as binary_value from data_large
+    select time, cast(value as integer) as binary_value from data_large
     where metric_name = 'binary_22'
 ),
 p as (
