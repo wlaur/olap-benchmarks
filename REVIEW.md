@@ -26,9 +26,11 @@ aggregate ranking while staying explorable. RTABench now schedules the
 upstream 1000-series pre-aggregated query variants where db-specific files
 exist and records explicit unsupported steps elsewhere. The default benchmark
 matrix now keeps row-store TPC-H/TPC-DS runs opt-in while preserving explicit
-low-scale commands. Remaining blockers are public rerun quality, correctness
-checks, published-data hygiene, and the larger suite/engine roadmap from
-`RESEARCH.md`.
+low-scale commands. Doris is now wired as a split FE/BE Docker engine for
+ClickBench and JSONBench, with combined FE+BE CPU and memory metric samples.
+Remaining blockers are public rerun quality, correctness checks,
+published-data hygiene, and the larger suite/engine roadmap from the research
+notes.
 
 ---
 
@@ -133,6 +135,24 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
       the repo's one-container lifecycle by starting with `4.0.3-all-slim`, or
       add first-class multi-container lifecycle/metrics for the split 4.1.x
       FE/BE setup. No Doris code was committed yet.
+
+      Partially fixed 2026-07-09: Doris now uses the split `apache/doris`
+      `fe-4.1.3` and `be-4.1.3` images, first-class command-sequence
+      lifecycle hooks, and metric targets that aggregate FE+BE CPU and memory
+      into one run metric sample. Doris is registered only for the initial
+      ClickBench and JSONBench scope. JSONBench loads native Doris `JSON`
+      values through Stream Load and uses `json_extract_*` query overrides.
+      Live smoke 2026-07-09: FE/BE startup, runtime-version verification,
+      native-JSON Stream Load, all five JSONBench query overrides, generic
+      Parquet Stream Load, FE+BE metric aggregation, lifecycle cleanup, and an
+      `olap benchmark doris jsonbench select` run all completed against a tiny
+      smoke table. The smoke found and fixed two integration issues:
+      ConnectorX is not the default Doris fetch path because live Doris rejects
+      ConnectorX's MySQL `socket` variable, and Doris JSON timestamp queries now
+      use fractional `from_unixtime(...)` instead of unsupported microsecond
+      `timestampadd`. Still pending: full ClickBench and JSONBench 10M data
+      runs before including Doris in the public matrix. RTABench and TPC-DS
+      remain deferred.
 - [ ] **Add JOB only after status handling.** It is the best optimizer-heavy
       follow-up, but unsupported/null statuses need to exist before porting it
       across engines.
@@ -147,8 +167,8 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
 2. Finalize public-run policy and metadata surfacing, then run the full matrix
    within the disk budget and publish `macbook-m4-pro` data.
 3. Clean published-data leftovers and make unexpected missing steps visible.
-4. Smoke JSONBench for the already-wired engines, then continue Doris once the
-   Docker lifecycle decision above is made. Handle JOB and TSBS after
+4. Smoke JSONBench for the already-wired engines and smoke the new Doris
+   ClickBench/JSONBench paths. Handle JOB and TSBS after
    value-level checks and status-aware reporting have been exercised on the
    rerun.
 
@@ -170,6 +190,9 @@ checks, published-data hygiene, and the larger suite/engine roadmap from
   as `wrong_result`; ambiguous splits still fail validation without guessing.
   New select runs also store bounded answer hashes, and consensus hash outliers
   are marked as `wrong_result` when row counts agree.
+- Multi-container engines are represented as one benchmark database; run
+  metrics store total CPU and memory across the engine's measured containers,
+  not per-service breakdown rows. Doris currently measures FE+BE totals.
 - RTABench upstream currently documents 33 queries in its README, but the
   current upstream Postgres query directory has 31 base files; TimescaleDB and
   ClickHouse also include 10 `1000+` pre-aggregated variants, and upstream
