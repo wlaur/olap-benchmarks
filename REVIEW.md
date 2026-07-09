@@ -43,6 +43,17 @@ notes.
       `OLAP_BENCHMARKS_SYSTEM=macbook-m4-pro` value and then regenerate the
       published DB. The rerun should also live-confirm each engine's runtime
       version query and the bumped image/package pins.
+- [ ] **Normalize system metadata before publishing the rerun.** Run metadata
+      already records host details such as OS, machine architecture, logical CPU
+      count, and total memory in `run.metadata.host`, but this is duplicated per
+      run and awkward for published-data queries. Add a `system_metadata` or
+      `system_snapshot` table with an integer primary key, the human-readable
+      `system` label, concrete hardware/OS fields, and an optional raw metadata
+      JSON column. Do not use `system` alone as the primary key: it is an
+      operator-provided label and can be reused after hardware, OS, Docker, or
+      benchmark policy changes. Link runs to the snapshot with a nullable scalar
+      id/index, following the repo's current application-managed relationship
+      style for DuckDB instead of relying on strict foreign-key behavior.
 
 ## 2. Correctness And Validation
 
