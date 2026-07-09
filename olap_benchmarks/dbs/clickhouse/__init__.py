@@ -313,7 +313,7 @@ class Clickhouse(Database):
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
-            self._connection = None
+            self.close_connection()
 
         if self._connection is not None:
             return self._connection

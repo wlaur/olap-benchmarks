@@ -127,6 +127,9 @@ class DuckDB(Database):
         return None
 
     def connect(self, reconnect: bool = False) -> Connection:
+        if reconnect:
+            self.close_connection()
+
         if self._connection is not None and not reconnect:
             return self._connection
 
