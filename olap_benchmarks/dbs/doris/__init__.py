@@ -3,7 +3,6 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from gzip import open as gzip_open
 from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, Literal, cast
@@ -15,7 +14,7 @@ from sqlalchemy.engine import make_url
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
-from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
 from .. import Database
 from ..utils import normalize_columns
 
@@ -133,8 +132,8 @@ class DorisJSONBench(JSONBench["Doris"]):
         staged_file = self.db.staging_directory / f"bluesky_{uuid.uuid4().hex}.tsv"
         row_id = start_id
 
-        with gzip_open(input_file, "rt", encoding="utf-8") as source, staged_file.open("w", encoding="utf-8") as out:
-            for line in source:
+        with staged_file.open("w", encoding="utf-8") as out:
+            for line in iter_jsonbench_input_lines(input_file):
                 out.write(f"{row_id}\t{line}")
                 row_id += 1
 

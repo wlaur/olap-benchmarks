@@ -3,7 +3,7 @@ import uuid
 from collections.abc import Mapping
 from math import ceil
 from pathlib import Path
-from shutil import copy2, rmtree
+from shutil import rmtree
 from time import perf_counter, sleep
 from typing import Any, ClassVar, cast
 from urllib.parse import urlparse
@@ -18,7 +18,7 @@ from sqlalchemy import Connection, create_engine
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
-from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from ...suites.tpc_ds.config import TpcDs
@@ -144,11 +144,8 @@ class ClickhouseJSONBench(JSONBench["Clickhouse"]):
         staging_dir.mkdir(parents=True)
 
         for input_file in get_jsonbench_input_files(self.scale_factor):
-            staged_file = staging_dir / input_file.name
-            try:
-                staged_file.hardlink_to(input_file)
-            except OSError:
-                copy2(input_file, staged_file)
+            staged_file = staging_dir / input_file.name.removesuffix(".gz")
+            write_jsonbench_input_file(input_file, staged_file)
 
         return staging_dir
 
@@ -190,7 +187,7 @@ class ClickhouseJSONBench(JSONBench["Clickhouse"]):
                     f"""
                     INSERT INTO bluesky
                     SELECT *
-                    FROM file('{staging_dir.name}/file_*.json.gz', 'JSONAsObject')
+                    FROM file('{staging_dir.name}/file_*.json', 'JSONAsObject')
                     SETTINGS min_insert_block_size_rows = 1000000,
                              min_insert_block_size_bytes = 0
                     """

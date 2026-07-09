@@ -3,30 +3,49 @@ from __future__ import annotations
 from collections.abc import Mapping
 from importlib.metadata import version as package_version
 from pathlib import Path
+from shutil import rmtree
 from typing import Any, cast
 
 import polars as pl
 from sqlalchemy import Connection
 
-from ...settings import DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
-from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from .. import Database
 
 VERSION = package_version("polars")
 
 
 class PolarsJSONBench(JSONBench["Polars"]):
+    def _stage_input_files(self) -> Path:
+        temp_dir = SETTINGS.temporary_directory / "polars/data"
+        staging_dir = temp_dir / self.data_directory_name
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        staging_dir.mkdir(parents=True)
+
+        for input_file in get_jsonbench_input_files(self.scale_factor):
+            staged_file = staging_dir / input_file.name.removesuffix(".gz")
+            write_jsonbench_input_file(input_file, staged_file)
+
+        return staging_dir
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
                 return
 
-        input_files = [fpath.as_posix() for fpath in get_jsonbench_input_files(self.scale_factor)]
         table_path = self.db.table_path("bluesky")
 
-        with self.db.phase_context("insert", table_name="bluesky"):
-            pl.scan_ndjson(input_files).sink_parquet(table_path)
+        staging_dir = self._stage_input_files()
+        try:
+            input_files = [fpath.as_posix() for fpath in sorted(staging_dir.glob("file_*.json"))]
+
+            with self.db.phase_context("insert", table_name="bluesky"):
+                pl.scan_ndjson(input_files).sink_parquet(table_path)
+        finally:
+            rmtree(staging_dir)
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()

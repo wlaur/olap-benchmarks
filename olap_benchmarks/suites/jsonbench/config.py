@@ -1,4 +1,7 @@
+import json
 import logging
+from collections.abc import Iterator
+from gzip import open as gzip_open
 from pathlib import Path
 from time import perf_counter
 from urllib.request import urlretrieve
@@ -21,6 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 JSONBENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/jsonbench/queries"
 JSONBENCH_DATASET_BASE_URL = "https://clickhouse-public-datasets.s3.amazonaws.com/bluesky"
 JSONBENCH_FILE_COUNTS = {10: 10}
+JSONBENCH_EMPTY_OBJECT_LINE = "{}\n"
 
 JSONBENCH_QUERY_NAMES = {
     "01_events_by_collection": 5,
@@ -39,6 +43,62 @@ def get_jsonbench_input_files(scale_factor: int) -> list[Path]:
     file_count = JSONBENCH_FILE_COUNTS[scale_factor]
     input_directory = get_jsonbench_input_directory(scale_factor)
     return [input_directory / f"file_{idx:04d}.json.gz" for idx in range(1, file_count + 1)]
+
+
+def _looks_like_json_object_line(line: str) -> bool:
+    stripped = line.rstrip("\r\n")
+    return stripped.startswith("{") and stripped.endswith("}")
+
+
+def _ensure_line_ending(line: str) -> str:
+    if line.endswith("\n"):
+        return line
+    return f"{line}\n"
+
+
+def _validate_json_object_line(line: str, input_file: Path, line_number: int) -> str:
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: {exc}") from exc
+
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: expected object")
+
+    return _ensure_line_ending(line)
+
+
+def iter_jsonbench_input_lines(input_file: Path) -> Iterator[str]:
+    pending_line: str | None = None
+    pending_line_number: int | None = None
+
+    with gzip_open(input_file, "rt", encoding="utf-8") as source:
+        for line_number, raw_line in enumerate(source, 1):
+            line = raw_line.replace("\\u0000", "")
+            if pending_line is not None:
+                repaired_line = f"{pending_line}\\n{line}"
+                yield _validate_json_object_line(repaired_line, input_file, pending_line_number or line_number)
+                yield JSONBENCH_EMPTY_OBJECT_LINE
+                pending_line = None
+                pending_line_number = None
+                continue
+
+            if _looks_like_json_object_line(line):
+                yield _ensure_line_ending(line)
+                continue
+
+            pending_line = line.rstrip("\r\n")
+            pending_line_number = line_number
+
+    if pending_line_number is not None:
+        raise RuntimeError(
+            f"Invalid JSONBench row in {input_file.name} at line {pending_line_number:_}: unrepaired fragment"
+        )
+
+
+def write_jsonbench_input_file(input_file: Path, output_file: Path) -> None:
+    with output_file.open("w", encoding="utf-8") as out:
+        out.writelines(iter_jsonbench_input_lines(input_file))
 
 
 def prepare_data(scale_factor: int) -> None:
