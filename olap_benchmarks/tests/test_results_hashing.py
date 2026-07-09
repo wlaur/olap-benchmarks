@@ -16,7 +16,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v1"
+    assert left["answer_hash_version"] == "canonical-v2"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -38,6 +38,37 @@ def test_answer_metadata_canonicalizes_equivalent_numeric_dtypes() -> None:
     )
 
     assert hashing.build_answer_metadata(narrow)["answer_hash"] == hashing.build_answer_metadata(wide)["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_booleans_to_integer_values() -> None:
+    bools = pl.DataFrame({"flag": [True, False, None]})
+    ints = pl.DataFrame({"flag": pl.Series([1, 0, None], dtype=pl.Int64)})
+
+    assert hashing.build_answer_metadata(bools)["answer_hash"] == hashing.build_answer_metadata(ints)["answer_hash"]
+
+
+def test_answer_metadata_quantizes_float_roundoff() -> None:
+    left = pl.DataFrame({"stddev": [0.5407961018807453]})
+    right = pl.DataFrame({"stddev": [0.540796101881521]})
+
+    assert hashing.build_answer_metadata(left)["answer_hash"] == hashing.build_answer_metadata(right)["answer_hash"]
+
+
+def test_answer_metadata_ignores_engine_specific_column_names() -> None:
+    expression_label = pl.DataFrame({"max(time)": [1]})
+    quoted_expression_label = pl.DataFrame({'max("time")': [1]})
+
+    assert (
+        hashing.build_answer_metadata(expression_label)["answer_hash"]
+        == hashing.build_answer_metadata(quoted_expression_label)["answer_hash"]
+    )
+
+
+def test_answer_metadata_hashes_equal_nullable_frames_deterministically() -> None:
+    first = pl.DataFrame({"time": [1, 2, 3], "delta": [None, 0.1, -0.2]})
+    second = pl.DataFrame({"time": [1, 2, 3], "delta": [None, 0.1, -0.2]})
+
+    assert hashing.build_answer_metadata(first)["answer_hash"] == hashing.build_answer_metadata(second)["answer_hash"]
 
 
 def test_answer_metadata_canonicalizes_datetimes_to_naive_milliseconds() -> None:
