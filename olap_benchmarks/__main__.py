@@ -69,20 +69,25 @@ app.command(results_app)
 
 
 def _start_db(db_instance: "Database") -> None:
-    cmd = db_instance.start
-    db_instance._last_start_command = cmd
-    if cmd is not None:
-        _stop_db(db_instance)
-        _LOGGER.info(f"Starting {db_instance.name}: {cmd}")
-        run_shell(cmd)
-        db_instance.wait_until_accessible()
+    commands = db_instance.start_commands
+    db_instance._last_start_command = "\n".join(commands) if commands else None
+    if not commands:
+        return
+
+    _stop_db(db_instance)
+    for command in commands:
+        _LOGGER.info(f"Starting {db_instance.name}: {command}")
+        rc = run_shell(command)
+        if rc != 0:
+            raise RuntimeError(f"Start command for {db_instance.name} exited with code {rc}: {command}")
+
+    db_instance.wait_until_accessible()
 
 
 def _stop_db(db_instance: "Database") -> None:
-    cmd = db_instance.stop
-    if cmd is not None:
-        _LOGGER.info(f"Stopping {db_instance.name}: {cmd}")
-        run_shell(cmd)
+    for command in db_instance.stop_commands:
+        _LOGGER.info(f"Stopping {db_instance.name}: {command}")
+        run_shell(command)
 
 
 def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor: int) -> None:

@@ -5,6 +5,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from typing import Any, Literal
 
 import psutil
@@ -58,15 +59,31 @@ def _run_optional_command(args: list[str]) -> str | None:
 def build_run_metadata(
     *,
     execution_mode: ExecutionMode,
-    container_image: str | None,
+    container_image: str | None = None,
+    container_images: Mapping[str, str] | None = None,
     start_command: str | None,
 ) -> dict[str, Any]:
     docker_version = _run_optional_command(["docker", "version", "--format", "{{.Server.Version}}"])
     docker_platform = _run_optional_command(["docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])
     docker_context = _run_optional_command(["docker", "context", "show"])
+
+    image_map = dict(container_images or {})
+    if container_image is not None and not image_map:
+        image_map = {"default": container_image}
+
+    primary_container_image = container_image
+    if primary_container_image is None and len(image_map) == 1:
+        primary_container_image = next(iter(image_map.values()))
+
+    image_digests = {
+        name: _run_optional_command(["docker", "image", "inspect", image, "--format", "{{index .RepoDigests 0}}"])
+        for name, image in image_map.items()
+    }
     image_digest = (
-        _run_optional_command(["docker", "image", "inspect", container_image, "--format", "{{index .RepoDigests 0}}"])
-        if container_image is not None
+        _run_optional_command(
+            ["docker", "image", "inspect", primary_container_image, "--format", "{{index .RepoDigests 0}}"]
+        )
+        if primary_container_image is not None
         else None
     )
 
@@ -89,8 +106,10 @@ def build_run_metadata(
         },
         "execution": {
             "mode": execution_mode,
-            "container_image": container_image,
+            "container_image": primary_container_image,
             "container_image_digest": image_digest,
+            "container_images": image_map or None,
+            "container_image_digests": image_digests or None,
             "container_platform": docker_platform if execution_mode == "container" else None,
             "start_command": start_command,
         },

@@ -133,9 +133,36 @@ class Database(BaseModel, ABC):
 
     @property
     def execution_mode(self) -> ExecutionMode:
-        if self.container_image is None:
+        if not self.container_images:
             return "in_process"
         return "container"
+
+    @property
+    def container_images(self) -> Mapping[str, str]:
+        if self.container_image is None:
+            return {}
+        return {self.name: self.container_image}
+
+    @property
+    def metric_container_names(self) -> tuple[str, ...]:
+        if not self.container_images:
+            return ()
+        return (f"{self.name}-benchmark",)
+
+    @property
+    def start_commands(self) -> tuple[str, ...]:
+        command = self.start
+        return () if command is None else (command,)
+
+    @property
+    def stop_commands(self) -> tuple[str, ...]:
+        command = self.stop
+        return () if command is None else (command,)
+
+    @property
+    def restart_commands(self) -> tuple[str, ...]:
+        command = self.restart
+        return () if command is None else (command,)
 
     def docker_run_command(
         self,
@@ -145,11 +172,18 @@ class Database(BaseModel, ABC):
         env: Mapping[str, str] | None = None,
         args: Sequence[str] = (),
         platform: str | None = None,
+        name: str | None = None,
+        network: str | None = None,
+        ip: str | None = None,
     ) -> str:
         parts = ["docker run"]
         if platform is not None:
             parts.extend(["--platform", platform])
-        parts.append(f"--name {self.name}-benchmark --rm -d")
+        parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
+        if network is not None:
+            parts.extend(["--network", network])
+        if ip is not None:
+            parts.extend(["--ip", ip])
         parts.extend(f"-p {host}:{container}" for host, container in (ports or {}).items())
         parts.extend(f"-v {src}:{dst}" for src, dst in (mounts or {}).items())
         parts.extend(f"-e {key}={value}" for key, value in (env or {}).items())
@@ -475,13 +509,16 @@ class Database(BaseModel, ABC):
         return df, duration_seconds
 
     def restart_event(self) -> None:
-        cmd = self.restart
-        if cmd is None:
+        commands = self.restart_commands
+        if not commands:
             return
 
         with self.phase_context("restart"):
             _LOGGER.info(f"Restarting service {self.name}")
-            run_shell(cmd)
+            for command in commands:
+                rc = run_shell(command)
+                if rc != 0:
+                    raise RuntimeError(f"Restart command for {self.name} exited with code {rc}: {command}")
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
@@ -655,6 +692,7 @@ class Database(BaseModel, ABC):
             metadata=build_run_metadata(
                 execution_mode=self.execution_mode,
                 container_image=self.container_image,
+                container_images=self.container_images,
                 start_command=self._last_start_command,
             ),
         )
@@ -663,6 +701,7 @@ class Database(BaseModel, ABC):
             db=self.name,
             suite=suite,
             suite_scale_factor=benchmark.scale_factor,
+            container_names=self.metric_container_names,
             run_id=self.run_id,
             storage=self.result_storage,
             interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
@@ -707,6 +746,7 @@ class Database(BaseModel, ABC):
 @lru_cache(maxsize=1)
 def get_databases() -> dict[DatabaseName, Database]:
     from .clickhouse import Clickhouse
+    from .doris import Doris
     from .duckdb import DuckDB
     from .monetdb import MonetDB
     from .polars import Polars
@@ -724,6 +764,7 @@ def get_databases() -> dict[DatabaseName, Database]:
         "questdb": QuestDB(),
         "postgres": Postgres(),
         "starrocks": StarRocks(),
+        "doris": Doris(),
     }
 
     assert set(databases) == set(get_args(DatabaseName))

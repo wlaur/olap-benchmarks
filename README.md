@@ -71,7 +71,7 @@ cd site && bun install && bun run dev
 
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N]`
 
-- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, or `all`
+- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, or `all`
 - `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
 - `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
@@ -164,6 +164,7 @@ version pins live in each connector:
 | Database    | Pinned in                                          |
 | ----------- | -------------------------------------------------- |
 | clickhouse  | `olap_benchmarks/dbs/clickhouse/__init__.py` (`VERSION`, Docker image tag) |
+| doris       | `olap_benchmarks/dbs/doris/__init__.py` (`VERSION`, split FE/BE Docker image tags) |
 | monetdb     | `olap_benchmarks/dbs/monetdb/__init__.py`          |
 | polars      | `pyproject.toml` (runs in-process; version follows the installed `polars` package) |
 | postgres    | `olap_benchmarks/dbs/postgres/__init__.py`         |

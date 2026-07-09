@@ -2,6 +2,8 @@ import logging
 import os
 import platform
 import subprocess
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
 from time import sleep
@@ -14,8 +16,6 @@ from pydantic import BaseModel
 from ..settings import MAIN_PROCESS_TITLE, SETTINGS, DatabaseName, SuiteName, format_suite_data_directory_name
 
 _LOGGER = logging.getLogger(__name__)
-
-IN_PROCESS_DBS: list[DatabaseName] = ["duckdb"]
 
 
 def get_docker_socket() -> str:
@@ -59,10 +59,6 @@ class BenchmarkMetric(BaseModel):
     cpu_percent: float
     mem_mb: int
     disk_mb: int
-
-
-def get_container_name(db: DatabaseName) -> str:
-    return f"{db}-benchmark"
 
 
 def get_database_directory(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> Path:
@@ -109,14 +105,8 @@ def get_main_process_metrics(db: DatabaseName, suite: SuiteName, suite_scale_fac
     )
 
 
-def get_container_metrics(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> BenchmarkMetric:
-    if db in IN_PROCESS_DBS:
-        # contains potentially significant overhead from e.g. the insert methods
-        # using docker stats only shows the resource usage from the database itself, not the main process that
-        # reads and processes input Parquet files
-        return get_main_process_metrics(db, suite, suite_scale_factor)
-
-    container = cast(Any, get_docker_client().containers).get(get_container_name(db))
+def get_container_metrics(container_name: str) -> BenchmarkMetric:
+    container = cast(Any, get_docker_client().containers).get(container_name)
 
     # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
     stats = cast(dict[str, Any], container.stats(stream=False))
@@ -126,14 +116,34 @@ def get_container_metrics(db: DatabaseName, suite: SuiteName, suite_scale_factor
     except KeyError as e:
         _LOGGER.warning(f"docker stats output invalid (KeyError: {e}): {stats}, sleeping and retrying...")
         sleep(1)
-        return get_container_metrics(db, suite, suite_scale_factor)
+        return get_container_metrics(container_name)
 
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))
 
+    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=0)
+
+
+def get_database_metrics(
+    db: DatabaseName,
+    suite: SuiteName,
+    suite_scale_factor: int,
+    container_names: Sequence[str],
+) -> BenchmarkMetric:
+    if not container_names:
+        # Contains potentially significant overhead from e.g. insert methods
+        # that read and process input Parquet files in the main Python process.
+        return get_main_process_metrics(db, suite, suite_scale_factor)
+
+    if len(container_names) == 1:
+        container_metrics = [get_container_metrics(container_names[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=len(container_names)) as executor:
+            container_metrics = list(executor.map(get_container_metrics, container_names))
+
     return BenchmarkMetric(
-        cpu_percent=cpu_percent,
-        mem_mb=mem_mb,
+        cpu_percent=sum(metric.cpu_percent for metric in container_metrics),
+        mem_mb=sum(metric.mem_mb for metric in container_metrics),
         disk_mb=get_directory_size_mb(get_database_directory(db, suite, suite_scale_factor)),
     )
 
