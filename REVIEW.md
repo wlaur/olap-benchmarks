@@ -115,6 +115,13 @@ notes.
       native-JSON load/query paths are also wired. The suite still needs
       engine smoke runs before the final full rerun, and 100M should wait until
       10M storage/runtime are known.
+
+      Partially fixed 2026-07-09: the upstream 10M files contain three raw
+      newline-split JSON objects, which strict readers either reject or filter.
+      JSONBench loaders now share a normalizing input stream that repairs those
+      objects, removes escaped NULs, and preserves the documented physical row
+      count with inert `{}` continuation rows. The normalized stream validates
+      as 10,000,000 parseable JSON rows with no tab characters.
 - [ ] **Add Polars as an in-process engine.** Model it as a dataframe/LazyFrame
       engine, use normal Polars APIs, keep SQL mode separate if added later,
       and label it as in-process/single-node.
@@ -150,9 +157,15 @@ notes.
       ConnectorX is not the default Doris fetch path because live Doris rejects
       ConnectorX's MySQL `socket` variable, and Doris JSON timestamp queries now
       use fractional `from_unixtime(...)` instead of unsupported microsecond
-      `timestampadd`. Still pending: full ClickBench and JSONBench 10M data
-      runs before including Doris in the public matrix. RTABench and TPC-DS
-      remain deferred.
+      `timestampadd`. Full JSONBench 10M validation also completed on
+      2026-07-09 in the isolated `jsonbench-doris` environment: FE/BE images
+      were pulled and already current, populate loaded all ten 1M-row files
+      with zero filtered rows after shared input normalization, row-count
+      verification passed at 10,000,000 rows, select completed all 25 query
+      iterations, latest row-count and answer-hash validation passed, and run
+      metrics were recorded as aggregate FE+BE CPU and memory samples. Still
+      pending: a full ClickBench Doris data run before including Doris in the
+      public matrix. RTABench and TPC-DS remain deferred.
 - [ ] **Add JOB only after status handling.** It is the best optimizer-heavy
       follow-up, but unsupported/null statuses need to exist before porting it
       across engines.
