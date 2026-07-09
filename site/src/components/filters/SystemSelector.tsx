@@ -10,7 +10,12 @@ interface SystemSelectorProps {
 }
 
 export function SystemSelectorSkeleton() {
-  return <ControlSelectSkeleton label="System" className="max-w-[18rem] sm:min-w-[12.5rem]" />
+  return (
+    <ControlSelectSkeleton
+      label="System"
+      className="w-full max-w-none sm:max-w-[18rem] sm:min-w-[12.5rem]"
+    />
+  )
 }
 
 export function SystemSelector({
@@ -32,7 +37,7 @@ export function SystemSelector({
       options={systems.map((system) => ({ value: system, label: system }))}
       icon={<Server className="h-3 w-3" strokeWidth={1.8} />}
       disabled={disabled}
-      className="max-w-[18rem] sm:min-w-[12.5rem]"
+      className="w-full max-w-none sm:max-w-[18rem] sm:min-w-[12.5rem]"
     />
   )
 }

@@ -78,7 +78,7 @@ export function Navbar({
             </NavLink>
           </nav>
 
-          <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:ml-auto sm:flex-1">
             {isExplorerActive ? (
               <SuiteSelector
                 benchmarkDefinitions={benchmarkDefinitions}
@@ -87,7 +87,7 @@ export function Navbar({
                 disabled={suitesLoading || benchmarkDefinitions.length === 0}
               />
             ) : null}
-            <div className="flex shrink-0 justify-end">
+            <div className="flex w-full shrink-0 justify-end sm:w-auto">
               {isSystemLoading ? (
                 <SystemSelectorSkeleton />
               ) : systems.length > 0 ? (
