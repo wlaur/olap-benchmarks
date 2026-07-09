@@ -7,7 +7,8 @@ from typing import Any
 import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
-ANSWER_HASH_VERSION = "canonical-v1"
+FLOAT_ROUND_DECIMALS = 11
+ANSWER_HASH_VERSION = "canonical-v2"
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
@@ -16,10 +17,10 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
     for name, dtype in df.schema.items():
         expression = pl.col(name)
 
-        if dtype.is_integer():
+        if dtype == pl.Boolean or dtype.is_integer():
             expression = expression.cast(pl.Int64)
         elif dtype.is_float():
-            expression = expression.cast(pl.Float64)
+            expression = expression.cast(pl.Float64).round(FLOAT_ROUND_DECIMALS)
         elif isinstance(dtype, pl.Datetime):
             if dtype.time_zone is not None:
                 expression = expression.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
@@ -29,7 +30,9 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
 
         expressions.append(expression.alias(name))
 
-    return df.select(expressions)
+    canonical = df.select(expressions)
+    canonical.columns = [f"c{idx}" for idx in range(canonical.width)]
+    return canonical
 
 
 def build_answer_metadata(df: pl.DataFrame) -> dict[str, Any]:
@@ -50,6 +53,6 @@ def build_answer_metadata(df: pl.DataFrame) -> dict[str, Any]:
         return metadata
 
     sink = BytesIO()
-    _canonicalize_answer_frame(df).write_ipc(sink, compression="uncompressed")
+    _canonicalize_answer_frame(df).write_ndjson(sink)
     metadata["answer_hash"] = f"blake2b128:{blake2b(sink.getbuffer(), digest_size=16).hexdigest()}"
     return metadata
