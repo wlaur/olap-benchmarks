@@ -85,6 +85,7 @@ def _start_db(db_instance: "Database") -> None:
 
 
 def _stop_db(db_instance: "Database") -> None:
+    db_instance.close_connection()
     for command in db_instance.stop_commands:
         _LOGGER.info(f"Stopping {db_instance.name}: {command}")
         run_shell(command)

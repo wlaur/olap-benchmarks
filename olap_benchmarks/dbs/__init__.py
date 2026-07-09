@@ -552,6 +552,20 @@ class Database(BaseModel, ABC):
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...
 
+    def close_connection(self) -> None:
+        connection = self._connection
+        if connection is None:
+            return
+
+        self._connection = None
+        engine = connection.engine
+        try:
+            connection.close()
+        except Exception:
+            _LOGGER.debug(f"Error closing {self.name} connection", exc_info=True)
+        finally:
+            engine.dispose()
+
     def rollback(self) -> None:
         if self._connection is None:
             return
