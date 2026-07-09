@@ -85,6 +85,19 @@ notes.
       `REGEXP_REPLACE` receives a backreference. The Doris query file was fixed
       and the isolated select rerun returned 25 rows for all Q28 iterations.
 
+      Continuation 2026-07-09: isolated time-series SF1 validation under
+      revision `correctness-timeseries-final` now passes row-count and
+      answer-hash validation across DuckDB, ClickHouse, and PostgreSQL latest
+      select runs. Fixes made during that validation include stable ClickHouse
+      standard deviation for `*_07_full_aggregate`, deterministic answer
+      hashing over canonical NDJSON, decimal/float and bool/integer hash
+      canonicalization, `NULLS LAST` for hourly top-N queries, and explicit
+      row-store EAV binary casts. TimescaleDB SF1 populate also completed in
+      the isolated environment and verified `data_tall`, `data_wide`, and
+      `data_large` counts (`599,999,835` EAV rows for `data_large`); the next
+      backend step is the TimescaleDB SF1 select run plus row-count/hash
+      validation.
+
       QuestDB's ClickBench rewrites still deserve value-level checks even though
       their published row counts match.
 - [ ] **Add value-level validation against a reference engine.** Row counts are
@@ -99,6 +112,10 @@ notes.
       precision/time zones, and categorical string values before hashing. The
       published data needs the final rerun before these hashes exist across
       engines.
+      Partially fixed 2026-07-09: answer hashing now writes canonical NDJSON
+      instead of IPC, ignores engine-specific column labels, rounds small
+      floating roundoff, and canonicalizes booleans and decimals where engines
+      return semantically equivalent values with different physical types.
 - [ ] **Make unrecorded steps impossible or visible.** TimescaleDB's published
       time-series mutate run silently lacks all three
       `insert_data_large_10000` iterations (79 mutation steps vs 82 elsewhere).
