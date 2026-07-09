@@ -8,6 +8,7 @@ import {
   type BenchmarkDefinition,
 } from "./lib/benchmarks"
 import { ExplorerPage } from "./pages/ExplorerPage"
+import { ExplorerPrototypePage } from "./pages/ExplorerPrototypePage"
 import { HomePage } from "./pages/HomePage"
 import { useAppStore } from "./stores/useAppStore"
 
@@ -97,6 +98,16 @@ export function App() {
         <Route
           path="/explorer/:suiteId"
           element={<ExplorerMain selectedSystem={selectedSystem} loading={loading} error={error} />}
+        />
+        <Route
+          path="/prototype/explorer"
+          element={
+            <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
+              <div className="flex min-h-0 w-full flex-1 flex-col">
+                <ExplorerPrototypePage />
+              </div>
+            </main>
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

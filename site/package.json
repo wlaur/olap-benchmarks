@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsgo && vite build",
-    "check": "tsgo --noEmit",
+    "build": "tsc && vite build",
+    "check": "tsc --noEmit",
     "codegen": "node ./scripts/generate-db-types.mjs && oxfmt --write src/lib/generated/db.ts",
     "dev": "vite",
     "fmt": "oxfmt --write .",
@@ -37,13 +37,12 @@
     "@tailwindcss/vite": "^4.3.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@typescript/native-preview": "^7.0.0-dev.20260702.3",
     "@vitejs/plugin-react": "^6.0.3",
     "duckdb": "^1.4.4",
     "oxfmt": "0.57.0",
     "oxlint": "1.72.0",
     "tailwindcss": "^4.3.2",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vite": "^8.1.3"
   }
 }
