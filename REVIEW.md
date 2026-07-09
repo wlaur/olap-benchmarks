@@ -69,6 +69,10 @@ notes.
       without a static full-table pivot. ClickHouse now normalizes `hr`/`d`
       bucket aliases on fetch for answer hashing.
 
+      Isolated Doris ClickBench validation on 2026-07-09 also returned 11 rows
+      for Q28, so the Q28 fix needs to cover Doris before Doris is added to the
+      public matrix.
+
       QuestDB's ClickBench rewrites still deserve value-level checks even though
       their published row counts match.
 - [ ] **Add value-level validation against a reference engine.** Row counts are
@@ -163,9 +167,16 @@ notes.
       with zero filtered rows after shared input normalization, row-count
       verification passed at 10,000,000 rows, select completed all 25 query
       iterations, latest row-count and answer-hash validation passed, and run
-      metrics were recorded as aggregate FE+BE CPU and memory samples. Still
-      pending: a full ClickBench Doris data run before including Doris in the
-      public matrix. RTABench and TPC-DS remain deferred.
+      metrics were recorded as aggregate FE+BE CPU and memory samples. Full
+      ClickBench validation completed the same day in the isolated
+      `clickbench-doris` environment: the official 99,997,497-row parquet was
+      downloaded, populate loaded all 100 partitioned Parquet chunks plus the
+      final 97-row chunk with zero filtered rows, row-count verification
+      passed, select completed all 215 query iterations, latest row-count and
+      answer-hash validation passed, and metrics were recorded as aggregate
+      FE+BE samples. Still pending before adding Doris to the public matrix:
+      fix/confirm ClickBench Q28 semantics for Doris alongside the existing
+      MonetDB/StarRocks Q28 work. RTABench and TPC-DS remain deferred.
 - [ ] **Add JOB only after status handling.** It is the best optimizer-heavy
       follow-up, but unsupported/null statuses need to exist before porting it
       across engines.
