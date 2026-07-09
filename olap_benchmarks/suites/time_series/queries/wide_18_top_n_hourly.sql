@@ -6,6 +6,6 @@ from
 group by
     date_trunc('hour', time)
 order by
-    avg_value desc
+    avg_value desc nulls last
 limit
     10

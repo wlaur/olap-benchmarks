@@ -8,7 +8,7 @@ import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
 FLOAT_ROUND_DECIMALS = 11
-ANSWER_HASH_VERSION = "canonical-v2"
+ANSWER_HASH_VERSION = "canonical-v3"
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
@@ -19,7 +19,7 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
 
         if dtype == pl.Boolean or dtype.is_integer():
             expression = expression.cast(pl.Int64)
-        elif dtype.is_float():
+        elif dtype.is_float() or isinstance(dtype, pl.Decimal):
             expression = expression.cast(pl.Float64).round(FLOAT_ROUND_DECIMALS)
         elif isinstance(dtype, pl.Datetime):
             if dtype.time_zone is not None:
