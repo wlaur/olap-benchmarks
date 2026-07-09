@@ -15,6 +15,7 @@ const DATABASE_COLOR_PALETTE = [
 
 const KNOWN_DATABASE_COLORS: Record<string, string> = {
   clickhouse: DATABASE_COLOR_PALETTE[0],
+  doris: DATABASE_COLOR_PALETTE[7],
   duckdb: DATABASE_COLOR_PALETTE[1],
   monetdb: DATABASE_COLOR_PALETTE[2],
   polars: DATABASE_COLOR_PALETTE[5],

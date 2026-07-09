@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from multiprocessing import Event as create_event
 from multiprocessing import Process, Queue
 from multiprocessing.synchronize import Event
 
 from ..settings import DatabaseName, SuiteName, setup_stdout_logging
-from .measure import get_container_metrics
+from .measure import get_database_metrics
 from .storage import Storage, WriterMessage
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ def sampling_loop(
     db: DatabaseName,
     suite: SuiteName,
     suite_scale_factor: int,
+    container_names: Sequence[str],
     run_id: int,
     stop_event: Event,
     queue: Queue[WriterMessage],
@@ -29,7 +31,7 @@ def sampling_loop(
 
     while not stop_event.is_set():
         now = datetime.now(UTC).replace(tzinfo=None)
-        metric = get_container_metrics(db, suite, suite_scale_factor)
+        metric = get_database_metrics(db, suite, suite_scale_factor, container_names)
 
         storage.insert_metric(
             run_id=run_id,
@@ -49,6 +51,7 @@ def start_metric_sampler(
     db: DatabaseName,
     suite: SuiteName,
     suite_scale_factor: int,
+    container_names: Sequence[str],
     run_id: int,
     storage: Storage,
     interval_seconds: float | None = 1.0,
@@ -57,7 +60,17 @@ def start_metric_sampler(
 
     process = Process(
         target=sampling_loop,
-        args=(db, suite, suite_scale_factor, run_id, stop_event, storage.queue, storage.result_queue, interval_seconds),
+        args=(
+            db,
+            suite,
+            suite_scale_factor,
+            tuple(container_names),
+            run_id,
+            stop_event,
+            storage.queue,
+            storage.result_queue,
+            interval_seconds,
+        ),
         daemon=False,
     )
 

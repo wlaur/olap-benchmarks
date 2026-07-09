@@ -94,6 +94,8 @@ export interface RunMetadata {
     mode?: "container" | "in_process" | string | null
     container_image?: string | null
     container_image_digest?: string | null
+    container_images?: Record<string, string | null> | null
+    container_image_digests?: Record<string, string | null> | null
     container_platform?: string | null
     start_command?: string | null
   } | null

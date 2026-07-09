@@ -56,6 +56,7 @@ def test_queries_manifest_includes_registered_suites() -> None:
     }
     assert set(cast(dict[str, str], manifest["jsonbench"]["01_events_by_collection"]["db_overrides"])) == {
         "clickhouse",
+        "doris",
         "postgres",
         "starrocks",
     }

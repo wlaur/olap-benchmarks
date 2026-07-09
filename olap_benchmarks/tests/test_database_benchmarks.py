@@ -192,11 +192,12 @@ def test_database_benchmarks_resolves_all_suites() -> None:
 
 def test_jsonbench_registered_for_initial_engines() -> None:
     from ..dbs.clickhouse import Clickhouse
+    from ..dbs.doris import Doris
     from ..dbs.duckdb import DuckDB
     from ..dbs.postgres import Postgres
     from ..dbs.starrocks import StarRocks
 
-    for db in (Clickhouse(), DuckDB(), Postgres(), StarRocks()):
+    for db in (Clickhouse(), Doris(), DuckDB(), Postgres(), StarRocks()):
         benchmarks = db.benchmarks
 
         assert "jsonbench" in benchmarks

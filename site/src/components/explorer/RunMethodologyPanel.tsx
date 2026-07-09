@@ -164,6 +164,13 @@ function formatDocker(metadata: RunMetadata): string {
 }
 
 function formatImage(metadata: RunMetadata): string {
+  const images = metadata.execution?.container_images
+  if (images && Object.keys(images).length > 1) {
+    return Object.entries(images)
+      .map(([name, image]) => `${name}: ${image ?? "unknown"}`)
+      .join(" · ")
+  }
+
   const image = metadata.execution?.container_image
   if (!image) return metadata.execution?.mode === "in_process" ? "Python package" : "Unknown"
 
@@ -179,6 +186,14 @@ function formatImage(metadata: RunMetadata): string {
 }
 
 function formatImageTitle(metadata: RunMetadata): string {
+  const images = metadata.execution?.container_images
+  const digests = metadata.execution?.container_image_digests
+  if (images && Object.keys(images).length > 1) {
+    return Object.entries(images)
+      .map(([name, image]) => compactJoin([name, image, digests?.[name]], " @ "))
+      .join("\n")
+  }
+
   const image = metadata.execution?.container_image
   const digest = metadata.execution?.container_image_digest
   return compactJoin([image, digest], " @ ")
