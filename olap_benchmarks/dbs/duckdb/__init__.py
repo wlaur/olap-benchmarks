@@ -2,6 +2,8 @@ import logging
 import uuid
 from collections.abc import Mapping
 from importlib.metadata import version as package_version
+from pathlib import Path
+from shutil import rmtree
 from typing import Any, cast
 
 import polars as pl
@@ -12,7 +14,7 @@ from sqlalchemy import Connection, create_engine
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
-from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from .. import Database
 from ..utils import normalize_columns, require_columns, tracked_commit
 
@@ -63,23 +65,40 @@ def duckdb_string_literal(value: str) -> str:
 
 
 class DuckDBJSONBench(JSONBench["DuckDB"]):
+    def _stage_input_files(self) -> Path:
+        temp_dir = SETTINGS.temporary_directory / "duckdb/data"
+        staging_dir = temp_dir / self.data_directory_name
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        staging_dir.mkdir(parents=True)
+
+        for input_file in get_jsonbench_input_files(self.scale_factor):
+            staged_file = staging_dir / input_file.name.removesuffix(".gz")
+            write_jsonbench_input_file(input_file, staged_file)
+
+        return staging_dir
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
                 return
 
-        input_files = ", ".join(
-            duckdb_string_literal(fpath.as_posix()) for fpath in get_jsonbench_input_files(self.scale_factor)
-        )
-
-        with self.db.phase_context("insert", table_name="bluesky"):
-            self.db.execute(
-                f"""
-                CREATE TABLE bluesky AS
-                SELECT json AS j
-                FROM read_ndjson_objects([{input_files}])
-                """
+        staging_dir = self._stage_input_files()
+        try:
+            input_files = ", ".join(
+                duckdb_string_literal(fpath.as_posix()) for fpath in sorted(staging_dir.glob("file_*.json"))
             )
+
+            with self.db.phase_context("insert", table_name="bluesky"):
+                self.db.execute(
+                    f"""
+                    CREATE TABLE bluesky AS
+                    SELECT json AS j
+                    FROM read_ndjson_objects([{input_files}])
+                    """
+                )
+        finally:
+            rmtree(staging_dir)
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()

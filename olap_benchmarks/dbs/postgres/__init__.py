@@ -2,7 +2,6 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
-from gzip import open as gzip_open
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
@@ -15,7 +14,7 @@ from ...run_metadata import StepResultStatus
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
-from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
     MutateStep,
@@ -494,9 +493,8 @@ class PostgresJSONBench(JSONBench["Postgres"]):
         copy_sql = "COPY bluesky FROM STDIN WITH (FORMAT csv, QUOTE E'\\x01', DELIMITER E'\\x02', ESCAPE E'\\x01')"
 
         try:
-            with gzip_open(input_file, "rt", encoding="utf-8") as source, temp_file.open("w", encoding="utf-8") as out:
-                for line in source:
-                    out.write(line.replace("\\u0000", ""))
+            with temp_file.open("w", encoding="utf-8") as out:
+                out.writelines(iter_jsonbench_input_lines(input_file))
 
             with temp_file.open(encoding="utf-8") as f, self.db.record_query_execution(copy_sql):
                 cursor.copy_expert(copy_sql, f)

@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import uuid
 from collections.abc import Mapping
-from gzip import open as gzip_open
 from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, Literal, cast
@@ -21,7 +20,7 @@ from ...suites.clickbench.config import (
     CLICKBENCH_TIMESTAMP_COLUMNS,
     Clickbench,
 )
-from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.time_series.config import TimeSeries
 from ...suites.tpc_ds.config import TpcDs
 from ...suites.tpc_h.config import TpcH
@@ -244,8 +243,7 @@ class StarRocksJSONBench(JSONBench["StarRocks"]):
         staging.mkdir(parents=True, exist_ok=True)
         staged_file = staging / f"bluesky_{uuid.uuid4().hex}.json"
 
-        with gzip_open(input_file, "rb") as source, staged_file.open("wb") as out:
-            shutil.copyfileobj(source, out)
+        write_jsonbench_input_file(input_file, staged_file)
 
         return staged_file
 
