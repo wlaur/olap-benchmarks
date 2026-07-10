@@ -1,9 +1,4 @@
-import type {
-  CrossSystemQueryCoverage,
-  CrossSystemQuerySummary,
-  QueryCoverage,
-  QuerySummary,
-} from "./types"
+import type { QueryCoverage, QuerySummary } from "./types"
 
 export interface DatabaseScore {
   dbKey: string
@@ -19,12 +14,6 @@ export interface DatabaseScore {
   latestSelectFailed: boolean
 }
 
-export interface SystemDatabaseScore extends DatabaseScore {
-  system: string
-  startedAt: string
-  finishedAt: string
-}
-
 const SMOOTHING_SECONDS = 0.01
 const MISSING_QUERY_MIN_RATIO = 10
 const MISSING_QUERY_WORST_MULTIPLIER = 2
@@ -32,14 +21,6 @@ const DURATION_EQUALITY_TOLERANCE = 1e-9
 
 export function databaseVariantKey(dbName: string, dbVersion: string): string {
   return JSON.stringify([dbName, dbVersion])
-}
-
-export function systemDatabaseVariantKey(
-  system: string,
-  dbName: string,
-  dbVersion: string,
-): string {
-  return JSON.stringify([system, dbName, dbVersion])
 }
 
 export function computeDatabaseScores(
@@ -147,132 +128,6 @@ export function computeDatabaseScores(
 
       const scoreDelta = a.score - b.score
       if (scoreDelta !== 0 && Number.isFinite(scoreDelta)) return scoreDelta
-      return a.db.localeCompare(b.db)
-    })
-}
-
-export function computeSystemDatabaseScores(
-  querySummaries: CrossSystemQuerySummary[],
-  queryCoverage: CrossSystemQueryCoverage[],
-  queryNames: string[],
-): SystemDatabaseScore[] {
-  if (querySummaries.length === 0 && queryCoverage.length === 0) return []
-
-  const queryGroups = new Map<string, Map<string, number>>()
-  const databases = new Map<
-    string,
-    { db: string; dbName: string; dbVersion: string; system: string }
-  >()
-  const coverageByDb = new Map(
-    queryCoverage.map((row) => [
-      systemDatabaseVariantKey(row.system, row.db_name, row.db_version),
-      row,
-    ]),
-  )
-  const scoredQueryNames = new Set(queryNames)
-
-  for (const row of querySummaries) {
-    const dbKey = systemDatabaseVariantKey(row.system, row.db_name, row.db_version)
-    databases.set(dbKey, {
-      db: row.db,
-      dbName: row.db_name,
-      dbVersion: row.db_version,
-      system: row.system,
-    })
-    scoredQueryNames.add(row.query_name)
-    const group = queryGroups.get(row.query_name) ?? new Map<string, number>()
-    group.set(dbKey, row.median_duration_s)
-    queryGroups.set(row.query_name, group)
-  }
-  for (const row of queryCoverage) {
-    databases.set(systemDatabaseVariantKey(row.system, row.db_name, row.db_version), {
-      db: row.db,
-      dbName: row.db_name,
-      dbVersion: row.db_version,
-      system: row.system,
-    })
-  }
-
-  const dbStats = new Map<
-    string,
-    { logSum: number; scoredCount: number; queryCount: number; wins: number }
-  >()
-  for (const dbKey of databases.keys()) {
-    dbStats.set(dbKey, { logSum: 0, scoredCount: 0, queryCount: 0, wins: 0 })
-  }
-
-  for (const queryName of scoredQueryNames) {
-    const group = queryGroups.get(queryName) ?? new Map<string, number>()
-    const times = Array.from(group.values())
-    const ratios = new Map<string, number>()
-    const minTime = times.length > 0 ? Math.min(...times) : null
-    let missingRatio = MISSING_QUERY_MIN_RATIO
-
-    if (minTime !== null) {
-      const minSmoothed = minTime + SMOOTHING_SECONDS
-
-      for (const [dbKey, time] of group) {
-        ratios.set(dbKey, (time + SMOOTHING_SECONDS) / minSmoothed)
-      }
-
-      missingRatio = Math.max(
-        MISSING_QUERY_MIN_RATIO,
-        MISSING_QUERY_WORST_MULTIPLIER * Math.max(...ratios.values()),
-      )
-    }
-
-    for (const dbKey of databases.keys()) {
-      const stats = dbStats.get(dbKey)!
-      const time = group.get(dbKey)
-      const ratio = ratios.get(dbKey) ?? missingRatio
-      stats.logSum += Math.log(ratio)
-      stats.scoredCount += 1
-      if (time === undefined) continue
-      stats.queryCount += 1
-      if (minTime !== null && durationsAreEqual(time, minTime)) stats.wins += 1
-    }
-  }
-
-  const totalQueries = scoredQueryNames.size
-
-  return Array.from(databases)
-    .map(([dbKey, database]) => {
-      const stats = dbStats.get(dbKey)!
-      const coverage = coverageByDb.get(dbKey)
-      if (!coverage) {
-        throw new Error(`query coverage is missing for ${database.system} ${database.db}`)
-      }
-      const score =
-        stats.scoredCount > 0
-          ? Math.exp(stats.logSum / stats.scoredCount)
-          : Number.POSITIVE_INFINITY
-      return {
-        dbKey,
-        db: database.db,
-        dbName: database.dbName,
-        dbVersion: database.dbVersion,
-        system: database.system,
-        startedAt: coverage.started_at,
-        finishedAt: coverage.finished_at,
-        score,
-        queryCount: stats.queryCount,
-        wins: stats.wins,
-        missing: totalQueries - stats.queryCount,
-        failed: coverage.failed_query_count,
-        neverCompleted: Math.max(0, totalQueries - stats.queryCount - coverage.failed_query_count),
-        latestSelectFailed: coverage.latest_status === "failed",
-      }
-    })
-    .sort((a, b) => {
-      const leftFinite = Number.isFinite(a.score)
-      const rightFinite = Number.isFinite(b.score)
-      if (leftFinite && !rightFinite) return -1
-      if (!leftFinite && rightFinite) return 1
-
-      const scoreDelta = a.score - b.score
-      if (scoreDelta !== 0 && Number.isFinite(scoreDelta)) return scoreDelta
-      const systemDelta = a.system.localeCompare(b.system)
-      if (systemDelta !== 0) return systemDelta
       return a.db.localeCompare(b.db)
     })
 }

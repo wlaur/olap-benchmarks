@@ -1,10 +1,8 @@
-# Explorer UI Improvement Plan
+# Explorer Comparison Architecture
 
-## Problem
+## Product Model
 
-The current explorer page combines too many related controls and visualizations in one dense viewport. The user has to reason about system, database, database version, suite, and scale factor at the same time, while panels imply relationships that are not always valid comparisons.
-
-The improved UI should mirror the benchmark result dimensions directly:
+The explorer mirrors the benchmark result dimensions directly:
 
 - system
 - database
@@ -12,154 +10,71 @@ The improved UI should mirror the benchmark result dimensions directly:
 - suite
 - scale factor
 
-The interface should make valid comparisons obvious and make invalid comparisons impossible or hard to create.
+One comparison mode varies exactly one dimension and fixes the remaining dimensions:
 
-## Product Direction
+- Database comparison: fixed system, suite, and scale factor; each database uses its latest
+  completed version.
+- Scale factor comparison: fixed system, suite, database, and database version.
+- Version comparison: fixed system, suite, database, and scale factor.
+- System comparison: fixed suite, database, database version, and scale factor.
 
-Use a comparison-oriented explorer instead of a dashboard that shows every visualization at once.
+Suite is an analytical scope rather than a comparison series because suites have different query
+sets and semantics.
 
-The explorer should have one active comparison mode. Each mode varies exactly one dimension and fixes the remaining dimensions:
+## Routes
 
-- Database comparison: fixed system, suite, scale factor; compare databases, each at a selected or latest valid version.
-- Scale factor comparison: fixed system, suite, database, database version; compare scale factors.
-- Version comparison: fixed system, suite, database, scale factor; compare database versions.
-- System comparison: fixed suite, database, database version, scale factor; compare systems.
+The production explorer lives at:
 
-Suite should usually be an analytical scope, not a comparison series. Different suites often have different query sets and semantics, so suite-to-suite ranking should not be a primary explorer comparison.
+`/olap-benchmarks/#/explorer/:suite`
 
-## Prototype
+The catalog lives at:
 
-The current prototype lives at:
+`/olap-benchmarks/#/catalog`
 
-`/olap-benchmarks/#/prototype/explorer`
+The explorer stores comparison state in query parameters:
 
-It is intentionally disconnected from real benchmark data. It uses dummy data to validate layout, interaction, and comparison rules before changing the real explorer data flow.
-
-The prototype currently includes:
-
-- explicit comparison modes
-- compact dimension-aware setup controls without nested dimension cards
-- URL-addressable selection state
-- responsive mobile and desktop layouts
-- ranking and query breakdown panels
-- SQL viewer for the selected query
-- a condensed comparison contract above the results canvas
-
-Decisions validated in the current prototype:
-
-- Suite is one fixed analytical scope. It is not a multi-select inside the explorer.
-- Database comparisons use the latest completed version for each database because version
-  families are not comparable across different products.
-- Query selection drives a persistent SQL viewer; database-specific override selection remains a
-  separate follow-up.
-
-## Deep Linking
-
-The explorer should support direct links to a specific subset of dimensions.
-
-Use plural query params for the dimension that varies and singular query params for fixed values:
-
+- `mode`
 - `systems`
 - `system`
-- `suite`
 - `databases`
 - `database`
 - `scales`
 - `scale`
 - `versions`
 - `version`
-- `mode`
 - `query`
+- `sql_database`
 
 Example:
 
 ```text
-/prototype/explorer?mode=database&databases=clickhouse,duckdb,doris&suite=clickbench&scale=100&query=Q22%20join
+/explorer/clickbench?mode=database&databases=clickhouse,duckdb&system=macbook-pro-m4&scale=1&query=Q22
 ```
 
-The explorer URL carries one suite. Cross-suite browsing belongs in the catalog rather than in the
-comparison setup.
+## Data Rules
 
-## Main Explorer Layout
+- Only completed select runs with successful query steps contribute comparison metrics.
+- The latest completed run is selected for each exact system, suite, scale, database, and version
+  variant.
+- Rankings use the median query runtime across the query set shared by every selected series.
+- The query breakdown shows missing results explicitly rather than treating them as zero.
+- Database comparisons resolve the latest completed version independently for each database.
+- SQL comes from the query manifest and automatically uses a database override when one exists.
 
-The page should have two conceptual areas:
+## Layout
 
-- Comparison setup: dimension controls and selected comparison contract.
-- Results canvas: ranking, query breakdown, SQL/query details, and supporting run metadata.
+Desktop uses a setup column and a results canvas. Ranking, query breakdown, and SQL have bounded
+internal scrolling where the result density requires it.
 
-Desktop layout:
+Mobile uses natural page scrolling. Dense query tables scroll horizontally within their own
+container, and setup precedes results.
 
-- left column for setup
-- right area for active results
-- bounded internal scrolling only where it improves density
+## Catalog
 
-Mobile layout:
+The catalog answers availability questions separately from performance ranking. It includes:
 
-- natural page scroll
-- setup first, results after
-- no desktop height constraints
-- horizontal scrolling only inside dense tables, not on the whole page
-
-## Query SQL
-
-Users should be able to inspect the SQL behind every query shown in the breakdown.
-
-The query breakdown should make query labels selectable. Selecting a query should update a SQL viewer panel using the existing `SqlCodeView` component style.
-
-When real data is connected, SQL should come from the query manifest and database-specific overrides where available.
-
-## Catalog Page
-
-The catalog lives at:
-
-`/olap-benchmarks/#/catalog`
-
-It is separate from the comparison explorer and reads completed result dimensions plus the suite
-and query manifests.
-
-Purpose:
-
-- browse all suites
-- browse queries in each suite
-- show which databases have results for each suite
-- show available database versions
-- show available scale factors
-- expose coverage gaps and missing combinations
-
-This page should answer availability questions, not performance ranking questions.
-
-Current structure:
-
-- suite list/table
-- filterable query list per selected suite
-- coverage matrix by database and scale factor
-- version availability summary
-- quick links into the explorer with the relevant dimensions preselected
-
-This avoids overloading the explorer with inventory concerns.
-
-## Implementation Phases
-
-1. Keep iterating on the dummy comparison prototype until the interaction model is accepted.
-2. Use the catalog to validate real availability dimensions and expose coverage gaps.
-3. Define typed availability rules for each real comparison mode.
-4. Replace dummy comparison rows with real result transforms.
-5. Add database-specific SQL override selection to the query viewer.
-6. Retire or simplify old explorer panels that no longer fit the comparison model.
-
-## Design Rules
-
-- Vary one benchmark dimension at a time.
-- Do not compare databases across different scale factors for the same suite.
-- Do allow comparing scale factors for the same database/version/system/suite.
-- Do allow comparing systems only when suite, database, database version, and scale factor are fixed.
-- Keep suite as the scope for a comparison, not a plotted series.
-- Prefer page scroll on mobile and internal scroll only inside dense tables or code viewers.
-- Avoid non-interactive icons that look like controls.
-- Preserve URL state for shareable analysis links.
-
-## Remaining Questions
-
-- In database comparison mode, should SQL overrides appear as database tabs or follow a selected
-  database from the ranking?
-- Which existing explorer panels are still needed after the comparison model is implemented?
+- suite navigation
+- query inventory
+- database and version availability
+- coverage by scale factor and system
+- links into the explorer at a valid suite and scale
