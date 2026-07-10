@@ -111,6 +111,14 @@ export interface SuiteScaleFactor {
   suite_scale_factor: number
 }
 
+export interface CatalogRunDimension {
+  system: string
+  suite: string
+  suite_scale_factor: number
+  db: string
+  db_version: string
+}
+
 export interface MetricSample {
   run_id: number
   db: string

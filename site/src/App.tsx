@@ -7,6 +7,7 @@ import {
   isBenchmarkSuiteId,
   type BenchmarkDefinition,
 } from "./lib/benchmarks"
+import { CatalogPage } from "./pages/CatalogPage"
 import { ExplorerPage } from "./pages/ExplorerPage"
 import { ExplorerPrototypePage } from "./pages/ExplorerPrototypePage"
 import { HomePage } from "./pages/HomePage"
@@ -105,6 +106,16 @@ export function App() {
             <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
               <div className="flex min-h-0 w-full flex-1 flex-col">
                 <ExplorerPrototypePage />
+              </div>
+            </main>
+          }
+        />
+        <Route
+          path="/catalog"
+          element={
+            <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
+              <div className="mx-auto flex min-h-0 w-full max-w-[96rem] flex-1 flex-col">
+                <CatalogPage />
               </div>
             </main>
           }

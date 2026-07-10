@@ -1,4 +1,4 @@
-import { FlaskConical, Home } from "lucide-react"
+import { BookOpenText, FlaskConical, Home } from "lucide-react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 
 import {
@@ -37,6 +37,7 @@ export function Navbar({
   const location = useLocation()
   const navigate = useNavigate()
   const isExplorerActive = location.pathname.startsWith("/explorer")
+  const isCatalogActive = location.pathname.startsWith("/catalog")
   const suiteMatch = location.pathname.match(/^\/explorer\/([^/]+)/)
   const routeSuiteId = suiteMatch?.[1]
   const resolvedSuiteId: BenchmarkSuiteId = isBenchmarkSuiteId(routeSuiteId, benchmarkDefinitions)
@@ -75,6 +76,15 @@ export function Navbar({
             >
               <FlaskConical size={16} strokeWidth={1.8} />
               Explorer
+            </NavLink>
+            <NavLink
+              to="/catalog"
+              className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm transition ${
+                isCatalogActive ? activeNavClass : inactiveNavTextClass
+              }`}
+            >
+              <BookOpenText size={16} strokeWidth={1.8} />
+              Catalog
             </NavLink>
           </nav>
 

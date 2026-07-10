@@ -5,7 +5,6 @@ import {
   GitBranch,
   Scale,
   Server,
-  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react"
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react"
@@ -15,7 +14,7 @@ import { ControlChip, SegmentedButton } from "../components/controls/Control"
 import { ControlSelect } from "../components/controls/ControlSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import { SqlCodeView } from "../components/SqlCodeView"
-import { BodyText, MetaLabel, SectionTitle } from "../components/Typography"
+import { MetaLabel, SectionTitle } from "../components/Typography"
 import { cn } from "../lib/cn"
 
 type ComparisonMode = "database" | "scale" | "version" | "system"
@@ -203,7 +202,6 @@ interface PrototypeUrlState {
   systemId: SystemId
   selectedSystems: SystemId[]
   suiteId: SuiteId
-  selectedSuites: SuiteId[]
   databaseId: DatabaseId
   selectedDatabases: DatabaseId[]
   scaleFactor: number
@@ -214,7 +212,6 @@ interface PrototypeUrlState {
 }
 
 const DEFAULT_SELECTED_SYSTEMS: SystemId[] = ["m3_max", "epyc_9754"]
-const DEFAULT_SELECTED_SUITES: SuiteId[] = ["clickbench"]
 const DEFAULT_SELECTED_DATABASES: DatabaseId[] = ["clickhouse", "duckdb", "doris"]
 
 function parsePrototypeUrlState(searchParams: URLSearchParams): PrototypeUrlState {
@@ -225,8 +222,7 @@ function parsePrototypeUrlState(searchParams: URLSearchParams): PrototypeUrlStat
     DEFAULT_SELECTED_SYSTEMS,
   )
   const systemId = parseIdValue(searchParams.get("system"), SYSTEMS, firstValue(selectedSystems))
-  const selectedSuites = parseIdSubset(searchParams.get("suites"), SUITES, DEFAULT_SELECTED_SUITES)
-  const suiteId = parseIdValue(searchParams.get("suite"), SUITES, firstValue(selectedSuites))
+  const suiteId = parseIdValue(searchParams.get("suite"), SUITES, "clickbench")
   const suite = getItem(SUITES, suiteId)
   const selectedDatabases = parseIdSubset(
     searchParams.get("databases"),
@@ -262,7 +258,6 @@ function parsePrototypeUrlState(searchParams: URLSearchParams): PrototypeUrlStat
     systemId,
     selectedSystems: ensureSelected(selectedSystems, systemId),
     suiteId,
-    selectedSuites: ensureSelected(selectedSuites, suiteId),
     databaseId,
     selectedDatabases: ensureSelected(selectedDatabases, databaseId),
     scaleFactor,
@@ -283,7 +278,6 @@ export function ExplorerPrototypePage() {
   const [scaleFactor, setScaleFactor] = useState(initialState.scaleFactor)
   const [databaseVersion, setDatabaseVersion] = useState(initialState.databaseVersion)
   const [selectedSystems, setSelectedSystems] = useState<SystemId[]>(initialState.selectedSystems)
-  const [selectedSuites, setSelectedSuites] = useState<SuiteId[]>(initialState.selectedSuites)
   const [selectedDatabases, setSelectedDatabases] = useState<DatabaseId[]>(
     initialState.selectedDatabases,
   )
@@ -356,7 +350,6 @@ export function ExplorerPrototypePage() {
         normalizedScaleFactor,
         normalizedVersion,
         selectedSystems,
-        selectedSuites,
         selectedDatabases,
         selectedScaleFactors: activeScaleFactors,
         selectedVersions: activeVersions,
@@ -370,7 +363,6 @@ export function ExplorerPrototypePage() {
       selectedDatabase,
       selectedDatabases,
       selectedSuite,
-      selectedSuites,
       selectedSystem,
       selectedSystems,
     ],
@@ -382,7 +374,6 @@ export function ExplorerPrototypePage() {
     params.set("system", systemId)
     params.set("systems", selectedSystems.join(","))
     params.set("suite", suiteId)
-    params.set("suites", selectedSuites.join(","))
     params.set("database", databaseId)
     params.set("databases", selectedDatabases.join(","))
     params.set("scale", String(normalizedScaleFactor))
@@ -401,7 +392,6 @@ export function ExplorerPrototypePage() {
     selectedDatabases,
     selectedQuery,
     selectedSystems,
-    selectedSuites,
     suiteId,
     systemId,
   ])
@@ -431,9 +421,6 @@ export function ExplorerPrototypePage() {
   function handleSuiteChange(nextSuiteId: SuiteId) {
     const nextSuite = getItem(SUITES, nextSuiteId)
     setSuiteId(nextSuiteId)
-    setSelectedSuites((current) =>
-      current.includes(nextSuiteId) ? current : [nextSuiteId, ...current],
-    )
     setScaleFactor((current) =>
       includesNumber(nextSuite.scales, current) ? current : firstValue(nextSuite.scales),
     )
@@ -447,14 +434,6 @@ export function ExplorerPrototypePage() {
       includesString(nextDatabase.versions, current) ? current : firstValue(nextDatabase.versions),
     )
     setSelectedVersions((current) => normalizeStringSelection(current, nextDatabase.versions))
-  }
-
-  function handleSuiteToggle(nextSuiteId: SuiteId) {
-    const nextSuites = toggleSelection(selectedSuites, nextSuiteId)
-    setSelectedSuites(nextSuites)
-    if (!nextSuites.includes(suiteId)) {
-      handleSuiteChange(firstValue(nextSuites))
-    }
   }
 
   return (
@@ -471,6 +450,7 @@ export function ExplorerPrototypePage() {
               <SegmentedButton
                 key={comparisonMode.id}
                 selected={mode === comparisonMode.id}
+                aria-pressed={mode === comparisonMode.id}
                 onClick={() => handleModeChange(comparisonMode.id)}
                 size="md"
                 className="min-h-10 min-w-0 gap-1.5 rounded-lg px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm"
@@ -484,18 +464,12 @@ export function ExplorerPrototypePage() {
       </header>
 
       <div className="grid max-w-full min-w-0 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
-        <PanelCard className="flex flex-col gap-4 p-2.5 sm:p-3 xl:max-h-[min(48rem,calc(100dvh-11rem))] xl:p-4">
+        <PanelCard className="flex flex-col gap-3 p-3 xl:h-[min(48rem,calc(100dvh-11rem))] xl:p-4">
           <PanelHeader>
-            <div>
-              <SectionTitle as="h3">Comparison setup</SectionTitle>
-              <BodyText className="mt-1 text-xs">
-                One benchmark dimension varies at a time.
-              </BodyText>
-            </div>
-            <SlidersHorizontal className="h-4 w-4 text-slate-500" strokeWidth={1.8} />
+            <SectionTitle as="h3">Comparison setup</SectionTitle>
           </PanelHeader>
 
-          <div className="panel-scrollbar space-y-3 overflow-visible xl:min-h-0 xl:overflow-y-auto xl:pr-1">
+          <div className="panel-scrollbar min-h-0 divide-y divide-border-subtle overflow-visible xl:overflow-y-auto xl:pr-1">
             <DimensionRow
               icon={Server}
               label="System"
@@ -604,25 +578,16 @@ export function ExplorerPrototypePage() {
               icon={FlaskConical}
               label="Suite"
               role="fixed"
-              summary={`${selectedSuite.label} · ${selectedSuites.length} linked`}
+              summary={selectedSuite.detail}
             >
-              <div className="space-y-2">
-                <ChoiceChips
-                  options={SUITES}
-                  selectedValues={selectedSuites}
-                  onToggle={(value) => handleSuiteToggle(value)}
-                />
-                {selectedSuites.length > 1 ? (
-                  <DimensionSelect
-                    ariaLabel="Active suite"
-                    label="Active"
-                    icon={FlaskConical}
-                    value={suiteId}
-                    options={SUITES.filter((suite) => selectedSuites.includes(suite.id))}
-                    onChange={(value) => handleSuiteChange(value as SuiteId)}
-                  />
-                ) : null}
-              </div>
+              <DimensionSelect
+                ariaLabel="Suite"
+                label="Suite"
+                icon={FlaskConical}
+                value={suiteId}
+                options={SUITES}
+                onChange={(value) => handleSuiteChange(value as SuiteId)}
+              />
             </DimensionRow>
 
             <DimensionRow
@@ -667,7 +632,7 @@ export function ExplorerPrototypePage() {
           </div>
         </PanelCard>
 
-        <PanelCard className="flex min-w-0 flex-col gap-4 p-2.5 sm:p-3 xl:grid xl:h-[min(42rem,calc(100dvh-11rem))] xl:min-h-0 xl:grid-rows-[auto_minmax(0,1fr)] xl:p-4">
+        <PanelCard className="flex min-w-0 flex-col gap-4 p-3 xl:h-[min(48rem,calc(100dvh-11rem))] xl:min-h-0 xl:p-4">
           <PanelHeader className="flex-wrap">
             <div>
               <MetaLabel>Active comparison</MetaLabel>
@@ -681,7 +646,9 @@ export function ExplorerPrototypePage() {
             </div>
           </PanelHeader>
 
-          <div className="grid gap-4 xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
+          <ComparisonScope contract={dimensionContract} />
+
+          <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.42fr)]">
             <div className="grid gap-4 xl:min-h-0 xl:grid-rows-[auto_minmax(0,1fr)]">
               <ChartFrame className="space-y-3 p-2.5 sm:p-3">
                 <div className="flex items-center justify-between gap-3">
@@ -711,13 +678,8 @@ export function ExplorerPrototypePage() {
               </ChartFrame>
             </div>
 
-            <div className="grid gap-4 xl:min-h-0 xl:grid-rows-[auto_minmax(0,1fr)]">
-              <ChartFrame className="space-y-3 p-2.5 sm:p-3">
-                <MetaLabel>Dimensions</MetaLabel>
-                <DimensionContractList contract={dimensionContract} />
-              </ChartFrame>
-
-              <ChartFrame className="flex min-h-[18rem] flex-col overflow-hidden p-2.5 sm:p-3 xl:min-h-0">
+            <div className="min-h-0">
+              <ChartFrame className="flex min-h-[22rem] flex-col overflow-hidden p-2.5 sm:p-3 xl:h-full xl:min-h-0">
                 <div className="mb-3 shrink-0">
                   <MetaLabel>Query SQL</MetaLabel>
                   <p className="mt-1 truncate text-sm font-medium text-slate-200">
@@ -728,7 +690,7 @@ export function ExplorerPrototypePage() {
                   <SqlCodeView
                     code={QUERY_SQL[selectedQuery]}
                     wrapLines
-                    className="h-[18rem] text-xs leading-relaxed xl:h-full"
+                    className="h-[22rem] text-xs leading-relaxed xl:h-full"
                   />
                 </div>
               </ChartFrame>
@@ -754,7 +716,7 @@ function DimensionRow({
   children: ReactNode
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-border-subtle bg-surface-inset/55 p-2.5 sm:p-3">
+    <section className="min-w-0 py-3 first:pt-0 last:pb-0">
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border-default bg-surface-raised text-slate-300 sm:h-8 sm:w-8">
           <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={1.8} />
@@ -767,7 +729,7 @@ function DimensionRow({
           <p className="mt-0.5 truncate text-xs text-slate-400">{summary}</p>
         </div>
       </div>
-      <div className="mt-3 min-w-0">{children}</div>
+      <div className="mt-2.5 min-w-0">{children}</div>
     </section>
   )
 }
@@ -839,6 +801,7 @@ function ChoiceChips<T extends string | number>({
           <ControlChip
             key={String(option.id)}
             selected={selected}
+            aria-pressed={selected}
             onClick={() => onToggle(option.id)}
             size="sm"
             className="min-h-8 max-w-full min-w-0 gap-1.5 rounded-lg"
@@ -857,14 +820,11 @@ function ChoiceChips<T extends string | number>({
 
 function VersionPins({ databaseIds }: { databaseIds: readonly DatabaseId[] }) {
   return (
-    <div className="space-y-2">
+    <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1.5">
       {databaseIds.map((databaseId) => {
         const database = getItem(DATABASES, databaseId)
         return (
-          <div
-            key={database.id}
-            className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface-primary/40 px-2.5 py-2 sm:gap-3 sm:px-3"
-          >
+          <div key={database.id} className="flex min-w-0 items-center gap-2 text-xs">
             <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-300">
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
@@ -872,7 +832,7 @@ function VersionPins({ databaseIds }: { databaseIds: readonly DatabaseId[] }) {
               />
               <span className="truncate">{database.label}</span>
             </span>
-            <span className="shrink-0 text-xs text-slate-400">{database.versions[0]}</span>
+            <span className="shrink-0 text-slate-500">{database.versions[0]}</span>
           </div>
         )
       })}
@@ -994,16 +954,20 @@ function QueryBreakdown({
   )
 }
 
-function DimensionContractList({ contract }: { contract: readonly DimensionContract[] }) {
+function ComparisonScope({ contract }: { contract: readonly DimensionContract[] }) {
   return (
-    <div className="space-y-2">
+    <div className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-3 border-y border-border-subtle bg-surface-primary/20 px-1 py-3 sm:grid-cols-3 xl:grid-cols-5">
       {contract.map((dimension) => (
-        <div key={dimension.label} className="grid gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-slate-300">{dimension.label}</span>
-            <RoleBadge role={dimension.role} />
+        <div key={dimension.label} className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-[0.65rem] font-semibold tracking-wide text-slate-500 uppercase">
+              {dimension.label}
+            </span>
+            {dimension.role === "varies" ? <RoleBadge role="varies" /> : null}
           </div>
-          <p className="truncate text-xs text-slate-500">{dimension.value}</p>
+          <p className="mt-1 truncate text-xs font-medium text-slate-300" title={dimension.value}>
+            {dimension.value}
+          </p>
         </div>
       ))}
     </div>
@@ -1122,7 +1086,6 @@ function makeDimensionContract({
   normalizedScaleFactor,
   normalizedVersion,
   selectedSystems,
-  selectedSuites,
   selectedDatabases,
   selectedScaleFactors,
   selectedVersions,
@@ -1134,7 +1097,6 @@ function makeDimensionContract({
   normalizedScaleFactor: number
   normalizedVersion: string
   selectedSystems: readonly SystemId[]
-  selectedSuites: readonly SuiteId[]
   selectedDatabases: readonly DatabaseId[]
   selectedScaleFactors: readonly number[]
   selectedVersions: readonly string[]
@@ -1169,10 +1131,7 @@ function makeDimensionContract({
     {
       label: "Suite",
       role: "fixed",
-      value:
-        selectedSuites.length > 1
-          ? `${selectedSuite.label} active · ${selectedSuites.map((id) => getItem(SUITES, id).label).join(", ")} linked`
-          : selectedSuite.label,
+      value: selectedSuite.label,
     },
     {
       label: "Scale factor",
