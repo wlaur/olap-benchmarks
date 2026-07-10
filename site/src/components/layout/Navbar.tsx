@@ -1,18 +1,9 @@
 import { BookOpenText, FlaskConical, Home } from "lucide-react"
-import { NavLink, useLocation, useNavigate } from "react-router-dom"
+import { NavLink, useLocation } from "react-router-dom"
 
-import {
-  getDefaultBenchmarkId,
-  isBenchmarkSuiteId,
-  type BenchmarkDefinition,
-  type BenchmarkSuiteId,
-} from "../../lib/benchmarks"
-import { SuiteSelector } from "../filters/SuiteSelector"
 import { SystemSelector, SystemSelectorSkeleton } from "../filters/SystemSelector"
 
 interface NavbarProps {
-  benchmarkDefinitions: BenchmarkDefinition[]
-  suitesLoading: boolean
   systems: string[]
   selectedSystem: string | null
   onSelectSystem: (system: string) => void
@@ -27,22 +18,14 @@ const inactiveNavTextClass =
   "bg-surface-raised/88 text-slate-300 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.08)] hover:bg-surface-raised hover:text-slate-100 hover:shadow-[inset_0_0_0_1px_rgba(120,154,214,0.18)]"
 
 export function Navbar({
-  benchmarkDefinitions,
-  suitesLoading,
   systems,
   selectedSystem,
   onSelectSystem,
   isSystemLoading = false,
 }: NavbarProps) {
   const location = useLocation()
-  const navigate = useNavigate()
   const isExplorerActive = location.pathname.startsWith("/explorer")
   const isCatalogActive = location.pathname.startsWith("/catalog")
-  const suiteMatch = location.pathname.match(/^\/explorer\/([^/]+)/)
-  const routeSuiteId = suiteMatch?.[1]
-  const resolvedSuiteId: BenchmarkSuiteId = isBenchmarkSuiteId(routeSuiteId, benchmarkDefinitions)
-    ? routeSuiteId
-    : getDefaultBenchmarkId(benchmarkDefinitions)
 
   return (
     <header className="border-b border-border-default bg-surface-primary/95 backdrop-blur">
@@ -88,30 +71,24 @@ export function Navbar({
             </NavLink>
           </nav>
 
-          <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:ml-auto sm:flex-1">
-            {isExplorerActive ? (
-              <SuiteSelector
-                benchmarkDefinitions={benchmarkDefinitions}
-                selected={resolvedSuiteId}
-                onChange={(next) => navigate(`/explorer/${next}`)}
-                disabled={suitesLoading || benchmarkDefinitions.length === 0}
-              />
-            ) : null}
-            <div className="flex w-full shrink-0 justify-end sm:w-auto">
-              {isSystemLoading ? (
-                <SystemSelectorSkeleton />
-              ) : systems.length > 0 ? (
-                <SystemSelector
-                  systems={systems}
-                  selected={selectedSystem}
-                  onChange={onSelectSystem}
-                  disabled={isSystemLoading}
-                />
-              ) : (
-                <p className="text-sm text-slate-500">No completed systems found.</p>
-              )}
+          {!isExplorerActive && !isCatalogActive ? (
+            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:ml-auto sm:flex-1">
+              <div className="flex w-full shrink-0 justify-end sm:w-auto">
+                {isSystemLoading ? (
+                  <SystemSelectorSkeleton />
+                ) : systems.length > 0 ? (
+                  <SystemSelector
+                    systems={systems}
+                    selected={selectedSystem}
+                    onChange={onSelectSystem}
+                    disabled={isSystemLoading}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">No completed systems found.</p>
+                )}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </header>

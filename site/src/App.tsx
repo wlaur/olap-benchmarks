@@ -9,19 +9,16 @@ import {
 } from "./lib/benchmarks"
 import { CatalogPage } from "./pages/CatalogPage"
 import { ExplorerPage } from "./pages/ExplorerPage"
-import { ExplorerPrototypePage } from "./pages/ExplorerPrototypePage"
 import { HomePage } from "./pages/HomePage"
 import { useAppStore } from "./stores/useAppStore"
 
 function ExplorerRoute({
-  selectedSystem,
-  isSystemLoading,
+  preferredSystem,
   benchmarkDefinitions,
   suitesLoading,
   suitesError,
 }: {
-  selectedSystem: string | null
-  isSystemLoading: boolean
+  preferredSystem: string | null
   benchmarkDefinitions: BenchmarkDefinition[]
   suitesLoading: boolean
   suitesError: string | null
@@ -47,10 +44,10 @@ function ExplorerRoute({
 
   return (
     <ExplorerPage
-      system={selectedSystem}
       suiteId={suiteId}
       suiteDefinition={suiteDefinition}
-      isSystemLoading={isSystemLoading}
+      benchmarkDefinitions={benchmarkDefinitions}
+      preferredSystem={preferredSystem}
     />
   )
 }
@@ -58,11 +55,11 @@ function ExplorerRoute({
 export function App() {
   const benchmarkDefinitions = useAppStore((s) => s.benchmarkDefinitions)
   const suitesLoading = useAppStore((s) => s.suitesLoading)
+  const suitesError = useAppStore((s) => s.suitesError)
   const systems = useAppStore((s) => s.systems)
   const selectedSystem = useAppStore((s) => s.selectedSystem)
   const setSelectedSystem = useAppStore((s) => s.setSelectedSystem)
   const loading = useAppStore((s) => s.systemLoading)
-  const error = useAppStore((s) => s.systemError)
   const loadSuites = useAppStore((s) => s.loadSuites)
   const loadSystems = useAppStore((s) => s.loadSystems)
 
@@ -73,8 +70,6 @@ export function App() {
 
   const navbar = (
     <Navbar
-      benchmarkDefinitions={benchmarkDefinitions}
-      suitesLoading={suitesLoading}
       systems={systems}
       selectedSystem={selectedSystem}
       onSelectSystem={setSelectedSystem}
@@ -98,14 +93,15 @@ export function App() {
         />
         <Route
           path="/explorer/:suiteId"
-          element={<ExplorerMain selectedSystem={selectedSystem} loading={loading} error={error} />}
-        />
-        <Route
-          path="/prototype/explorer"
           element={
             <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
               <div className="flex min-h-0 w-full flex-1 flex-col">
-                <ExplorerPrototypePage />
+                <ExplorerRoute
+                  preferredSystem={selectedSystem}
+                  benchmarkDefinitions={benchmarkDefinitions}
+                  suitesLoading={suitesLoading}
+                  suitesError={suitesError}
+                />
               </div>
             </main>
           }
@@ -123,47 +119,5 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
-  )
-}
-
-interface ExplorerMainProps {
-  selectedSystem: string | null
-  loading: boolean
-  error: string | null
-}
-
-function ExplorerMain({ selectedSystem, loading, error }: ExplorerMainProps) {
-  const benchmarkDefinitions = useAppStore((s) => s.benchmarkDefinitions)
-  const suitesLoading = useAppStore((s) => s.suitesLoading)
-  const suitesError = useAppStore((s) => s.suitesError)
-
-  const content = error ? (
-    <p className="text-sm text-red-300">Failed to load systems: {error}</p>
-  ) : !selectedSystem ? (
-    loading ? (
-      <ExplorerRoute
-        selectedSystem={selectedSystem}
-        isSystemLoading
-        benchmarkDefinitions={benchmarkDefinitions}
-        suitesLoading={suitesLoading}
-        suitesError={suitesError}
-      />
-    ) : (
-      <p className="text-sm text-slate-400">No completed benchmark runs are available yet.</p>
-    )
-  ) : (
-    <ExplorerRoute
-      selectedSystem={selectedSystem}
-      isSystemLoading={loading}
-      benchmarkDefinitions={benchmarkDefinitions}
-      suitesLoading={suitesLoading}
-      suitesError={suitesError}
-    />
-  )
-
-  return (
-    <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
-      <div className="flex min-h-0 w-full flex-1 flex-col">{content}</div>
-    </main>
   )
 }
