@@ -38,21 +38,29 @@ It is intentionally disconnected from real benchmark data. It uses dummy data to
 The prototype currently includes:
 
 - explicit comparison modes
-- dimension-aware setup controls
+- compact dimension-aware setup controls without nested dimension cards
 - URL-addressable selection state
 - responsive mobile and desktop layouts
 - ranking and query breakdown panels
 - SQL viewer for the selected query
+- a condensed comparison contract above the results canvas
+
+Decisions validated in the current prototype:
+
+- Suite is one fixed analytical scope. It is not a multi-select inside the explorer.
+- Database comparisons use the latest completed version for each database because version
+  families are not comparable across different products.
+- Query selection drives a persistent SQL viewer; database-specific override selection remains a
+  separate follow-up.
 
 ## Deep Linking
 
 The explorer should support direct links to a specific subset of dimensions.
 
-Use plural query params for selectable subsets and singular query params for the active fixed value:
+Use plural query params for the dimension that varies and singular query params for fixed values:
 
 - `systems`
 - `system`
-- `suites`
 - `suite`
 - `databases`
 - `database`
@@ -66,10 +74,11 @@ Use plural query params for selectable subsets and singular query params for the
 Example:
 
 ```text
-/prototype/explorer?mode=database&databases=clickhouse,duckdb,doris&suites=clickbench,tpc_h&suite=clickbench&scale=100&query=Q22%20join
+/prototype/explorer?mode=database&databases=clickhouse,duckdb,doris&suite=clickbench&scale=100&query=Q22%20join
 ```
 
-The URL can carry multiple suites for browsing context, but the active comparison should still use one active suite at a time.
+The explorer URL carries one suite. Cross-suite browsing belongs in the catalog rather than in the
+comparison setup.
 
 ## Main Explorer Layout
 
@@ -99,9 +108,14 @@ The query breakdown should make query labels selectable. Selecting a query shoul
 
 When real data is connected, SQL should come from the query manifest and database-specific overrides where available.
 
-## Separate Catalog Page
+## Catalog Page
 
-Add a separate inventory/catalog page that is not part of the comparison explorer.
+The catalog lives at:
+
+`/olap-benchmarks/#/catalog`
+
+It is separate from the comparison explorer and reads completed result dimensions plus the suite
+and query manifests.
 
 Purpose:
 
@@ -114,10 +128,10 @@ Purpose:
 
 This page should answer availability questions, not performance ranking questions.
 
-Suggested structure:
+Current structure:
 
 - suite list/table
-- query list per selected suite
+- filterable query list per selected suite
 - coverage matrix by database and scale factor
 - version availability summary
 - quick links into the explorer with the relevant dimensions preselected
@@ -126,11 +140,11 @@ This avoids overloading the explorer with inventory concerns.
 
 ## Implementation Phases
 
-1. Keep iterating on the dummy prototype until the interaction model is accepted.
-2. Define the real dimension model from benchmark metadata and result rows.
-3. Replace dummy data with derived availability data.
-4. Connect each comparison mode to real result transforms.
-5. Add the catalog page for suite/query/database coverage.
+1. Keep iterating on the dummy comparison prototype until the interaction model is accepted.
+2. Use the catalog to validate real availability dimensions and expose coverage gaps.
+3. Define typed availability rules for each real comparison mode.
+4. Replace dummy comparison rows with real result transforms.
+5. Add database-specific SQL override selection to the query viewer.
 6. Retire or simplify old explorer panels that no longer fit the comparison model.
 
 ## Design Rules
@@ -144,9 +158,8 @@ This avoids overloading the explorer with inventory concerns.
 - Avoid non-interactive icons that look like controls.
 - Preserve URL state for shareable analysis links.
 
-## Open Questions
+## Remaining Questions
 
-- For database comparison, should each database default to latest completed version, or should version be fixed across databases only when the same version family exists?
-- Should SQL override selection be automatic from the selected database, or shown as tabs like the existing query detail panel?
-- Should the catalog page be linked from the navbar or from the explorer setup panel first?
+- In database comparison mode, should SQL overrides appear as database tabs or follow a selected
+  database from the ranking?
 - Which existing explorer panels are still needed after the comparison model is implemented?

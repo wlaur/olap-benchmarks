@@ -4,6 +4,7 @@ import type { BenchmarkSuiteId } from "./benchmarks"
 import { getKyselyDb, type ResultsDb } from "./duckdb"
 import type {
   BenchmarkOperation,
+  CatalogRunDimension,
   CrossSystemQueryCoverage,
   CrossSystemQuerySummary,
   FlameSpan,
@@ -83,6 +84,23 @@ export async function fetchSystemSuiteScaleFactors(system: string): Promise<Suit
     .where("status", "!=", "running")
     .orderBy("suite")
     .orderBy("suite_scale_factor")
+    .execute()
+}
+
+export async function fetchCatalogRunDimensions(): Promise<CatalogRunDimension[]> {
+  const db = await getKyselyDb()
+  return db
+    .selectFrom("run")
+    .select(["system", "suite", "suite_scale_factor", "db", "db_version"])
+    .distinct()
+    .where("operation", "=", "select")
+    .where("status", "=", "completed")
+    .where("finished_at", "is not", null)
+    .orderBy("suite")
+    .orderBy("db")
+    .orderBy("db_version")
+    .orderBy("suite_scale_factor")
+    .orderBy("system")
     .execute()
 }
 
