@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from dataclasses import dataclass
@@ -9,11 +10,11 @@ from queue import Empty
 from threading import Lock
 from typing import Any, Literal, TypedDict, cast
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..results import get_results_engine
-from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep
+from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from ..results.schema import ensure_results_schema
 from ..run_metadata import IterationRole, StepResultStatus
 from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
@@ -40,6 +41,41 @@ class WriterMessage(TypedDict):
     args: list[Any]
 
 
+def _get_or_create_system_snapshot(
+    session: Session,
+    system: str,
+    metadata: dict[str, Any] | None,
+) -> int | None:
+    if metadata is None:
+        return None
+
+    canonical_metadata = cast(dict[str, Any], json.loads(json.dumps(metadata, sort_keys=True)))
+    existing_id = session.scalar(
+        select(SystemSnapshot.id)
+        .where(SystemSnapshot.system == system)
+        .where(SystemSnapshot.metadata_json == canonical_metadata)
+        .limit(1)
+    )
+    if existing_id is not None:
+        return existing_id
+
+    host_value = canonical_metadata.get("host")
+    host = cast(dict[str, Any], host_value) if isinstance(host_value, dict) else {}
+    snapshot = SystemSnapshot(
+        system=system,
+        os=cast(str | None, host.get("os")),
+        os_release=cast(str | None, host.get("os_release")),
+        machine=cast(str | None, host.get("machine")),
+        processor=cast(str | None, host.get("processor")),
+        cpu_count_logical=cast(int | None, host.get("cpu_count_logical")),
+        memory_total_mb=cast(int | None, host.get("memory_total_mb")),
+        metadata_json=canonical_metadata,
+    )
+    session.add(snapshot)
+    session.flush()
+    return snapshot.id
+
+
 def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revision: Revision = "default") -> None:
     setup_stdout_logging()
 
@@ -62,16 +98,23 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     result_queue.put(row.id)
 
                 case "insert_run":
+                    system = cast(str, msg["args"][5])
+                    system_snapshot_id = _get_or_create_system_snapshot(
+                        session,
+                        system,
+                        cast(dict[str, Any] | None, msg["args"][8]),
+                    )
                     row = Run(
                         suite=cast(str, msg["args"][0]),
                         suite_scale_factor=cast(int, msg["args"][1]),
                         db=cast(str, msg["args"][2]),
                         db_version=cast(str, msg["args"][3]),
                         operation=cast(str, msg["args"][4]),
-                        system=cast(str, msg["args"][5]),
+                        system=system,
+                        system_snapshot_id=system_snapshot_id,
                         status=cast(str, msg["args"][6]),
                         started_at=cast(datetime, msg["args"][7]),
-                        metadata_json=cast(dict[str, Any] | None, msg["args"][8]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][9]),
                     )
                     session.add(row)
                     session.commit()
@@ -221,11 +264,23 @@ class Storage:
         operation: Operation,
         system: str,
         started_at: datetime,
+        system_metadata: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
         return self.put_and_get_id(
             "insert_run",
-            [suite, suite_scale_factor, db, db_version, operation, system, "running", started_at, metadata],
+            [
+                suite,
+                suite_scale_factor,
+                db,
+                db_version,
+                operation,
+                system,
+                "running",
+                started_at,
+                system_metadata,
+                metadata,
+            ],
         )
 
     def finish_run(

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..results import get_results_engine, get_results_head_revision, migrate_results
 from ..results.merge import merge_results
-from ..results.models import QueryExecution, Run, RunMetric, RunStep
+from ..results.models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 
 
 def _create_results_db(db_path: Path) -> None:
@@ -26,7 +26,22 @@ def _insert_run_tree(
     status: str = "completed",
     started_at: datetime | None = None,
     query: str = "select 1",
+    snapshot_metadata: dict[str, Any] | None = None,
 ) -> int:
+    snapshot_id: int | None = None
+    if snapshot_metadata is not None:
+        snapshot = SystemSnapshot(
+            system="test-system",
+            os="TestOS",
+            machine="test-machine",
+            cpu_count_logical=8,
+            memory_total_mb=16_384,
+            metadata_json=snapshot_metadata,
+        )
+        session.add(snapshot)
+        session.flush()
+        snapshot_id = snapshot.id
+
     run = Run(
         suite=suite,
         suite_scale_factor=suite_scale_factor,
@@ -34,6 +49,7 @@ def _insert_run_tree(
         db_version=db_version,
         operation="select",
         system="test-system",
+        system_snapshot_id=snapshot_id,
         status=status,
         started_at=started_at or datetime(2026, 1, 1),
         metadata_json={"source": db},
@@ -77,6 +93,7 @@ def _populate(
     status: str = "completed",
     started_at: datetime | None = None,
     query: str = "select 1",
+    snapshot_metadata: dict[str, Any] | None = None,
 ) -> int:
     engine = get_results_engine(read_only=False, db_path=db_path)
     try:
@@ -89,6 +106,7 @@ def _populate(
                 status=status,
                 started_at=started_at,
                 query=query,
+                snapshot_metadata=snapshot_metadata,
             )
     finally:
         engine.dispose()
@@ -187,6 +205,22 @@ def test_merge_preserves_run_metadata_and_step_status_fields(tmp_path: Path) -> 
 
     assert _query(dest, """select "metadata"->>'source' from run""") == [("monetdb",)]
     assert _query(dest, "select result_status, iteration_role from run_step") == [("ok", "first_run")]
+
+
+def test_merge_remaps_and_deduplicates_system_snapshots(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+    metadata = {"host": {"os": "TestOS", "machine": "test-machine"}}
+
+    _populate(dest, db="clickhouse", snapshot_metadata=metadata)
+    _populate(source, db="monetdb", snapshot_metadata=metadata)
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.system_snapshots_added == 0
+    assert _query(dest, "select count(*) from system_snapshot") == [(1,)]
+    assert _query(dest, "select count(distinct system_snapshot_id) from run") == [(1,)]
 
 
 def test_merge_keeps_different_suite_scale_factors(tmp_path: Path) -> None:

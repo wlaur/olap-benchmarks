@@ -13,11 +13,12 @@ _LOGGER = logging.getLogger(__name__)
 # sequences at 1), so runs are matched by this natural key when merging.
 RUN_NATURAL_KEY = ("system", "db", "db_version", "suite", "suite_scale_factor", "operation", "started_at")
 
-MERGE_TABLES = ("run", "run_step", "run_metric", "query_execution")
+MERGE_TABLES = ("system_snapshot", "run", "run_step", "run_metric", "query_execution")
 
 
 @dataclass(frozen=True)
 class MergeStats:
+    system_snapshots_added: int
     runs_added: int
     runs_replaced: int
     run_steps_added: int
@@ -101,6 +102,65 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
     con.execute("delete from run_metric where run_id in (select dest_id from matched_run)")
     con.execute("delete from run_step where run_id in (select dest_id from matched_run)")
 
+    con.execute(
+        """
+        create or replace temp table referenced_source_snapshot as
+        select distinct system_snapshot_id as id
+        from src.run
+        where status <> 'running' and system_snapshot_id is not null
+        """
+    )
+    con.execute(
+        """
+        create or replace temp table matched_system_snapshot as
+        select s.id as src_id, min(d.id) as dest_id
+        from src.system_snapshot s
+        join referenced_source_snapshot r on r.id = s.id
+        join system_snapshot d on
+            d.system = s.system
+            and d.os is not distinct from s.os
+            and d.os_release is not distinct from s.os_release
+            and d.machine is not distinct from s.machine
+            and d.processor is not distinct from s.processor
+            and d.cpu_count_logical is not distinct from s.cpu_count_logical
+            and d.memory_total_mb is not distinct from s.memory_total_mb
+            and d."metadata" is not distinct from s."metadata"
+        group by s.id
+        """
+    )
+    snapshot_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from system_snapshot")
+    con.execute(
+        """
+        create or replace temp table unmatched_source_snapshot as
+        select r.id
+        from referenced_source_snapshot r
+        left join matched_system_snapshot m on m.src_id = r.id
+        where m.src_id is null
+        """
+    )
+    system_snapshots_added = _fetch_scalar(con, "select count(*) from unmatched_source_snapshot")
+    con.execute(
+        f"""
+        create or replace temp table system_snapshot_map as
+        select src_id, dest_id as new_id from matched_system_snapshot
+        union all
+        select s.id as src_id, {snapshot_offset} + row_number() over (order by s.id) as new_id
+        from unmatched_source_snapshot s
+        """
+    )
+    con.execute(
+        """
+        insert into system_snapshot (
+            id, system, os, os_release, machine, processor, cpu_count_logical, memory_total_mb, "metadata"
+        )
+        select m.new_id, s.system, s.os, s.os_release, s.machine, s.processor,
+               s.cpu_count_logical, s.memory_total_mb, s."metadata"
+        from src.system_snapshot s
+        join system_snapshot_map m on m.src_id = s.id
+        join unmatched_source_snapshot u on u.id = s.id
+        """
+    )
+
     run_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from run")
     step_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from run_step")
     metric_offset = _fetch_scalar(con, "select coalesce(max(id), 0) from run_metric")
@@ -127,6 +187,9 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
             db_version = s.db_version,
             operation = s.operation,
             system = s.system,
+            system_snapshot_id = (
+                select m.new_id from system_snapshot_map m where m.src_id = s.system_snapshot_id
+            ),
             status = s.status,
             started_at = s.started_at,
             finished_at = s.finished_at,
@@ -158,13 +221,15 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
 
     con.execute(
         """
-        insert into run (id, suite, suite_scale_factor, db, db_version, operation, system, status,
+        insert into run (id, suite, suite_scale_factor, db, db_version, operation, system, system_snapshot_id, status,
                          started_at, finished_at, error_type, error_message, "metadata")
-        select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.operation, s.system, s.status,
+        select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.operation, s.system,
+               sm.new_id, s.status,
                s.started_at, s.finished_at, s.error_type, s.error_message, s."metadata"
         from src.run s
         join run_map m on s.id = m.src_id
         join unmatched_source_run u on s.id = u.id
+        left join system_snapshot_map sm on sm.src_id = s.system_snapshot_id
         """
     )
 
@@ -207,7 +272,17 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
         con, f"select count(*) from query_execution where id > {query_execution_offset}"
     )
 
+    con.execute(
+        """
+        delete from system_snapshot
+        where id not in (
+            select system_snapshot_id from run where system_snapshot_id is not null
+        )
+        """
+    )
+
     return MergeStats(
+        system_snapshots_added=system_snapshots_added,
         runs_added=runs_added,
         runs_replaced=runs_replaced,
         run_steps_added=run_steps_added,
@@ -221,6 +296,7 @@ def _sync_sequences(con: duckdb.DuckDBPyConnection) -> None:
     # backing the id defaults. Recreate them past the current max so the file
     # stays usable as a write target.
     for sequence, table in (
+        ("seq_system_snapshot", "system_snapshot"),
         ("seq_run", "run"),
         ("seq_run_step", "run_step"),
         ("seq_run_metric", "run_metric"),

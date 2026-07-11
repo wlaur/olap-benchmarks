@@ -23,6 +23,7 @@ from ..run_metadata import (
     ExecutionMode,
     StepResultStatus,
     build_run_metadata,
+    build_system_metadata,
     classify_iteration_role,
     classify_step_result_status,
 )
@@ -703,6 +704,7 @@ class Database(BaseModel, ABC):
             operation=operation,
             system=SETTINGS.system,
             started_at=started_at,
+            system_metadata=build_system_metadata(),
             metadata=build_run_metadata(
                 execution_mode=self.execution_mode,
                 container_image=self.container_image,
