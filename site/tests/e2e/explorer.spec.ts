@@ -89,20 +89,91 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   expect(consoleErrors).toEqual([])
 })
 
-test("query heatmap repeats database headers across wide layout columns", async ({ page }) => {
+test("query heatmap sorts by database and keeps headers aligned", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 })
   await page.goto("#/explorer/rtabench?mode=database&databases=clickhouse%2Cduckdb%2Cmonetdb")
   await page.getByRole("button", { name: /Show all \d+ query results/ }).click()
 
   const blocks = page.locator("[data-heatmap-block]")
+  const headerBlocks = page.locator("[data-heatmap-header-block]")
   await expect(blocks).toHaveCount(2)
-  const firstHeaderCount = await blocks.nth(0).locator("[data-heatmap-series-header]").count()
-  const secondHeaderCount = await blocks.nth(1).locator("[data-heatmap-series-header]").count()
+  await expect(headerBlocks).toHaveCount(2)
+  const firstHeaderCount = await headerBlocks.nth(0).locator("[data-heatmap-series-header]").count()
+  const secondHeaderCount = await headerBlocks
+    .nth(1)
+    .locator("[data-heatmap-series-header]")
+    .count()
   expect(firstHeaderCount).toBeGreaterThan(0)
   expect(secondHeaderCount).toBe(firstHeaderCount)
 
+  const originalQueryOrder = await page
+    .locator("[data-query-name]")
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-query-name")))
+  const firstClickHouseSort = page
+    .getByRole("button", {
+      name: /^ClickHouse: sort by best relative performance$/,
+    })
+    .first()
+  const clickHouseSeries = await firstClickHouseSort.getAttribute("data-sort-series")
+  expect(clickHouseSeries).not.toBeNull()
+  const sortButtons = page.locator(`[data-sort-series="${clickHouseSeries}"]`)
+  await sortButtons.first().click()
+  await expect(sortButtons).toHaveCount(2)
+  await expect(sortButtons.first()).toHaveAttribute("data-sort-direction", "best")
+  await expect(sortButtons.last()).toHaveAttribute("data-sort-direction", "best")
+  const bestFirstQueryOrder = await page
+    .locator("[data-query-name]")
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-query-name")))
+  expect(bestFirstQueryOrder).not.toEqual(originalQueryOrder)
+  await sortButtons.first().click()
+  await expect(sortButtons.first()).toHaveAttribute("data-sort-direction", "worst")
+  await sortButtons.first().click()
+  await expect(sortButtons.first()).toHaveAttribute("data-sort-direction", "none")
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-query-name]")
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("data-query-name")),
+        ),
+    )
+    .toEqual(originalQueryOrder)
+
   await page.setViewportSize({ width: 1024, height: 900 })
   await expect(blocks).toHaveCount(1)
+  await expectNoHorizontalPageOverflow(page)
+
+  const stickyPosition = await page.evaluate(async () => {
+    const main = document.querySelector("main")
+    const header = document.querySelector<HTMLElement>("[data-heatmap-header]")
+    if (!(main instanceof HTMLElement) || !header) return null
+    header.scrollIntoView({ block: "start" })
+    await new Promise(requestAnimationFrame)
+    main.scrollTop += 120
+    await new Promise(requestAnimationFrame)
+    return {
+      headerTop: header.getBoundingClientRect().top,
+      mainTop: main.getBoundingClientRect().top,
+    }
+  })
+  expect(stickyPosition).not.toBeNull()
+  expect(Math.abs(stickyPosition!.headerTop - stickyPosition!.mainTop)).toBeLessThanOrEqual(1)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const heatmapScroll = page.locator("[data-heatmap-scroll]")
+  const heatmapHeader = page.locator("[data-heatmap-header]")
+  const verticalScroll = await heatmapScroll.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+  }))
+  expect(verticalScroll.overflowY).toBe("hidden")
+  expect(verticalScroll.scrollHeight).toBe(verticalScroll.clientHeight)
+  await heatmapScroll.evaluate((element) => {
+    element.scrollLeft = 120
+    element.dispatchEvent(new Event("scroll"))
+  })
+  await expect.poll(() => heatmapHeader.evaluate((element) => element.scrollLeft)).toBe(120)
   await expectNoHorizontalPageOverflow(page)
 })
 
