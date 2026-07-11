@@ -1,5 +1,5 @@
 SELECT
-  data.commit.collection AS event,
+  nullIf(data.commit.collection::String, '') AS event,
   count() AS count
 FROM bluesky
 GROUP BY event
