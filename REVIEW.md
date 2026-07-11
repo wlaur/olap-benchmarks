@@ -36,13 +36,7 @@ This document contains only unfinished work. Completed findings and implementati
   shadowed duplicates, the PostgreSQL TPC-DS populate-only leftover, failed/orphaned runs, and unreferenced system
   snapshots. Regenerate the manifests and confirm TimescaleDB mutation coverage in the published artifact.
 
-## 3. Finish the near-term suite and engine roadmap
-
-- [ ] **Extend Doris to RTABench.**
-  Align query coverage and unsupported statuses first. Consider TPC-DS only after the full rerun demonstrates stable
-  Doris lifecycle, loading, metrics, and cleanup behavior.
-
-## 4. Deferred larger additions
+## 3. Deferred larger additions
 
 - [ ] **Add JOB after status-aware reporting is exercised by the public rerun.**
   Port the optimizer-heavy workload only after unsupported, skipped, timeout, error, and wrong-result states are
@@ -54,8 +48,7 @@ This document contains only unfinished work. Completed findings and implementati
 
 ## Execution order
 
-1. Extend Doris to RTABench.
-2. Complete the remaining correctness checks across the intended public matrix.
-3. Run and validate the host-native `macbook-m4-pro` matrix within the disk budget.
-4. Publish the cleaned replacement database and manifests.
-5. Continue with JOB and the broader TSBS/InfluxDB work.
+1. Complete the remaining correctness checks across the intended public matrix.
+2. Run and validate the host-native `macbook-m4-pro` matrix within the disk budget.
+3. Publish the cleaned replacement database and manifests.
+4. Continue with JOB and the broader TSBS/InfluxDB work.

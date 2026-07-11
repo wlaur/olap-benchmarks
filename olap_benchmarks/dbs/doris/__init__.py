@@ -15,6 +15,7 @@ from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
+from ...suites.rtabench.config import RTABench
 from .. import Database
 from ..utils import normalize_columns
 
@@ -138,6 +139,16 @@ class DorisJSONBench(JSONBench["Doris"]):
                 row_id += 1
 
         return staged_file, row_id
+
+
+class DorisRTABench(RTABench["Doris"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+    def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
+        partitions = 100 if table_name == "order_events" else None
+        self.db.insert(df, table_name, partitions=partitions)
 
 
 class Doris(Database):
@@ -502,4 +513,5 @@ class Doris(Database):
         return {
             "clickbench": DorisClickbench,
             "jsonbench": DorisJSONBench,
+            "rtabench": DorisRTABench,
         }
