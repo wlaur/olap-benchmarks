@@ -18,8 +18,10 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
+from ...suites.tpc_h.config import TPCH_TABLES, TpcH
 from .. import Database
 from .clickbench import execute_clickbench_query
+from .tpc_h import execute_tpc_h_query
 
 VERSION = package_version("polars")
 
@@ -72,6 +74,26 @@ class PolarsClickbench(Clickbench["Polars"]):
 
         with self.db.phase_context("register", table_name="hits"):
             self.db.register_table("hits", SETTINGS.input_data_directory / "clickbench/hits.parquet")
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+
+class PolarsTpcH(TpcH["Polars"]):
+    def load_tpch_query(self, query_name: str) -> str:
+        return f"Polars LazyFrame expression {query_name}"
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        for table_name in TPCH_TABLES:
+            with self.db.phase_context("register", table_name=table_name):
+                self.db.register_table(table_name, self.input_data_directory / f"{table_name}.parquet")
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
@@ -139,6 +161,12 @@ class Polars(Database):
                 lf = self._execute_jsonbench_query(self.current_query_name)
             case "clickbench":
                 lf = execute_clickbench_query(self._scan_table("hits"), self.current_query_name)
+            case "tpc_h":
+                lf = execute_tpc_h_query(
+                    {table_name: self._scan_table(table_name) for table_name in TPCH_TABLES},
+                    self.current_query_name,
+                    self.current_suite_scale_factor,
+                )
             case _:
                 raise NotImplementedError(f"Polars fetch is not implemented for {self.current_suite}")
         df = lf.collect()
@@ -254,4 +282,4 @@ class Polars(Database):
         raise NotImplementedError("Polars does not support generic delete")
 
     def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
-        return {"clickbench": PolarsClickbench, "jsonbench": PolarsJSONBench}
+        return {"clickbench": PolarsClickbench, "jsonbench": PolarsJSONBench, "tpc_h": PolarsTpcH}
