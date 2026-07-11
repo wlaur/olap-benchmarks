@@ -31,6 +31,8 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await expect(page).toHaveURL(/mode=version/)
 
   await page.getByRole("combobox", { name: "Query" }).click()
+  await expect(page.getByRole("option")).toHaveCount(10)
+  await page.getByRole("searchbox", { name: "Filter queries" }).fill("Q22")
   await page.getByRole("option", { name: "Q22", exact: true }).click()
   await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q22")
   await expect(page).toHaveURL(/query=Q22/)

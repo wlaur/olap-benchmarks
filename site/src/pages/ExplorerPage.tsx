@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { ControlChip, QuietButton, SegmentedButton } from "../components/controls/Control"
 import { ControlSelect } from "../components/controls/ControlSelect"
+import { VirtualizedSelect } from "../components/controls/VirtualizedSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import { Skeleton } from "../components/Skeleton"
 import { SqlCodeView } from "../components/SqlCodeView"
@@ -163,6 +164,10 @@ export function ExplorerPage({
   const queryNames = useMemo(
     () => orderQueryNames(Object.keys(manifestEntries), rankedRows),
     [manifestEntries, rankedRows],
+  )
+  const queryOptions = useMemo(
+    () => queryNames.map((query) => ({ value: query, label: query })),
+    [queryNames],
   )
   const selectedQuery = queryNames.includes(requestedQuery) ? requestedQuery : (queryNames[0] ?? "")
   const queryRows = useMemo(() => makeQueryRows(queryNames, rankedRows), [queryNames, rankedRows])
@@ -529,8 +534,8 @@ export function ExplorerPage({
 
       {!showLoading && !error && rankedRows.length > 0 ? (
         <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
-          <PanelHeader className="flex-wrap">
-            <div>
+          <PanelHeader className="flex-wrap sm:flex-nowrap sm:items-end">
+            <div className="min-w-0 flex-1">
               <MetaLabel>Drill down</MetaLabel>
               <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
                 Explore one query
@@ -539,13 +544,15 @@ export function ExplorerPage({
                 Select a query to compare its runtime and inspect the SQL used by each database.
               </p>
             </div>
-            <DimensionSelect
+            <VirtualizedSelect
               ariaLabel="Query"
-              label="Query"
-              icon={Search}
+              label="Selected query"
               value={selectedQuery}
-              options={queryNames.map((query) => ({ id: query, label: query }))}
+              options={queryOptions}
               onChange={setRequestedQuery}
+              icon={<Search className="h-3.5 w-3.5" strokeWidth={1.8} />}
+              filterPlaceholder="Filter queries"
+              className="w-full sm:w-[28rem] sm:shrink-0"
             />
           </PanelHeader>
 
