@@ -13,12 +13,18 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await suiteSelect.click()
   await page.getByRole("option", { name: "RTABench", exact: true }).click()
   await expect(page).toHaveURL(/\/explorer\/rtabench/)
-  await expect(page.getByRole("heading", { name: "Benchmark results" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Benchmark explorer" })).toBeVisible()
   await expect(page.getByRole("combobox", { name: "Benchmark suite" })).toContainText("RTABench")
   await page.getByRole("combobox", { name: "Benchmark suite" }).click()
   await page.getByRole("option", { name: "ClickBench", exact: true }).click()
 
-  await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
+  await expect(page.getByRole("button", { name: /Compare databases/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
+  await expect(page.getByText("Databases to compare")).toBeVisible()
+  await expect(page.getByText("Fixed environment")).toBeVisible()
   await expect(page.getByText("Normalized suite score across 43 suite queries")).toBeVisible()
   await expect(page.getByText("Best suite score")).toBeVisible()
   await expect(page.getByText("Lower is better · 1.0× is ideal")).toBeVisible()
@@ -41,10 +47,6 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   expect(runtimeScrollState.overflowY).toBe("auto")
   expect(runtimeScrollState.scrollHeight).toBeGreaterThan(runtimeScrollState.clientHeight)
 
-  await page.getByRole("button", { name: "Adjust comparison" }).click()
-  await expect(page.getByText("Scale factor", { exact: true }).first()).toBeVisible()
-  await page.getByRole("button", { name: "Done" }).click()
-
   await page.getByRole("combobox", { name: "Query" }).click()
   await expect(page.getByRole("option")).toHaveCount(10)
   await page.getByRole("searchbox", { name: "Filter queries" }).fill("Q22")
@@ -54,17 +56,12 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await page.getByRole("option", { name: "Q22", exact: true }).click()
   await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q22")
   await expect(page).toHaveURL(/query=Q22/)
-  await expect(page.getByRole("button", { name: "QuestDB", exact: true })).toHaveAttribute(
-    "data-sql-variant",
-    "different",
-  )
-  await expect(page.getByRole("button", { name: "DuckDB", exact: true })).toHaveAttribute(
-    "data-sql-variant",
-    "default",
-  )
+  const questDbSqlButton = page.locator("button[data-sql-variant]").filter({ hasText: /^QuestDB$/ })
+  const duckDbSqlButton = page.locator("button[data-sql-variant]").filter({ hasText: /^DuckDB$/ })
+  await expect(questDbSqlButton).toHaveAttribute("data-sql-variant", "different")
+  await expect(duckDbSqlButton).toHaveAttribute("data-sql-variant", "default")
   await expect(page.getByText("Differs from default SQL")).toBeVisible()
 
-  const questDbSqlButton = page.getByRole("button", { name: "QuestDB", exact: true })
   await questDbSqlButton.scrollIntoViewIfNeeded()
   const sqlTabsTop = await questDbSqlButton.evaluate((button) => button.getBoundingClientRect().top)
   await questDbSqlButton.click()
@@ -85,15 +82,18 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   expect(queryNameBox!.x + queryNameBox!.width).toBeLessThanOrEqual(heatCellBox!.x)
   expect(heatCellBox!.width).toBeLessThanOrEqual(88)
 
-  await page.getByRole("button", { name: "Version", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
+  await page.getByRole("button", { name: /Analyze one database/ }).click()
+  await expect(page.getByText("Database to analyze")).toBeVisible()
+  await expect(page.getByText("Compare it across")).toBeVisible()
+  await page.getByRole("button", { name: /^Versions/ }).click()
+  await expect(page.getByRole("heading", { name: /version comparison/i })).toBeVisible()
   await expect(page).toHaveURL(/mode=version/)
   await expect(page).toHaveURL(/query=Q22/)
   await expectNoHorizontalPageOverflow(page)
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.reload()
-  await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: /version comparison/i })).toBeVisible()
   await expectNoHorizontalPageOverflow(page)
   expect(consoleErrors).toEqual([])
 })

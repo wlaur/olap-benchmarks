@@ -11,7 +11,6 @@ import {
   Scale,
   Search,
   Server,
-  Settings2,
   Trophy,
   type LucideIcon,
 } from "lucide-react"
@@ -33,17 +32,26 @@ import { computeRelativeSeriesScores, formatScore } from "../lib/score"
 import type { ExplorerQueryMetric, QuerySqlEntry } from "../lib/types"
 
 type ComparisonMode = "database" | "scale" | "version" | "system"
+type SingleDatabaseMode = Exclude<ComparisonMode, "database">
 
 const COMPARISON_MODES: {
   id: ComparisonMode
   label: string
   icon: LucideIcon
 }[] = [
-  { id: "database", label: "Database", icon: Database },
-  { id: "scale", label: "Scale factor", icon: Scale },
-  { id: "version", label: "Version", icon: GitBranch },
-  { id: "system", label: "System", icon: Server },
+  { id: "database", label: "Databases", icon: Database },
+  { id: "scale", label: "Scale factors", icon: Scale },
+  { id: "version", label: "Versions", icon: GitBranch },
+  { id: "system", label: "Systems", icon: Server },
 ]
+
+const SINGLE_DATABASE_MODES = COMPARISON_MODES.filter(
+  (
+    comparisonMode,
+  ): comparisonMode is (typeof COMPARISON_MODES)[number] & {
+    id: SingleDatabaseMode
+  } => comparisonMode.id !== "database",
+)
 
 const SERIES_COLORS = ["#5eead4", "#93c5fd", "#fbbf24", "#fb7185", "#c4b5fd"] as const
 
@@ -125,12 +133,15 @@ export function ExplorerPage({
   const [mode, setMode] = useState<ComparisonMode>(() =>
     parseComparisonMode(searchParams.get("mode")),
   )
+  const [singleDatabaseMode, setSingleDatabaseMode] = useState<SingleDatabaseMode>(() => {
+    const initialMode = parseComparisonMode(searchParams.get("mode"))
+    return initialMode === "database" ? "scale" : initialMode
+  })
   const [rawSelection, setRawSelection] = useState<RawSelection>(initialState)
   const [requestedQuery, setRequestedQuery] = useState(searchParams.get("query") ?? "")
   const [requestedSqlDatabase, setRequestedSqlDatabase] = useState(
     searchParams.get("sql_database") ?? "",
   )
-  const [showSetup, setShowSetup] = useState(false)
   const [showAllQueries, setShowAllQueries] = useState(false)
   const { metrics, queriesManifest, loading, error } = useExplorerData(suiteId)
   const variants = useMemo(() => makeRunVariants(metrics), [metrics])
@@ -144,6 +155,22 @@ export function ExplorerPage({
         defaultScale: suiteDefinition.defaultScaleFactor,
       }),
     [mode, preferredSystem, rawSelection, suiteDefinition.defaultScaleFactor, variants],
+  )
+  const singleDatabaseSelections = useMemo(
+    () =>
+      new Map(
+        SINGLE_DATABASE_MODES.map((comparisonMode) => [
+          comparisonMode.id,
+          resolveSelection({
+            mode: comparisonMode.id,
+            variants,
+            raw: rawSelection,
+            preferredSystem,
+            defaultScale: suiteDefinition.defaultScaleFactor,
+          }),
+        ]),
+      ),
+    [preferredSystem, rawSelection, suiteDefinition.defaultScaleFactor, variants],
   )
   const databaseColors = useMemo(
     () => getDatabaseColors(unique(variants.map((variant) => variant.database))),
@@ -248,81 +275,128 @@ export function ExplorerPage({
   }
 
   function handleSuiteChange(nextSuiteId: string) {
-    navigate(`/explorer/${nextSuiteId}?mode=${mode}`)
+    navigate(`/explorer/${nextSuiteId}?${nextSearchParams || `mode=${mode}`}`)
+  }
+
+  function handleSingleDatabaseModeChange(nextMode: SingleDatabaseMode) {
+    setRawSelection((current) => ({
+      ...current,
+      databases: current.databases.length > 0 ? current.databases : selection.databases,
+      scales: current.scales.length > 0 ? current.scales : selection.scales,
+      versions: current.versions.length > 0 ? current.versions : selection.versions,
+      systems: current.systems.length > 0 ? current.systems : selection.systems,
+    }))
+    setSingleDatabaseMode(nextMode)
+    setMode(nextMode)
+  }
+
+  function handleCompareDatabases() {
+    setRawSelection((current) => ({
+      ...current,
+      databases: current.databases.length > 0 ? current.databases : selection.databases,
+      scales: current.scales.length > 0 ? current.scales : selection.scales,
+      versions: current.versions.length > 0 ? current.versions : selection.versions,
+      systems: current.systems.length > 0 ? current.systems : selection.systems,
+    }))
+    setMode("database")
+  }
+
+  function handleAnalyzeOneDatabase() {
+    const nextMode =
+      getVaryingOptionCount(singleDatabaseMode, singleDatabaseSelections.get(singleDatabaseMode)) >
+      1
+        ? singleDatabaseMode
+        : (SINGLE_DATABASE_MODES.find(
+            (candidate) =>
+              getVaryingOptionCount(candidate.id, singleDatabaseSelections.get(candidate.id)) > 1,
+          )?.id ?? singleDatabaseMode)
+    handleSingleDatabaseModeChange(nextMode)
   }
 
   const showLoading = loading
 
   return (
     <div className="flex min-h-full w-full max-w-full min-w-0 shrink-0 flex-col gap-4 overflow-x-clip pb-8">
-      <header className="grid gap-4 xl:grid-cols-[minmax(20rem,1fr)_auto] xl:items-end">
+      <header className="grid gap-4 md:grid-cols-[minmax(20rem,1fr)_16rem] md:items-end">
         <div className="min-w-0">
           <MetaLabel>Explorer</MetaLabel>
           <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
-            Benchmark results
+            Benchmark explorer
           </h2>
           <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
-            See the overall result first, then inspect individual queries or adjust what is being
-            compared.
+            Start with a comparison question, then move from the suite result to individual queries
+            and SQL.
           </p>
         </div>
-
-        <div className="flex min-w-0 flex-wrap items-end gap-3 xl:flex-nowrap">
-          <div className="w-full min-w-0 lg:w-56">
-            <MetaLabel className="mb-2 block">Suite</MetaLabel>
-            <ControlSelect
-              ariaLabel="Benchmark suite"
-              label="Suite"
-              value={suiteId}
-              onChange={handleSuiteChange}
-              options={benchmarkDefinitions.map((definition) => ({
-                value: definition.id,
-                label: definition.title,
-              }))}
-              icon={<FlaskConical className="h-3 w-3" strokeWidth={1.8} />}
-              labelMode="hidden"
-              className="min-h-10 w-full"
-              menuClassName="min-w-56"
-            />
-          </div>
-          <div className="w-full min-w-0 lg:flex-1">
-            <MetaLabel className="mb-2 block">Compare by</MetaLabel>
-            <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:flex-wrap">
-              {COMPARISON_MODES.map((comparisonMode) => {
-                const Icon = comparisonMode.icon
-                return (
-                  <SegmentedButton
-                    key={comparisonMode.id}
-                    selected={mode === comparisonMode.id}
-                    aria-pressed={mode === comparisonMode.id}
-                    onClick={() => setMode(comparisonMode.id)}
-                    size="md"
-                    className="min-h-10 min-w-0 gap-1.5 rounded-lg px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm lg:min-w-32"
-                  >
-                    <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-                    <span className="truncate">{comparisonMode.label}</span>
-                  </SegmentedButton>
-                )
-              })}
-            </div>
-          </div>
+        <div className="min-w-0">
+          <MetaLabel className="mb-2 block">Benchmark suite</MetaLabel>
+          <ControlSelect
+            ariaLabel="Benchmark suite"
+            label="Suite"
+            value={suiteId}
+            onChange={handleSuiteChange}
+            options={benchmarkDefinitions.map((definition) => ({
+              value: definition.id,
+              label: definition.title,
+            }))}
+            icon={<FlaskConical className="h-3 w-3" strokeWidth={1.8} />}
+            labelMode="hidden"
+            className="min-h-10 w-full"
+            menuClassName="min-w-56"
+          />
         </div>
       </header>
 
-      {showSetup ? (
-        <PanelCard className="p-3 sm:p-4">
-          <PanelHeader className="mb-4 flex-wrap">
-            <div>
-              <MetaLabel>Advanced controls</MetaLabel>
-              <SectionTitle as="h3" className="mt-1">
-                Adjust comparison
-              </SectionTitle>
-            </div>
-            <QuietButton size="sm" onClick={() => setShowSetup(false)}>
-              Done
-            </QuietButton>
-          </PanelHeader>
+      <PanelCard className="p-3 sm:p-4">
+        <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)] xl:items-center">
+          <div className="min-w-0">
+            <MetaLabel>1 · Choose an analysis</MetaLabel>
+            <SectionTitle as="h3" className="mt-1 text-lg">
+              What do you want to compare?
+            </SectionTitle>
+            <p className="mt-1.5 font-sans text-sm leading-5 text-slate-400">
+              Compare the database landscape, or focus on how one database changes.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SegmentedButton
+              selected={mode === "database"}
+              aria-pressed={mode === "database"}
+              onClick={handleCompareDatabases}
+              size="md"
+              className="min-h-16 min-w-0 justify-start gap-3 rounded-lg px-3 py-2.5 text-left"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle bg-surface-raised">
+                <Database className="h-4 w-4" strokeWidth={1.8} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">Compare databases</span>
+                <span className="mt-0.5 block truncate font-sans text-xs font-normal text-slate-400">
+                  Rank engines in the same environment
+                </span>
+              </span>
+            </SegmentedButton>
+            <SegmentedButton
+              selected={mode !== "database"}
+              aria-pressed={mode !== "database"}
+              onClick={handleAnalyzeOneDatabase}
+              size="md"
+              className="min-h-16 min-w-0 justify-start gap-3 rounded-lg px-3 py-2.5 text-left"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle bg-surface-raised">
+                <Search className="h-4 w-4" strokeWidth={1.8} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">Analyze one database</span>
+                <span className="mt-0.5 block truncate font-sans text-xs font-normal text-slate-400">
+                  Compare scale, versions, or systems
+                </span>
+              </span>
+            </SegmentedButton>
+          </div>
+        </div>
 
+        <div className="mt-4 border-t border-border-subtle pt-4">
           {showLoading ? (
             <SetupSkeleton />
           ) : error ? (
@@ -333,29 +407,33 @@ export function ExplorerPage({
             <div className="border-y border-border-subtle px-3 py-4 text-sm text-slate-500">
               No completed query results are available for this suite.
             </div>
-          ) : (
-            <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-4">
-              <DimensionRow
-                icon={Server}
-                label="System"
-                role={mode === "system" ? "varies" : "fixed"}
-                summary={
-                  mode === "system" ? `${selection.systems.length} selected` : selection.system
-                }
+          ) : mode === "database" ? (
+            <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(24rem,0.7fr)]">
+              <AnalysisField
+                icon={Database}
+                label="Databases to compare"
+                helper="Select the engines that should compete in the suite ranking."
               >
-                {mode === "system" ? (
-                  <ChoiceChips
-                    options={selection.systemOptions.map((system, index) => ({
-                      id: system,
-                      label: system,
-                      color: getSeriesColor(index),
-                    }))}
-                    selectedValues={selection.systems}
-                    onToggle={(system) =>
-                      updateRawSelection({ systems: toggleSelection(selection.systems, system) })
-                    }
-                  />
-                ) : (
+                <ChoiceChips
+                  options={selection.databaseOptions.map((database) => ({
+                    id: database,
+                    label: formatDatabaseName(database),
+                    color: databaseColors[database] ?? getSeriesColor(0),
+                  }))}
+                  selectedValues={selection.databases}
+                  onToggle={(database) =>
+                    updateRawSelection({
+                      databases: toggleSelection(selection.databases, database),
+                    })
+                  }
+                />
+              </AnalysisField>
+              <AnalysisField
+                icon={Server}
+                label="Fixed environment"
+                helper="Every database runs on the same system and scale; latest completed versions are used."
+              >
+                <div className="flex min-w-0 flex-wrap gap-2">
                   <DimensionSelect
                     ariaLabel="System"
                     label="System"
@@ -366,35 +444,31 @@ export function ExplorerPage({
                       label: system,
                     }))}
                     onChange={(system) => updateRawSelection({ system })}
+                    className="sm:w-56"
                   />
-                )}
-              </DimensionRow>
-
-              <DimensionRow
-                icon={Database}
-                label="Database"
-                role={mode === "database" ? "varies" : "fixed"}
-                summary={
-                  mode === "database"
-                    ? `${selection.databases.length} selected`
-                    : formatDatabaseName(selection.database)
-                }
-              >
-                {mode === "database" ? (
-                  <ChoiceChips
-                    options={selection.databaseOptions.map((database) => ({
-                      id: database,
-                      label: formatDatabaseName(database),
-                      color: databaseColors[database] ?? getSeriesColor(0),
+                  <DimensionSelect
+                    ariaLabel="Scale factor"
+                    label="Scale"
+                    icon={Scale}
+                    value={String(selection.scale)}
+                    options={selection.scaleOptions.map((scale) => ({
+                      id: String(scale),
+                      label: `SF ${scale}`,
                     }))}
-                    selectedValues={selection.databases}
-                    onToggle={(database) =>
-                      updateRawSelection({
-                        databases: toggleSelection(selection.databases, database),
-                      })
-                    }
+                    onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
+                    className="sm:w-40"
                   />
-                ) : (
+                </div>
+              </AnalysisField>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(15rem,0.6fr)_minmax(0,1.4fr)]">
+                <AnalysisField
+                  icon={Database}
+                  label="Database to analyze"
+                  helper="Keep one engine in focus while another dimension changes."
+                >
                   <DimensionSelect
                     ariaLabel="Database"
                     label="Database"
@@ -406,101 +480,155 @@ export function ExplorerPage({
                     }))}
                     onChange={(database) => updateRawSelection({ database })}
                   />
-                )}
-              </DimensionRow>
+                </AnalysisField>
+                <AnalysisField
+                  icon={Scale}
+                  label="Compare it across"
+                  helper="Choose the dimension you want to vary."
+                >
+                  <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+                    {SINGLE_DATABASE_MODES.map((comparisonMode) => {
+                      const Icon = comparisonMode.icon
+                      const optionCount = getVaryingOptionCount(
+                        comparisonMode.id,
+                        singleDatabaseSelections.get(comparisonMode.id),
+                      )
+                      return (
+                        <SegmentedButton
+                          key={comparisonMode.id}
+                          selected={mode === comparisonMode.id}
+                          aria-pressed={mode === comparisonMode.id}
+                          onClick={() => handleSingleDatabaseModeChange(comparisonMode.id)}
+                          size="sm"
+                          className="min-h-9 min-w-0 gap-1.5 px-2"
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                          <span className="truncate">{comparisonMode.label}</span>
+                          <span className="ml-auto shrink-0 text-[0.65rem] text-slate-500">
+                            {optionCount}
+                          </span>
+                        </SegmentedButton>
+                      )
+                    })}
+                  </div>
+                </AnalysisField>
+              </div>
 
-              <DimensionRow
-                icon={GitBranch}
-                label="Database version"
-                role={mode === "version" ? "varies" : "fixed"}
-                summary={
-                  mode === "version"
-                    ? `${selection.versions.length} selected`
-                    : mode === "database"
-                      ? "Latest completed per database"
-                      : selection.version
-                }
-              >
-                {mode === "version" ? (
-                  <ChoiceChips
-                    options={selection.versionOptions.map((version, index) => ({
-                      id: version,
-                      label: version,
-                      color: getSeriesColor(index),
-                    }))}
-                    selectedValues={selection.versions}
-                    onToggle={(version) =>
-                      updateRawSelection({
-                        versions: toggleSelection(selection.versions, version),
-                      })
-                    }
-                  />
-                ) : mode === "database" ? (
-                  <VersionPins
-                    databaseIds={selection.databases}
-                    latestVersions={selection.latestVersions}
-                    databaseColors={databaseColors}
-                  />
-                ) : (
-                  <DimensionSelect
-                    ariaLabel="Database version"
-                    label="Version"
-                    icon={GitBranch}
-                    value={selection.version}
-                    options={selection.versionOptions.map((version) => ({
-                      id: version,
-                      label: version,
-                    }))}
-                    onChange={(version) => updateRawSelection({ version })}
-                  />
-                )}
-              </DimensionRow>
+              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,auto)]">
+                <AnalysisField
+                  icon={getModeIcon(mode)}
+                  label={`${getModePluralLabel(mode)} to compare`}
+                  helper={
+                    getVaryingOptionCount(mode, selection) < 2
+                      ? `Only one recorded ${getModePluralLabel(mode).toLowerCase().replace(/s$/, "")} is available. Try another dimension or database for a meaningful comparison.`
+                      : "Select the values that should appear together in the ranking and query views."
+                  }
+                >
+                  {mode === "scale" ? (
+                    <ChoiceChips
+                      options={selection.scaleOptions.map((scale, index) => ({
+                        id: scale,
+                        label: `SF ${scale}`,
+                        color: getSeriesColor(index),
+                      }))}
+                      selectedValues={selection.scales}
+                      onToggle={(scale) =>
+                        updateRawSelection({ scales: toggleSelection(selection.scales, scale) })
+                      }
+                    />
+                  ) : mode === "version" ? (
+                    <ChoiceChips
+                      options={selection.versionOptions.map((version, index) => ({
+                        id: version,
+                        label: version,
+                        color: getSeriesColor(index),
+                      }))}
+                      selectedValues={selection.versions}
+                      onToggle={(version) =>
+                        updateRawSelection({
+                          versions: toggleSelection(selection.versions, version),
+                        })
+                      }
+                    />
+                  ) : (
+                    <ChoiceChips
+                      options={selection.systemOptions.map((system, index) => ({
+                        id: system,
+                        label: system,
+                        color: getSeriesColor(index),
+                      }))}
+                      selectedValues={selection.systems}
+                      onToggle={(system) =>
+                        updateRawSelection({
+                          systems: toggleSelection(selection.systems, system),
+                        })
+                      }
+                    />
+                  )}
+                </AnalysisField>
 
-              <DimensionRow
-                icon={Scale}
-                label="Scale factor"
-                role={mode === "scale" ? "varies" : "fixed"}
-                summary={
-                  mode === "scale" ? `${selection.scales.length} selected` : `SF ${selection.scale}`
-                }
-              >
-                {mode === "scale" ? (
-                  <ChoiceChips
-                    options={selection.scaleOptions.map((scale, index) => ({
-                      id: scale,
-                      label: `SF ${scale}`,
-                      color: getSeriesColor(index),
-                    }))}
-                    selectedValues={selection.scales}
-                    onToggle={(scale) =>
-                      updateRawSelection({ scales: toggleSelection(selection.scales, scale) })
-                    }
-                  />
-                ) : (
-                  <DimensionSelect
-                    ariaLabel="Scale factor"
-                    label="Scale"
-                    icon={Scale}
-                    value={String(selection.scale)}
-                    options={selection.scaleOptions.map((scale) => ({
-                      id: String(scale),
-                      label: `SF ${scale}`,
-                    }))}
-                    onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
-                  />
-                )}
-              </DimensionRow>
+                <AnalysisField
+                  icon={Server}
+                  label="Fixed context"
+                  helper="These values stay constant while the selected dimension changes."
+                >
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    {mode !== "system" ? (
+                      <DimensionSelect
+                        ariaLabel="System"
+                        label="System"
+                        icon={Server}
+                        value={selection.system}
+                        options={selection.systemOptions.map((system) => ({
+                          id: system,
+                          label: system,
+                        }))}
+                        onChange={(system) => updateRawSelection({ system })}
+                        className="sm:w-56"
+                      />
+                    ) : null}
+                    {mode !== "scale" ? (
+                      <DimensionSelect
+                        ariaLabel="Scale factor"
+                        label="Scale"
+                        icon={Scale}
+                        value={String(selection.scale)}
+                        options={selection.scaleOptions.map((scale) => ({
+                          id: String(scale),
+                          label: `SF ${scale}`,
+                        }))}
+                        onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
+                        className="sm:w-40"
+                      />
+                    ) : null}
+                    {mode !== "version" ? (
+                      <DimensionSelect
+                        ariaLabel="Database version"
+                        label="Version"
+                        icon={GitBranch}
+                        value={selection.version}
+                        options={selection.versionOptions.map((version) => ({
+                          id: version,
+                          label: version,
+                        }))}
+                        onChange={(version) => updateRawSelection({ version })}
+                        className="sm:w-52"
+                      />
+                    ) : null}
+                  </div>
+                </AnalysisField>
+              </div>
             </div>
           )}
-        </PanelCard>
-      ) : null}
+        </div>
+      </PanelCard>
 
       <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
         <PanelHeader className="flex-wrap">
           <div className="min-w-0">
-            <MetaLabel>Overview</MetaLabel>
+            <MetaLabel>2 · Suite results</MetaLabel>
             <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
-              {getModeLabel(mode)}
+              {getModeLabel(mode, selection)}
             </SectionTitle>
             {!showLoading && selection.ready ? (
               <p className="mt-2 max-w-4xl font-sans text-sm leading-6 text-slate-400">
@@ -513,14 +641,6 @@ export function ExplorerPage({
               </p>
             ) : null}
           </div>
-          <QuietButton
-            size="sm"
-            onClick={() => setShowSetup((current) => !current)}
-            className="gap-2 rounded-lg"
-          >
-            <Settings2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-            Adjust comparison
-          </QuietButton>
         </PanelHeader>
 
         {showLoading ? (
@@ -564,12 +684,12 @@ export function ExplorerPage({
         <PanelCard className="min-w-0 space-y-4 overflow-visible p-3 sm:p-4">
           <PanelHeader className="flex-wrap sm:flex-nowrap sm:items-end">
             <div className="min-w-0 flex-1">
-              <MetaLabel>Drill down</MetaLabel>
+              <MetaLabel>3 · Inspect a query</MetaLabel>
               <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
-                Explore one query
+                Query performance and SQL
               </SectionTitle>
               <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-slate-400">
-                Select a query to compare its runtime and inspect the SQL used by each database.
+                Choose a query to compare its runtime and inspect the SQL used by each database.
               </p>
             </div>
             <VirtualizedSelect
@@ -715,34 +835,29 @@ export function ExplorerPage({
   )
 }
 
-function DimensionRow({
+function AnalysisField({
   icon: Icon,
   label,
-  role,
-  summary,
+  helper,
   children,
 }: {
   icon: LucideIcon
   label: string
-  role: "fixed" | "varies"
-  summary: string
+  helper: string
   children: ReactNode
 }) {
   return (
-    <section className="min-w-0 rounded-lg bg-surface-inset p-3">
-      <div className="flex min-w-0 items-start gap-2 sm:gap-3">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border-default bg-surface-raised text-slate-300 sm:h-8 sm:w-8">
-          <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={1.8} />
+    <section className="min-w-0 rounded-lg border border-border-subtle bg-surface-inset p-3">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised text-slate-300">
+          <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center justify-between gap-2">
-            <p className="truncate text-sm font-semibold text-slate-100">{label}</p>
-            <RoleBadge role={role} />
-          </div>
-          <p className="mt-0.5 truncate text-xs text-slate-400">{summary}</p>
+          <p className="text-sm font-semibold text-slate-100">{label}</p>
+          <p className="mt-0.5 font-sans text-xs leading-5 text-slate-400">{helper}</p>
         </div>
       </div>
-      <div className="mt-2.5 min-w-0">{children}</div>
+      <div className="mt-3 min-w-0">{children}</div>
     </section>
   )
 }
@@ -793,21 +908,6 @@ function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
   )
 }
 
-function RoleBadge({ role }: { role: "fixed" | "varies" }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded-full border px-1.5 py-0.5 text-[0.58rem] font-semibold tracking-wide uppercase sm:px-2 sm:text-[0.62rem]",
-        role === "varies"
-          ? "border-accent-300/35 bg-accent-400/10 text-accent-200"
-          : "border-border-default bg-surface-raised text-slate-400",
-      )}
-    >
-      {role}
-    </span>
-  )
-}
-
 function DimensionSelect<T extends string>({
   ariaLabel,
   label,
@@ -815,6 +915,7 @@ function DimensionSelect<T extends string>({
   value,
   options,
   onChange,
+  className,
 }: {
   ariaLabel: string
   label: string
@@ -822,6 +923,7 @@ function DimensionSelect<T extends string>({
   value: string
   options: readonly { id: T; label: string }[]
   onChange: (value: T) => void
+  className?: string
 }) {
   return (
     <ControlSelect
@@ -832,7 +934,7 @@ function DimensionSelect<T extends string>({
       options={options.map((option) => ({ value: option.id, label: option.label }))}
       icon={<Icon className="h-3 w-3" strokeWidth={1.8} />}
       labelMode="always"
-      className="w-full max-w-full"
+      className={cn("w-full max-w-full", className)}
       menuClassName="min-w-[11rem] sm:min-w-[13rem]"
     />
   )
@@ -868,33 +970,6 @@ function ChoiceChips<T extends string | number>({
           </ControlChip>
         )
       })}
-    </div>
-  )
-}
-
-function VersionPins({
-  databaseIds,
-  latestVersions,
-  databaseColors,
-}: {
-  databaseIds: readonly string[]
-  latestVersions: ReadonlyMap<string, string>
-  databaseColors: Readonly<Record<string, string>>
-}) {
-  return (
-    <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1.5">
-      {databaseIds.map((database) => (
-        <div key={database} className="flex min-w-0 items-center gap-2 text-xs">
-          <span className="flex min-w-0 items-center gap-2 font-medium text-slate-300">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: databaseColors[database] ?? getSeriesColor(0) }}
-            />
-            <span className="truncate">{formatDatabaseName(database)}</span>
-          </span>
-          <span className="shrink-0 text-slate-500">{latestVersions.get(database)}</span>
-        </div>
-      ))}
     </div>
   )
 }
@@ -1747,9 +1822,28 @@ function median(values: readonly number[]) {
   return sorted.length % 2 === 0 ? ((sorted[middle - 1] ?? upper) + upper) / 2 : upper
 }
 
-function getModeLabel(mode: ComparisonMode) {
-  const selectedMode = COMPARISON_MODES.find((comparisonMode) => comparisonMode.id === mode)
-  return `${selectedMode?.label ?? "Database"} comparison`
+function getModeLabel(mode: ComparisonMode, selection: ResolvedSelection) {
+  if (mode === "database") return "Database ranking"
+  const database = formatDatabaseName(selection.database)
+  if (mode === "scale") return `${database} across scale factors`
+  if (mode === "version") return `${database} version comparison`
+  return `${database} across systems`
+}
+
+function getModeIcon(mode: ComparisonMode): LucideIcon {
+  return COMPARISON_MODES.find((comparisonMode) => comparisonMode.id === mode)?.icon ?? Database
+}
+
+function getModePluralLabel(mode: ComparisonMode) {
+  return COMPARISON_MODES.find((comparisonMode) => comparisonMode.id === mode)?.label ?? "Databases"
+}
+
+function getVaryingOptionCount(mode: ComparisonMode, selection: ResolvedSelection | undefined) {
+  if (!selection) return 0
+  if (mode === "database") return selection.databaseOptions.length
+  if (mode === "scale") return selection.scaleOptions.length
+  if (mode === "version") return selection.versionOptions.length
+  return selection.systemOptions.length
 }
 
 function getComparisonDescription(
@@ -1759,15 +1853,15 @@ function getComparisonDescription(
   seriesCount: number,
 ) {
   if (mode === "database") {
-    return `Comparing ${seriesCount} databases on ${selection.system} for ${suiteTitle} at SF ${selection.scale}. Each database uses its latest completed version.`
+    return `${suiteTitle} · ${selection.system} · SF ${selection.scale} · ${seriesCount} databases · latest completed version per database`
   }
   if (mode === "scale") {
-    return `Comparing ${seriesCount} scale factors for ${formatDatabaseName(selection.database)} ${selection.version} on ${selection.system}.`
+    return `${suiteTitle} · ${selection.version} · ${selection.system} · ${seriesCount} recorded scale ${seriesCount === 1 ? "factor" : "factors"}`
   }
   if (mode === "version") {
-    return `Comparing ${seriesCount} versions of ${formatDatabaseName(selection.database)} on ${selection.system} for ${suiteTitle} at SF ${selection.scale}.`
+    return `${suiteTitle} · ${selection.system} · SF ${selection.scale} · ${seriesCount} recorded ${seriesCount === 1 ? "version" : "versions"}`
   }
-  return `Comparing ${seriesCount} systems running ${formatDatabaseName(selection.database)} ${selection.version} for ${suiteTitle} at SF ${selection.scale}.`
+  return `${suiteTitle} · ${selection.version} · SF ${selection.scale} · ${seriesCount} recorded ${seriesCount === 1 ? "system" : "systems"}`
 }
 
 function formatRuntime(valueMs: number) {
