@@ -63,7 +63,7 @@ export function HomeScoreTable() {
                 Database
               </th>
               {suites.map((suite) => (
-                <th key={suite.key} className="px-2 py-3 text-right font-medium">
+                <th key={suite.key} className="px-2 py-3 text-right font-medium last:pr-6">
                   <button
                     type="button"
                     className="cursor-pointer rounded-md px-1 text-right leading-tight text-slate-200 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
@@ -204,7 +204,7 @@ interface ScoreCellProps {
 
 function ScoreCell({ score, rank }: ScoreCellProps) {
   return (
-    <td className="px-2 py-3 text-right align-middle">
+    <td className="px-2 py-3 text-right align-middle last:pr-6">
       <ScoreValue score={score} rank={rank} align="right" />
     </td>
   )
@@ -267,7 +267,7 @@ function LoadingRows({ suiteCount }: { suiteCount: number }) {
             </div>
           </td>
           {Array.from({ length: suiteCount }, (__, colIdx) => (
-            <td key={colIdx} className="px-4 py-3">
+            <td key={colIdx} className="px-4 py-3 last:pr-6">
               <div className="flex flex-col items-end gap-1">
                 <Skeleton className="h-4 w-12 rounded" />
                 <Skeleton className="h-2.5 w-16 rounded" />
