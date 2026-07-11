@@ -26,6 +26,7 @@ class FakeMutationDB(Database):
     upserted_tables: list[str] = []
     deleted_tables: list[str] = []
     query_iterations: list[tuple[str, int, str]] = []
+    rollback_calls: int = 0
 
     @property
     def start(self) -> None:
@@ -66,6 +67,9 @@ class FakeMutationDB(Database):
 
     def record_skipped_mutation_step(self, query_name: str, iteration: int, table_name: str, reason: str) -> None:
         self.skipped_steps.append((query_name, iteration, table_name, reason))
+
+    def rollback(self) -> None:
+        self.rollback_calls += 1
 
     def insert(
         self,
@@ -180,6 +184,53 @@ def test_time_series_concurrent_runs_writer_and_readers(monkeypatch: pytest.Monk
         ("large_01_max_time", 2, "select 'large_01_max_time'"),
         ("large_01_max_time", 2, "select 'large_01_max_time'"),
     ]
+
+
+def test_time_series_mutate_records_remaining_iterations_after_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeMutationDB(
+        disabled_steps=set(),
+        executed_steps=[],
+        skipped_steps=[],
+        inserted_tables=[],
+        upserted_tables=[],
+        deleted_tables=[],
+        query_iterations=[],
+    )
+    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
+    failed_step = MutateStep(action="insert", table="data_large", row_count=1)
+    succeeding_step = MutateStep(action="delete", table="data_tall", row_count=1)
+
+    monkeypatch.setattr(
+        "olap_benchmarks.suites.time_series.config.TIME_SERIES_MUTATE_STEPS",
+        [failed_step, succeeding_step],
+    )
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.MUTATE_ITERATIONS", 2)
+    monkeypatch.setattr(TimeSeries, "_generate_insert_data", _fake_insert_data)
+    monkeypatch.setattr(TimeSeries, "_generate_delete_keys", _fake_delete_keys)
+
+    def fail_insert(self: TimeSeries[Any], step: MutateStep, df: pl.DataFrame) -> None:
+        _ = (self, step, df)
+        raise RuntimeError("insert failed")
+
+    monkeypatch.setattr(TimeSeries, "_apply_insert", fail_insert)
+
+    suite.mutate()
+
+    assert db.executed_steps == [
+        (failed_step.name, 1, "data_large"),
+        (succeeding_step.name, 1, "data_tall"),
+        (succeeding_step.name, 2, "data_tall"),
+    ]
+    assert db.skipped_steps == [
+        (
+            failed_step.name,
+            2,
+            "data_large",
+            "mutation aborted after RuntimeError: insert failed",
+        )
+    ]
+    assert db.deleted_tables == ["data_tall", "data_tall"]
+    assert db.rollback_calls == 1
 
 
 def test_time_series_concurrent_skips_disabled_writer(monkeypatch: pytest.MonkeyPatch) -> None:
