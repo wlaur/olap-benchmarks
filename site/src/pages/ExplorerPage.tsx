@@ -514,7 +514,7 @@ export function ExplorerPage({
                 </AnalysisField>
               </div>
 
-              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(30rem,auto)]">
+              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
                 <AnalysisField
                   icon={getModeIcon(mode)}
                   label={`${getModePluralLabel(mode)} to compare`}
@@ -571,6 +571,7 @@ export function ExplorerPage({
                   icon={Server}
                   label="Fixed context"
                   helper="These values stay constant while the selected dimension changes."
+                  className="w-fit max-w-full"
                 >
                   <div className="flex min-w-0 flex-wrap gap-2">
                     {mode !== "system" ? (
@@ -840,14 +841,21 @@ function AnalysisField({
   label,
   helper,
   children,
+  className,
 }: {
   icon: LucideIcon
   label: string
   helper: string
   children: ReactNode
+  className?: string
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-border-subtle bg-surface-inset p-3">
+    <section
+      className={cn(
+        "min-w-0 rounded-lg border border-border-subtle bg-surface-inset p-3",
+        className,
+      )}
+    >
       <div className="flex min-w-0 items-start gap-2.5">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised text-slate-300">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />

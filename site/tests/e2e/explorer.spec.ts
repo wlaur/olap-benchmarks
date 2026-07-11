@@ -93,8 +93,15 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
     controlsFit: [...section.querySelectorAll<HTMLElement>('[role="combobox"]')].every(
       (control) => control.scrollWidth <= control.clientWidth,
     ),
+    usesContentWidth:
+      section.getBoundingClientRect().width <
+      (section.parentElement?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY),
   }))
-  expect(fixedContextFit).toEqual({ cardFits: true, controlsFit: true })
+  expect(fixedContextFit).toEqual({
+    cardFits: true,
+    controlsFit: true,
+    usesContentWidth: true,
+  })
   await page.getByRole("button", { name: /^Versions/ }).click()
   await expect(page.getByRole("heading", { name: /version comparison/i })).toBeVisible()
   await expect(page).toHaveURL(/mode=version/)
