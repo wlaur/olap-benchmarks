@@ -16,7 +16,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v3"
+    assert left["answer_hash_version"] == "canonical-v4"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -57,8 +57,8 @@ def test_answer_metadata_canonicalizes_decimal_float_equivalents() -> None:
 
 
 def test_answer_metadata_quantizes_float_roundoff() -> None:
-    left = pl.DataFrame({"stddev": [0.5407961018807453]})
-    right = pl.DataFrame({"stddev": [0.540796101881521]})
+    left = pl.DataFrame({"stddev": [43.242039026201894]})
+    right = pl.DataFrame({"stddev": [43.24203902622548]})
 
     assert hashing.build_answer_metadata(left)["answer_hash"] == hashing.build_answer_metadata(right)["answer_hash"]
 

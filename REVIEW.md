@@ -87,9 +87,19 @@ notes.
       canonicalization, `NULLS LAST` for hourly top-N queries, and explicit
       row-store EAV binary casts. TimescaleDB SF1 populate also completed in
       the isolated environment and verified `data_tall`, `data_wide`, and
-      `data_large` counts (`599,999,835` EAV rows for `data_large`); the next
-      backend step is the TimescaleDB SF1 select run plus row-count/hash
-      validation.
+      `data_large` counts (`599,999,835` EAV rows for `data_large`).
+
+      Continuation 2026-07-11: the preserved isolated TimescaleDB SF1 cluster
+      was reused without regenerating data. Its full select run completed, and
+      the first validation pass isolated answer-hash differences to
+      `large/tall/wide_07_full_aggregate`. TimescaleDB's `stddev()` returned
+      materially incorrect values over compressed columnstore data even though
+      min, max, average, and count matched the reference engines. TimescaleDB
+      overrides now use a stable two-pass sample-standard-deviation expression,
+      and canonical answer hashes use ten decimal places (`canonical-v4`) to
+      absorb only the remaining accumulation-order noise. Fresh SF1 select runs
+      across DuckDB, ClickHouse, PostgreSQL, and TimescaleDB then passed latest
+      row-count and answer-hash validation with zero `wrong_result` steps.
 
       QuestDB's ClickBench rewrites still deserve value-level checks even though
       their published row counts match.
@@ -109,6 +119,11 @@ notes.
       instead of IPC, ignores engine-specific column labels, rounds small
       floating roundoff, and canonicalizes booleans and decimals where engines
       return semantically equivalent values with different physical types.
+      Continuation 2026-07-11: canonical-v4 rounds floating results to ten
+      decimal places after the TimescaleDB compressed-columnstore validation
+      demonstrated harmless accumulation-order differences beyond eleven
+      places. All four isolated SF1 reference runs were regenerated with the
+      same hash version and pass value-level validation.
 - [ ] **Make unrecorded steps impossible or visible.** TimescaleDB's published
       time-series mutate run silently lacks all three
       `insert_data_large_10000` iterations (79 mutation steps vs 82 elsewhere).
