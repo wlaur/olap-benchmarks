@@ -89,6 +89,23 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   expect(consoleErrors).toEqual([])
 })
 
+test("query heatmap repeats database headers across wide layout columns", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await page.goto("#/explorer/rtabench?mode=database&databases=clickhouse%2Cduckdb%2Cmonetdb")
+  await page.getByRole("button", { name: /Show all \d+ query results/ }).click()
+
+  const blocks = page.locator("[data-heatmap-block]")
+  await expect(blocks).toHaveCount(2)
+  const firstHeaderCount = await blocks.nth(0).locator("[data-heatmap-series-header]").count()
+  const secondHeaderCount = await blocks.nth(1).locator("[data-heatmap-series-header]").count()
+  expect(firstHeaderCount).toBeGreaterThan(0)
+  expect(secondHeaderCount).toBe(firstHeaderCount)
+
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await expect(blocks).toHaveCount(1)
+  await expectNoHorizontalPageOverflow(page)
+})
+
 async function expectNoHorizontalPageOverflow(page: import("@playwright/test").Page) {
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
