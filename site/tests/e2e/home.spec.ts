@@ -13,7 +13,7 @@ test("home scores load and link into the production explorer", async ({ page }) 
 
   await page.getByRole("button", { name: "ClickBench SF1" }).click()
   await expect(page).toHaveURL(/\/explorer\/clickbench\?scale=1/)
-  await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
   await expect(page.getByText("Normalized suite score across 43 suite queries")).toBeVisible()
   expect(consoleErrors).toEqual([])
 })
