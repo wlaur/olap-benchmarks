@@ -518,7 +518,7 @@ export function ExplorerPage({
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
                   <Gauge className="h-3.5 w-3.5 text-accent-300" strokeWidth={1.8} />
-                  Lower runtime is better
+                  Shorter bars are faster
                 </div>
               </div>
               <RankingBars rows={rankedRows} />
@@ -559,6 +559,7 @@ export function ExplorerPage({
                 >
                   {selectedQuery}
                 </p>
+                <p className="mt-1 text-xs text-slate-500">Shorter bars are faster</p>
               </div>
               <RankingBars rows={selectedQueryRows} />
             </ChartFrame>
@@ -815,12 +816,12 @@ function VersionPins({
 
 function RankingBars({ rows }: { rows: readonly ComparisonRow[] }) {
   const bestRuntime = Math.min(...rows.map((row) => row.valueMs))
+  const slowestRuntime = Math.max(...rows.map((row) => row.valueMs))
 
   return (
     <div className="space-y-3">
       {rows.map((row, index) => {
-        const speed =
-          bestRuntime > 0 && row.valueMs > 0 ? Math.round((bestRuntime / row.valueMs) * 100) : 0
+        const runtimeWidth = slowestRuntime > 0 ? (row.valueMs / slowestRuntime) * 100 : 0
         return (
           <div key={row.id} className="grid gap-1.5">
             <div className="flex items-center justify-between gap-3">
@@ -838,10 +839,18 @@ function RankingBars({ rows }: { rows: readonly ComparisonRow[] }) {
                 {formatRuntime(row.valueMs)}
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-surface-primary">
+            <div
+              role="meter"
+              aria-label={`${row.label} runtime`}
+              aria-valuemin={0}
+              aria-valuemax={slowestRuntime}
+              aria-valuenow={row.valueMs}
+              aria-valuetext={formatRuntime(row.valueMs)}
+              className="h-2 overflow-hidden rounded-full bg-surface-primary"
+            >
               <div
                 className="h-full rounded-full"
-                style={{ width: `${Math.max(8, speed)}%`, backgroundColor: row.color }}
+                style={{ width: `${Math.max(4, runtimeWidth)}%`, backgroundColor: row.color }}
               />
             </div>
             <div className="flex items-center justify-between gap-2 text-[0.7rem] text-slate-500">
