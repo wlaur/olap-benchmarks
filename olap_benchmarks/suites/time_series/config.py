@@ -788,6 +788,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def mutate(self) -> None:
         t0 = perf_counter()
         steps, skipped_steps = self.get_mutate_steps()
+        failed_steps = 0
 
         if skipped_steps:
             skipped_names = ", ".join(step.name for step in skipped_steps)
@@ -806,25 +807,50 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             return
 
         for step_idx, step in enumerate(steps):
-            for iteration in range(1, MUTATE_ITERATIONS + 1):
-                seed = step_idx * 1000 + iteration
+            failed_iteration: int | None = None
+            try:
+                for iteration in range(1, MUTATE_ITERATIONS + 1):
+                    failed_iteration = iteration
+                    seed = step_idx * 1000 + iteration
 
-                with self.db.mutation_context(
-                    query_name=step.name,
-                    iteration=iteration,
-                    table_name=step.table,
-                ):
-                    match step.action:
-                        case "insert":
-                            self._apply_insert(step, self._generate_insert_data(step, seed))
-                        case "upsert":
-                            self._apply_upsert(step, self._generate_upsert_data(step, seed))
-                        case "delete":
-                            self._apply_delete(step, self._generate_delete_keys(step, seed))
+                    with self.db.mutation_context(
+                        query_name=step.name,
+                        iteration=iteration,
+                        table_name=step.table,
+                    ):
+                        match step.action:
+                            case "insert":
+                                self._apply_insert(step, self._generate_insert_data(step, seed))
+                            case "upsert":
+                                self._apply_upsert(step, self._generate_upsert_data(step, seed))
+                            case "delete":
+                                self._apply_delete(step, self._generate_delete_keys(step, seed))
 
-                _LOGGER.info(
-                    f"Executed {step.name} ({step_idx + 1:_}/{len(steps):_}) "
-                    f"iteration {iteration:_}/{MUTATE_ITERATIONS:_}"
+                    _LOGGER.info(
+                        f"Executed {step.name} ({step_idx + 1:_}/{len(steps):_}) "
+                        f"iteration {iteration:_}/{MUTATE_ITERATIONS:_}"
+                    )
+                    failed_iteration = None
+            except Exception as exc:
+                self.db.rollback()
+                failed_steps += 1
+                start_iteration = 1 if failed_iteration is None else failed_iteration + 1
+                for iteration in range(start_iteration, MUTATE_ITERATIONS + 1):
+                    self.db.record_skipped_mutation_step(
+                        query_name=step.name,
+                        iteration=iteration,
+                        table_name=step.table,
+                        reason=f"mutation aborted after {type(exc).__name__}: {exc}",
+                    )
+                _LOGGER.exception(
+                    f"Failed {step.name} ({step_idx + 1:_}/{len(steps):_}) on {self.db.name}; "
+                    f"continuing with remaining mutation steps: {exc}"
                 )
+
+        if failed_steps:
+            _LOGGER.warning(
+                f"Time-series mutate completed on {self.db.name} with {failed_steps:_} failed "
+                f"{'steps' if failed_steps != 1 else 'step'}"
+            )
 
         _LOGGER.info(f"Executed {len(steps):_} mutation steps (with repetitions) in {perf_counter() - t0:_.2f} seconds")

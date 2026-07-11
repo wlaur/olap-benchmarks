@@ -121,6 +121,13 @@ notes.
       TimescaleDB missing insert iterations still need root-cause analysis
       during the rerun.
 
+      Continuation 2026-07-11: time-series mutation loops now isolate a failed
+      mutation step, roll back its transaction, record every remaining
+      iteration for that step as `skipped`, and continue with later planned
+      steps. This prevents an ordinary per-step exception from leaving the rest
+      of the mutation plan invisible. Interrupted processes and the historical
+      TimescaleDB run still need confirmation during the rerun.
+
 ## 3. Dimensions, UI, And Data Hygiene
 
 - [ ] **Clean published data after the rerun.** Remove old `macbook-pro-m4`
