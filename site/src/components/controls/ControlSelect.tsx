@@ -24,7 +24,7 @@ interface ControlSelectProps {
 }
 
 const TRIGGER_CLASS =
-  "inline-flex min-w-0 items-center justify-between gap-1.5 overflow-hidden rounded-md border border-border-default bg-surface-primary/80 py-1 pr-2 pl-1.5 text-left text-slate-100 transition-colors outline-none hover:border-slate-500 focus-visible:border-accent-300/70 focus-visible:ring-2 focus-visible:ring-accent-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+  "inline-flex min-w-0 items-center justify-between gap-1.5 rounded-md border border-border-default bg-surface-primary/80 py-1 pr-2 pl-1.5 text-left text-slate-100 transition-colors outline-none hover:border-slate-500 focus-visible:border-accent-300/70 focus-visible:ring-2 focus-visible:ring-accent-400/15 disabled:cursor-not-allowed disabled:opacity-60"
 
 const CONTENT_CLASS =
   "z-50 max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border-strong bg-surface-primary p-1.5 text-slate-100 shadow-2xl shadow-black/60 data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1"
@@ -51,11 +51,11 @@ export function ControlSelect({
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger aria-label={ariaLabel} className={cn(TRIGGER_CLASS, className)}>
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border-subtle bg-surface-raised text-slate-300">
             {icon}
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
+          <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
             <span
               className={cn(
                 "shrink-0 text-[0.6rem] font-semibold tracking-[0.18em] text-slate-500 uppercase",

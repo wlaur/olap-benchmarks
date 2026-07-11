@@ -93,6 +93,13 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
     controlsFit: [...section.querySelectorAll<HTMLElement>('[role="combobox"]')].every(
       (control) => control.scrollWidth <= control.clientWidth,
     ),
+    indicatorsVisible: [...section.querySelectorAll<HTMLElement>('[role="combobox"]')].every(
+      (control) => {
+        const indicator = control.lastElementChild?.getBoundingClientRect()
+        const bounds = control.getBoundingClientRect()
+        return Boolean(indicator && indicator.width > 0 && indicator.right <= bounds.right)
+      },
+    ),
     usesContentWidth:
       section.getBoundingClientRect().width <
       (section.parentElement?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY),
@@ -100,6 +107,7 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   expect(fixedContextFit).toEqual({
     cardFits: true,
     controlsFit: true,
+    indicatorsVisible: true,
     usesContentWidth: true,
   })
   await page.getByRole("button", { name: /^Versions/ }).click()
