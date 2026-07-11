@@ -244,15 +244,21 @@ export function ExplorerPage({
 
   return (
     <div className="flex min-h-full w-full max-w-full min-w-0 shrink-0 flex-col gap-4 overflow-x-clip pb-8">
-      <header className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+      <header className="grid gap-4 xl:grid-cols-[minmax(20rem,1fr)_auto] xl:items-end">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0 flex-1">
-              <MetaLabel>Benchmark explorer</MetaLabel>
-              <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
-                {suiteDefinition.title} results
-              </h2>
-            </div>
+          <MetaLabel>Explorer</MetaLabel>
+          <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
+            Benchmark results
+          </h2>
+          <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
+            See the overall result first, then inspect individual queries or adjust what is being
+            compared.
+          </p>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-end gap-3 xl:flex-nowrap">
+          <div className="w-full min-w-0 lg:w-56">
+            <MetaLabel className="mb-2 block">Suite</MetaLabel>
             <ControlSelect
               ariaLabel="Benchmark suite"
               label="Suite"
@@ -263,35 +269,31 @@ export function ExplorerPage({
                 label: definition.title,
               }))}
               icon={<FlaskConical className="h-3 w-3" strokeWidth={1.8} />}
-              labelMode="always"
-              className="w-full sm:mb-0.5 sm:w-56"
+              labelMode="hidden"
+              className="min-h-10 w-full"
               menuClassName="min-w-56"
             />
           </div>
-          <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
-            See the overall result first, then inspect individual queries or adjust what is being
-            compared.
-          </p>
-        </div>
-        <div className="min-w-0">
-          <MetaLabel className="mb-2 block">Compare by</MetaLabel>
-          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-            {COMPARISON_MODES.map((comparisonMode) => {
-              const Icon = comparisonMode.icon
-              return (
-                <SegmentedButton
-                  key={comparisonMode.id}
-                  selected={mode === comparisonMode.id}
-                  aria-pressed={mode === comparisonMode.id}
-                  onClick={() => setMode(comparisonMode.id)}
-                  size="md"
-                  className="min-h-10 min-w-0 gap-1.5 rounded-lg px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm"
-                >
-                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-                  <span className="truncate">{comparisonMode.label}</span>
-                </SegmentedButton>
-              )
-            })}
+          <div className="w-full min-w-0 lg:flex-1">
+            <MetaLabel className="mb-2 block">Compare by</MetaLabel>
+            <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:flex-wrap">
+              {COMPARISON_MODES.map((comparisonMode) => {
+                const Icon = comparisonMode.icon
+                return (
+                  <SegmentedButton
+                    key={comparisonMode.id}
+                    selected={mode === comparisonMode.id}
+                    aria-pressed={mode === comparisonMode.id}
+                    onClick={() => setMode(comparisonMode.id)}
+                    size="md"
+                    className="min-h-10 min-w-0 gap-1.5 rounded-lg px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm lg:min-w-32"
+                  >
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                    <span className="truncate">{comparisonMode.label}</span>
+                  </SegmentedButton>
+                )
+              })}
+            </div>
           </div>
         </div>
       </header>
@@ -658,12 +660,22 @@ export function ExplorerPage({
               {showAllQueries ? "Hide" : "Show"} all {queryRows.length} query results
             </QuietButton>
             {showAllQueries ? (
-              <ChartFrame className="mt-4 flex max-h-[36rem] min-h-[22rem] flex-col overflow-hidden p-3 sm:p-4">
-                <div className="mb-3 shrink-0">
-                  <MetaLabel>All queries</MetaLabel>
-                  <p className="mt-1 text-sm font-medium text-slate-200">
-                    Select a row to update the query detail above
-                  </p>
+              <ChartFrame className="mt-4 flex max-h-[36rem] min-h-[22rem] w-fit max-w-full flex-col overflow-hidden p-3 sm:p-4">
+                <div className="mb-3 flex shrink-0 flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <MetaLabel>All queries</MetaLabel>
+                    <p className="mt-1 text-sm font-medium text-slate-200">
+                      Select a row to update the query detail above
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-[0.6875rem] text-slate-500">
+                    <span>Faster</span>
+                    <span
+                      className="h-2 w-20 rounded-sm border border-border-subtle bg-[linear-gradient(90deg,hsl(155_58%_25%),hsl(30_70%_27%))]"
+                      aria-hidden="true"
+                    />
+                    <span>Slower</span>
+                  </div>
                 </div>
                 <QueryBreakdown
                   rows={rankedRows}
@@ -927,69 +939,92 @@ function QueryBreakdown({
   selectedQuery: string
   onSelectQuery: (query: string) => void
 }) {
-  const values = queryRows
-    .flatMap((queryRow) => queryRow.values)
-    .filter((value): value is number => value !== null)
-  const maxValue = Math.max(...values, 1)
-
   return (
     <div className="panel-scrollbar overflow-auto xl:min-h-0 xl:flex-1">
       <div
-        className="grid min-w-[30rem] gap-1 text-xs sm:min-w-[38rem]"
+        className="grid w-max min-w-full gap-0.5 text-xs"
         style={{
-          gridTemplateColumns: `minmax(6.5rem, 8rem) repeat(${rows.length}, minmax(6.25rem, 1fr))`,
+          gridTemplateColumns: `12rem repeat(${rows.length}, 5.5rem)`,
         }}
       >
-        <div className="sticky top-0 z-10 bg-surface-inset pb-1 text-slate-500">Query</div>
+        <div className="sticky top-0 left-0 z-30 flex h-8 items-center border-r border-border-default bg-surface-inset pr-2 font-semibold text-slate-500">
+          Query
+        </div>
         {rows.map((row) => (
           <div
             key={row.id}
-            className="sticky top-0 z-10 min-w-0 bg-surface-inset pb-1 font-medium text-slate-300"
+            className="sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-surface-inset px-1.5 font-medium text-slate-300"
+            title={row.label}
           >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: row.color }}
+            />
             <span className="block truncate">{row.label}</span>
           </div>
         ))}
-        {queryRows.map((queryRow) => (
-          <Fragment key={queryRow.query}>
-            <div className="py-1">
-              <button
-                type="button"
-                onClick={() => onSelectQuery(queryRow.query)}
-                className={cn(
-                  "w-full rounded-md px-2 py-1 text-left font-medium transition-colors outline-none",
-                  "focus-visible:ring-2 focus-visible:ring-slate-300/20",
-                  selectedQuery === queryRow.query
-                    ? "bg-surface-raised text-slate-100"
-                    : "text-slate-400 hover:bg-surface-raised/70 hover:text-slate-200",
-                )}
-              >
-                {queryRow.query}
-              </button>
-            </div>
-            {queryRow.values.map((value, index) => {
-              const row = rows[index]
-              if (!row) return null
-              const intensity = value === null ? 0 : Math.round(14 + (value / maxValue) * 42)
-              return (
-                <div
-                  key={`${queryRow.query}-${row.id}`}
-                  className="rounded-md border border-border-subtle px-2 py-1.5 font-medium text-slate-100"
-                  style={{
-                    background:
-                      value === null
-                        ? "rgba(20, 24, 38, 0.5)"
-                        : `linear-gradient(90deg, color-mix(in srgb, ${row.color} ${intensity}%, rgba(20, 24, 38, 0.92)), rgba(20, 24, 38, 0.68))`,
-                  }}
+        {queryRows.map((queryRow) => {
+          const availableValues = queryRow.values.filter((value): value is number => value !== null)
+          const fastestValue = Math.min(...availableValues)
+          const slowestValue = Math.max(...availableValues)
+          const selected = selectedQuery === queryRow.query
+          return (
+            <Fragment key={queryRow.query}>
+              <div className="sticky left-0 z-10 min-w-0 border-r border-border-subtle bg-surface-inset py-0.5 pr-2">
+                <button
+                  type="button"
+                  onClick={() => onSelectQuery(queryRow.query)}
+                  title={queryRow.query}
+                  data-query-name={queryRow.query}
+                  className={cn(
+                    "block h-8 w-full min-w-0 truncate rounded-sm px-2 text-left font-medium transition-colors outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-slate-300/20",
+                    selected
+                      ? "bg-accent-400/10 text-slate-50"
+                      : "text-slate-400 hover:bg-surface-raised/70 hover:text-slate-200",
+                  )}
                 >
-                  {value === null ? "-" : formatRuntime(value)}
-                </div>
-              )
-            })}
-          </Fragment>
-        ))}
+                  {queryRow.query}
+                </button>
+              </div>
+              {queryRow.values.map((value, index) => {
+                const row = rows[index]
+                if (!row) return null
+                const heatStyle = getHeatCellStyle(value, fastestValue, slowestValue)
+                return (
+                  <div
+                    key={`${queryRow.query}-${row.id}`}
+                    aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "not run" : formatRuntime(value)}`}
+                    data-query={queryRow.query}
+                    data-series={row.id}
+                    className={cn(
+                      "flex h-9 items-center justify-center rounded-sm border px-1 text-center font-mono text-[0.6875rem] font-medium tabular-nums",
+                      value === null ? "border-border-subtle text-slate-600" : "text-slate-100",
+                      selected && "ring-1 ring-accent-300/30",
+                    )}
+                    style={heatStyle}
+                  >
+                    {value === null ? "-" : formatRuntime(value)}
+                  </div>
+                )
+              })}
+            </Fragment>
+          )
+        })}
       </div>
     </div>
   )
+}
+
+function getHeatCellStyle(value: number | null, fastestValue: number, slowestValue: number) {
+  if (value === null) return { backgroundColor: "rgba(7, 10, 15, 0.55)" }
+  const range = slowestValue - fastestValue
+  const position = range > 0 ? Math.max(0, Math.min(1, (value - fastestValue) / range)) : 0
+  const hue = 155 - position * 125
+  return {
+    backgroundColor: `hsl(${hue} 58% ${17 + position * 6}%)`,
+    borderColor: `hsl(${hue} 50% ${30 + position * 8}% / 0.72)`,
+  }
 }
 
 function SetupSkeleton() {
