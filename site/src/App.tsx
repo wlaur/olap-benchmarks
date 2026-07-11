@@ -85,7 +85,7 @@ export function App() {
           path="/"
           element={
             <main className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-4xl px-4">
+              <div className="mx-auto w-full max-w-[76rem] px-3 sm:px-4 lg:px-6">
                 <HomePage />
               </div>
             </main>

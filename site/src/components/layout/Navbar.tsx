@@ -72,8 +72,8 @@ export function Navbar({
           </nav>
 
           {!isExplorerActive && !isCatalogActive ? (
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:ml-auto sm:flex-1">
-              <div className="flex w-full shrink-0 justify-end sm:w-auto">
+            <div className="flex w-full min-w-0 basis-full flex-wrap items-center justify-end gap-3 lg:ml-auto lg:w-auto lg:flex-1 lg:basis-auto">
+              <div className="flex w-full shrink-0 justify-end lg:w-auto">
                 {isSystemLoading ? (
                   <SystemSelectorSkeleton />
                 ) : systems.length > 0 ? (
