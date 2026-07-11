@@ -314,6 +314,11 @@ export function ExplorerPage({
   }
 
   const showLoading = loading
+  const analysisSummary = selection.ready
+    ? mode === "database"
+      ? `${selection.databases.length} databases · ${selection.system} · SF ${selection.scale}`
+      : `${formatDatabaseName(selection.database)} · ${getModePluralLabel(mode).toLowerCase()} · ${getVaryingOptionCount(mode, selection)} values`
+    : "Configure the comparison"
 
   return (
     <div className="flex min-h-full w-full max-w-full min-w-0 shrink-0 flex-col gap-4 overflow-x-clip pb-8">
@@ -347,19 +352,32 @@ export function ExplorerPage({
         </div>
       </header>
 
-      <PanelCard className="p-3 sm:p-4">
-        <PanelHeader className="flex-wrap sm:items-center">
-          <div className="min-w-0">
-            <MetaLabel>Analysis</MetaLabel>
-            <SectionTitle as="h2" className="mt-1 text-lg">
-              {mode === "database" ? "Compare databases" : "Analyze one database"}
-            </SectionTitle>
-            <p className="mt-1.5 font-sans text-sm leading-5 text-slate-400">
-              {mode === "database"
-                ? "Rank engines under one shared environment."
-                : "Hold one database constant and vary scale, version, or system."}
-            </p>
+      <details className="group overflow-hidden rounded-lg border border-border-default bg-surface-inset/60">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 outline-none select-none hover:bg-surface-raised/50 focus-visible:ring-2 focus-visible:ring-slate-300/20 focus-visible:ring-inset sm:px-4 [&::-webkit-details-marker]:hidden">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-primary text-slate-400">
+              <Gauge className="h-4 w-4" strokeWidth={1.8} />
+            </span>
+            <div className="min-w-0">
+              <MetaLabel>Analysis setup</MetaLabel>
+              <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="font-semibold text-slate-100">
+                  {mode === "database" ? "Compare databases" : "Analyze one database"}
+                </span>
+                <span className="truncate font-sans text-xs text-slate-400">{analysisSummary}</span>
+              </div>
+            </div>
           </div>
+          <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-slate-400 group-hover:text-slate-200">
+            <span className="max-sm:hidden">Change analysis</span>
+            <ChevronDown
+              className="h-4 w-4 transition-transform group-open:rotate-180"
+              strokeWidth={1.8}
+            />
+          </span>
+        </summary>
+
+        <div className="border-t border-border-subtle px-3 py-3 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-wrap gap-2">
             <SegmentedButton
               selected={mode === "database"}
@@ -382,238 +400,238 @@ export function ExplorerPage({
               Analyze one database
             </SegmentedButton>
           </div>
-        </PanelHeader>
 
-        <div className="mt-4 border-t border-border-subtle pt-4">
-          {showLoading ? (
-            <SetupSkeleton />
-          ) : error ? (
-            <div className="border-y border-red-500/30 bg-red-950/20 px-3 py-4 text-sm text-red-300">
-              Failed to load explorer data: {error}
-            </div>
-          ) : !selection.ready ? (
-            <div className="border-y border-border-subtle px-3 py-4 text-sm text-slate-500">
-              No completed query results are available for this suite.
-            </div>
-          ) : mode === "database" ? (
-            <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(24rem,0.7fr)]">
-              <AnalysisField
-                icon={Database}
-                label="Databases to compare"
-                helper="Select the engines that should compete in the suite ranking."
-              >
-                <ChoiceChips
-                  options={selection.databaseOptions.map((database) => ({
-                    id: database,
-                    label: formatDatabaseName(database),
-                    color: databaseColors[database] ?? getSeriesColor(0),
-                  }))}
-                  selectedValues={selection.databases}
-                  onToggle={(database) =>
-                    updateRawSelection({
-                      databases: toggleSelection(selection.databases, database),
-                    })
-                  }
-                />
-              </AnalysisField>
-              <AnalysisField
-                icon={Server}
-                label="Fixed environment"
-                helper="Every database runs on the same system and scale; latest completed versions are used."
-                className="xl:border-l xl:border-border-subtle xl:pl-4"
-              >
-                <div className="flex min-w-0 flex-wrap gap-2">
-                  <DimensionSelect
-                    ariaLabel="System"
-                    label="System"
-                    icon={Server}
-                    value={selection.system}
-                    options={selection.systemOptions.map((system) => ({
-                      id: system,
-                      label: system,
-                    }))}
-                    onChange={(system) => updateRawSelection({ system })}
-                    className="sm:w-72"
-                  />
-                  <DimensionSelect
-                    ariaLabel="Scale factor"
-                    label="Scale"
-                    icon={Scale}
-                    value={String(selection.scale)}
-                    options={selection.scaleOptions.map((scale) => ({
-                      id: String(scale),
-                      label: `SF ${scale}`,
-                    }))}
-                    onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
-                    className="sm:w-40"
-                  />
-                </div>
-              </AnalysisField>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(15rem,0.6fr)_minmax(0,1.4fr)]">
+          <div className="mt-3 border-t border-border-subtle pt-3">
+            {showLoading ? (
+              <SetupSkeleton />
+            ) : error ? (
+              <div className="border-y border-red-500/30 bg-red-950/20 px-3 py-4 text-sm text-red-300">
+                Failed to load explorer data: {error}
+              </div>
+            ) : !selection.ready ? (
+              <div className="border-y border-border-subtle px-3 py-4 text-sm text-slate-500">
+                No completed query results are available for this suite.
+              </div>
+            ) : mode === "database" ? (
+              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(24rem,0.7fr)]">
                 <AnalysisField
                   icon={Database}
-                  label="Database to analyze"
-                  helper="Keep one engine in focus while another dimension changes."
+                  label="Databases to compare"
+                  helper="Select the engines that should compete in the suite ranking."
                 >
-                  <DimensionSelect
-                    ariaLabel="Database"
-                    label="Database"
-                    icon={Database}
-                    value={selection.database}
+                  <ChoiceChips
                     options={selection.databaseOptions.map((database) => ({
                       id: database,
                       label: formatDatabaseName(database),
+                      color: databaseColors[database] ?? getSeriesColor(0),
                     }))}
-                    onChange={(database) => updateRawSelection({ database })}
+                    selectedValues={selection.databases}
+                    onToggle={(database) =>
+                      updateRawSelection({
+                        databases: toggleSelection(selection.databases, database),
+                      })
+                    }
                   />
                 </AnalysisField>
                 <AnalysisField
-                  icon={Scale}
-                  label="Compare it across"
-                  helper="Choose the dimension you want to vary."
-                >
-                  <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
-                    {SINGLE_DATABASE_MODES.map((comparisonMode) => {
-                      const Icon = comparisonMode.icon
-                      const optionCount = getVaryingOptionCount(
-                        comparisonMode.id,
-                        singleDatabaseSelections.get(comparisonMode.id),
-                      )
-                      return (
-                        <SegmentedButton
-                          key={comparisonMode.id}
-                          selected={mode === comparisonMode.id}
-                          aria-pressed={mode === comparisonMode.id}
-                          onClick={() => handleSingleDatabaseModeChange(comparisonMode.id)}
-                          size="sm"
-                          className="min-h-9 min-w-0 gap-1.5 px-2"
-                        >
-                          <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
-                          <span className="truncate">{comparisonMode.label}</span>
-                          <span className="ml-auto shrink-0 text-[0.65rem] text-slate-500">
-                            {optionCount}
-                          </span>
-                        </SegmentedButton>
-                      )
-                    })}
-                  </div>
-                </AnalysisField>
-              </div>
-
-              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
-                <AnalysisField
-                  icon={getModeIcon(mode)}
-                  label={`${getModePluralLabel(mode)} to compare`}
-                  helper={
-                    getVaryingOptionCount(mode, selection) < 2
-                      ? `Only one recorded ${getModePluralLabel(mode).toLowerCase().replace(/s$/, "")} is available. Try another dimension or database for a meaningful comparison.`
-                      : "Select the values that should appear together in the ranking and query views."
-                  }
-                >
-                  {mode === "scale" ? (
-                    <ChoiceChips
-                      options={selection.scaleOptions.map((scale, index) => ({
-                        id: scale,
-                        label: `SF ${scale}`,
-                        color: getSeriesColor(index),
-                      }))}
-                      selectedValues={selection.scales}
-                      onToggle={(scale) =>
-                        updateRawSelection({ scales: toggleSelection(selection.scales, scale) })
-                      }
-                    />
-                  ) : mode === "version" ? (
-                    <ChoiceChips
-                      options={selection.versionOptions.map((version, index) => ({
-                        id: version,
-                        label: version,
-                        color: getSeriesColor(index),
-                      }))}
-                      selectedValues={selection.versions}
-                      onToggle={(version) =>
-                        updateRawSelection({
-                          versions: toggleSelection(selection.versions, version),
-                        })
-                      }
-                    />
-                  ) : (
-                    <ChoiceChips
-                      options={selection.systemOptions.map((system, index) => ({
-                        id: system,
-                        label: system,
-                        color: getSeriesColor(index),
-                      }))}
-                      selectedValues={selection.systems}
-                      onToggle={(system) =>
-                        updateRawSelection({
-                          systems: toggleSelection(selection.systems, system),
-                        })
-                      }
-                    />
-                  )}
-                </AnalysisField>
-
-                <AnalysisField
                   icon={Server}
-                  label="Fixed context"
-                  helper="These values stay constant while the selected dimension changes."
-                  className="w-fit max-w-full"
+                  label="Fixed environment"
+                  helper="Every database runs on the same system and scale; latest completed versions are used."
+                  className="xl:border-l xl:border-border-subtle xl:pl-4"
                 >
                   <div className="flex min-w-0 flex-wrap gap-2">
-                    {mode !== "system" ? (
-                      <DimensionSelect
-                        ariaLabel="System"
-                        label="System"
-                        icon={Server}
-                        value={selection.system}
-                        options={selection.systemOptions.map((system) => ({
-                          id: system,
-                          label: system,
-                        }))}
-                        onChange={(system) => updateRawSelection({ system })}
-                        className="sm:w-72"
-                      />
-                    ) : null}
-                    {mode !== "scale" ? (
-                      <DimensionSelect
-                        ariaLabel="Scale factor"
-                        label="Scale"
-                        icon={Scale}
-                        value={String(selection.scale)}
-                        options={selection.scaleOptions.map((scale) => ({
-                          id: String(scale),
-                          label: `SF ${scale}`,
-                        }))}
-                        onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
-                        className="sm:w-40"
-                      />
-                    ) : null}
-                    {mode !== "version" ? (
-                      <DimensionSelect
-                        ariaLabel="Database version"
-                        label="Version"
-                        icon={GitBranch}
-                        value={selection.version}
-                        options={selection.versionOptions.map((version) => ({
-                          id: version,
-                          label: version,
-                        }))}
-                        onChange={(version) => updateRawSelection({ version })}
-                        className="sm:w-64"
-                      />
-                    ) : null}
+                    <DimensionSelect
+                      ariaLabel="System"
+                      label="System"
+                      icon={Server}
+                      value={selection.system}
+                      options={selection.systemOptions.map((system) => ({
+                        id: system,
+                        label: system,
+                      }))}
+                      onChange={(system) => updateRawSelection({ system })}
+                      className="sm:w-72"
+                    />
+                    <DimensionSelect
+                      ariaLabel="Scale factor"
+                      label="Scale"
+                      icon={Scale}
+                      value={String(selection.scale)}
+                      options={selection.scaleOptions.map((scale) => ({
+                        id: String(scale),
+                        label: `SF ${scale}`,
+                      }))}
+                      onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
+                      className="sm:w-40"
+                    />
                   </div>
                 </AnalysisField>
               </div>
-            </div>
-          )}
-        </div>
-      </PanelCard>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(15rem,0.6fr)_minmax(0,1.4fr)]">
+                  <AnalysisField
+                    icon={Database}
+                    label="Database to analyze"
+                    helper="Keep one engine in focus while another dimension changes."
+                  >
+                    <DimensionSelect
+                      ariaLabel="Database"
+                      label="Database"
+                      icon={Database}
+                      value={selection.database}
+                      options={selection.databaseOptions.map((database) => ({
+                        id: database,
+                        label: formatDatabaseName(database),
+                      }))}
+                      onChange={(database) => updateRawSelection({ database })}
+                    />
+                  </AnalysisField>
+                  <AnalysisField
+                    icon={Scale}
+                    label="Compare it across"
+                    helper="Choose the dimension you want to vary."
+                  >
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+                      {SINGLE_DATABASE_MODES.map((comparisonMode) => {
+                        const Icon = comparisonMode.icon
+                        const optionCount = getVaryingOptionCount(
+                          comparisonMode.id,
+                          singleDatabaseSelections.get(comparisonMode.id),
+                        )
+                        return (
+                          <SegmentedButton
+                            key={comparisonMode.id}
+                            selected={mode === comparisonMode.id}
+                            aria-pressed={mode === comparisonMode.id}
+                            onClick={() => handleSingleDatabaseModeChange(comparisonMode.id)}
+                            size="sm"
+                            className="min-h-9 min-w-0 gap-1.5 px-2"
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                            <span className="truncate">{comparisonMode.label}</span>
+                            <span className="ml-auto shrink-0 text-[0.65rem] text-slate-500">
+                              {optionCount}
+                            </span>
+                          </SegmentedButton>
+                        )
+                      })}
+                    </div>
+                  </AnalysisField>
+                </div>
 
-      <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
+                <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+                  <AnalysisField
+                    icon={getModeIcon(mode)}
+                    label={`${getModePluralLabel(mode)} to compare`}
+                    helper={
+                      getVaryingOptionCount(mode, selection) < 2
+                        ? `Only one recorded ${getModePluralLabel(mode).toLowerCase().replace(/s$/, "")} is available. Try another dimension or database for a meaningful comparison.`
+                        : "Select the values that should appear together in the ranking and query views."
+                    }
+                  >
+                    {mode === "scale" ? (
+                      <ChoiceChips
+                        options={selection.scaleOptions.map((scale, index) => ({
+                          id: scale,
+                          label: `SF ${scale}`,
+                          color: getSeriesColor(index),
+                        }))}
+                        selectedValues={selection.scales}
+                        onToggle={(scale) =>
+                          updateRawSelection({ scales: toggleSelection(selection.scales, scale) })
+                        }
+                      />
+                    ) : mode === "version" ? (
+                      <ChoiceChips
+                        options={selection.versionOptions.map((version, index) => ({
+                          id: version,
+                          label: version,
+                          color: getSeriesColor(index),
+                        }))}
+                        selectedValues={selection.versions}
+                        onToggle={(version) =>
+                          updateRawSelection({
+                            versions: toggleSelection(selection.versions, version),
+                          })
+                        }
+                      />
+                    ) : (
+                      <ChoiceChips
+                        options={selection.systemOptions.map((system, index) => ({
+                          id: system,
+                          label: system,
+                          color: getSeriesColor(index),
+                        }))}
+                        selectedValues={selection.systems}
+                        onToggle={(system) =>
+                          updateRawSelection({
+                            systems: toggleSelection(selection.systems, system),
+                          })
+                        }
+                      />
+                    )}
+                  </AnalysisField>
+
+                  <AnalysisField
+                    icon={Server}
+                    label="Fixed context"
+                    helper="These values stay constant while the selected dimension changes."
+                    className="w-fit max-w-full"
+                  >
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      {mode !== "system" ? (
+                        <DimensionSelect
+                          ariaLabel="System"
+                          label="System"
+                          icon={Server}
+                          value={selection.system}
+                          options={selection.systemOptions.map((system) => ({
+                            id: system,
+                            label: system,
+                          }))}
+                          onChange={(system) => updateRawSelection({ system })}
+                          className="sm:w-72"
+                        />
+                      ) : null}
+                      {mode !== "scale" ? (
+                        <DimensionSelect
+                          ariaLabel="Scale factor"
+                          label="Scale"
+                          icon={Scale}
+                          value={String(selection.scale)}
+                          options={selection.scaleOptions.map((scale) => ({
+                            id: String(scale),
+                            label: `SF ${scale}`,
+                          }))}
+                          onChange={(scale) => updateRawSelection({ scale: Number(scale) })}
+                          className="sm:w-40"
+                        />
+                      ) : null}
+                      {mode !== "version" ? (
+                        <DimensionSelect
+                          ariaLabel="Database version"
+                          label="Version"
+                          icon={GitBranch}
+                          value={selection.version}
+                          options={selection.versionOptions.map((version) => ({
+                            id: version,
+                            label: version,
+                          }))}
+                          onChange={(version) => updateRawSelection({ version })}
+                          className="sm:w-64"
+                        />
+                      ) : null}
+                    </div>
+                  </AnalysisField>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </details>
+
+      <PanelCard className="min-w-0 space-y-4 border-border-strong p-3 sm:p-4">
         <PanelHeader className="flex-wrap">
           <div className="min-w-0">
             <MetaLabel>Suite result</MetaLabel>
@@ -669,7 +687,7 @@ export function ExplorerPage({
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
                   <Gauge className="h-3.5 w-3.5 text-accent-300" strokeWidth={1.8} />
-                  Lower is better · 1.0× is ideal
+                  Larger score → wider bar · lower is better
                 </div>
               </div>
               <ScoreRanking rows={rankedRows} />
@@ -973,44 +991,69 @@ function ChoiceChips<T extends string | number>({
 }
 
 function ScoreRanking({ rows }: { rows: readonly ScoredComparisonRow[] }) {
+  const largestScore = rows.at(-1)?.score ?? 1
+
   return (
     <div className="divide-y divide-border-subtle overflow-hidden rounded-md border border-border-subtle bg-surface-primary/25">
-      {rows.map((row, index) => (
-        <div
-          key={row.id}
-          data-score-ranking-row={row.id}
-          className={cn(
-            "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5",
-            index === 0 && "bg-amber-300/[0.035]",
-          )}
-        >
-          <span className="flex w-7 items-center gap-1 text-xs font-semibold text-slate-500">
-            {index === 0 ? (
-              <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
-            ) : null}
-            <span>#{index + 1}</span>
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: row.color }}
-              />
-              <span className="truncate text-sm font-medium text-slate-100">{row.label}</span>
-            </div>
-            <p className="mt-1 truncate text-[0.7rem] text-slate-500">
-              {row.wins}/{row.queryCount} fastest
-              {row.missing > 0 ? ` · ${row.missing} missing penalized` : ""} · {row.detail}
-            </p>
-          </div>
-          <span
-            data-score={row.score}
-            className="text-base font-semibold text-slate-50 tabular-nums"
+      {rows.map((row, index) => {
+        const relativeScoreWidth =
+          Number.isFinite(row.score) && row.score > 0 && Number.isFinite(largestScore)
+            ? Math.max(0, Math.min(1, row.score / largestScore))
+            : 0
+        const barWidth = Math.max(4, relativeScoreWidth * 100)
+
+        return (
+          <div
+            key={row.id}
+            data-score-ranking-row={row.id}
+            className={cn(
+              "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5",
+              index === 0 && "bg-amber-300/[0.035]",
+            )}
           >
-            {formatScore(row.score)}
-          </span>
-        </div>
-      ))}
+            <span className="flex w-7 items-center gap-1 text-xs font-semibold text-slate-500">
+              {index === 0 ? (
+                <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
+              ) : null}
+              <span>#{index + 1}</span>
+            </span>
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: row.color }}
+                />
+                <span className="truncate text-sm font-medium text-slate-100">{row.label}</span>
+              </div>
+              <div
+                role="meter"
+                aria-label={`${row.label} normalized suite score`}
+                aria-valuemin={0}
+                aria-valuemax={largestScore}
+                aria-valuenow={row.score}
+                aria-valuetext={`${formatScore(row.score)}; lower is better`}
+                data-score-bar={relativeScoreWidth}
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-primary"
+              >
+                <div
+                  className="h-full rounded-full opacity-80"
+                  style={{ width: `${barWidth}%`, backgroundColor: row.color }}
+                />
+              </div>
+              <p className="mt-1 truncate text-[0.7rem] text-slate-500">
+                {row.wins}/{row.queryCount} fastest
+                {row.missing > 0 ? ` · ${row.missing} missing penalized` : ""} · {row.detail}
+              </p>
+            </div>
+            <span
+              data-score={row.score}
+              className="text-base font-semibold text-slate-50 tabular-nums"
+            >
+              {formatScore(row.score)}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
