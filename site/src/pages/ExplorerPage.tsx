@@ -1,16 +1,21 @@
 import {
+  ChevronDown,
+  ChevronUp,
   Database,
   FlaskConical,
   Gauge,
   GitBranch,
   Scale,
+  Search,
   Server,
+  Settings2,
+  Trophy,
   type LucideIcon,
 } from "lucide-react"
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
-import { ControlChip, SegmentedButton } from "../components/controls/Control"
+import { ControlChip, QuietButton, SegmentedButton } from "../components/controls/Control"
 import { ControlSelect } from "../components/controls/ControlSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import { Skeleton } from "../components/Skeleton"
@@ -96,12 +101,6 @@ interface QueryRow {
   values: (number | null)[]
 }
 
-interface DimensionContract {
-  label: string
-  role: "fixed" | "varies"
-  value: string
-}
-
 export function ExplorerPage({
   suiteId,
   suiteDefinition,
@@ -119,6 +118,8 @@ export function ExplorerPage({
   const [requestedSqlDatabase, setRequestedSqlDatabase] = useState(
     searchParams.get("sql_database") ?? "",
   )
+  const [showSetup, setShowSetup] = useState(false)
+  const [showAllQueries, setShowAllQueries] = useState(false)
   const { metrics, queriesManifest, loading, error } = useExplorerData(suiteId)
   const variants = useMemo(() => makeRunVariants(metrics), [metrics])
   const selection = useMemo(
@@ -181,14 +182,15 @@ export function ExplorerPage({
     : (sqlDatabaseOptions[0] ?? "")
   const selectedSqlEntry = manifestEntries[selectedQuery]
   const selectedSql = resolveSql(selectedSqlEntry, sqlDatabase)
-  const dimensionContract = useMemo(
+  const selectedQueryRows = useMemo(
     () =>
-      makeDimensionContract({
-        mode,
-        suiteTitle: suiteDefinition.title,
-        selection,
-      }),
-    [mode, selection, suiteDefinition.title],
+      rankedRows
+        .flatMap((row) => {
+          const valueMs = row.queryValues.get(selectedQuery)
+          return valueMs === undefined ? [] : [{ ...row, valueMs }]
+        })
+        .sort((a, b) => a.valueMs - b.valueMs),
+    [rankedRows, selectedQuery],
   )
   const nextSearchParams = useMemo(() => {
     if (!selection.ready || !selectedQuery) return ""
@@ -224,36 +226,53 @@ export function ExplorerPage({
   const showLoading = loading
 
   return (
-    <div className="flex min-h-full w-full max-w-full min-w-0 flex-col gap-4 overflow-x-hidden pb-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex min-h-full w-full max-w-full min-w-0 shrink-0 flex-col gap-4 overflow-x-clip pb-8">
+      <header className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
         <div className="min-w-0">
-          <MetaLabel>{suiteDefinition.title}</MetaLabel>
-          <h2 className="mt-1 text-2xl font-semibold text-slate-50">Compare results</h2>
+          <MetaLabel>Benchmark explorer</MetaLabel>
+          <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
+            {suiteDefinition.title} results
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+            See the overall result first, then inspect individual queries or adjust what is being
+            compared.
+          </p>
         </div>
-        <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:w-auto sm:grid-cols-4">
-          {COMPARISON_MODES.map((comparisonMode) => {
-            const Icon = comparisonMode.icon
-            return (
-              <SegmentedButton
-                key={comparisonMode.id}
-                selected={mode === comparisonMode.id}
-                aria-pressed={mode === comparisonMode.id}
-                onClick={() => setMode(comparisonMode.id)}
-                size="md"
-                className="min-h-10 min-w-0 gap-1.5 rounded-lg px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm"
-              >
-                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-                <span className="truncate">{comparisonMode.label}</span>
-              </SegmentedButton>
-            )
-          })}
+        <div className="min-w-0">
+          <MetaLabel className="mb-2 block">Compare by</MetaLabel>
+          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+            {COMPARISON_MODES.map((comparisonMode) => {
+              const Icon = comparisonMode.icon
+              return (
+                <SegmentedButton
+                  key={comparisonMode.id}
+                  selected={mode === comparisonMode.id}
+                  aria-pressed={mode === comparisonMode.id}
+                  onClick={() => setMode(comparisonMode.id)}
+                  size="md"
+                  className="min-h-10 min-w-0 gap-1.5 rounded-lg px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm"
+                >
+                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                  <span className="truncate">{comparisonMode.label}</span>
+                </SegmentedButton>
+              )
+            })}
+          </div>
         </div>
       </header>
 
-      <div className="grid max-w-full min-w-0 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
-        <PanelCard className="flex flex-col gap-3 p-3 xl:h-[min(48rem,calc(100dvh-11rem))] xl:p-4">
-          <PanelHeader>
-            <SectionTitle as="h3">Comparison setup</SectionTitle>
+      {showSetup ? (
+        <PanelCard className="p-3 sm:p-4">
+          <PanelHeader className="mb-4 flex-wrap">
+            <div>
+              <MetaLabel>Advanced controls</MetaLabel>
+              <SectionTitle as="h3" className="mt-1">
+                Adjust comparison
+              </SectionTitle>
+            </div>
+            <QuietButton size="sm" onClick={() => setShowSetup(false)}>
+              Done
+            </QuietButton>
           </PanelHeader>
 
           {showLoading ? (
@@ -267,7 +286,7 @@ export function ExplorerPage({
               No completed query results are available for this suite.
             </div>
           ) : (
-            <div className="panel-scrollbar min-h-0 divide-y divide-border-subtle overflow-visible xl:overflow-y-auto xl:pr-1">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-5">
               <DimensionRow
                 icon={Server}
                 label="System"
@@ -445,103 +464,169 @@ export function ExplorerPage({
             </div>
           )}
         </PanelCard>
+      ) : null}
 
-        <PanelCard className="flex min-w-0 flex-col gap-4 p-3 xl:h-[min(48rem,calc(100dvh-11rem))] xl:min-h-0 xl:p-4">
+      <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
+        <PanelHeader className="flex-wrap">
+          <div className="min-w-0">
+            <MetaLabel>Overview</MetaLabel>
+            <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
+              {getModeLabel(mode)}
+            </SectionTitle>
+            {!showLoading && selection.ready ? (
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
+                {getComparisonDescription(
+                  mode,
+                  suiteDefinition.title,
+                  selection,
+                  rankedRows.length,
+                )}
+              </p>
+            ) : null}
+          </div>
+          <QuietButton
+            size="sm"
+            onClick={() => setShowSetup((current) => !current)}
+            className="gap-2 rounded-lg"
+          >
+            <Settings2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+            Adjust comparison
+          </QuietButton>
+        </PanelHeader>
+
+        {showLoading ? (
+          <ResultsSkeleton />
+        ) : error ? (
+          <div className="flex min-h-72 items-center justify-center border-y border-red-500/30 bg-red-950/20 px-4 text-sm text-red-300">
+            Failed to load explorer data: {error}
+          </div>
+        ) : rankedRows.length === 0 ? (
+          <div className="flex min-h-72 items-center justify-center border-y border-border-subtle text-sm text-slate-500">
+            No completed query results match this comparison.
+          </div>
+        ) : (
+          <>
+            <OverviewStats rows={rankedRows} sharedQueryCount={sharedQueries.length} />
+
+            <ChartFrame className="p-3 sm:p-4">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <MetaLabel>Overall ranking</MetaLabel>
+                  <p className="mt-1 text-sm font-medium text-slate-200">
+                    Median across {sharedQueries.length} shared queries
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                  <Gauge className="h-3.5 w-3.5 text-accent-300" strokeWidth={1.8} />
+                  Lower runtime is better
+                </div>
+              </div>
+              <RankingBars rows={rankedRows} />
+            </ChartFrame>
+          </>
+        )}
+      </PanelCard>
+
+      {!showLoading && !error && rankedRows.length > 0 ? (
+        <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
           <PanelHeader className="flex-wrap">
             <div>
-              <MetaLabel>Active comparison</MetaLabel>
-              <SectionTitle as="h3" className="mt-1">
-                {getModeLabel(mode)}
+              <MetaLabel>Drill down</MetaLabel>
+              <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
+                Explore one query
               </SectionTitle>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                Select a query to compare its runtime and inspect the SQL used by each database.
+              </p>
             </div>
-            <div className="flex items-center gap-2 rounded-full border border-border-default bg-surface-inset px-3 py-1.5 text-xs font-medium text-slate-300">
-              <Gauge className="h-3.5 w-3.5 text-accent-300" strokeWidth={1.8} />
-              Lower runtime is better
-            </div>
+            <DimensionSelect
+              ariaLabel="Query"
+              label="Query"
+              icon={Search}
+              value={selectedQuery}
+              options={queryNames.map((query) => ({ id: query, label: query }))}
+              onChange={setRequestedQuery}
+            />
           </PanelHeader>
 
-          {showLoading ? (
-            <ResultsSkeleton />
-          ) : error ? (
-            <div className="flex min-h-72 flex-1 items-center justify-center border-y border-red-500/30 bg-red-950/20 px-4 text-sm text-red-300">
-              Failed to load explorer data: {error}
-            </div>
-          ) : rankedRows.length === 0 ? (
-            <div className="flex min-h-72 flex-1 items-center justify-center border-y border-border-subtle text-sm text-slate-500">
-              No completed query results match this comparison.
-            </div>
-          ) : (
-            <>
-              <ComparisonScope contract={dimensionContract} />
-
-              <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.42fr)]">
-                <div className="grid gap-4 xl:min-h-0 xl:grid-rows-[minmax(14rem,0.85fr)_minmax(14rem,1fr)]">
-                  <ChartFrame className="flex min-h-0 flex-col p-2.5 sm:p-3">
-                    <div className="mb-3 shrink-0">
-                      <MetaLabel>Ranking</MetaLabel>
-                      <p className="mt-1 text-sm font-medium text-slate-200">
-                        Median across {sharedQueries.length} shared queries
-                      </p>
-                    </div>
-                    <div className="panel-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
-                      <RankingBars rows={rankedRows} />
-                    </div>
-                  </ChartFrame>
-
-                  <ChartFrame className="flex min-h-0 flex-col overflow-hidden p-2.5 sm:p-3">
-                    <div className="mb-3 shrink-0">
-                      <MetaLabel>Query breakdown</MetaLabel>
-                      <p className="mt-1 text-sm font-medium text-slate-200">
-                        Median runtime by query
-                      </p>
-                    </div>
-                    <QueryBreakdown
-                      rows={rankedRows}
-                      queryRows={queryRows}
-                      selectedQuery={selectedQuery}
-                      onSelectQuery={setRequestedQuery}
-                    />
-                  </ChartFrame>
-                </div>
-
-                <ChartFrame className="flex min-h-[22rem] flex-col overflow-hidden p-2.5 sm:p-3 xl:h-full xl:min-h-0">
-                  <div className="mb-3 shrink-0 space-y-2">
-                    <div>
-                      <MetaLabel>Query SQL</MetaLabel>
-                      <p className="mt-1 truncate text-sm font-medium text-slate-200">
-                        {selectedQuery}
-                      </p>
-                    </div>
-                    {sqlDatabaseOptions.length > 1 ? (
-                      <div className="panel-scrollbar flex gap-1 overflow-x-auto pb-1">
-                        {sqlDatabaseOptions.map((database) => (
-                          <SegmentedButton
-                            key={database}
-                            selected={sqlDatabase === database}
-                            aria-pressed={sqlDatabase === database}
-                            onClick={() => setRequestedSqlDatabase(database)}
-                            size="xs"
-                            className="shrink-0 rounded-md"
-                          >
-                            {formatDatabaseName(database)}
-                          </SegmentedButton>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border-subtle bg-surface-primary/40">
-                    <SqlCodeView
-                      code={selectedSql}
-                      wrapLines
-                      className="h-[22rem] text-xs leading-relaxed xl:h-full"
-                    />
-                  </div>
-                </ChartFrame>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.28fr)]">
+            <ChartFrame className="p-3 sm:p-4">
+              <div className="mb-4">
+                <MetaLabel>Runtime for this query</MetaLabel>
+                <p
+                  className="mt-1 truncate text-sm font-medium text-slate-200"
+                  title={selectedQuery}
+                >
+                  {selectedQuery}
+                </p>
               </div>
-            </>
-          )}
+              <RankingBars rows={selectedQueryRows} />
+            </ChartFrame>
+
+            <ChartFrame className="flex min-h-[24rem] flex-col overflow-hidden p-3 sm:p-4">
+              <div className="mb-3 shrink-0 space-y-3">
+                <div>
+                  <MetaLabel>SQL used</MetaLabel>
+                  <p className="mt-1 truncate text-sm font-medium text-slate-200">
+                    {selectedQuery}
+                  </p>
+                </div>
+                {sqlDatabaseOptions.length > 1 ? (
+                  <div className="panel-scrollbar flex gap-1 overflow-x-auto pb-1">
+                    {sqlDatabaseOptions.map((database) => (
+                      <SegmentedButton
+                        key={database}
+                        selected={sqlDatabase === database}
+                        aria-pressed={sqlDatabase === database}
+                        onClick={() => setRequestedSqlDatabase(database)}
+                        size="xs"
+                        className="shrink-0 rounded-md"
+                      >
+                        {formatDatabaseName(database)}
+                      </SegmentedButton>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border-subtle bg-surface-primary/40">
+                <SqlCodeView code={selectedSql} wrapLines className="text-xs leading-relaxed" />
+              </div>
+            </ChartFrame>
+          </div>
+
+          <div className="border-t border-border-subtle pt-4">
+            <QuietButton
+              size="sm"
+              onClick={() => setShowAllQueries((current) => !current)}
+              aria-expanded={showAllQueries}
+              className="gap-2 rounded-lg"
+            >
+              {showAllQueries ? (
+                <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.8} />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
+              )}
+              {showAllQueries ? "Hide" : "Show"} all {queryRows.length} query results
+            </QuietButton>
+            {showAllQueries ? (
+              <ChartFrame className="mt-4 flex max-h-[36rem] min-h-[22rem] flex-col overflow-hidden p-3 sm:p-4">
+                <div className="mb-3 shrink-0">
+                  <MetaLabel>All queries</MetaLabel>
+                  <p className="mt-1 text-sm font-medium text-slate-200">
+                    Select a row to update the query detail above
+                  </p>
+                </div>
+                <QueryBreakdown
+                  rows={rankedRows}
+                  queryRows={queryRows}
+                  selectedQuery={selectedQuery}
+                  onSelectQuery={setRequestedQuery}
+                />
+              </ChartFrame>
+            ) : null}
+          </div>
         </PanelCard>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -560,7 +645,7 @@ function DimensionRow({
   children: ReactNode
 }) {
   return (
-    <section className="min-w-0 py-3 first:pt-0 last:pb-0">
+    <section className="min-w-0 rounded-lg bg-surface-inset p-3">
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border-default bg-surface-raised text-slate-300 sm:h-8 sm:w-8">
           <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={1.8} />
@@ -575,6 +660,50 @@ function DimensionRow({
       </div>
       <div className="mt-2.5 min-w-0">{children}</div>
     </section>
+  )
+}
+
+function OverviewStats({
+  rows,
+  sharedQueryCount,
+}: {
+  rows: readonly ComparisonRow[]
+  sharedQueryCount: number
+}) {
+  const fastest = rows[0]
+  const slowest = rows.at(-1)
+  if (!fastest || !slowest) return null
+  const range = fastest.valueMs > 0 ? slowest.valueMs / fastest.valueMs : 0
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+        <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
+          Fastest overall
+        </div>
+        <p className="mt-2 truncate text-xl font-semibold text-slate-50">{fastest.label}</p>
+        <p className="mt-1 text-xs text-slate-400">
+          {formatRuntime(fastest.valueMs)} median runtime
+        </p>
+      </div>
+      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          Performance range
+        </p>
+        <p className="mt-2 text-xl font-semibold text-slate-50">{range.toFixed(1)}×</p>
+        <p className="mt-1 truncate text-xs text-slate-400" title={slowest.label}>
+          Fastest to slowest ({slowest.label})
+        </p>
+      </div>
+      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          Shared workload
+        </p>
+        <p className="mt-2 text-xl font-semibold text-slate-50">{sharedQueryCount} queries</p>
+        <p className="mt-1 text-xs text-slate-400">Successful for every selected series</p>
+      </div>
+    </div>
   )
 }
 
@@ -717,7 +846,11 @@ function RankingBars({ rows }: { rows: readonly ComparisonRow[] }) {
             </div>
             <div className="flex items-center justify-between gap-2 text-[0.7rem] text-slate-500">
               <span className="truncate">{row.detail}</span>
-              <span>{speed} speed index</span>
+              <span>
+                {index === 0 || bestRuntime <= 0
+                  ? "Fastest"
+                  : `${(row.valueMs / bestRuntime).toFixed(1)}× slower`}
+              </span>
             </div>
           </div>
         )
@@ -802,31 +935,11 @@ function QueryBreakdown({
   )
 }
 
-function ComparisonScope({ contract }: { contract: readonly DimensionContract[] }) {
-  return (
-    <div className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-3 border-y border-border-subtle bg-surface-primary/20 px-1 py-3 sm:grid-cols-3 xl:grid-cols-5">
-      {contract.map((dimension) => (
-        <div key={dimension.label} className="min-w-0">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-[0.65rem] font-semibold tracking-wide text-slate-500 uppercase">
-              {dimension.label}
-            </span>
-            {dimension.role === "varies" ? <RoleBadge role="varies" /> : null}
-          </div>
-          <p className="mt-1 truncate text-xs font-medium text-slate-300" title={dimension.value}>
-            {dimension.value}
-          </p>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function SetupSkeleton() {
   return (
-    <div className="min-h-0 divide-y divide-border-subtle">
+    <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-5">
       {Array.from({ length: 5 }, (_, index) => (
-        <div key={index} className="space-y-3 py-3 first:pt-0 last:pb-0">
+        <div key={index} className="space-y-3 rounded-lg bg-surface-inset p-3">
           <div className="flex items-center gap-3">
             <Skeleton className="h-8 w-8 rounded-lg" />
             <div className="flex-1 space-y-2">
@@ -844,21 +957,12 @@ function SetupSkeleton() {
 function ResultsSkeleton() {
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 border-y border-border-subtle py-3 sm:grid-cols-5">
-        {Array.from({ length: 5 }, (_, index) => (
-          <div key={index} className="space-y-2">
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-3 w-24" />
-          </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {Array.from({ length: 3 }, (_, index) => (
+          <Skeleton key={index} className="h-24 w-full rounded-lg" />
         ))}
       </div>
-      <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.42fr)]">
-        <div className="grid gap-4 xl:grid-rows-2">
-          <Skeleton className="min-h-56 w-full rounded-lg" />
-          <Skeleton className="min-h-64 w-full rounded-lg" />
-        </div>
-        <Skeleton className="min-h-80 w-full rounded-lg" />
-      </div>
+      <Skeleton className="h-80 w-full rounded-lg" />
     </>
   )
 }
@@ -1189,51 +1293,6 @@ function makeQueryRows(queryNames: readonly string[], rows: readonly ComparisonR
   }))
 }
 
-function makeDimensionContract({
-  mode,
-  suiteTitle,
-  selection,
-}: {
-  mode: ComparisonMode
-  suiteTitle: string
-  selection: ResolvedSelection
-}): DimensionContract[] {
-  return [
-    {
-      label: "System",
-      role: mode === "system" ? "varies" : "fixed",
-      value: mode === "system" ? selection.systems.join(", ") : selection.system,
-    },
-    {
-      label: "Database",
-      role: mode === "database" ? "varies" : "fixed",
-      value:
-        mode === "database"
-          ? selection.databases.map(formatDatabaseName).join(", ")
-          : formatDatabaseName(selection.database),
-    },
-    {
-      label: "Database version",
-      role: mode === "version" ? "varies" : "fixed",
-      value:
-        mode === "version"
-          ? selection.versions.join(", ")
-          : mode === "database"
-            ? "Latest completed per database"
-            : selection.version,
-    },
-    { label: "Suite", role: "fixed", value: suiteTitle },
-    {
-      label: "Scale factor",
-      role: mode === "scale" ? "varies" : "fixed",
-      value:
-        mode === "scale"
-          ? selection.scales.map((scale) => `SF ${scale}`).join(", ")
-          : `SF ${selection.scale}`,
-    },
-  ]
-}
-
 function resolveSql(entry: QuerySqlEntry | undefined, database: string) {
   if (!entry) return "-- SQL is not available for this query."
   return entry.db_overrides[database] ?? entry.sql ?? "-- SQL is not available for this database."
@@ -1343,6 +1402,24 @@ function median(values: readonly number[]) {
 function getModeLabel(mode: ComparisonMode) {
   const selectedMode = COMPARISON_MODES.find((comparisonMode) => comparisonMode.id === mode)
   return `${selectedMode?.label ?? "Database"} comparison`
+}
+
+function getComparisonDescription(
+  mode: ComparisonMode,
+  suiteTitle: string,
+  selection: ResolvedSelection,
+  seriesCount: number,
+) {
+  if (mode === "database") {
+    return `Comparing ${seriesCount} databases on ${selection.system} for ${suiteTitle} at SF ${selection.scale}. Each database uses its latest completed version.`
+  }
+  if (mode === "scale") {
+    return `Comparing ${seriesCount} scale factors for ${formatDatabaseName(selection.database)} ${selection.version} on ${selection.system}.`
+  }
+  if (mode === "version") {
+    return `Comparing ${seriesCount} versions of ${formatDatabaseName(selection.database)} on ${selection.system} for ${suiteTitle} at SF ${selection.scale}.`
+  }
+  return `Comparing ${seriesCount} systems running ${formatDatabaseName(selection.database)} ${selection.version} for ${suiteTitle} at SF ${selection.scale}.`
 }
 
 function formatRuntime(valueMs: number) {

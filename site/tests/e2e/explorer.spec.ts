@@ -10,14 +10,19 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
 
   await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
   await expect(page.getByText("Median across 43 shared queries")).toBeVisible()
+  await expect(page.getByText("Fastest overall")).toBeVisible()
+
+  await page.getByRole("button", { name: "Adjust comparison" }).click()
   await expect(page.getByText("Scale factor", { exact: true }).first()).toBeVisible()
+  await page.getByRole("button", { name: "Done" }).click()
 
   await page.getByRole("button", { name: "Version", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
   await expect(page).toHaveURL(/mode=version/)
 
-  await page.getByRole("button", { name: "Q22", exact: true }).click()
-  await expect(page.getByText("Q22", { exact: true }).last()).toBeVisible()
+  await page.getByRole("combobox", { name: "Query" }).click()
+  await page.getByRole("option", { name: "Q22", exact: true }).click()
+  await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q22")
   await expect(page).toHaveURL(/query=Q22/)
   await expectNoHorizontalPageOverflow(page)
 
