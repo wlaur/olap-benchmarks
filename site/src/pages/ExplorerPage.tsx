@@ -444,7 +444,7 @@ export function ExplorerPage({
                       label: system,
                     }))}
                     onChange={(system) => updateRawSelection({ system })}
-                    className="sm:w-60"
+                    className="sm:w-72"
                   />
                   <DimensionSelect
                     ariaLabel="Scale factor"
@@ -585,7 +585,7 @@ export function ExplorerPage({
                           label: system,
                         }))}
                         onChange={(system) => updateRawSelection({ system })}
-                        className="sm:w-60"
+                        className="sm:w-72"
                       />
                     ) : null}
                     {mode !== "scale" ? (
@@ -613,7 +613,7 @@ export function ExplorerPage({
                           label: version,
                         }))}
                         onChange={(version) => updateRawSelection({ version })}
-                        className="sm:w-52"
+                        className="sm:w-64"
                       />
                     ) : null}
                   </div>
