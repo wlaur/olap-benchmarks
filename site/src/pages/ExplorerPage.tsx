@@ -1,6 +1,9 @@
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronUp,
+  ChevronsUpDown,
   Database,
   FlaskConical,
   Gauge,
@@ -12,7 +15,7 @@ import {
   Trophy,
   type LucideIcon,
 } from "lucide-react"
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { ControlChip, QuietButton, SegmentedButton } from "../components/controls/Control"
@@ -546,7 +549,7 @@ export function ExplorerPage({
       </PanelCard>
 
       {!showLoading && !error && rankedRows.length > 0 ? (
-        <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
+        <PanelCard className="min-w-0 space-y-4 overflow-visible p-3 sm:p-4">
           <PanelHeader className="flex-wrap sm:flex-nowrap sm:items-end">
             <div className="min-w-0 flex-1">
               <MetaLabel>Drill down</MetaLabel>
@@ -660,12 +663,12 @@ export function ExplorerPage({
               {showAllQueries ? "Hide" : "Show"} all {queryRows.length} query results
             </QuietButton>
             {showAllQueries ? (
-              <ChartFrame className="mt-4 flex max-h-[36rem] min-h-[22rem] w-fit max-w-full flex-col overflow-hidden p-3 sm:p-4">
+              <ChartFrame className="mt-4 flex w-fit max-w-full flex-col overflow-visible p-3 sm:p-4">
                 <div className="mb-3 flex shrink-0 flex-wrap items-end justify-between gap-3">
                   <div>
                     <MetaLabel>All queries</MetaLabel>
                     <p className="mt-1 text-sm font-medium text-slate-200">
-                      Select a row to update the query detail above
+                      Select a row for detail; click a database header to sort
                     </p>
                   </div>
                   <div className="flex items-center gap-2 text-[0.6875rem] text-slate-500">
@@ -939,29 +942,153 @@ function QueryBreakdown({
   selectedQuery: string
   onSelectQuery: (query: string) => void
 }) {
+  const [sort, setSort] = useState<HeatmapSort | null>(null)
+  const headerScrollRef = useRef<HTMLDivElement>(null)
   const columnCount = useHeatmapColumnCount(rows.length, queryRows.length)
-  const splitIndex = Math.ceil(queryRows.length / columnCount)
+  const sortedQueryRows = useMemo(() => {
+    if (!sort) return queryRows
+    const seriesIndex = rows.findIndex((row) => row.id === sort.seriesId)
+    if (seriesIndex < 0) return queryRows
+
+    return queryRows
+      .map((queryRow, originalIndex) => ({
+        queryRow,
+        originalIndex,
+        score: getRelativeQueryScore(queryRow.values, seriesIndex),
+      }))
+      .sort((left, right) => {
+        if (left.score === null && right.score === null) {
+          return left.originalIndex - right.originalIndex
+        }
+        if (left.score === null) return 1
+        if (right.score === null) return -1
+        const difference = left.score - right.score
+        if (difference === 0) return left.originalIndex - right.originalIndex
+        return sort.direction === "best" ? difference : -difference
+      })
+      .map(({ queryRow }) => queryRow)
+  }, [queryRows, rows, sort])
+  const splitIndex = Math.ceil(sortedQueryRows.length / columnCount)
   const queryGroups =
-    columnCount === 1 ? [queryRows] : [queryRows.slice(0, splitIndex), queryRows.slice(splitIndex)]
+    columnCount === 1
+      ? [sortedQueryRows]
+      : [sortedQueryRows.slice(0, splitIndex), sortedQueryRows.slice(splitIndex)]
+
+  function handleSort(seriesId: string) {
+    setSort((current) => {
+      if (current?.seriesId !== seriesId) return { seriesId, direction: "best" }
+      if (current.direction === "best") return { seriesId, direction: "worst" }
+      return null
+    })
+  }
 
   return (
-    <div className="panel-scrollbar overflow-auto xl:min-h-0 xl:flex-1">
-      <div className="flex w-max min-w-full items-start gap-4">
-        {queryGroups.map((group, index) => (
-          <QueryHeatmapBlock
-            key={`${index}-${group[0]?.query ?? "empty"}`}
-            rows={rows}
-            queryRows={group}
-            selectedQuery={selectedQuery}
-            onSelectQuery={onSelectQuery}
-          />
-        ))}
+    <div className="max-w-full min-w-0">
+      <div
+        ref={headerScrollRef}
+        data-heatmap-header
+        className="sticky -top-4 z-30 max-w-full overflow-hidden border-b border-border-default bg-surface-inset shadow-[0_5px_12px_rgba(0,0,0,0.28)] lg:-top-5"
+      >
+        <div className="flex w-max min-w-full items-start gap-4">
+          {queryGroups.map((group, index) => (
+            <QueryHeatmapHeaderBlock
+              key={`header-${index}-${group[0]?.query ?? "empty"}`}
+              rows={rows}
+              sort={sort}
+              onSort={handleSort}
+            />
+          ))}
+        </div>
+      </div>
+      <div
+        data-heatmap-scroll
+        className="panel-scrollbar max-w-full overflow-x-auto overflow-y-hidden pb-1"
+        onScroll={(event) => {
+          if (headerScrollRef.current) {
+            headerScrollRef.current.scrollLeft = event.currentTarget.scrollLeft
+          }
+        }}
+      >
+        <div className="flex w-max min-w-full items-start gap-4 pt-0.5">
+          {queryGroups.map((group, index) => (
+            <QueryHeatmapRowsBlock
+              key={`${index}-${group[0]?.query ?? "empty"}`}
+              rows={rows}
+              queryRows={group}
+              selectedQuery={selectedQuery}
+              onSelectQuery={onSelectQuery}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function QueryHeatmapBlock({
+interface HeatmapSort {
+  seriesId: string
+  direction: "best" | "worst"
+}
+
+function QueryHeatmapHeaderBlock({
+  rows,
+  sort,
+  onSort,
+}: {
+  rows: readonly ComparisonRow[]
+  sort: HeatmapSort | null
+  onSort: (seriesId: string) => void
+}) {
+  return (
+    <div
+      data-heatmap-header-block
+      className="grid shrink-0 gap-0.5 text-xs"
+      style={{ gridTemplateColumns: `11rem repeat(${rows.length}, 5.25rem)` }}
+    >
+      <div className="flex h-9 items-center border-r border-border-default bg-surface-inset pr-2 font-semibold text-slate-500">
+        Query
+      </div>
+      {rows.map((row) => {
+        const direction = sort?.seriesId === row.id ? sort.direction : null
+        const nextAction =
+          direction === "best" ? "worst" : direction === "worst" ? "original" : "best"
+        return (
+          <button
+            key={row.id}
+            type="button"
+            data-heatmap-series-header={row.id}
+            data-sort-series={row.id}
+            data-sort-direction={direction ?? "none"}
+            aria-pressed={direction !== null}
+            aria-label={`${row.label}: sort by ${nextAction} relative performance`}
+            title={`${row.label} — ${direction === "best" ? "best relative performance first" : direction === "worst" ? "worst relative performance first" : "original query order"}`}
+            onClick={() => onSort(row.id)}
+            className={cn(
+              "flex h-9 min-w-0 items-center gap-1 bg-surface-inset px-1.5 text-left font-medium transition-colors outline-none",
+              "hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-slate-300/25 focus-visible:ring-inset",
+              direction ? "text-slate-50" : "text-slate-300",
+            )}
+          >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: row.color }}
+            />
+            <span className="min-w-0 flex-1 truncate">{row.label}</span>
+            {direction === "best" ? (
+              <ArrowUp className="h-3 w-3 shrink-0 text-accent-300" strokeWidth={2} />
+            ) : direction === "worst" ? (
+              <ArrowDown className="h-3 w-3 shrink-0 text-accent-300" strokeWidth={2} />
+            ) : (
+              <ChevronsUpDown className="h-3 w-3 shrink-0 text-slate-600" strokeWidth={1.7} />
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function QueryHeatmapRowsBlock({
   rows,
   queryRows,
   selectedQuery,
@@ -978,23 +1105,6 @@ function QueryHeatmapBlock({
       className="grid shrink-0 gap-0.5 text-xs"
       style={{ gridTemplateColumns: `11rem repeat(${rows.length}, 5.25rem)` }}
     >
-      <div className="sticky top-0 z-30 flex h-8 items-center border-r border-border-default bg-surface-inset pr-2 font-semibold text-slate-500">
-        Query
-      </div>
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          data-heatmap-series-header={row.id}
-          className="sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-surface-inset px-1.5 font-medium text-slate-300"
-          title={row.label}
-        >
-          <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: row.color }}
-          />
-          <span className="block truncate">{row.label}</span>
-        </div>
-      ))}
       {queryRows.map((queryRow) => {
         const availableValues = queryRow.values.filter((value): value is number => value !== null)
         const fastestValue = Math.min(...availableValues)
@@ -1045,6 +1155,16 @@ function QueryHeatmapBlock({
       })}
     </div>
   )
+}
+
+function getRelativeQueryScore(values: readonly (number | null)[], seriesIndex: number) {
+  const selectedValue = values[seriesIndex]
+  if (selectedValue === null || selectedValue === undefined) return null
+  const competitorValues = values.filter(
+    (value, index): value is number => index !== seriesIndex && value !== null,
+  )
+  if (competitorValues.length === 0) return null
+  return selectedValue / Math.min(...competitorValues)
 }
 
 function useHeatmapColumnCount(seriesCount: number, queryCount: number): 1 | 2 {
