@@ -444,7 +444,7 @@ export function ExplorerPage({
                       label: system,
                     }))}
                     onChange={(system) => updateRawSelection({ system })}
-                    className="sm:w-56"
+                    className="sm:w-60"
                   />
                   <DimensionSelect
                     ariaLabel="Scale factor"
@@ -514,7 +514,7 @@ export function ExplorerPage({
                 </AnalysisField>
               </div>
 
-              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,auto)]">
+              <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(30rem,auto)]">
                 <AnalysisField
                   icon={getModeIcon(mode)}
                   label={`${getModePluralLabel(mode)} to compare`}
@@ -584,7 +584,7 @@ export function ExplorerPage({
                           label: system,
                         }))}
                         onChange={(system) => updateRawSelection({ system })}
-                        className="sm:w-56"
+                        className="sm:w-60"
                       />
                     ) : null}
                     {mode !== "scale" ? (
