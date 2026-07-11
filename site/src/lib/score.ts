@@ -138,8 +138,6 @@ function durationsAreEqual(left: number, right: number): boolean {
 
 export function formatScore(score: number): string {
   if (!Number.isFinite(score)) return "—"
-  if (score < 1.005) return "1.00×"
-  if (score < 10) return `${score.toFixed(2)}×`
   if (score < 100) return `${score.toFixed(1)}×`
   return `${Math.round(score)}×`
 }
@@ -151,7 +149,7 @@ export const SCORE_EXPLAINER = {
     "Query medians use warm or steady-state iterations when available. Queries with only one recorded iteration fall back to the all-iteration median.",
     "The score shown is the geometric mean of these ratios across the suite's query manifest. Missing or unsupported queries are scored as the larger of 10× or 2× the slowest observed ratio for that query.",
     "When the latest attempted select run recorded failed query steps, those failures are shown separately from queries that were never completed or not recorded.",
-    "1.00× means the database was the fastest on every query; 2.50× means it was on average 2.5× slower than the fastest per query after any missing-query penalties.",
+    "1.0× means the database was the fastest on every query; 2.5× means it was on average 2.5× slower than the fastest per query after any missing-query penalties.",
     "This is the same shape of metric used by the official ClickBench rankings, just normalised to per-query so suites with very different query counts stay comparable.",
   ],
 }
