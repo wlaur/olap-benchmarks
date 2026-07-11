@@ -67,7 +67,9 @@ This document contains only unfinished work. Completed findings and implementati
 
 ## Execution order
 
-1. Complete remaining correctness checks and JSONBench 10M smokes.
-2. Run and validate the host-native `macbook-m4-pro` matrix within the disk budget.
-3. Publish the cleaned replacement database and manifests.
-4. Continue with Polars, Doris RTABench, JOB, and the broader TSBS/InfluxDB work.
+1. Complete the JSONBench 10M smokes and resolve any cross-engine discrepancies.
+2. Add Polars ClickBench/TPC-H and Doris RTABench, then validate the new paths.
+3. Complete the remaining correctness checks across the intended public matrix.
+4. Run and validate the host-native `macbook-m4-pro` matrix within the disk budget.
+5. Publish the cleaned replacement database and manifests.
+6. Continue with JOB and the broader TSBS/InfluxDB work.
