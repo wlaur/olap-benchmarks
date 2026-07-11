@@ -65,7 +65,7 @@ export function HomeScoreTable() {
       </div>
 
       <div className="panel-scrollbar hidden overflow-x-auto overscroll-x-contain lg:block">
-        <table className="w-full min-w-[62rem] table-fixed border-collapse text-left text-sm">
+        <table className="w-full min-w-[59rem] table-fixed border-collapse text-left text-sm">
           <thead className="bg-surface-inset/60 text-xs tracking-wide text-slate-300 uppercase">
             <tr>
               <th className="sticky left-0 z-20 w-44 bg-surface-inset px-4 py-3 font-medium">

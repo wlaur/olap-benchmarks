@@ -9,8 +9,8 @@ export type BenchmarkSuiteId =
   | "tpc_h"
   | "tpc_ds"
 
-export type QueryNameParserId = "generic" | "time_series"
-export type BenchmarkPublicRole = "benchmark" | "smoke"
+type QueryNameParserId = "generic" | "time_series"
+type BenchmarkPublicRole = "benchmark" | "smoke"
 
 export interface BenchmarkDefinition {
   id: BenchmarkSuiteId
@@ -54,7 +54,7 @@ const KNOWN_SUITE_IDS: readonly BenchmarkSuiteId[] = [
 
 let benchmarkDefinitionsCache: BenchmarkDefinition[] | null = null
 
-export const fallbackBenchmarkId: BenchmarkSuiteId = "time_series"
+const fallbackBenchmarkId: BenchmarkSuiteId = "time_series"
 
 export function isBenchmarkSuiteId(
   value: string | undefined,

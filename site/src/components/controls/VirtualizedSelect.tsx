@@ -13,7 +13,7 @@ import { createPortal } from "react-dom"
 
 import { cn } from "../../lib/cn"
 
-export interface VirtualizedSelectOption {
+interface VirtualizedSelectOption {
   value: string
   label: string
 }

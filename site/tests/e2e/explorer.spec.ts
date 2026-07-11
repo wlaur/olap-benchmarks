@@ -203,11 +203,15 @@ test("query heatmap sorts by database and keeps headers aligned", async ({ page 
   }))
   expect(verticalScroll.overflowY).toBe("hidden")
   expect(verticalScroll.scrollHeight).toBe(verticalScroll.clientHeight)
-  await heatmapScroll.evaluate((element) => {
+  const expectedScrollLeft = await heatmapScroll.evaluate((element) => {
     element.scrollLeft = 120
     element.dispatchEvent(new Event("scroll"))
+    return element.scrollLeft
   })
-  await expect.poll(() => heatmapHeader.evaluate((element) => element.scrollLeft)).toBe(120)
+  expect(expectedScrollLeft).toBeGreaterThan(0)
+  await expect
+    .poll(() => heatmapHeader.evaluate((element) => element.scrollLeft))
+    .toBe(expectedScrollLeft)
   await expectNoHorizontalPageOverflow(page)
 })
 
