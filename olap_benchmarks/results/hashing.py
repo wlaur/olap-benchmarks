@@ -7,8 +7,8 @@ from typing import Any
 import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
-FLOAT_ROUND_DECIMALS = 11
-ANSWER_HASH_VERSION = "canonical-v3"
+FLOAT_ROUND_DECIMALS = 10
+ANSWER_HASH_VERSION = "canonical-v4"
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
