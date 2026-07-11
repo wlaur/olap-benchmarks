@@ -1,5 +1,4 @@
 import type { BenchmarkDefinition, BenchmarkSuiteId } from "./benchmarks"
-import { toTitleCase } from "./format"
 import type { BenchmarkOperation } from "./types"
 
 export interface ParsedQueryName {
@@ -98,3 +97,7 @@ export function getSuiteConfig(definition: BenchmarkDefinition): SuiteConfig {
 }
 
 export const METRIC_SAMPLE_RATE_S = 2
+
+function toTitleCase(value: string): string {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
