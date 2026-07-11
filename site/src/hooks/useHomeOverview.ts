@@ -15,6 +15,7 @@ export interface HomeDatabase {
   label: string
   dbName: string
   dbVersion: string
+  overallScore: number
 }
 
 export interface SuiteOverview {
@@ -135,6 +136,7 @@ export function useHomeOverview(
           databases: Array.from(databasesByKey.values())
             .map((database) => ({
               ...database,
+              overallScore: overallScores.get(database.key) ?? Number.POSITIVE_INFINITY,
               label:
                 (versionCountsByDb.get(database.dbName)?.size ?? 0) > 1
                   ? `${database.dbName} ${database.dbVersion}`

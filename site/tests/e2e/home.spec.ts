@@ -8,7 +8,7 @@ test("home scores load and link into the production explorer", async ({ page }) 
 
   await page.goto("#/")
 
-  await expect(page.getByRole("heading", { name: "Suite scores" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
   await expect(page.getByRole("cell", { name: /duckdb/i }).first()).toBeVisible()
 
   await page.getByRole("button", { name: "ClickBench SF1" }).click()
@@ -26,7 +26,7 @@ test("home scores fit desktop and switch to cards on smaller screens", async ({ 
 
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto("#/")
-  await expect(page.getByRole("heading", { name: "Suite scores" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
   await expectTableToFit(page)
   await expectNoHorizontalPageOverflow(page)
 

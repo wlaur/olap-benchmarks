@@ -1,10 +1,11 @@
 import { Database, ExternalLink, Layers3, Server, type LucideIcon } from "lucide-react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { CatalogCoverageMatrix } from "../components/catalog/CatalogCoverageMatrix"
 import { CatalogQueryList } from "../components/catalog/CatalogQueryList"
 import { CatalogSuiteList } from "../components/catalog/CatalogSuiteList"
+import { QuietButton } from "../components/controls/Control"
 import { ControlSelect, ControlSelectSkeleton } from "../components/controls/ControlSelect"
 import { PanelCard, PanelHeader } from "../components/layout/Panel"
 import { MetaLabel, SectionTitle } from "../components/Typography"
@@ -19,6 +20,7 @@ export function CatalogPage() {
   const suitesLoading = useAppStore((state) => state.suitesLoading)
   const suitesError = useAppStore((state) => state.suitesError)
   const catalog = useCatalogData()
+  const [showCoverage, setShowCoverage] = useState(false)
   const summaries = useMemo(
     () =>
       benchmarkDefinitions.map((definition) =>
@@ -75,7 +77,7 @@ export function CatalogPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <MetaLabel>Inventory</MetaLabel>
-          <h2 className="mt-1 text-2xl font-semibold text-slate-50">Benchmark catalog</h2>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-50">Benchmark catalog</h1>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
           <CatalogStat
@@ -96,6 +98,26 @@ export function CatalogPage() {
         </div>
       </header>
 
+      <div className="xl:hidden">
+        {loading || selectedSuiteId === null ? (
+          <ControlSelectSkeleton label="Suite" labelMode="always" className="w-full" />
+        ) : (
+          <ControlSelect
+            ariaLabel="Suite"
+            label="Suite"
+            value={selectedSuiteId}
+            onChange={handleSuiteSelect}
+            options={benchmarkDefinitions.map((definition) => ({
+              value: definition.id,
+              label: definition.title,
+            }))}
+            icon={<Layers3 className="h-3 w-3" strokeWidth={1.8} />}
+            labelMode="always"
+            className="min-h-10 w-full"
+          />
+        )}
+      </div>
+
       {error ? (
         <div className="border-y border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
           Failed to load catalog: {error}
@@ -103,7 +125,7 @@ export function CatalogPage() {
       ) : null}
 
       <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)]">
-        <PanelCard className="p-3 xl:sticky xl:top-4">
+        <PanelCard className="hidden p-3 xl:sticky xl:top-4 xl:block">
           <PanelHeader className="px-1 pb-2">
             <div>
               <SectionTitle as="h3">Suites</SectionTitle>
@@ -112,75 +134,25 @@ export function CatalogPage() {
               </p>
             </div>
           </PanelHeader>
-          <div className="xl:hidden">
-            {loading || selectedSuiteId === null ? (
-              <ControlSelectSkeleton label="Suite" labelMode="always" className="w-full" />
-            ) : (
-              <ControlSelect
-                ariaLabel="Suite"
-                label="Suite"
-                value={selectedSuiteId}
-                onChange={handleSuiteSelect}
-                options={benchmarkDefinitions.map((definition) => ({
-                  value: definition.id,
-                  label: definition.title,
-                }))}
-                icon={<Layers3 className="h-3 w-3" strokeWidth={1.8} />}
-                labelMode="always"
-                className="w-full"
-              />
-            )}
-          </div>
-          <div className="hidden xl:block">
-            <CatalogSuiteList
-              summaries={summaries}
-              selectedSuiteId={selectedSuiteId}
-              loading={loading}
-              onSelect={handleSuiteSelect}
-            />
-          </div>
+          <CatalogSuiteList
+            summaries={summaries}
+            selectedSuiteId={selectedSuiteId}
+            loading={loading}
+            onSelect={handleSuiteSelect}
+          />
         </PanelCard>
 
         <div className="grid min-w-0 gap-4">
           <PanelCard className="p-3 sm:p-4">
-            <PanelHeader className="mb-3 flex-wrap">
-              <div className="min-w-0">
-                <MetaLabel>Result coverage</MetaLabel>
-                <SectionTitle as="h3" className="mt-1 truncate">
-                  {selectedSummary?.definition.title ?? "Suite coverage"}
-                </SectionTitle>
-                <p className="mt-1 text-xs text-slate-500">
-                  {selectedSummary?.systems.length ?? 0} completed{" "}
-                  {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
-                </p>
-              </div>
-              {selectedSummary ? (
-                <Link
-                  to={makeExplorerHref(
-                    selectedSummary.definition.id,
-                    explorerScale,
-                    selectedQuery,
-                    selectedDialect,
-                  )}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border-default bg-surface-inset px-3 text-xs font-medium text-slate-300 transition-colors outline-none hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20"
-                >
-                  Open explorer
-                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </Link>
-              ) : null}
-            </PanelHeader>
-            <CatalogCoverageMatrix summary={selectedSummary} loading={loading} />
-          </PanelCard>
-
-          <PanelCard className="p-3 sm:p-4">
             <PanelHeader className="mb-4 flex-wrap">
               <div>
-                <MetaLabel>Query browser</MetaLabel>
+                <MetaLabel>Queries</MetaLabel>
                 <SectionTitle as="h3" className="mt-1">
-                  {selectedSummary?.queryNames.length ?? 0} queries
+                  {selectedSummary?.definition.title ?? "Benchmark"} SQL
                 </SectionTitle>
                 <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
-                  Select a query, then switch dialects to inspect database-specific SQL.
+                  {selectedSummary?.queryNames.length ?? 0} queries · select one, then switch
+                  database dialects.
                 </p>
               </div>
             </PanelHeader>
@@ -194,6 +166,50 @@ export function CatalogPage() {
               onSelectQuery={handleQuerySelect}
               onSelectDialect={handleDialectSelect}
             />
+          </PanelCard>
+
+          <PanelCard className="p-3 sm:p-4">
+            <PanelHeader className="flex-wrap sm:items-center">
+              <div className="min-w-0">
+                <MetaLabel>Availability</MetaLabel>
+                <SectionTitle as="h3" className="mt-1">
+                  Result coverage
+                </SectionTitle>
+                <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
+                  {selectedSummary?.databases.length ?? 0} databases ·{" "}
+                  {selectedSummary?.systems.length ?? 0} completed{" "}
+                  {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <QuietButton
+                  size="sm"
+                  aria-expanded={showCoverage}
+                  onClick={() => setShowCoverage((current) => !current)}
+                >
+                  {showCoverage ? "Hide coverage" : "Show coverage"}
+                </QuietButton>
+                {selectedSummary ? (
+                  <Link
+                    to={makeExplorerHref(
+                      selectedSummary.definition.id,
+                      explorerScale,
+                      selectedQuery,
+                      selectedDialect,
+                    )}
+                    className="inline-flex min-h-8 items-center gap-2 rounded-md border border-border-default bg-surface-inset px-2.5 text-xs font-medium text-slate-300 transition-colors outline-none hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20"
+                  >
+                    Open explorer
+                    <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </Link>
+                ) : null}
+              </div>
+            </PanelHeader>
+            {showCoverage ? (
+              <div className="mt-3 border-t border-border-subtle pt-3">
+                <CatalogCoverageMatrix summary={selectedSummary} loading={loading} />
+              </div>
+            ) : null}
           </PanelCard>
         </div>
       </div>

@@ -12,8 +12,6 @@ interface NavbarProps {
 
 const activeNavClass =
   "border-accent-400/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-const inactiveNavClass =
-  "border-border-subtle bg-surface-inset text-slate-400 hover:border-border-default hover:bg-surface-raised hover:text-slate-100"
 const inactiveNavTextClass =
   "border-border-subtle bg-surface-inset text-slate-300 hover:border-border-default hover:bg-surface-raised hover:text-slate-100"
 
@@ -34,9 +32,9 @@ export function Navbar({
           <div className="flex min-w-0 shrink-0 items-center gap-2">
             <NavLink to="/" className="flex shrink-0 items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="h-8 w-8" />
-              <h1 className="text-base font-semibold tracking-tight text-slate-50 max-sm:hidden">
+              <span className="text-base font-semibold tracking-tight text-slate-50 max-sm:hidden">
                 OLAP Benchmarks
-              </h1>
+              </span>
             </NavLink>
           </div>
 
@@ -45,13 +43,13 @@ export function Navbar({
               to="/"
               end
               className={({ isActive }) =>
-                `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition ${
-                  isActive ? activeNavClass : inactiveNavClass
+                `inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-xs transition ${
+                  isActive ? activeNavClass : inactiveNavTextClass
                 }`
               }
-              title="Home"
             >
-              <Home size={18} />
+              <Home size={16} strokeWidth={1.8} />
+              Home
             </NavLink>
             <NavLink
               to="/explorer/time_series"

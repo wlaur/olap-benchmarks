@@ -57,7 +57,7 @@ export function CatalogQueryList({
   }
 
   return (
-    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
+    <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
       <ChartFrame className="flex min-h-0 flex-col p-3">
         <label className="flex min-w-0 items-center gap-2 border-b border-border-default px-1 pb-2 text-slate-400 focus-within:border-slate-500 focus-within:text-slate-300">
           <Search className="h-4 w-4 shrink-0" strokeWidth={1.8} />
