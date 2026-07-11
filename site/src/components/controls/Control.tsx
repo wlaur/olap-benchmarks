@@ -23,7 +23,7 @@ export function ControlGroup({
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full border border-border-default bg-surface-inset",
+        "inline-flex items-center rounded-md border border-border-default bg-surface-inset",
         compact ? "gap-0.5 p-0.5" : "gap-1 p-1",
         className,
       )}
@@ -51,11 +51,11 @@ export function SegmentedButton({
     <button
       type={type ?? "button"}
       className={cn(
-        "inline-flex items-center justify-center rounded-full border font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-        "focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20",
+        "inline-flex items-center justify-center rounded-md border font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
+        "focus-visible:border-accent-300 focus-visible:ring-2 focus-visible:ring-accent-400/15",
         BUTTON_SIZE_CLASS[size],
         selected
-          ? "border-slate-200/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+          ? "border-accent-300/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
           : "border-border-default bg-surface-inset text-slate-300 hover:border-slate-500 hover:bg-surface-raised hover:text-slate-100",
         className,
       )}
@@ -78,11 +78,11 @@ export function ControlChip({
     <button
       type={type ?? "button"}
       className={cn(
-        "inline-flex items-center justify-center rounded-full border font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-        "focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20",
+        "inline-flex items-center justify-center rounded-md border font-medium transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
+        "focus-visible:border-accent-300 focus-visible:ring-2 focus-visible:ring-accent-400/15",
         BUTTON_SIZE_CLASS[size],
         selected
-          ? "border-slate-200/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+          ? "border-accent-300/60 bg-surface-elevated text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
           : "border-border-default bg-surface-inset text-slate-300 hover:border-slate-500 hover:bg-surface-raised hover:text-slate-100",
         className,
       )}
@@ -108,8 +108,8 @@ export function QuietButton({
     <button
       type={type ?? "button"}
       className={cn(
-        "inline-flex items-center justify-center rounded-full border border-border-default bg-surface-inset font-medium text-slate-200 transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
-        "hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20",
+        "inline-flex items-center justify-center rounded-md border border-border-default bg-surface-inset font-medium text-slate-200 transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
+        "hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-accent-300 focus-visible:ring-2 focus-visible:ring-accent-400/15",
         BUTTON_SIZE_CLASS[size],
         className,
       )}

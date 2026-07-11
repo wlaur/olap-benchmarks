@@ -28,7 +28,7 @@ export function Eyebrow({
   return (
     <Text
       as={as}
-      className={cn("text-sm font-medium tracking-wide text-accent-300 uppercase", className)}
+      className={cn("text-xs font-semibold tracking-[0.14em] text-accent-300 uppercase", className)}
     >
       {children}
     </Text>
@@ -47,7 +47,10 @@ export function MetaLabel({
   return (
     <Text
       as={as}
-      className={cn("text-xs font-medium tracking-wide text-slate-400 uppercase", className)}
+      className={cn(
+        "text-[0.6875rem] font-semibold tracking-[0.13em] text-slate-400 uppercase",
+        className,
+      )}
     >
       {children}
     </Text>
@@ -80,7 +83,7 @@ export function SectionTitle({
   className?: string
 }) {
   return (
-    <Text as={as} className={cn("text-lg font-semibold text-slate-50", className)}>
+    <Text as={as} className={cn("text-lg font-semibold tracking-tight text-slate-50", className)}>
       {children}
     </Text>
   )
@@ -96,7 +99,7 @@ export function FeatureTitle({
   className?: string
 }) {
   return (
-    <Text as={as} className={cn("text-2xl font-semibold text-slate-50", className)}>
+    <Text as={as} className={cn("text-2xl font-semibold tracking-tight text-slate-50", className)}>
       {children}
     </Text>
   )
@@ -119,7 +122,7 @@ export function SectionDivider({
         <h2 className="text-[11px] font-semibold tracking-[0.18em] text-slate-300 uppercase">
           {title}
         </h2>
-        {description ? <p className="text-xs text-slate-400">{description}</p> : null}
+        {description ? <p className="font-sans text-xs text-slate-400">{description}</p> : null}
       </div>
       {trailing ? <div className="flex items-center gap-2">{trailing}</div> : null}
     </div>
@@ -136,7 +139,7 @@ export function BodyText({
   className?: string
 }) {
   return (
-    <Text as={as} className={cn("text-sm text-slate-300", className)}>
+    <Text as={as} className={cn("font-sans text-sm text-slate-300", className)}>
       {children}
     </Text>
   )

@@ -95,7 +95,7 @@ export function App() {
           path="/explorer/:suiteId"
           element={
             <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
-              <div className="flex min-h-0 w-full flex-1 flex-col">
+              <div className="mx-auto flex min-h-0 w-full max-w-[84rem] flex-1 flex-col">
                 <ExplorerRoute
                   preferredSystem={selectedSystem}
                   benchmarkDefinitions={benchmarkDefinitions}
@@ -110,7 +110,7 @@ export function App() {
           path="/catalog"
           element={
             <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
-              <div className="mx-auto flex min-h-0 w-full max-w-[96rem] flex-1 flex-col">
+              <div className="mx-auto flex min-h-0 w-full max-w-[84rem] flex-1 flex-col">
                 <CatalogPage />
               </div>
             </main>

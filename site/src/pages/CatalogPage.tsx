@@ -179,7 +179,7 @@ export function CatalogPage() {
                 <SectionTitle as="h3" className="mt-1">
                   {selectedSummary?.queryNames.length ?? 0} queries
                 </SectionTitle>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
+                <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
                   Select a query, then switch dialects to inspect database-specific SQL.
                 </p>
               </div>

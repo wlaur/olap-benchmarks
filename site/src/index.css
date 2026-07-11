@@ -2,19 +2,27 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-surface-primary: #0c0f17;
-  --color-surface-raised: #1c2233;
-  --color-surface-inset: #141826;
-  --color-surface-elevated: #232a3e;
+  --color-surface-primary: #070a0f;
+  --color-surface-raised: #111722;
+  --color-surface-inset: #0b1018;
+  --color-surface-elevated: #182232;
 
-  --color-border-subtle: rgba(148, 163, 184, 0.12);
-  --color-border-default: rgba(148, 163, 184, 0.24);
-  --color-border-strong: rgba(148, 163, 184, 0.38);
+  --color-border-subtle: rgba(148, 163, 184, 0.15);
+  --color-border-default: rgba(148, 163, 184, 0.3);
+  --color-border-strong: rgba(148, 163, 184, 0.48);
 
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #cbd5e1;
-  --color-text-muted: #94a3b8;
-  --color-text-faint: #64748b;
+  --color-text-primary: #f4f7fb;
+  --color-text-secondary: #d3dce8;
+  --color-text-muted: #9dacbf;
+  --color-text-faint: #718198;
+
+  --color-slate-50: #f4f7fb;
+  --color-slate-100: #e8eef6;
+  --color-slate-200: #d3dce8;
+  --color-slate-300: #b8c5d5;
+  --color-slate-400: #9dacbf;
+  --color-slate-500: #718198;
+  --color-slate-600: #536176;
 
   --color-accent-200: #dceaff;
   --color-accent-300: #a8c8ff;
@@ -31,6 +39,13 @@
 
   body {
     margin: 0;
+    background: var(--color-surface-primary);
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+      monospace;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
   }
 
   button:not(:disabled),
