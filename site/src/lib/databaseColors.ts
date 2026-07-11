@@ -31,7 +31,7 @@ const FALLBACK_DATABASE_COLORS = DATABASE_COLOR_PALETTE.slice(
 
 // Database identities from the query layer are variant labels: the engine
 // name, suffixed with the db version when several versions are present.
-export function databaseEngine(dbLabel: string): string {
+function databaseEngine(dbLabel: string): string {
   return dbLabel.split(" ")[0]!
 }
 

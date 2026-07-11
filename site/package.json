@@ -21,7 +21,6 @@
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-select": "^2.3.2",
     "@tailwindcss/typography": "^0.5.20",
-    "@tanstack/react-table": "^8.21.3",
     "clsx": "^2.1.1",
     "kysely": "^0.29.2",
     "lucide-react": "^1.23.0",
@@ -29,7 +28,6 @@
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.1",
-    "recharts": "^3.9.1",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"
