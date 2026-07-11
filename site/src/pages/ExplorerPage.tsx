@@ -208,6 +208,7 @@ export function ExplorerPage({
         .sort((a, b) => a.valueMs - b.valueMs),
     [rankedRows, selectedQuery],
   )
+  const queryDetailHeight = Math.max(384, 88 + selectedQueryRows.length * 60)
   const nextSearchParams = useMemo(() => {
     if (!selection.ready || !selectedQuery) return ""
     const params = new URLSearchParams()
@@ -245,10 +246,28 @@ export function ExplorerPage({
     <div className="flex min-h-full w-full max-w-full min-w-0 shrink-0 flex-col gap-4 overflow-x-clip pb-8">
       <header className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
         <div className="min-w-0">
-          <MetaLabel>Benchmark explorer</MetaLabel>
-          <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
-            {suiteDefinition.title} results
-          </h2>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <MetaLabel>Benchmark explorer</MetaLabel>
+              <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
+                {suiteDefinition.title} results
+              </h2>
+            </div>
+            <ControlSelect
+              ariaLabel="Benchmark suite"
+              label="Suite"
+              value={suiteId}
+              onChange={handleSuiteChange}
+              options={benchmarkDefinitions.map((definition) => ({
+                value: definition.id,
+                label: definition.title,
+              }))}
+              icon={<FlaskConical className="h-3 w-3" strokeWidth={1.8} />}
+              labelMode="always"
+              className="w-full sm:mb-0.5 sm:w-56"
+              menuClassName="min-w-56"
+            />
+          </div>
           <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
             See the overall result first, then inspect individual queries or adjust what is being
             compared.
@@ -302,7 +321,7 @@ export function ExplorerPage({
               No completed query results are available for this suite.
             </div>
           ) : (
-            <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-5">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-4">
               <DimensionRow
                 icon={Server}
                 label="System"
@@ -422,25 +441,6 @@ export function ExplorerPage({
                     onChange={(version) => updateRawSelection({ version })}
                   />
                 )}
-              </DimensionRow>
-
-              <DimensionRow
-                icon={FlaskConical}
-                label="Suite"
-                role="fixed"
-                summary={`${queryNames.length} queries with results`}
-              >
-                <DimensionSelect
-                  ariaLabel="Suite"
-                  label="Suite"
-                  icon={FlaskConical}
-                  value={suiteId}
-                  options={benchmarkDefinitions.map((definition) => ({
-                    id: definition.id,
-                    label: definition.title,
-                  }))}
-                  onChange={handleSuiteChange}
-                />
               </DimensionRow>
 
               <DimensionRow
@@ -568,7 +568,7 @@ export function ExplorerPage({
           </PanelHeader>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.28fr)]">
-            <ChartFrame className="p-3 sm:p-4">
+            <ChartFrame className="p-3 sm:p-4" style={{ height: queryDetailHeight }}>
               <div className="mb-4">
                 <MetaLabel>Runtime for this query</MetaLabel>
                 <p
@@ -582,46 +582,14 @@ export function ExplorerPage({
               <RankingBars rows={selectedQueryRows} />
             </ChartFrame>
 
-            <ChartFrame className="flex min-h-[24rem] flex-col overflow-hidden p-3 sm:p-4">
+            <ChartFrame
+              className="flex flex-col overflow-hidden p-3 sm:p-4"
+              style={{ height: queryDetailHeight }}
+            >
               <div className="mb-3 shrink-0 space-y-3">
                 <div>
-                  <MetaLabel>SQL used</MetaLabel>
-                  <p className="mt-1 truncate text-sm font-medium text-slate-200">
-                    {selectedQuery}
-                  </p>
-                </div>
-                {sqlDatabaseOptions.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <div className="panel-scrollbar flex gap-1 overflow-x-auto pb-1">
-                      {sqlDatabaseOptions.map((database) => {
-                        const differsFromDefault = sqlVariants.get(database) ?? false
-                        const databaseName = formatDatabaseName(database)
-                        return (
-                          <SegmentedButton
-                            key={database}
-                            selected={sqlDatabase === database}
-                            aria-pressed={sqlDatabase === database}
-                            onClick={() => setRequestedSqlDatabase(database)}
-                            size="xs"
-                            className="shrink-0 gap-1.5 rounded-md"
-                            data-sql-variant={differsFromDefault ? "different" : "default"}
-                            title={
-                              differsFromDefault
-                                ? `${databaseName} SQL differs from the default`
-                                : `${databaseName} uses the default SQL`
-                            }
-                          >
-                            {differsFromDefault ? (
-                              <span
-                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.12)]"
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                            {databaseName}
-                          </SegmentedButton>
-                        )
-                      })}
-                    </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <MetaLabel>SQL used</MetaLabel>
                     {hasDifferentSql ? (
                       <p className="flex items-center gap-1.5 text-[0.6875rem] text-slate-500">
                         <span
@@ -631,6 +599,41 @@ export function ExplorerPage({
                         Differs from default SQL
                       </p>
                     ) : null}
+                  </div>
+                  <p className="mt-1 truncate text-sm font-medium text-slate-200">
+                    {selectedQuery}
+                  </p>
+                </div>
+                {sqlDatabaseOptions.length > 0 ? (
+                  <div className="panel-scrollbar flex gap-1 overflow-x-auto pb-1">
+                    {sqlDatabaseOptions.map((database) => {
+                      const differsFromDefault = sqlVariants.get(database) ?? false
+                      const databaseName = formatDatabaseName(database)
+                      return (
+                        <SegmentedButton
+                          key={database}
+                          selected={sqlDatabase === database}
+                          aria-pressed={sqlDatabase === database}
+                          onClick={() => setRequestedSqlDatabase(database)}
+                          size="xs"
+                          className="shrink-0 gap-1.5 rounded-md"
+                          data-sql-variant={differsFromDefault ? "different" : "default"}
+                          title={
+                            differsFromDefault
+                              ? `${databaseName} SQL differs from the default`
+                              : `${databaseName} uses the default SQL`
+                          }
+                        >
+                          {differsFromDefault ? (
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.12)]"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          {databaseName}
+                        </SegmentedButton>
+                      )
+                    })}
                   </div>
                 ) : null}
               </div>

@@ -8,6 +8,15 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
 
   await page.goto("#/explorer/clickbench?mode=database")
 
+  const suiteSelect = page.getByRole("combobox", { name: "Benchmark suite" })
+  await expect(suiteSelect).toContainText("ClickBench")
+  await suiteSelect.click()
+  await page.getByRole("option", { name: "RTABench", exact: true }).click()
+  await expect(page).toHaveURL(/\/explorer\/rtabench/)
+  await expect(page.getByRole("heading", { name: "RTABench results" })).toBeVisible()
+  await page.getByRole("combobox", { name: "Benchmark suite" }).click()
+  await page.getByRole("option", { name: "ClickBench", exact: true }).click()
+
   await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
   await expect(page.getByText("Median across 43 shared queries")).toBeVisible()
   await expect(page.getByText("Fastest overall")).toBeVisible()
@@ -44,6 +53,15 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
     "default",
   )
   await expect(page.getByText("Differs from default SQL")).toBeVisible()
+
+  const questDbSqlButton = page.getByRole("button", { name: "QuestDB", exact: true })
+  await questDbSqlButton.scrollIntoViewIfNeeded()
+  const sqlTabsTop = await questDbSqlButton.evaluate((button) => button.getBoundingClientRect().top)
+  await questDbSqlButton.click()
+  await expect(questDbSqlButton).toHaveAttribute("aria-pressed", "true")
+  expect(await questDbSqlButton.evaluate((button) => button.getBoundingClientRect().top)).toBe(
+    sqlTabsTop,
+  )
 
   await page.getByRole("button", { name: "Version", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
