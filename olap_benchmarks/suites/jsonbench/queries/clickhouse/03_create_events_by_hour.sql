@@ -1,6 +1,6 @@
 SELECT
   data.commit.collection AS event,
-  toHour(fromUnixTimestamp64Micro(data.time_us)) AS hour_of_day,
+  toHour(fromUnixTimestamp64Micro(data.time_us, 'UTC')) AS hour_of_day,
   count() AS count
 FROM bluesky
 WHERE

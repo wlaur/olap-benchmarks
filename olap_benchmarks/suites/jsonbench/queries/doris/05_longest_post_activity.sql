@@ -1,7 +1,7 @@
 SELECT
   json_extract_string(data, '$.did') AS user_id,
-  (max(json_extract_bigint(data, '$.time_us')) - min(json_extract_bigint(data, '$.time_us'))) / 1000.0
-    AS activity_span
+  CAST(floor(max(json_extract_bigint(data, '$.time_us')) / 1000.0) AS BIGINT)
+    - CAST(floor(min(json_extract_bigint(data, '$.time_us')) / 1000.0) AS BIGINT) AS activity_span
 FROM bluesky
 WHERE
   json_extract_string(data, '$.kind') = 'commit'

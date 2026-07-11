@@ -1,10 +1,7 @@
 SELECT
   get_json_string(data, 'did') AS user_id,
-  date_diff(
-    'millisecond',
-    to_datetime(min(get_json_int(data, 'time_us')), 6),
-    to_datetime(max(get_json_int(data, 'time_us')), 6)
-  ) AS activity_span
+  CAST(floor(max(get_json_int(data, 'time_us')) / 1000.0) AS BIGINT)
+    - CAST(floor(min(get_json_int(data, 'time_us')) / 1000.0) AS BIGINT) AS activity_span
 FROM bluesky
 WHERE
   get_json_string(data, 'kind') = 'commit'

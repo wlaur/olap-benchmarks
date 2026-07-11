@@ -1,11 +1,11 @@
 SELECT
   j ->> '$.did' AS user_id,
-  CAST(to_timestamp(CAST(min(j ->> '$.time_us') AS BIGINT) / 1000000) AS TIMESTAMP_MS) AS first_post_ts
+  epoch_ms(CAST(min(j ->> '$.time_us') AS BIGINT) // 1000) AS first_post_ts
 FROM bluesky
 WHERE
-  j ->> '$.kind' = 'commit'
-  AND j ->> '$.commit.operation' = 'create'
-  AND j ->> '$.commit.collection' = 'app.bsky.feed.post'
+  (j ->> '$.kind') = 'commit'
+  AND (j ->> '$.commit.operation') = 'create'
+  AND (j ->> '$.commit.collection') = 'app.bsky.feed.post'
 GROUP BY user_id
-ORDER BY first_post_ts ASC
+ORDER BY CAST(min(j ->> '$.time_us') AS BIGINT) ASC
 LIMIT 3;
