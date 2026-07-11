@@ -29,6 +29,7 @@ import { useExplorerData } from "../hooks/useExplorerData"
 import type { BenchmarkDefinition, BenchmarkSuiteId } from "../lib/benchmarks"
 import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
+import { computeRelativeSeriesScores, formatScore } from "../lib/score"
 import type { ExplorerQueryMetric, QuerySqlEntry } from "../lib/types"
 
 type ComparisonMode = "database" | "scale" | "version" | "system"
@@ -100,6 +101,13 @@ interface ComparisonRow {
   queryValues: Map<string, number>
 }
 
+interface ScoredComparisonRow extends ComparisonRow {
+  score: number
+  queryCount: number
+  wins: number
+  missing: number
+}
+
 interface QueryRow {
   query: string
   values: (number | null)[]
@@ -145,25 +153,25 @@ export function ExplorerPage({
     () => buildComparisonRows({ mode, metrics, variants, selection, databaseColors }),
     [databaseColors, metrics, mode, selection, variants],
   )
-  const sharedQueries = useMemo(() => findSharedQueries(comparisonRows), [comparisonRows])
-  const rankedRows = useMemo(
-    () =>
-      comparisonRows
-        .map((row) => ({
-          ...row,
-          valueMs: median(
-            sharedQueries
-              .map((query) => row.queryValues.get(query))
-              .filter((value): value is number => value !== undefined),
-          ),
-        }))
-        .sort((a, b) => a.valueMs - b.valueMs),
-    [comparisonRows, sharedQueries],
-  )
   const manifestEntries = useMemo(
     () => queriesManifest[suiteDefinition.queriesKey] ?? {},
     [queriesManifest, suiteDefinition.queriesKey],
   )
+  const rankedRows = useMemo(() => {
+    const scores = new Map(
+      computeRelativeSeriesScores(
+        comparisonRows.map((row) => ({ key: row.id, queryValues: row.queryValues })),
+        Object.keys(manifestEntries),
+        10,
+      ).map((score) => [score.key, score]),
+    )
+    return comparisonRows
+      .map((row): ScoredComparisonRow => ({ ...row, ...scores.get(row.id)! }))
+      .sort((left, right) => left.score - right.score || left.label.localeCompare(right.label))
+  }, [comparisonRows, manifestEntries])
+  const scoredQueryCount = rankedRows[0]
+    ? rankedRows[0].queryCount + rankedRows[0].missing
+    : Object.keys(manifestEntries).length
   const queryNames = useMemo(
     () => orderQueryNames(Object.keys(manifestEntries), rankedRows),
     [manifestEntries, rankedRows],
@@ -211,7 +219,7 @@ export function ExplorerPage({
         .sort((a, b) => a.valueMs - b.valueMs),
     [rankedRows, selectedQuery],
   )
-  const queryDetailHeight = Math.max(384, 88 + selectedQueryRows.length * 60)
+  const queryDetailHeight = Math.min(480, Math.max(384, 112 + selectedQueryRows.length * 60))
   const nextSearchParams = useMemo(() => {
     if (!selection.ready || !selectedQuery) return ""
     const params = new URLSearchParams()
@@ -527,22 +535,26 @@ export function ExplorerPage({
           </div>
         ) : (
           <>
-            <OverviewStats rows={rankedRows} sharedQueryCount={sharedQueries.length} />
+            <OverviewStats rows={rankedRows} />
 
             <ChartFrame className="p-3 sm:p-4">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <MetaLabel>Overall ranking</MetaLabel>
                   <p className="mt-1 text-sm font-medium text-slate-200">
-                    Median across {sharedQueries.length} shared queries
+                    Normalized suite score across {scoredQueryCount} suite queries
+                  </p>
+                  <p className="mt-1 max-w-3xl font-sans text-xs leading-5 text-slate-500">
+                    Geometric mean versus the fastest result per query, with 10ms smoothing and
+                    missing-query penalties.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
                   <Gauge className="h-3.5 w-3.5 text-accent-300" strokeWidth={1.8} />
-                  Shorter bars are faster
+                  Lower is better · 1.0× is ideal
                 </div>
               </div>
-              <RankingBars rows={rankedRows} />
+              <ScoreRanking rows={rankedRows} />
             </ChartFrame>
           </>
         )}
@@ -573,8 +585,11 @@ export function ExplorerPage({
           </PanelHeader>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.28fr)]">
-            <ChartFrame className="p-3 sm:p-4" style={{ height: queryDetailHeight }}>
-              <div className="mb-4">
+            <ChartFrame
+              className="flex flex-col overflow-hidden p-3 sm:p-4"
+              style={{ height: queryDetailHeight }}
+            >
+              <div className="mb-4 shrink-0">
                 <MetaLabel>Runtime for this query</MetaLabel>
                 <p
                   className="mt-1 truncate text-sm font-medium text-slate-200"
@@ -584,7 +599,12 @@ export function ExplorerPage({
                 </p>
                 <p className="mt-1 text-xs text-slate-500">Shorter bars are faster</p>
               </div>
-              <RankingBars rows={selectedQueryRows} />
+              <div
+                data-query-runtime-scroll
+                className="panel-scrollbar min-h-0 flex-1 overflow-y-auto pr-1"
+              >
+                <RuntimeRankingBars rows={selectedQueryRows} />
+              </div>
             </ChartFrame>
 
             <ChartFrame
@@ -727,45 +747,47 @@ function DimensionRow({
   )
 }
 
-function OverviewStats({
-  rows,
-  sharedQueryCount,
-}: {
-  rows: readonly ComparisonRow[]
-  sharedQueryCount: number
-}) {
-  const fastest = rows[0]
-  const slowest = rows.at(-1)
-  if (!fastest || !slowest) return null
-  const range = fastest.valueMs > 0 ? slowest.valueMs / fastest.valueMs : 0
+function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
+  const leader = rows[0]
+  const last = rows.at(-1)
+  if (!leader || !last) return null
+  const scoredQueryCount = leader.queryCount + leader.missing
+  const scoreRange =
+    Number.isFinite(leader.score) && Number.isFinite(last.score) && leader.score > 0
+      ? last.score / leader.score
+      : null
 
   return (
     <div className="grid gap-2 sm:grid-cols-3">
       <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
         <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
           <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
-          Fastest overall
+          Best suite score
         </div>
-        <p className="mt-2 truncate text-xl font-semibold text-slate-50">{fastest.label}</p>
+        <p className="mt-2 truncate text-xl font-semibold text-slate-50">{leader.label}</p>
+        <p className="mt-1 text-xs text-slate-400">{formatScore(leader.score)} normalized score</p>
+      </div>
+      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          Winning queries
+        </p>
+        <p className="mt-2 text-xl font-semibold text-slate-50">
+          {leader.wins}/{leader.queryCount}
+        </p>
+        <p className="mt-1 truncate text-xs text-slate-400" title={leader.label}>
+          Fastest completed results ({leader.label})
+        </p>
+      </div>
+      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          Scored workload
+        </p>
+        <p className="mt-2 text-xl font-semibold text-slate-50">{scoredQueryCount} queries</p>
         <p className="mt-1 text-xs text-slate-400">
-          {formatRuntime(fastest.valueMs)} median runtime
+          {scoreRange === null
+            ? "Missing results are penalized"
+            : `${scoreRange.toFixed(1)}× score spread; missing results penalized`}
         </p>
-      </div>
-      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
-        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Performance range
-        </p>
-        <p className="mt-2 text-xl font-semibold text-slate-50">{range.toFixed(1)}×</p>
-        <p className="mt-1 truncate text-xs text-slate-400" title={slowest.label}>
-          Fastest to slowest ({slowest.label})
-        </p>
-      </div>
-      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
-        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Shared workload
-        </p>
-        <p className="mt-2 text-xl font-semibold text-slate-50">{sharedQueryCount} queries</p>
-        <p className="mt-1 text-xs text-slate-400">Successful for every selected series</p>
       </div>
     </div>
   )
@@ -877,7 +899,50 @@ function VersionPins({
   )
 }
 
-function RankingBars({ rows }: { rows: readonly ComparisonRow[] }) {
+function ScoreRanking({ rows }: { rows: readonly ScoredComparisonRow[] }) {
+  return (
+    <div className="grid gap-2">
+      {rows.map((row, index) => (
+        <div
+          key={row.id}
+          data-score-ranking-row={row.id}
+          className={cn(
+            "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border bg-surface-primary/35 px-3 py-2.5",
+            index === 0 ? "border-amber-300/35" : "border-border-subtle",
+          )}
+        >
+          <span className="flex w-7 items-center gap-1 text-xs font-semibold text-slate-500">
+            {index === 0 ? (
+              <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
+            ) : null}
+            <span>#{index + 1}</span>
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: row.color }}
+              />
+              <span className="truncate text-sm font-medium text-slate-100">{row.label}</span>
+            </div>
+            <p className="mt-1 truncate text-[0.7rem] text-slate-500">
+              {row.wins}/{row.queryCount} fastest
+              {row.missing > 0 ? ` · ${row.missing} missing penalized` : ""} · {row.detail}
+            </p>
+          </div>
+          <span
+            data-score={row.score}
+            className="text-base font-semibold text-slate-50 tabular-nums"
+          >
+            {formatScore(row.score)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RuntimeRankingBars({ rows }: { rows: readonly ComparisonRow[] }) {
   const bestRuntime = Math.min(...rows.map((row) => row.valueMs))
   const slowestRuntime = Math.max(...rows.map((row) => row.valueMs))
 
@@ -1529,14 +1594,6 @@ function makeRunVariants(metrics: readonly ExplorerQueryMetric[]): RunVariant[] 
     })
   }
   return [...variants.values()]
-}
-
-function findSharedQueries(rows: readonly ComparisonRow[]): string[] {
-  const first = rows[0]
-  if (!first) return []
-  return [...first.queryValues.keys()].filter((query) =>
-    rows.every((row) => row.queryValues.has(query)),
-  )
 }
 
 function orderQueryNames(manifestNames: readonly string[], rows: readonly ComparisonRow[]) {

@@ -14,6 +14,19 @@ export interface DatabaseScore {
   latestSelectFailed: boolean
 }
 
+export interface RelativeScoreSeries {
+  key: string
+  queryValues: ReadonlyMap<string, number>
+}
+
+export interface RelativeSeriesScore {
+  key: string
+  score: number
+  queryCount: number
+  wins: number
+  missing: number
+}
+
 const SMOOTHING_SECONDS = 0.01
 const MISSING_QUERY_MIN_RATIO = 10
 const MISSING_QUERY_WORST_MULTIPLIER = 2
@@ -53,47 +66,12 @@ export function computeDatabaseScores(
     })
   }
 
-  const dbStats = new Map<
-    string,
-    { logSum: number; scoredCount: number; queryCount: number; wins: number }
-  >()
-  for (const dbKey of databases.keys()) {
-    dbStats.set(dbKey, { logSum: 0, scoredCount: 0, queryCount: 0, wins: 0 })
-  }
-
-  for (const queryName of scoredQueryNames) {
-    const group = queryGroups.get(queryName) ?? new Map<string, number>()
-    const times = Array.from(group.values())
-    const ratios = new Map<string, number>()
-    const minTime = times.length > 0 ? Math.min(...times) : null
-    let missingRatio = MISSING_QUERY_MIN_RATIO
-
-    if (minTime !== null) {
-      const minSmoothed = minTime + SMOOTHING_SECONDS
-
-      for (const [dbKey, time] of group) {
-        ratios.set(dbKey, (time + SMOOTHING_SECONDS) / minSmoothed)
-      }
-
-      missingRatio = Math.max(
-        MISSING_QUERY_MIN_RATIO,
-        MISSING_QUERY_WORST_MULTIPLIER * Math.max(...ratios.values()),
-      )
-    }
-
-    for (const dbKey of databases.keys()) {
-      const stats = dbStats.get(dbKey)!
-      const time = group.get(dbKey)
-      const ratio = ratios.get(dbKey) ?? missingRatio
-      stats.logSum += Math.log(ratio)
-      stats.scoredCount += 1
-      if (time === undefined) continue
-      stats.queryCount += 1
-      if (minTime !== null && durationsAreEqual(time, minTime)) stats.wins += 1
-    }
-  }
-
-  const totalQueries = scoredQueryNames.size
+  const dbStats = calculateRelativeScores(
+    [...databases.keys()],
+    [...scoredQueryNames],
+    queryGroups,
+    SMOOTHING_SECONDS,
+  )
 
   return Array.from(databases)
     .map(([dbKey, database]) => {
@@ -102,21 +80,17 @@ export function computeDatabaseScores(
       if (!coverage) {
         throw new Error(`query coverage is missing for ${database.db}`)
       }
-      const score =
-        stats.scoredCount > 0
-          ? Math.exp(stats.logSum / stats.scoredCount)
-          : Number.POSITIVE_INFINITY
       return {
         dbKey,
         db: database.db,
         dbName: database.dbName,
         dbVersion: database.dbVersion,
-        score,
+        score: stats.score,
         queryCount: stats.queryCount,
         wins: stats.wins,
-        missing: totalQueries - stats.queryCount,
+        missing: stats.missing,
         failed: coverage.failed_query_count,
-        neverCompleted: Math.max(0, totalQueries - stats.queryCount - coverage.failed_query_count),
+        neverCompleted: Math.max(0, stats.missing - coverage.failed_query_count),
         latestSelectFailed: coverage.latest_status === "failed",
       }
     })
@@ -132,6 +106,94 @@ export function computeDatabaseScores(
     })
 }
 
+export function computeRelativeSeriesScores(
+  series: readonly RelativeScoreSeries[],
+  queryNames: readonly string[],
+  smoothingDuration: number,
+): RelativeSeriesScore[] {
+  const scoredQueryNames = new Set(queryNames)
+  const queryGroups = new Map<string, Map<string, number>>()
+  for (const entry of series) {
+    for (const [queryName, duration] of entry.queryValues) {
+      scoredQueryNames.add(queryName)
+      const group = queryGroups.get(queryName) ?? new Map<string, number>()
+      group.set(entry.key, duration)
+      queryGroups.set(queryName, group)
+    }
+  }
+
+  const scores = calculateRelativeScores(
+    series.map((entry) => entry.key),
+    [...scoredQueryNames],
+    queryGroups,
+    smoothingDuration,
+  )
+  return series.map((entry) => scores.get(entry.key)!)
+}
+
+function calculateRelativeScores(
+  seriesKeys: readonly string[],
+  queryNames: readonly string[],
+  queryGroups: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  smoothingDuration: number,
+): Map<string, RelativeSeriesScore> {
+  const statsBySeries = new Map<
+    string,
+    { logSum: number; scoredCount: number; queryCount: number; wins: number }
+  >()
+  for (const key of seriesKeys) {
+    statsBySeries.set(key, { logSum: 0, scoredCount: 0, queryCount: 0, wins: 0 })
+  }
+
+  for (const queryName of queryNames) {
+    const group = queryGroups.get(queryName) ?? new Map<string, number>()
+    const times = [...group.values()]
+    const ratios = new Map<string, number>()
+    const minTime = times.length > 0 ? Math.min(...times) : null
+    let missingRatio = MISSING_QUERY_MIN_RATIO
+
+    if (minTime !== null) {
+      const minSmoothed = minTime + smoothingDuration
+      for (const [key, time] of group) {
+        ratios.set(key, (time + smoothingDuration) / minSmoothed)
+      }
+      missingRatio = Math.max(
+        MISSING_QUERY_MIN_RATIO,
+        MISSING_QUERY_WORST_MULTIPLIER * Math.max(...ratios.values()),
+      )
+    }
+
+    for (const key of seriesKeys) {
+      const stats = statsBySeries.get(key)!
+      const time = group.get(key)
+      stats.logSum += Math.log(ratios.get(key) ?? missingRatio)
+      stats.scoredCount += 1
+      if (time === undefined) continue
+      stats.queryCount += 1
+      if (minTime !== null && durationsAreEqual(time, minTime)) stats.wins += 1
+    }
+  }
+
+  return new Map(
+    seriesKeys.map((key) => {
+      const stats = statsBySeries.get(key)!
+      return [
+        key,
+        {
+          key,
+          score:
+            stats.scoredCount > 0
+              ? Math.exp(stats.logSum / stats.scoredCount)
+              : Number.POSITIVE_INFINITY,
+          queryCount: stats.queryCount,
+          wins: stats.wins,
+          missing: queryNames.length - stats.queryCount,
+        },
+      ]
+    }),
+  )
+}
+
 function durationsAreEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= DURATION_EQUALITY_TOLERANCE
 }
@@ -140,16 +202,4 @@ export function formatScore(score: number): string {
   if (!Number.isFinite(score)) return "—"
   if (score < 100) return `${score.toFixed(1)}×`
   return `${Math.round(score)}×`
-}
-
-export const SCORE_EXPLAINER = {
-  title: "How the score is calculated",
-  body: [
-    "For each query in the suite, we find the fastest database and compare every other database's warm median time to it as a ratio (a smoothing constant of 10ms is added to both sides to avoid blow-ups on sub-millisecond queries).",
-    "Query medians use warm or steady-state iterations when available. Queries with only one recorded iteration fall back to the all-iteration median.",
-    "The score shown is the geometric mean of these ratios across the suite's query manifest. Missing or unsupported queries are scored as the larger of 10× or 2× the slowest observed ratio for that query.",
-    "When the latest attempted select run recorded failed query steps, those failures are shown separately from queries that were never completed or not recorded.",
-    "1.0× means the database was the fastest on every query; 2.5× means it was on average 2.5× slower than the fastest per query after any missing-query penalties.",
-    "This is the same shape of metric used by the official ClickBench rankings, just normalised to per-query so suites with very different query counts stay comparable.",
-  ],
 }
