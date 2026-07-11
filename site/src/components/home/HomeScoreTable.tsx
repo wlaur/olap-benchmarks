@@ -39,7 +39,7 @@ export function HomeScoreTable() {
       : `No completed runs found${selectedSystem ? ` for ${selectedSystem}` : ""}.`
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-default bg-surface-raised">
+    <div className="overflow-hidden rounded-lg border border-border-default bg-surface-raised">
       <div className="border-b border-border-default px-5 py-4">
         <SectionTitle as="h2">Suite scores</SectionTitle>
         <BodyText className="mt-1">

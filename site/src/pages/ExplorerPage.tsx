@@ -238,7 +238,7 @@ export function ExplorerPage({
           <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
             {suiteDefinition.title} results
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+          <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
             See the overall result first, then inspect individual queries or adjust what is being
             compared.
           </p>
@@ -479,7 +479,7 @@ export function ExplorerPage({
               {getModeLabel(mode)}
             </SectionTitle>
             {!showLoading && selection.ready ? (
-              <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
+              <p className="mt-2 max-w-4xl font-sans text-sm leading-6 text-slate-400">
                 {getComparisonDescription(
                   mode,
                   suiteDefinition.title,
@@ -540,7 +540,7 @@ export function ExplorerPage({
               <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
                 Explore one query
               </SectionTitle>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-slate-400">
                 Select a query to compare its runtime and inspect the SQL used by each database.
               </p>
             </div>

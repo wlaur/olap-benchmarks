@@ -4,9 +4,9 @@ import { cn } from "../../lib/cn"
 
 export const CHART_TOOLTIP_STYLES = {
   contentStyle: {
-    backgroundColor: "#1e2330",
-    border: "1px solid rgba(148, 163, 184, 0.12)",
-    borderRadius: 12,
+    backgroundColor: "#0b1018",
+    border: "1px solid rgba(148, 163, 184, 0.3)",
+    borderRadius: 6,
     color: "#e2e8f0",
   },
   labelStyle: { color: "#e2e8f0" },
@@ -17,7 +17,7 @@ export function PanelCard({ children, className }: { children: ReactNode; classN
   return (
     <div
       className={cn(
-        "min-h-0 min-w-0 overflow-hidden rounded-xl border border-border-default bg-surface-raised p-3 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)]",
+        "min-h-0 min-w-0 overflow-hidden rounded-lg border border-border-default bg-surface-raised p-3 shadow-[0_1px_0_rgba(255,255,255,0.025)_inset,0_12px_32px_-24px_rgba(0,0,0,0.9)]",
         className,
       )}
     >
@@ -45,7 +45,10 @@ export function ChartFrame({
 
   return (
     <div
-      className={cn("min-h-0 min-w-0 overflow-hidden rounded-lg bg-surface-inset p-3", className)}
+      className={cn(
+        "min-h-0 min-w-0 overflow-hidden rounded-md border border-border-subtle bg-surface-inset p-3",
+        className,
+      )}
       style={resolvedStyle}
     >
       {children}
