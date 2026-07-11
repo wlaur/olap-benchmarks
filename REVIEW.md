@@ -1,6 +1,6 @@
-# Project review - 2026-07-08
+# Project review - 2026-07-11
 
-Status after fixes through the 2026-07-08 methodology, version, warm-reporting,
+Status after fixes through the 2026-07-11 methodology, version, warm-reporting,
 suite-registry, TPC-DS, and scale-factor-discovery work. Completed findings
 from the prior review have been removed. This document tracks only remaining
 work and caveats.
@@ -9,8 +9,9 @@ work and caveats.
 the db-label/keying, score-universe, time-series SF1/SF10, TPC-DS normalization,
 preflight-error masking, ConnectorX recording, validation partitioning, Docker
 platform-flag, runtime-version verification, version-bump, warm-reporting, home
-scale-factor, suite-registry, TPC-DS decimal-normalization hardening, and failed
-scale-factor discovery issues. TPC-H now fans out SF10 and SF50 for `suite=all`.
+scale-factor, suite-registry, TPC-DS decimal-normalization hardening, failed
+scale-factor discovery, and system-metadata normalization issues. TPC-H now fans
+out SF10 and SF50 for `suite=all`.
 The time-series suite now includes an explicit concurrent read/write operation.
 The version-bump work now includes MonetDB Dec2025-SP3, the site now surfaces
 run methodology metadata when present, and the home page labels the current
@@ -28,6 +29,10 @@ exist and records explicit unsupported steps elsewhere. The default benchmark
 matrix now keeps row-store TPC-H/TPC-DS runs opt-in while preserving explicit
 low-scale commands. Doris is now wired as a split FE/BE Docker engine for
 ClickBench and JSONBench, with combined FE+BE CPU and memory metric samples.
+Stable host, Python, Docker, and benchmark-methodology context now lives in
+deduplicated `system_snapshot` rows linked to runs by a nullable scalar ID;
+legacy run metadata is backfilled by migration, and results merges remap and
+deduplicate snapshots.
 Remaining blockers are public rerun quality, correctness checks,
 published-data hygiene, and the larger suite/engine roadmap from the research
 notes.
@@ -43,18 +48,6 @@ notes.
       `OLAP_BENCHMARKS_SYSTEM=macbook-m4-pro` value and then regenerate the
       published DB. The rerun should also live-confirm each engine's runtime
       version query and the bumped image/package pins.
-- [ ] **Normalize system metadata before publishing the rerun.** Run metadata
-      already records host details such as OS, machine architecture, logical CPU
-      count, and total memory in `run.metadata.host`, but this is duplicated per
-      run and awkward for published-data queries. Add a `system_metadata` or
-      `system_snapshot` table with an integer primary key, the human-readable
-      `system` label, concrete hardware/OS fields, and an optional raw metadata
-      JSON column. Do not use `system` alone as the primary key: it is an
-      operator-provided label and can be reused after hardware, OS, Docker, or
-      benchmark policy changes. Link runs to the snapshot with a nullable scalar
-      id/index, following the repo's current application-managed relationship
-      style for DuckDB instead of relying on strict foreign-key behavior.
-
 ## 2. Correctness And Validation
 
 - [ ] **Investigate/fix divergent query results, then rerun.**
@@ -218,8 +211,8 @@ notes.
 
 1. Fix known divergent queries and add value-level validation before trusting
    the rerun.
-2. Finalize public-run policy and metadata surfacing, then run the full matrix
-   within the disk budget and publish `macbook-m4-pro` data.
+2. Run the full matrix within the disk budget, validate the normalized system
+   snapshots, and publish `macbook-m4-pro` data.
 3. Clean published-data leftovers and make unexpected missing steps visible.
 4. Smoke JSONBench for the already-wired engines and smoke the new Doris
    ClickBench/JSONBench paths. Handle JOB and TSBS after
@@ -247,6 +240,10 @@ notes.
 - Multi-container engines are represented as one benchmark database; run
   metrics store total CPU and memory across the engine's measured containers,
   not per-service breakdown rows. Doris currently measures FE+BE totals.
+- Runs retain the operator-provided `system` label for grouping and natural
+  keys, while `system_snapshot_id` identifies the concrete host, Python, Docker,
+  and methodology context. Snapshot rows are deduplicated by label plus their
+  raw metadata rather than assuming a label permanently identifies one system.
 - RTABench upstream currently documents 33 queries in its README, but the
   current upstream Postgres query directory has 31 base files; TimescaleDB and
   ClickHouse also include 10 `1000+` pre-aggregated variants, and upstream

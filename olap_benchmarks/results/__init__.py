@@ -33,10 +33,14 @@ from ..settings import (
 )
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from .merge import MergeStats, merge_results
-from .models import QueryExecution, Run, RunMetric, RunStep
+from .models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from .schema import ensure_results_schema
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _serialize_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def get_results_db_path(revision: Revision = "default") -> Path:
@@ -90,6 +94,7 @@ def get_results_engine(read_only: bool = True, db_path: Path | None = None, revi
     return create_engine(
         f"duckdb:///{path}",
         connect_args={"read_only": read_only},
+        json_serializer=_serialize_json,
     )
 
 
@@ -132,7 +137,7 @@ def _published_table_counts(db_path: Path) -> dict[str, int]:
 
     try:
         counts: dict[str, int] = {}
-        for table in ("run", "run_step", "run_metric", "query_execution"):
+        for table in ("system_snapshot", "run", "run_step", "run_metric", "query_execution"):
             row = con.execute(f"select count(*) from {table}").fetchone()
             assert row is not None
             counts[table] = int(row[0])
@@ -300,10 +305,20 @@ def list_runs(
 
 
 def _delete_run_subtrees(session: Session, run_ids: list[int]) -> None:
+    snapshot_ids = list(
+        session.scalars(
+            select(Run.system_snapshot_id).where(Run.id.in_(run_ids)).where(Run.system_snapshot_id.is_not(None))
+        ).all()
+    )
     session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
     session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
     session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
     session.execute(delete(Run).where(Run.id.in_(run_ids)))
+    if snapshot_ids:
+        snapshot_is_referenced = select(Run.id).where(Run.system_snapshot_id == SystemSnapshot.id).exists()
+        session.execute(
+            delete(SystemSnapshot).where(SystemSnapshot.id.in_(snapshot_ids)).where(~snapshot_is_referenced)
+        )
     session.commit()
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -18,17 +19,23 @@ from ..results import (
     migrate_results,
     rename_database,
 )
-from ..results.models import QueryExecution, Run, RunMetric, RunStep
+from ..results.models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from ..results.schema import ensure_results_schema
 
 
-def _insert_run(session: Session, suite: str, db: str = "monetdb") -> Run:
+def _insert_run(
+    session: Session,
+    suite: str,
+    db: str = "monetdb",
+    system_snapshot_id: int | None = None,
+) -> Run:
     run = Run(
         suite=suite,
         db=db,
         db_version="test",
         operation="populate",
         system="test",
+        system_snapshot_id=system_snapshot_id,
         status="running",
         started_at=datetime.now(),
     )
@@ -329,6 +336,81 @@ def test_methodology_metadata_migration_backfills_step_fields(tmp_path: Path) ->
         con.close()
 
 
+def test_system_snapshot_migration_normalizes_and_deduplicates_run_metadata(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="b7c4d9a8e6f2")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        system_metadata = {
+            "host": {
+                "os": "Darwin",
+                "os_release": "25",
+                "machine": "arm64",
+                "processor": "M4",
+                "cpu_count_logical": 14,
+                "memory_total_mb": 49_152,
+            },
+            "python": {"version": "3.14"},
+            "docker": {"version": "28"},
+            "methodology": {"cache_policy": "test"},
+        }
+        con.executemany(
+            """
+            insert into run (
+                suite, suite_scale_factor, db, db_version, operation, system, status, started_at, "metadata"
+            ) values (?, 1, ?, 'test', 'select', 'shared-label', 'completed', ?, ?)
+            """,
+            [
+                (
+                    "time_series",
+                    "duckdb",
+                    datetime(2026, 1, 1),
+                    json.dumps(system_metadata | {"execution": {"mode": "in_process"}}),
+                ),
+                (
+                    "time_series",
+                    "clickhouse",
+                    datetime(2026, 1, 2),
+                    json.dumps(system_metadata | {"execution": {"mode": "container"}}),
+                ),
+            ],
+        )
+    finally:
+        con.close()
+
+    migrate_results(db_path=db_path)
+
+    con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        snapshots = con.execute(
+            """
+            select id, system, os, os_release, machine, processor, cpu_count_logical, memory_total_mb
+            from system_snapshot
+            """
+        ).fetchall()
+        runs = con.execute(
+            "select system_snapshot_id, \"metadata\"->'execution'->>'mode' from run order by started_at"
+        ).fetchall()
+
+        assert snapshots == [(1, "shared-label", "Darwin", "25", "arm64", "M4", 14, 49_152)]
+        assert runs == [(1, "in_process"), (1, "container")]
+    finally:
+        con.close()
+
+    engine = get_results_engine(read_only=True, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            snapshot_id = session.scalar(
+                select(SystemSnapshot.id)
+                .where(SystemSnapshot.system == "shared-label")
+                .where(SystemSnapshot.metadata_json == system_metadata)
+            )
+            assert snapshot_id == 1
+    finally:
+        engine.dispose()
+
+
 def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Path) -> None:
     engine = get_results_engine(read_only=False, db_path=tmp_path / "results.db")
 
@@ -484,14 +566,34 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
         ensure_results_schema(engine)
 
         with Session(engine) as session:
-            failed_run = _insert_run(session, suite="time_series", db="timescaledb")
+            deleted_snapshot = SystemSnapshot(system="test", os="TestOS")
+            retained_snapshot = SystemSnapshot(system="test", os="OtherOS")
+            session.add_all([deleted_snapshot, retained_snapshot])
+            session.commit()
+
+            failed_run = _insert_run(
+                session,
+                suite="time_series",
+                db="timescaledb",
+                system_snapshot_id=deleted_snapshot.id,
+            )
             failed_run_id = failed_run.id
             failed_run.status = "failed"
             failed_run.finished_at = datetime.now()
 
-            running_run = _insert_run(session, suite="time_series", db="monetdb")
+            running_run = _insert_run(
+                session,
+                suite="time_series",
+                db="monetdb",
+                system_snapshot_id=deleted_snapshot.id,
+            )
             running_run_id = running_run.id
-            completed_run = _insert_run(session, suite="clickbench", db="duckdb")
+            completed_run = _insert_run(
+                session,
+                suite="clickbench",
+                db="duckdb",
+                system_snapshot_id=retained_snapshot.id,
+            )
             completed_run_id = completed_run.id
             completed_run.status = "completed"
             completed_run.finished_at = datetime.now()
@@ -564,6 +666,9 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
 
             remaining_query_run_ids = session.scalars(select(QueryExecution.run_id).order_by(QueryExecution.id)).all()
             assert remaining_query_run_ids == [completed_run_id]
+
+            snapshots = session.scalars(select(SystemSnapshot).order_by(SystemSnapshot.id)).all()
+            assert [snapshot.os for snapshot in snapshots] == ["OtherOS"]
     finally:
         engine.dispose()
 

@@ -6,6 +6,7 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 
 RESULT_TABLES = [
+    "system_snapshot",
     "run",
     "run_step",
     "run_metric",

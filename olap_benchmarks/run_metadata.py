@@ -56,6 +56,36 @@ def _run_optional_command(args: list[str]) -> str | None:
     return value or None
 
 
+def build_system_metadata() -> dict[str, Any]:
+    docker_version = _run_optional_command(["docker", "version", "--format", "{{.Server.Version}}"])
+    docker_platform = _run_optional_command(["docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])
+    docker_context = _run_optional_command(["docker", "context", "show"])
+
+    return {
+        "host": {
+            "os": platform.system(),
+            "os_release": platform.release(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "cpu_count_logical": os.cpu_count(),
+            "memory_total_mb": int(psutil.virtual_memory().total / (1024 * 1024)),
+        },
+        "python": {
+            "version": sys.version.split()[0],
+        },
+        "docker": {
+            "version": docker_version,
+            "context": docker_context,
+            "server_platform": docker_platform,
+        },
+        "methodology": {
+            "timed_unit": "perf_counter around fetch() into Polars",
+            "iteration_roles": "iteration 1 is first_run; later iterations are warm unless a suite records otherwise",
+            "cache_policy": "database restart only where suite code calls restart_event; OS caches are not cleared",
+        },
+    }
+
+
 def build_run_metadata(
     *,
     execution_mode: ExecutionMode,
@@ -63,10 +93,7 @@ def build_run_metadata(
     container_images: Mapping[str, str] | None = None,
     start_command: str | None,
 ) -> dict[str, Any]:
-    docker_version = _run_optional_command(["docker", "version", "--format", "{{.Server.Version}}"])
     docker_platform = _run_optional_command(["docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])
-    docker_context = _run_optional_command(["docker", "context", "show"])
-
     image_map = dict(container_images or {})
     if container_image is not None and not image_map:
         image_map = {"default": container_image}
@@ -88,22 +115,6 @@ def build_run_metadata(
     )
 
     return {
-        "host": {
-            "os": platform.system(),
-            "os_release": platform.release(),
-            "machine": platform.machine(),
-            "processor": platform.processor(),
-            "cpu_count_logical": os.cpu_count(),
-            "memory_total_mb": int(psutil.virtual_memory().total / (1024 * 1024)),
-        },
-        "python": {
-            "version": sys.version.split()[0],
-        },
-        "docker": {
-            "version": docker_version,
-            "context": docker_context,
-            "server_platform": docker_platform,
-        },
         "execution": {
             "mode": execution_mode,
             "container_image": primary_container_image,
@@ -112,10 +123,5 @@ def build_run_metadata(
             "container_image_digests": image_digests or None,
             "container_platform": docker_platform if execution_mode == "container" else None,
             "start_command": start_command,
-        },
-        "methodology": {
-            "timed_unit": "perf_counter around fetch() into Polars",
-            "iteration_roles": "iteration 1 is first_run; later iterations are warm unless a suite records otherwise",
-            "cache_policy": "database restart only where suite code calls restart_event; OS caches are not cleared",
         },
     }
