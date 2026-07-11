@@ -85,6 +85,16 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await page.getByRole("button", { name: /Analyze one database/ }).click()
   await expect(page.getByText("Database to analyze")).toBeVisible()
   await expect(page.getByText("Compare it across")).toBeVisible()
+  const fixedContext = page
+    .locator("section")
+    .filter({ has: page.getByText("Fixed context", { exact: true }) })
+  const fixedContextFit = await fixedContext.evaluate((section) => ({
+    cardFits: section.scrollWidth <= section.clientWidth,
+    controlsFit: [...section.querySelectorAll<HTMLElement>('[role="combobox"]')].every(
+      (control) => control.scrollWidth <= control.clientWidth,
+    ),
+  }))
+  expect(fixedContextFit).toEqual({ cardFits: true, controlsFit: true })
   await page.getByRole("button", { name: /^Versions/ }).click()
   await expect(page.getByRole("heading", { name: /version comparison/i })).toBeVisible()
   await expect(page).toHaveURL(/mode=version/)
