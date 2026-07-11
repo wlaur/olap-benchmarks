@@ -5,8 +5,8 @@ import homeContent from "../content/home.md?raw"
 
 export function HomePage() {
   return (
-    <section className="mx-auto max-w-4xl space-y-8 py-10">
-      <header className="space-y-3">
+    <section className="space-y-8 py-8 sm:py-10">
+      <header className="mx-auto max-w-4xl space-y-3">
         <DisplayTitle as="h1">OLAP Benchmarks</DisplayTitle>
         <BodyText className="max-w-2xl text-base">
           Identical SQL workloads run against multiple OLAP databases on the same machine, measuring
@@ -14,7 +14,9 @@ export function HomePage() {
         </BodyText>
       </header>
       <HomeScoreTable />
-      <MarkdownContent content={homeContent} />
+      <div className="mx-auto max-w-4xl">
+        <MarkdownContent content={homeContent} />
+      </div>
     </section>
   )
 }
