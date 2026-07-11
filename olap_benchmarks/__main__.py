@@ -8,9 +8,7 @@ from setproctitle import setproctitle
 from .dbs import get_databases
 from .metrics.storage import start_writer_process
 from .results import (
-    config as show_config,
-)
-from .results import (
+    compact_results,
     delete_runs,
     delete_runs_by_status,
     list_revisions,
@@ -19,6 +17,9 @@ from .results import (
     migrate_results,
     query_results,
     rename_database,
+)
+from .results import (
+    config as show_config,
 )
 from .results import (
     publish as publish_results,
@@ -473,6 +474,13 @@ def revisions() -> None:
         return
     for name in names:
         print(name)
+
+
+@results_app.command
+def compact(revision: Revision = "default") -> None:
+    """Rewrite a results database into a fresh file to reclaim unused space."""
+    db_path, size_before, size_after = compact_results(revision=revision)
+    print(f"Compacted {db_path}: {size_before / 1e6:.1f} MB -> {size_after / 1e6:.1f} MB")
 
 
 @results_app.command

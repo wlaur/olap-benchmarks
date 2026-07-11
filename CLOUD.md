@@ -125,13 +125,18 @@ uv run olap prepare all
 uv run olap prepare tpc_h --scale-factor 50
 ```
 
-Then the campaign, with results pushed and the instance terminated at the end:
+Then the campaign, with results pushed and the instance terminated at the end.
+The compact step rewrites the results database into a fresh file before it is
+committed — DuckDB files keep space freed by checkpoints and re-runs, so this
+typically shrinks them 2–3x and keeps `results/*.db` well under GitHub's
+100 MB file limit:
 
 ```bash
 REV=$SYSTEM
 uv run olap benchmark all all --revision "$REV" --cleanup
 uv run olap benchmark all tpc_h --scale-factor 50 --revision "$REV" --cleanup
 
+uv run olap results compact --revision "$REV"
 git checkout -b "results-$REV"
 git add "results/$REV.db"
 git commit -m "Results: $REV"
