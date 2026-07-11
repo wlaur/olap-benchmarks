@@ -40,4 +40,4 @@ Vendor-recommended server settings, storage layout, and per-suite physical desig
 
 ## Explorer
 
-Each suite links to an explorer with per-query latency breakdowns, SQL source, and per-step resource usage. Databases can be filtered and the duration scale toggled between linear and log.
+Each suite links to an explorer with overall rankings, per-query latency breakdowns, and database-specific SQL.
