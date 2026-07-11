@@ -24,9 +24,13 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
         case "Q1":
             return lf.filter(pl.col("AdvEngineID") != 0).select(_count())
         case "Q2":
-            return lf.select(pl.col("AdvEngineID").sum(), _count(), pl.col("ResolutionWidth").mean())
+            return lf.select(
+                pl.col("AdvEngineID").sum().cast(pl.Float64),
+                _count(),
+                pl.col("ResolutionWidth").mean(),
+            )
         case "Q3":
-            return lf.select(pl.col("UserID").mean())
+            return lf.select((pl.col("UserID").cast(pl.Decimal(38, 0)).sum() / pl.len()).cast(pl.Float64))
         case "Q4":
             return lf.select(pl.col("UserID").n_unique().cast(pl.Int64))
         case "Q5":
@@ -41,25 +45,25 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("AdvEngineID") != 0)
                 .group_by("AdvEngineID")
                 .agg(_count())
-                .sort("count", descending=True)
+                .sort(["count", "AdvEngineID"], descending=[True, False])
             )
         case "Q8":
             return (
                 lf.group_by("RegionID")
                 .agg(pl.col("UserID").n_unique().cast(pl.Int64).alias("u"))
-                .sort("u", descending=True)
+                .sort(["u", "RegionID"], descending=[True, False])
                 .limit(10)
             )
         case "Q9":
             return (
                 lf.group_by("RegionID")
                 .agg(
-                    pl.col("AdvEngineID").sum(),
+                    pl.col("AdvEngineID").sum().cast(pl.Float64),
                     _count("c"),
                     pl.col("ResolutionWidth").mean(),
                     pl.col("UserID").n_unique().cast(pl.Int64),
                 )
-                .sort("c", descending=True)
+                .sort(["c", "RegionID"], descending=[True, False])
                 .limit(10)
             )
         case "Q10":
@@ -67,7 +71,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("MobilePhoneModel") != "")
                 .group_by("MobilePhoneModel")
                 .agg(pl.col("UserID").n_unique().cast(pl.Int64).alias("u"))
-                .sort("u", descending=True)
+                .sort(["u", "MobilePhoneModel"], descending=[True, False])
                 .limit(10)
             )
         case "Q11":
@@ -75,7 +79,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("MobilePhoneModel") != "")
                 .group_by("MobilePhone", "MobilePhoneModel")
                 .agg(pl.col("UserID").n_unique().cast(pl.Int64).alias("u"))
-                .sort("u", descending=True)
+                .sort(["u", "MobilePhone", "MobilePhoneModel"], descending=[True, False, False])
                 .limit(10)
             )
         case "Q12":
@@ -83,7 +87,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("SearchPhrase") != "")
                 .group_by("SearchPhrase")
                 .agg(_count("c"))
-                .sort("c", descending=True)
+                .sort(["c", "SearchPhrase"], descending=[True, False])
                 .limit(10)
             )
         case "Q13":
@@ -91,7 +95,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("SearchPhrase") != "")
                 .group_by("SearchPhrase")
                 .agg(pl.col("UserID").n_unique().cast(pl.Int64).alias("u"))
-                .sort("u", descending=True)
+                .sort(["u", "SearchPhrase"], descending=[True, False])
                 .limit(10)
             )
         case "Q14":
@@ -99,21 +103,26 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("SearchPhrase") != "")
                 .group_by("SearchEngineID", "SearchPhrase")
                 .agg(_count("c"))
-                .sort("c", descending=True)
+                .sort(["c", "SearchEngineID", "SearchPhrase"], descending=[True, False, False])
                 .limit(10)
             )
         case "Q15":
-            return lf.group_by("UserID").agg(_count()).sort("count", descending=True).limit(10)
+            return lf.group_by("UserID").agg(_count()).sort(["count", "UserID"], descending=[True, False]).limit(10)
         case "Q16":
-            return lf.group_by("UserID", "SearchPhrase").agg(_count()).sort("count", descending=True).limit(10)
+            return (
+                lf.group_by("UserID", "SearchPhrase")
+                .agg(_count())
+                .sort(["count", "UserID", "SearchPhrase"], descending=[True, False, False])
+                .limit(10)
+            )
         case "Q17":
-            return lf.group_by("UserID", "SearchPhrase", maintain_order=True).agg(_count()).limit(10)
+            return lf.group_by("UserID", "SearchPhrase").agg(_count()).sort("UserID", "SearchPhrase").limit(10)
         case "Q18":
             return (
                 lf.with_columns(pl.col("EventTime").dt.minute().cast(pl.Int64).alias("m"))
                 .group_by("UserID", "m", "SearchPhrase")
                 .agg(_count())
-                .sort("count", descending=True)
+                .sort(["count", "UserID", "m", "SearchPhrase"], descending=[True, False, False, False])
                 .limit(10)
             )
         case "Q19":
@@ -125,7 +134,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(pl.col("URL").str.contains("google", literal=True) & (pl.col("SearchPhrase") != ""))
                 .group_by("SearchPhrase")
                 .agg(pl.col("URL").min(), _count("c"))
-                .sort("c", descending=True)
+                .sort(["c", "SearchPhrase"], descending=[True, False])
                 .limit(10)
             )
         case "Q22":
@@ -142,13 +151,13 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                     _count("c"),
                     pl.col("UserID").n_unique().cast(pl.Int64),
                 )
-                .sort("c", descending=True)
+                .sort(["c", "SearchPhrase"], descending=[True, False])
                 .limit(10)
             )
         case "Q23":
-            return lf.filter(pl.col("URL").str.contains("google", literal=True)).sort("EventTime").limit(10)
+            return lf.filter(pl.col("URL").str.contains("google", literal=True)).sort("EventTime", "WatchID").limit(10)
         case "Q24":
-            return lf.filter(pl.col("SearchPhrase") != "").sort("EventTime").select("SearchPhrase").limit(10)
+            return lf.filter(pl.col("SearchPhrase") != "").sort("EventTime", "WatchID").select("SearchPhrase").limit(10)
         case "Q25":
             return lf.filter(pl.col("SearchPhrase") != "").sort("SearchPhrase").select("SearchPhrase").limit(10)
         case "Q26":
@@ -162,9 +171,9 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
             return (
                 lf.filter(pl.col("URL") != "")
                 .group_by("CounterID")
-                .agg(pl.col("URL").str.len_chars().mean().alias("l"), _count("c"))
+                .agg(pl.col("URL").str.len_bytes().mean().alias("l"), _count("c"))
                 .filter(pl.col("c") > 100000)
-                .sort("l", descending=True)
+                .sort(["l", "CounterID"], descending=[True, False])
                 .limit(25)
             )
         case "Q28":
@@ -173,47 +182,62 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 .with_columns(pl.col("Referer").str.replace(r"^https?://(?:www\.)?([^/]+)/.*$", "$1").alias("k"))
                 .group_by("k")
                 .agg(
-                    pl.col("Referer").str.len_chars().mean().alias("l"),
+                    pl.col("Referer").str.len_bytes().mean().alias("l"),
                     _count("c"),
                     pl.col("Referer").min(),
                 )
                 .filter(pl.col("c") > 100000)
-                .sort("l", descending=True)
+                .sort(["l", "k"], descending=[True, False])
                 .limit(25)
             )
         case "Q29":
-            return lf.select((pl.col("ResolutionWidth") + offset).sum().alias(f"sum_{offset}") for offset in range(90))
+            return lf.select(
+                (pl.col("ResolutionWidth") + offset).sum().cast(pl.Float64).alias(f"sum_{offset}")
+                for offset in range(90)
+            )
         case "Q30":
             return (
                 lf.filter(pl.col("SearchPhrase") != "")
                 .group_by("SearchEngineID", "ClientIP")
-                .agg(_count("c"), pl.col("IsRefresh").sum(), pl.col("ResolutionWidth").mean())
-                .sort("c", descending=True)
+                .agg(
+                    _count("c"),
+                    pl.col("IsRefresh").sum().cast(pl.Float64),
+                    pl.col("ResolutionWidth").mean(),
+                )
+                .sort(["c", "SearchEngineID", "ClientIP"], descending=[True, False, False])
                 .limit(10)
             )
         case "Q31":
             return (
                 lf.filter(pl.col("SearchPhrase") != "")
                 .group_by("WatchID", "ClientIP")
-                .agg(_count("c"), pl.col("IsRefresh").sum(), pl.col("ResolutionWidth").mean())
-                .sort("c", descending=True)
+                .agg(
+                    _count("c"),
+                    pl.col("IsRefresh").sum().cast(pl.Float64),
+                    pl.col("ResolutionWidth").mean(),
+                )
+                .sort(["c", "WatchID", "ClientIP"], descending=[True, False, False])
                 .limit(10)
             )
         case "Q32":
             return (
                 lf.group_by("WatchID", "ClientIP")
-                .agg(_count("c"), pl.col("IsRefresh").sum(), pl.col("ResolutionWidth").mean())
-                .sort("c", descending=True)
+                .agg(
+                    _count("c"),
+                    pl.col("IsRefresh").sum().cast(pl.Float64),
+                    pl.col("ResolutionWidth").mean(),
+                )
+                .sort(["c", "WatchID", "ClientIP"], descending=[True, False, False])
                 .limit(10)
             )
         case "Q33":
-            return lf.group_by("URL").agg(_count("c")).sort("c", descending=True).limit(10)
+            return lf.group_by("URL").agg(_count("c")).sort(["c", "URL"], descending=[True, False]).limit(10)
         case "Q34":
             return (
                 lf.group_by("URL")
                 .agg(_count("c"))
                 .select(pl.lit(1).cast(pl.Int64), "URL", "c")
-                .sort("c", descending=True)
+                .sort(["c", "URL"], descending=[True, False])
                 .limit(10)
             )
         case "Q35":
@@ -227,7 +251,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                     (pl.col("ClientIP") - 3).alias("ClientIP_3"),
                     "c",
                 )
-                .sort("c", descending=True)
+                .sort(["c", "ClientIP"], descending=[True, False])
                 .limit(10)
             )
         case "Q36":
@@ -235,7 +259,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(_july_filter() & (pl.col("DontCountHits") == 0) & (pl.col("URL") != ""))
                 .group_by("URL")
                 .agg(_count("PageViews"))
-                .sort("PageViews", descending=True)
+                .sort(["PageViews", "URL"], descending=[True, False])
                 .limit(10)
             )
         case "Q37":
@@ -243,7 +267,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(_july_filter() & (pl.col("DontCountHits") == 0) & (pl.col("Title") != ""))
                 .group_by("Title")
                 .agg(_count("PageViews"))
-                .sort("PageViews", descending=True)
+                .sort(["PageViews", "Title"], descending=[True, False])
                 .limit(10)
             )
         case "Q38":
@@ -251,7 +275,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(_july_filter() & (pl.col("IsLink") != 0) & (pl.col("IsDownload") == 0))
                 .group_by("URL")
                 .agg(_count("PageViews"))
-                .sort("PageViews", descending=True)
+                .sort(["PageViews", "URL"], descending=[True, False])
                 .slice(1000, 10)
             )
         case "Q39":
@@ -266,7 +290,10 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 )
                 .group_by("TraficSourceID", "SearchEngineID", "AdvEngineID", "Src", "Dst")
                 .agg(_count("PageViews"))
-                .sort("PageViews", descending=True)
+                .sort(
+                    ["PageViews", "TraficSourceID", "SearchEngineID", "AdvEngineID", "Src", "Dst"],
+                    descending=[True, False, False, False, False, False],
+                )
                 .slice(1000, 10)
             )
         case "Q40":
@@ -278,7 +305,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 )
                 .group_by("URLHash", "EventDate")
                 .agg(_count("PageViews"))
-                .sort("PageViews", descending=True)
+                .sort(["PageViews", "URLHash", "EventDate"], descending=[True, False, False])
                 .slice(100, 10)
             )
         case "Q41":
@@ -286,7 +313,10 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.filter(_july_filter() & (pl.col("DontCountHits") == 0) & (pl.col("URLHash") == 2868770270353813622))
                 .group_by("WindowClientWidth", "WindowClientHeight")
                 .agg(_count("PageViews"))
-                .sort("PageViews", descending=True)
+                .sort(
+                    ["PageViews", "WindowClientWidth", "WindowClientHeight"],
+                    descending=[True, False, False],
+                )
                 .slice(10000, 10)
             )
         case "Q42":
