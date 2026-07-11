@@ -1,5 +1,5 @@
 import type { BenchmarkDefinition } from "./benchmarks"
-import type { CatalogRunDimension, QueriesManifest } from "./types"
+import type { CatalogRunDimension, QueriesManifest, QuerySqlEntry } from "./types"
 
 export interface CatalogDatabaseCoverage {
   database: string
@@ -63,6 +63,11 @@ export function buildCatalogSuiteSummary(
     coveredCombinations,
     totalCombinations: databases.length * scales.length,
   }
+}
+
+export function getSqlDialects(entry: QuerySqlEntry | undefined) {
+  if (!entry) return []
+  return [...(entry.sql === null ? [] : ["base"]), ...Object.keys(entry.db_overrides).sort()]
 }
 
 function unique<T>(values: readonly T[]) {

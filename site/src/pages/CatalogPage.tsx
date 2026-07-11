@@ -10,7 +10,7 @@ import { PanelCard, PanelHeader } from "../components/layout/Panel"
 import { MetaLabel, SectionTitle } from "../components/Typography"
 import { useCatalogData } from "../hooks/useCatalogData"
 import { isBenchmarkSuiteId } from "../lib/benchmarks"
-import { buildCatalogSuiteSummary } from "../lib/catalog"
+import { buildCatalogSuiteSummary, getSqlDialects } from "../lib/catalog"
 import { useAppStore } from "../stores/useAppStore"
 
 export function CatalogPage() {
@@ -32,6 +32,19 @@ export function CatalogPage() {
     : (benchmarkDefinitions[0]?.id ?? null)
   const selectedSummary =
     summaries.find((summary) => summary.definition.id === selectedSuiteId) ?? null
+  const manifestEntries = selectedSummary
+    ? (catalog.queriesManifest[selectedSummary.definition.queriesKey] ?? {})
+    : {}
+  const requestedQuery = searchParams.get("query") ?? ""
+  const selectedQuery = selectedSummary?.queryNames.includes(requestedQuery)
+    ? requestedQuery
+    : (selectedSummary?.queryNames[0] ?? "")
+  const selectedSqlEntry = manifestEntries[selectedQuery]
+  const sqlDialects = getSqlDialects(selectedSqlEntry)
+  const requestedDialect = searchParams.get("sql_database") ?? ""
+  const selectedDialect = sqlDialects.includes(requestedDialect)
+    ? requestedDialect
+    : (sqlDialects[0] ?? "")
   const loading = suitesLoading || catalog.loading
   const error = suitesError ?? catalog.error
   const systems = unique(catalog.dimensions.map((row) => row.system))
@@ -40,6 +53,21 @@ export function CatalogPage() {
 
   function handleSuiteSelect(suiteId: string) {
     setSearchParams({ suite: suiteId }, { replace: true })
+  }
+
+  function handleQuerySelect(query: string) {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (selectedSuiteId) nextSearchParams.set("suite", selectedSuiteId)
+    nextSearchParams.set("query", query)
+    nextSearchParams.delete("sql_database")
+    setSearchParams(nextSearchParams, { replace: true })
+  }
+
+  function handleDialectSelect(dialect: string) {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (dialect === "base") nextSearchParams.delete("sql_database")
+    else nextSearchParams.set("sql_database", dialect)
+    setSearchParams(nextSearchParams, { replace: true })
   }
 
   return (
@@ -128,7 +156,12 @@ export function CatalogPage() {
               </div>
               {selectedSummary ? (
                 <Link
-                  to={`/explorer/${selectedSummary.definition.id}?scale=${explorerScale}`}
+                  to={makeExplorerHref(
+                    selectedSummary.definition.id,
+                    explorerScale,
+                    selectedQuery,
+                    selectedDialect,
+                  )}
                   className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border-default bg-surface-inset px-3 text-xs font-medium text-slate-300 transition-colors outline-none hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20"
                 >
                   Open explorer
@@ -140,18 +173,26 @@ export function CatalogPage() {
           </PanelCard>
 
           <PanelCard className="p-3 sm:p-4">
-            <PanelHeader className="mb-3">
+            <PanelHeader className="mb-4 flex-wrap">
               <div>
-                <MetaLabel>Query inventory</MetaLabel>
+                <MetaLabel>Query browser</MetaLabel>
                 <SectionTitle as="h3" className="mt-1">
                   {selectedSummary?.queryNames.length ?? 0} queries
                 </SectionTitle>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Select a query, then switch dialects to inspect database-specific SQL.
+                </p>
               </div>
             </PanelHeader>
             <CatalogQueryList
               key={selectedSuiteId}
               queryNames={selectedSummary?.queryNames ?? []}
+              selectedQuery={selectedQuery}
+              selectedDialect={selectedDialect}
+              sqlEntry={selectedSqlEntry}
               loading={loading}
+              onSelectQuery={handleQuerySelect}
+              onSelectDialect={handleDialectSelect}
             />
           </PanelCard>
         </div>
@@ -180,4 +221,11 @@ function CatalogStat({
 
 function unique(values: readonly string[]) {
   return [...new Set(values)]
+}
+
+function makeExplorerHref(suiteId: string, scale: number, query: string, dialect: string) {
+  const searchParams = new URLSearchParams({ scale: String(scale) })
+  if (query) searchParams.set("query", query)
+  if (dialect && dialect !== "base") searchParams.set("sql_database", dialect)
+  return `/explorer/${suiteId}?${searchParams.toString()}`
 }
