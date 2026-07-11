@@ -1,6 +1,7 @@
 SELECT
   data -> 'commit' ->> 'collection' AS event,
-  EXTRACT(HOUR FROM to_timestamp((data ->> 'time_us')::BIGINT / 1000000) AT TIME ZONE 'UTC') AS hour_of_day,
+  EXTRACT(HOUR FROM to_timestamp((data ->> 'time_us')::BIGINT / 1000000) AT TIME ZONE 'UTC')::BIGINT
+    AS hour_of_day,
   count(*) AS count
 FROM bluesky
 WHERE
