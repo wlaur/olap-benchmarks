@@ -14,6 +14,7 @@ from .. import BenchmarkSuite, ManualPreparationRequired
 _LOGGER = logging.getLogger(__name__)
 
 ITERATIONS = 5
+CLICKBENCH_QUERY_COUNT = 43
 
 
 def prepare_data() -> None:
@@ -85,12 +86,17 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def select(self) -> None:
-        t0 = perf_counter()
-
-        # NOTE: clickbench query files should not be formatted, need to have one query per line
+    def load_queries(self) -> list[str]:
         with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.db.name}.sql").open() as f:
             queries = f.readlines()
+
+        if len(queries) != CLICKBENCH_QUERY_COUNT:
+            raise RuntimeError(f"Expected {CLICKBENCH_QUERY_COUNT} ClickBench queries for {self.db.name}")
+        return queries
+
+    def select(self) -> None:
+        t0 = perf_counter()
+        queries = self.load_queries()
 
         failed_queries = 0
         for idx, query in enumerate(queries):

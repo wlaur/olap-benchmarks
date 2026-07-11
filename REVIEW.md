@@ -38,9 +38,14 @@ This document contains only unfinished work. Completed findings and implementati
 
 ## 3. Finish the near-term suite and engine roadmap
 
-- [ ] **Extend Polars beyond JSONBench.**
-  Add normal DataFrame/LazyFrame implementations for ClickBench and TPC-H. Keep any future SQL-mode implementation
-  separate and continue labeling Polars as in-process/single-node.
+- [ ] **Finish Polars ClickBench validation.**
+  Generate a fresh `canonical-v4` reference run, then resolve real value mismatches and make limited/grouped results
+  deterministic where the ClickBench SQL lacks a total order. Keep Polars on native LazyFrame expressions and label
+  it as in-process/single-node.
+
+- [ ] **Add Polars TPC-H.**
+  Implement all 22 queries with native LazyFrame expressions, validate row counts and answer hashes against a fresh
+  reference run, and keep any future Polars SQL-mode implementation separate.
 
 - [ ] **Extend Doris to RTABench.**
   Align query coverage and unsupported statuses first. Consider TPC-DS only after the full rerun demonstrates stable
@@ -58,7 +63,7 @@ This document contains only unfinished work. Completed findings and implementati
 
 ## Execution order
 
-1. Add Polars ClickBench/TPC-H and Doris RTABench, then validate the new paths.
+1. Finish Polars ClickBench validation, then add Polars TPC-H and Doris RTABench.
 2. Complete the remaining correctness checks across the intended public matrix.
 3. Run and validate the host-native `macbook-m4-pro` matrix within the disk budget.
 4. Publish the cleaned replacement database and manifests.
