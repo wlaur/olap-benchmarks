@@ -38,10 +38,6 @@ This document contains only unfinished work. Completed findings and implementati
 
 ## 3. Finish the near-term suite and engine roadmap
 
-- [ ] **Add Polars TPC-H.**
-  Implement all 22 queries with native LazyFrame expressions, validate row counts and answer hashes against a fresh
-  reference run, and keep any future Polars SQL-mode implementation separate.
-
 - [ ] **Extend Doris to RTABench.**
   Align query coverage and unsupported statuses first. Consider TPC-DS only after the full rerun demonstrates stable
   Doris lifecycle, loading, metrics, and cleanup behavior.
@@ -58,7 +54,7 @@ This document contains only unfinished work. Completed findings and implementati
 
 ## Execution order
 
-1. Add Polars TPC-H, then Doris RTABench.
+1. Extend Doris to RTABench.
 2. Complete the remaining correctness checks across the intended public matrix.
 3. Run and validate the host-native `macbook-m4-pro` matrix within the disk budget.
 4. Publish the cleaned replacement database and manifests.
