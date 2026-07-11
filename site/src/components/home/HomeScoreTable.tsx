@@ -43,7 +43,7 @@ export function HomeScoreTable() {
       <div className="border-b border-border-default px-5 py-4">
         <SectionTitle as="h2">Suite scores</SectionTitle>
         <BodyText className="mt-1">
-          Geometric mean of per-query latency vs the fastest database. Lower is better; 1.00× is the
+          Geometric mean of per-query latency vs the fastest database. Lower is better; 1.0× is the
           leader. Missing queries are penalized, and rows are ranked by geometric mean across suites
           at the scale factors shown; smoke suites are shown but excluded from aggregate ordering. A
           missing suite/scale factor counts as its worst score.{" "}
