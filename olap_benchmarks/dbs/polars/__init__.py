@@ -167,7 +167,9 @@ class Polars(Database):
                     .agg(pl.col("time_us").min().alias("first_post_us"))
                     .select(
                         pl.col("did").alias("user_id"),
-                        pl.from_epoch("first_post_us", time_unit="us").cast(pl.Datetime("ms")).alias("first_post_ts"),
+                        pl.from_epoch((pl.col("first_post_us") // 1000) * 1000, time_unit="us")
+                        .cast(pl.Datetime("ms"))
+                        .alias("first_post_ts"),
                     )
                     .sort("first_post_ts")
                     .limit(3)
@@ -176,7 +178,7 @@ class Polars(Database):
                 return (
                     lf.filter(self._create_post_filter())
                     .group_by("did")
-                    .agg(((pl.col("time_us").max() - pl.col("time_us").min()) // 1000).alias("activity_span"))
+                    .agg(((pl.col("time_us").max() // 1000) - (pl.col("time_us").min() // 1000)).alias("activity_span"))
                     .select(pl.col("did").alias("user_id"), pl.col("activity_span").cast(pl.Int64))
                     .sort("activity_span", descending=True)
                     .limit(3)

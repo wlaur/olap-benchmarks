@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -22,7 +23,7 @@ def polars_jsonbench_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Pola
         {
             "did": ["u1", "u1", "u2", "u3"],
             "kind": ["commit", "commit", "commit", "commit"],
-            "time_us": [1_700_000_000_000_000, 1_700_003_600_000_000, 1_700_000_600_000_000, 1_700_007_200_000_000],
+            "time_us": [1_700_000_000_000_900, 1_700_003_600_000_100, 1_700_000_600_000_000, 1_700_007_200_000_000],
             "commit": [
                 {"operation": "create", "collection": "app.bsky.feed.post"},
                 {"operation": "create", "collection": "app.bsky.feed.post"},
@@ -57,3 +58,11 @@ def test_polars_jsonbench_activity_span(polars_jsonbench_db: Polars) -> None:
     df = polars_jsonbench_db.fetch("")
 
     assert df.to_dicts() == [{"user_id": "u1", "activity_span": 3_600_000}]
+
+
+def test_polars_jsonbench_first_post_uses_utc_milliseconds(polars_jsonbench_db: Polars) -> None:
+    polars_jsonbench_db.current_query_name = "04_first_post_users"
+
+    df = polars_jsonbench_db.fetch("")
+
+    assert df.to_dicts() == [{"user_id": "u1", "first_post_ts": datetime(2023, 11, 14, 22, 13, 20)}]

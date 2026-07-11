@@ -1,10 +1,6 @@
 SELECT
   data.did::String AS user_id,
-  date_diff(
-    'milliseconds',
-    min(fromUnixTimestamp64Micro(data.time_us)),
-    max(fromUnixTimestamp64Micro(data.time_us))
-  ) AS activity_span
+  intDiv(max(data.time_us), 1000) - intDiv(min(data.time_us), 1000) AS activity_span
 FROM bluesky
 WHERE
   data.kind = 'commit'
