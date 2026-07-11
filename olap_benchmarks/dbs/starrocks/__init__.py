@@ -7,11 +7,10 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
-from sqlalchemy.engine import make_url
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
@@ -47,9 +46,6 @@ STARROCKS_DATABASE = "benchmark"
 STARROCKS_CONNECTION_STRING = (
     f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/{STARROCKS_DATABASE}"
 )
-StarRocksFetchMethod = Literal["connectorx", "python"]
-
-
 POLARS_STARROCKS_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
     pl.Int8: "TINYINT",
     pl.Int16: "SMALLINT",
@@ -198,10 +194,6 @@ class StarRocksTimeSeries(TimeSeries["StarRocks"]):
 
 
 class StarRocksJSONBench(JSONBench["StarRocks"]):
-    @property
-    def fetch_kwargs(self) -> dict[str, Any]:
-        return {"method": "python"}
-
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -382,37 +374,6 @@ class StarRocks(Database):
         return self._connection
 
     def fetch(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-        method: StarRocksFetchMethod = "connectorx",
-    ) -> pl.DataFrame:
-        if method == "connectorx":
-            return self.fetch_connectorx(query, schema)
-        if method == "python":
-            return self.fetch_python(query, schema)
-
-        raise ValueError(f"Unknown method: {method}")
-
-    def _connectorx_uri(self) -> str:
-        url = make_url(self.connection_string).set(drivername="mysql")
-        return url.render_as_string(hide_password=False)
-
-    def fetch_connectorx(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        sql = query.strip().removesuffix(";")
-        with self.record_query_execution(sql):
-            df = pl.read_database_uri(sql, self._connectorx_uri())
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def fetch_python(
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
