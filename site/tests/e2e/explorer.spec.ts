@@ -19,18 +19,27 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await page.getByRole("option", { name: "ClickBench", exact: true }).click()
 
   await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
-  await expect(page.getByText("Median across 43 shared queries")).toBeVisible()
-  await expect(page.getByText("Fastest overall")).toBeVisible()
+  await expect(page.getByText("Normalized suite score across 43 suite queries")).toBeVisible()
+  await expect(page.getByText("Best suite score")).toBeVisible()
+  await expect(page.getByText("Lower is better · 1.0× is ideal")).toBeVisible()
   await expect(page.getByText("Shorter bars are faster").first()).toBeVisible()
 
-  const overallBarWidths = await page
-    .getByRole("meter")
-    .evaluateAll((meters) =>
-      meters
-        .slice(0, 7)
-        .map((meter) => meter.firstElementChild?.getBoundingClientRect().width ?? 0),
+  const overallScores = await page
+    .locator("[data-score-ranking-row] [data-score]")
+    .evaluateAll((elements) =>
+      elements.map((element) => Number((element as HTMLElement).dataset.score)),
     )
-  expect(overallBarWidths[0]).toBeLessThan(overallBarWidths.at(-1) ?? 0)
+  expect(overallScores.length).toBeGreaterThan(1)
+  expect(overallScores[0]).toBeLessThanOrEqual(overallScores.at(-1) ?? 0)
+
+  const runtimeScroll = page.locator("[data-query-runtime-scroll]")
+  const runtimeScrollState = await runtimeScroll.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    scrollHeight: element.scrollHeight,
+  }))
+  expect(runtimeScrollState.overflowY).toBe("auto")
+  expect(runtimeScrollState.scrollHeight).toBeGreaterThan(runtimeScrollState.clientHeight)
 
   await page.getByRole("button", { name: "Adjust comparison" }).click()
   await expect(page.getByText("Scale factor", { exact: true }).first()).toBeVisible()
