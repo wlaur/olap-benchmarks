@@ -132,6 +132,34 @@ def query_results(sql: str, revision: Revision = "default") -> None:
             con.close()
 
 
+def compact_results(revision: Revision = "default", db_path: Path | None = None) -> tuple[Path, int, int]:
+    path = (db_path or _require_revision(revision)).expanduser().resolve()
+    size_before = path.stat().st_size
+
+    tmp_path = path.with_name(f"{path.name}.compact")
+
+    try:
+        tmp_path.unlink(missing_ok=True)
+        con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect()
+
+        try:
+            con.execute(f"ATTACH '{path.as_posix()}' AS src (READ_ONLY)")
+            con.execute(f"ATTACH '{tmp_path.as_posix()}' AS dst")
+            # copies tables, views, and sequences including their current state
+            con.execute("COPY FROM DATABASE src TO dst")
+        finally:
+            con.close()
+
+        tmp_path.replace(path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    size_after = path.stat().st_size
+    _LOGGER.info(f"Compacted {path.name}: {size_before / 1e6:.1f} MB -> {size_after / 1e6:.1f} MB")
+    return path, size_before, size_after
+
+
 def _published_table_counts(db_path: Path) -> dict[str, int]:
     con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
 
