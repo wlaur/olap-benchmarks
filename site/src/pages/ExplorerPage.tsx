@@ -351,7 +351,7 @@ export function ExplorerPage({
         <PanelHeader className="flex-wrap sm:items-center">
           <div className="min-w-0">
             <MetaLabel>Analysis</MetaLabel>
-            <SectionTitle as="h3" className="mt-1 text-lg">
+            <SectionTitle as="h2" className="mt-1 text-lg">
               {mode === "database" ? "Compare databases" : "Analyze one database"}
             </SectionTitle>
             <p className="mt-1.5 font-sans text-sm leading-5 text-slate-400">
@@ -617,7 +617,7 @@ export function ExplorerPage({
         <PanelHeader className="flex-wrap">
           <div className="min-w-0">
             <MetaLabel>Suite result</MetaLabel>
-            <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
+            <SectionTitle as="h2" className="mt-1 text-lg sm:text-xl">
               {getModeLabel(mode, selection)}
             </SectionTitle>
             {!showLoading && selection.ready ? (
@@ -683,7 +683,7 @@ export function ExplorerPage({
           <PanelHeader className="flex-wrap sm:flex-nowrap sm:items-end">
             <div className="min-w-0 flex-1">
               <MetaLabel>Query detail</MetaLabel>
-              <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
+              <SectionTitle as="h2" className="mt-1 text-lg sm:text-xl">
                 Query performance and SQL
               </SectionTitle>
               <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-slate-400">

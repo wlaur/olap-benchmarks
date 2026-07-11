@@ -241,6 +241,7 @@ export function VirtualizedSelect({
                 <input
                   ref={searchRef}
                   type="text"
+                  name={`${listId}-filter`}
                   role="searchbox"
                   aria-label={filterPlaceholder}
                   aria-controls={listId}

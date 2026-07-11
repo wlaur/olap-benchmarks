@@ -128,7 +128,7 @@ export function CatalogPage() {
         <PanelCard className="hidden p-3 xl:sticky xl:top-4 xl:block">
           <PanelHeader className="px-1 pb-2">
             <div>
-              <SectionTitle as="h3">Suites</SectionTitle>
+              <SectionTitle as="h2">Suites</SectionTitle>
               <p className="mt-1 text-xs text-slate-500">
                 {benchmarkDefinitions.length} configured
               </p>
@@ -147,7 +147,7 @@ export function CatalogPage() {
             <PanelHeader className="mb-4 flex-wrap">
               <div>
                 <MetaLabel>Queries</MetaLabel>
-                <SectionTitle as="h3" className="mt-1">
+                <SectionTitle as="h2" className="mt-1">
                   {selectedSummary?.definition.title ?? "Benchmark"} SQL
                 </SectionTitle>
                 <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
@@ -172,7 +172,7 @@ export function CatalogPage() {
             <PanelHeader className="flex-wrap sm:items-center">
               <div className="min-w-0">
                 <MetaLabel>Availability</MetaLabel>
-                <SectionTitle as="h3" className="mt-1">
+                <SectionTitle as="h2" className="mt-1">
                   Result coverage
                 </SectionTitle>
                 <p className="mt-1 font-sans text-xs leading-5 text-slate-500">

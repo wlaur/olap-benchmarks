@@ -30,7 +30,11 @@ export function Navbar({
       <div className="px-4 py-2">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex min-w-0 shrink-0 items-center gap-2">
-            <NavLink to="/" className="flex shrink-0 items-center gap-3">
+            <NavLink
+              to="/"
+              aria-label="OLAP Benchmarks home"
+              className="flex shrink-0 items-center gap-3"
+            >
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="h-8 w-8" />
               <span className="text-base font-semibold tracking-tight text-slate-50 max-sm:hidden">
                 OLAP Benchmarks

@@ -64,6 +64,7 @@ export function CatalogQueryList({
           <span className="sr-only">Filter queries</span>
           <input
             type="search"
+            name="catalog-query-filter"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Filter queries"
