@@ -939,81 +939,129 @@ function QueryBreakdown({
   selectedQuery: string
   onSelectQuery: (query: string) => void
 }) {
+  const columnCount = useHeatmapColumnCount(rows.length, queryRows.length)
+  const splitIndex = Math.ceil(queryRows.length / columnCount)
+  const queryGroups =
+    columnCount === 1 ? [queryRows] : [queryRows.slice(0, splitIndex), queryRows.slice(splitIndex)]
+
   return (
     <div className="panel-scrollbar overflow-auto xl:min-h-0 xl:flex-1">
-      <div
-        className="grid w-max min-w-full gap-0.5 text-xs"
-        style={{
-          gridTemplateColumns: `12rem repeat(${rows.length}, 5.5rem)`,
-        }}
-      >
-        <div className="sticky top-0 left-0 z-30 flex h-8 items-center border-r border-border-default bg-surface-inset pr-2 font-semibold text-slate-500">
-          Query
-        </div>
-        {rows.map((row) => (
-          <div
-            key={row.id}
-            className="sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-surface-inset px-1.5 font-medium text-slate-300"
-            title={row.label}
-          >
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: row.color }}
-            />
-            <span className="block truncate">{row.label}</span>
-          </div>
+      <div className="flex w-max min-w-full items-start gap-4">
+        {queryGroups.map((group, index) => (
+          <QueryHeatmapBlock
+            key={`${index}-${group[0]?.query ?? "empty"}`}
+            rows={rows}
+            queryRows={group}
+            selectedQuery={selectedQuery}
+            onSelectQuery={onSelectQuery}
+          />
         ))}
-        {queryRows.map((queryRow) => {
-          const availableValues = queryRow.values.filter((value): value is number => value !== null)
-          const fastestValue = Math.min(...availableValues)
-          const slowestValue = Math.max(...availableValues)
-          const selected = selectedQuery === queryRow.query
-          return (
-            <Fragment key={queryRow.query}>
-              <div className="sticky left-0 z-10 min-w-0 border-r border-border-subtle bg-surface-inset py-0.5 pr-2">
-                <button
-                  type="button"
-                  onClick={() => onSelectQuery(queryRow.query)}
-                  title={queryRow.query}
-                  data-query-name={queryRow.query}
-                  className={cn(
-                    "block h-8 w-full min-w-0 truncate rounded-sm px-2 text-left font-medium transition-colors outline-none",
-                    "focus-visible:ring-2 focus-visible:ring-slate-300/20",
-                    selected
-                      ? "bg-accent-400/10 text-slate-50"
-                      : "text-slate-400 hover:bg-surface-raised/70 hover:text-slate-200",
-                  )}
-                >
-                  {queryRow.query}
-                </button>
-              </div>
-              {queryRow.values.map((value, index) => {
-                const row = rows[index]
-                if (!row) return null
-                const heatStyle = getHeatCellStyle(value, fastestValue, slowestValue)
-                return (
-                  <div
-                    key={`${queryRow.query}-${row.id}`}
-                    aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "not run" : formatRuntime(value)}`}
-                    data-query={queryRow.query}
-                    data-series={row.id}
-                    className={cn(
-                      "flex h-9 items-center justify-center rounded-sm border px-1 text-center font-mono text-[0.6875rem] font-medium tabular-nums",
-                      value === null ? "border-border-subtle text-slate-600" : "text-slate-100",
-                      selected && "ring-1 ring-accent-300/30",
-                    )}
-                    style={heatStyle}
-                  >
-                    {value === null ? "-" : formatRuntime(value)}
-                  </div>
-                )
-              })}
-            </Fragment>
-          )
-        })}
       </div>
     </div>
   )
+}
+
+function QueryHeatmapBlock({
+  rows,
+  queryRows,
+  selectedQuery,
+  onSelectQuery,
+}: {
+  rows: readonly ComparisonRow[]
+  queryRows: readonly QueryRow[]
+  selectedQuery: string
+  onSelectQuery: (query: string) => void
+}) {
+  return (
+    <div
+      data-heatmap-block
+      className="grid shrink-0 gap-0.5 text-xs"
+      style={{ gridTemplateColumns: `11rem repeat(${rows.length}, 5.25rem)` }}
+    >
+      <div className="sticky top-0 z-30 flex h-8 items-center border-r border-border-default bg-surface-inset pr-2 font-semibold text-slate-500">
+        Query
+      </div>
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          data-heatmap-series-header={row.id}
+          className="sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-surface-inset px-1.5 font-medium text-slate-300"
+          title={row.label}
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: row.color }}
+          />
+          <span className="block truncate">{row.label}</span>
+        </div>
+      ))}
+      {queryRows.map((queryRow) => {
+        const availableValues = queryRow.values.filter((value): value is number => value !== null)
+        const fastestValue = Math.min(...availableValues)
+        const slowestValue = Math.max(...availableValues)
+        const selected = selectedQuery === queryRow.query
+        return (
+          <Fragment key={queryRow.query}>
+            <div className="min-w-0 border-r border-border-subtle bg-surface-inset py-0.5 pr-2">
+              <button
+                type="button"
+                onClick={() => onSelectQuery(queryRow.query)}
+                title={queryRow.query}
+                data-query-name={queryRow.query}
+                className={cn(
+                  "block h-8 w-full min-w-0 truncate rounded-sm px-2 text-left font-medium transition-colors outline-none",
+                  "focus-visible:ring-2 focus-visible:ring-slate-300/20",
+                  selected
+                    ? "bg-accent-400/10 text-slate-50"
+                    : "text-slate-400 hover:bg-surface-raised/70 hover:text-slate-200",
+                )}
+              >
+                {queryRow.query}
+              </button>
+            </div>
+            {queryRow.values.map((value, index) => {
+              const row = rows[index]
+              if (!row) return null
+              const heatStyle = getHeatCellStyle(value, fastestValue, slowestValue)
+              return (
+                <div
+                  key={`${queryRow.query}-${row.id}`}
+                  aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "not run" : formatRuntime(value)}`}
+                  data-query={queryRow.query}
+                  data-series={row.id}
+                  className={cn(
+                    "flex h-9 items-center justify-center rounded-sm border px-1 text-center font-mono text-[0.6875rem] font-medium tabular-nums",
+                    value === null ? "border-border-subtle text-slate-600" : "text-slate-100",
+                    selected && "ring-1 ring-accent-300/30",
+                  )}
+                  style={heatStyle}
+                >
+                  {value === null ? "-" : formatRuntime(value)}
+                </div>
+              )
+            })}
+          </Fragment>
+        )
+      })}
+    </div>
+  )
+}
+
+function useHeatmapColumnCount(seriesCount: number, queryCount: number): 1 | 2 {
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+
+  useEffect(() => {
+    function updateViewportWidth() {
+      setViewportWidth(window.innerWidth)
+    }
+    window.addEventListener("resize", updateViewportWidth)
+    return () => window.removeEventListener("resize", updateViewportWidth)
+  }, [])
+
+  const canSplit =
+    queryCount > 1 &&
+    ((seriesCount <= 4 && viewportWidth >= 1280) || (seriesCount === 5 && viewportWidth >= 1536))
+  return canSplit ? 2 : 1
 }
 
 function getHeatCellStyle(value: number | null, fastestValue: number, slowestValue: number) {
