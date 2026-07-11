@@ -11,7 +11,8 @@ test("catalog loads real coverage and keeps selected results visible on mobile",
   await page.goto("#/catalog?suite=clickbench")
 
   await expect(page.getByRole("heading", { name: "Benchmark catalog" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "ClickBench", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "ClickBench SQL", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Show coverage" }).click()
   await expect(page.getByRole("rowheader", { name: "ClickHouse" })).toBeVisible()
   await expect(page.getByText("43/43")).toBeVisible()
   await expectNoHorizontalPageOverflow(page)
@@ -26,8 +27,9 @@ test("catalog loads real coverage and keeps selected results visible on mobile",
   await page.reload()
 
   await expect(page.getByRole("combobox", { name: "Suite" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "ClickBench", exact: true })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "ClickBench SQL", exact: true })).toBeVisible()
   await expect(page.getByRole("link", { name: "Open explorer" })).toBeVisible()
+  await page.getByRole("button", { name: "Show coverage" }).click()
   await expect(page.getByRole("listitem", { name: "ClickHouse coverage" })).toBeVisible()
   await expect(page.getByRole("button", { name: "QuestDB", exact: true })).toHaveAttribute(
     "aria-pressed",

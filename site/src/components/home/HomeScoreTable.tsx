@@ -41,27 +41,37 @@ export function HomeScoreTable() {
   return (
     <div className="overflow-hidden rounded-lg border border-border-default bg-surface-raised">
       <div className="border-b border-border-default px-5 py-4">
-        <SectionTitle as="h2">Suite scores</SectionTitle>
+        <SectionTitle as="h2">Database ranking</SectionTitle>
         <BodyText className="mt-1">
-          Geometric mean of per-query latency vs the fastest database. Lower is better; 1.0× is the
-          leader. Missing queries are penalized, and rows are ranked by geometric mean across suites
-          at the scale factors shown; smoke suites are shown but excluded from aggregate ordering. A
-          missing suite/scale factor counts as its worst score.{" "}
+          Overall score across benchmark suites. Lower is better; 1.0× means fastest on every query.
+          Missing results are penalized.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
             </>
           ) : null}
         </BodyText>
+        <details className="mt-2 font-sans text-xs text-slate-500">
+          <summary className="w-fit cursor-pointer rounded-sm outline-none hover:text-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20">
+            How scoring works
+          </summary>
+          <p className="mt-2 max-w-4xl leading-5">
+            Each suite score is the geometric mean of per-query latency ratios versus the fastest
+            database, with missing queries penalized. Overall ordering is the geometric mean across
+            benchmark suites; smoke suites are shown but excluded. A missing suite counts as that
+            suite&apos;s worst recorded score.
+          </p>
+        </details>
       </div>
 
       <div className="panel-scrollbar hidden overflow-x-auto overscroll-x-contain lg:block">
-        <table className="w-full min-w-[58rem] table-fixed border-collapse text-left text-sm">
+        <table className="w-full min-w-[62rem] table-fixed border-collapse text-left text-sm">
           <thead className="bg-surface-inset/60 text-xs tracking-wide text-slate-300 uppercase">
             <tr>
               <th className="sticky left-0 z-20 w-44 bg-surface-inset px-4 py-3 font-medium">
                 Database
               </th>
+              <th className="w-24 px-2 py-3 text-right font-medium">Overall</th>
               {suites.map((suite) => (
                 <th key={suite.key} className="px-2 py-3 text-right font-medium last:pr-6">
                   <button
@@ -89,7 +99,7 @@ export function HomeScoreTable() {
             ) : isEmpty ? (
               <tr>
                 <td
-                  colSpan={suites.length + 1}
+                  colSpan={suites.length + 2}
                   className="px-5 py-10 text-center text-sm text-slate-300"
                 >
                   {emptyMessage}
@@ -109,6 +119,11 @@ export function HomeScoreTable() {
                       />
                       <span className="font-medium text-slate-100">{database.label}</span>
                     </div>
+                  </td>
+                  <td className="px-2 py-3 text-right align-middle">
+                    <span className="font-mono text-sm font-semibold text-slate-100 tabular-nums">
+                      {formatScore(database.overallScore)}
+                    </span>
                   </td>
                   {suites.map((suite) => (
                     <ScoreCell
@@ -130,7 +145,7 @@ export function HomeScoreTable() {
 
       <div className="lg:hidden">
         {isLoading ? (
-          <MobileLoadingRows suiteCount={suites.length} />
+          <MobileLoadingRows />
         ) : isEmpty ? (
           <p className="px-5 py-10 text-center text-sm text-slate-300">{emptyMessage}</p>
         ) : (
@@ -146,48 +161,58 @@ export function HomeScoreTable() {
                 aria-label={`${database.label} scores`}
                 className="p-4"
               >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="w-4 text-right font-mono text-xs text-slate-400 tabular-nums">
-                    {index + 1}
-                  </span>
-                  <span
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: databaseColors[database.label] ?? "#94a3b8" }}
-                  />
-                  <span className="min-w-0 truncate font-semibold text-slate-100">
-                    {database.label}
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="w-4 text-right font-mono text-xs text-slate-400 tabular-nums">
+                      {index + 1}
+                    </span>
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: databaseColors[database.label] ?? "#94a3b8" }}
+                    />
+                    <span className="min-w-0 truncate font-semibold text-slate-100">
+                      {database.label}
+                    </span>
+                  </div>
+                  <span className="shrink-0 font-mono text-sm font-semibold text-slate-100 tabular-nums">
+                    {formatScore(database.overallScore)}
                   </span>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {suites.map((suite) => (
-                    <div key={suite.key} className="min-w-0 rounded-lg bg-surface-inset p-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(`/explorer/${suite.suiteId}?scale=${suite.suiteScaleFactor}`)
-                        }
-                        className="block max-w-full truncate rounded-sm text-left text-xs font-medium text-slate-300 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
-                        title={`Open ${suite.title} explorer`}
-                      >
-                        {suite.title}
-                        {suite.publicRole === "smoke" ? (
-                          <span className="ml-1 text-[9px] font-semibold text-slate-500 uppercase">
-                            smoke
-                          </span>
-                        ) : null}
-                      </button>
-                      <ScoreValue
-                        score={overview.scoresByDbAndSuite.get(database.key)?.get(suite.key)}
-                        rank={
-                          overview.suites
-                            .find((entry) => entry.key === suite.key)
-                            ?.scores.findIndex((entry) => entry.dbKey === database.key) ?? -1
-                        }
-                        align="left"
-                      />
-                    </div>
-                  ))}
-                </div>
+                <details className="mt-3">
+                  <summary className="w-fit cursor-pointer rounded-sm text-xs text-slate-400 outline-none hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-slate-300/20">
+                    Suite breakdown
+                  </summary>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {suites.map((suite) => (
+                      <div key={suite.key} className="min-w-0 rounded-md bg-surface-inset p-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(`/explorer/${suite.suiteId}?scale=${suite.suiteScaleFactor}`)
+                          }
+                          className="block max-w-full truncate rounded-sm text-left text-xs font-medium text-slate-300 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
+                          title={`Open ${suite.title} explorer`}
+                        >
+                          {suite.title}
+                          {suite.publicRole === "smoke" ? (
+                            <span className="ml-1 text-[9px] font-semibold text-slate-500 uppercase">
+                              smoke
+                            </span>
+                          ) : null}
+                        </button>
+                        <ScoreValue
+                          score={overview.scoresByDbAndSuite.get(database.key)?.get(suite.key)}
+                          rank={
+                            overview.suites
+                              .find((entry) => entry.key === suite.key)
+                              ?.scores.findIndex((entry) => entry.dbKey === database.key) ?? -1
+                          }
+                          align="left"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </section>
             ))}
           </div>
@@ -266,6 +291,9 @@ function LoadingRows({ suiteCount }: { suiteCount: number }) {
               <Skeleton className="h-4 w-24 rounded" />
             </div>
           </td>
+          <td className="px-2 py-3">
+            <Skeleton className="ml-auto h-4 w-12 rounded" />
+          </td>
           {Array.from({ length: suiteCount }, (__, colIdx) => (
             <td key={colIdx} className="px-4 py-3 last:pr-6">
               <div className="flex flex-col items-end gap-1">
@@ -280,21 +308,17 @@ function LoadingRows({ suiteCount }: { suiteCount: number }) {
   )
 }
 
-function MobileLoadingRows({ suiteCount }: { suiteCount: number }) {
+function MobileLoadingRows() {
   return (
     <div className="divide-y divide-border-subtle">
       {Array.from({ length: 4 }, (_, rowIndex) => (
-        <div key={rowIndex} className="space-y-3 p-4">
+        <div key={rowIndex} className="flex items-center gap-2.5 p-4">
           <div className="flex items-center gap-2.5">
             <Skeleton className="h-3 w-4 rounded" />
             <Skeleton className="size-2.5 rounded-full" />
             <Skeleton className="h-4 w-28 rounded" />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {Array.from({ length: suiteCount }, (__, columnIndex) => (
-              <Skeleton key={columnIndex} className="h-16 w-full rounded-lg" />
-            ))}
-          </div>
+          <Skeleton className="ml-auto h-4 w-12 rounded" />
         </div>
       ))}
     </div>

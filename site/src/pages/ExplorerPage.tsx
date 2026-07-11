@@ -320,9 +320,9 @@ export function ExplorerPage({
       <header className="grid gap-4 md:grid-cols-[minmax(20rem,1fr)_16rem] md:items-end">
         <div className="min-w-0">
           <MetaLabel>Explorer</MetaLabel>
-          <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
             Benchmark explorer
-          </h2>
+          </h1>
           <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
             Start with a comparison question, then move from the suite result to individual queries
             and SQL.
@@ -348,53 +348,41 @@ export function ExplorerPage({
       </header>
 
       <PanelCard className="p-3 sm:p-4">
-        <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)] xl:items-center">
+        <PanelHeader className="flex-wrap sm:items-center">
           <div className="min-w-0">
-            <MetaLabel>1 · Choose an analysis</MetaLabel>
+            <MetaLabel>Analysis</MetaLabel>
             <SectionTitle as="h3" className="mt-1 text-lg">
-              What do you want to compare?
+              {mode === "database" ? "Compare databases" : "Analyze one database"}
             </SectionTitle>
             <p className="mt-1.5 font-sans text-sm leading-5 text-slate-400">
-              Compare the database landscape, or focus on how one database changes.
+              {mode === "database"
+                ? "Rank engines under one shared environment."
+                : "Hold one database constant and vary scale, version, or system."}
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <SegmentedButton
               selected={mode === "database"}
               aria-pressed={mode === "database"}
               onClick={handleCompareDatabases}
-              size="md"
-              className="min-h-16 min-w-0 justify-start gap-3 rounded-lg px-3 py-2.5 text-left"
+              size="sm"
+              className="min-h-9 min-w-0 gap-2"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle bg-surface-raised">
-                <Database className="h-4 w-4" strokeWidth={1.8} />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">Compare databases</span>
-                <span className="mt-0.5 block truncate font-sans text-xs font-normal text-slate-400">
-                  Rank engines in the same environment
-                </span>
-              </span>
+              <Database className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+              Compare databases
             </SegmentedButton>
             <SegmentedButton
               selected={mode !== "database"}
               aria-pressed={mode !== "database"}
               onClick={handleAnalyzeOneDatabase}
-              size="md"
-              className="min-h-16 min-w-0 justify-start gap-3 rounded-lg px-3 py-2.5 text-left"
+              size="sm"
+              className="min-h-9 min-w-0 gap-2"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle bg-surface-raised">
-                <Search className="h-4 w-4" strokeWidth={1.8} />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">Analyze one database</span>
-                <span className="mt-0.5 block truncate font-sans text-xs font-normal text-slate-400">
-                  Compare scale, versions, or systems
-                </span>
-              </span>
+              <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+              Analyze one database
             </SegmentedButton>
           </div>
-        </div>
+        </PanelHeader>
 
         <div className="mt-4 border-t border-border-subtle pt-4">
           {showLoading ? (
@@ -432,6 +420,7 @@ export function ExplorerPage({
                 icon={Server}
                 label="Fixed environment"
                 helper="Every database runs on the same system and scale; latest completed versions are used."
+                className="xl:border-l xl:border-border-subtle xl:pl-4"
               >
                 <div className="flex min-w-0 flex-wrap gap-2">
                   <DimensionSelect
@@ -627,7 +616,7 @@ export function ExplorerPage({
       <PanelCard className="min-w-0 space-y-4 p-3 sm:p-4">
         <PanelHeader className="flex-wrap">
           <div className="min-w-0">
-            <MetaLabel>2 · Suite results</MetaLabel>
+            <MetaLabel>Suite result</MetaLabel>
             <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
               {getModeLabel(mode, selection)}
             </SectionTitle>
@@ -654,11 +643,19 @@ export function ExplorerPage({
           <div className="flex min-h-72 items-center justify-center border-y border-border-subtle text-sm text-slate-500">
             No completed query results match this comparison.
           </div>
+        ) : rankedRows.length < 2 ? (
+          <div className="rounded-md border border-border-subtle bg-surface-inset px-4 py-5">
+            <p className="text-sm font-semibold text-slate-200">No comparison available</p>
+            <p className="mt-1 max-w-3xl font-sans text-sm leading-6 text-slate-400">
+              Only one recorded value matches this setup. Choose another database, dimension, or
+              environment to compare suite scores. Query SQL and runtime remain available below.
+            </p>
+          </div>
         ) : (
           <>
             <OverviewStats rows={rankedRows} />
 
-            <ChartFrame className="p-3 sm:p-4">
+            <div className="border-t border-border-subtle pt-4">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <MetaLabel>Overall ranking</MetaLabel>
@@ -676,7 +673,7 @@ export function ExplorerPage({
                 </div>
               </div>
               <ScoreRanking rows={rankedRows} />
-            </ChartFrame>
+            </div>
           </>
         )}
       </PanelCard>
@@ -685,7 +682,7 @@ export function ExplorerPage({
         <PanelCard className="min-w-0 space-y-4 overflow-visible p-3 sm:p-4">
           <PanelHeader className="flex-wrap sm:flex-nowrap sm:items-end">
             <div className="min-w-0 flex-1">
-              <MetaLabel>3 · Inspect a query</MetaLabel>
+              <MetaLabel>Query detail</MetaLabel>
               <SectionTitle as="h3" className="mt-1 text-lg sm:text-xl">
                 Query performance and SQL
               </SectionTitle>
@@ -850,22 +847,15 @@ function AnalysisField({
   className?: string
 }) {
   return (
-    <section
-      className={cn(
-        "min-w-0 rounded-lg border border-border-subtle bg-surface-inset p-3",
-        className,
-      )}
-    >
+    <section className={cn("min-w-0 py-1", className)}>
       <div className="flex min-w-0 items-start gap-2.5">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised text-slate-300">
-          <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </span>
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" strokeWidth={1.8} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-100">{label}</p>
           <p className="mt-0.5 font-sans text-xs leading-5 text-slate-400">{helper}</p>
         </div>
       </div>
-      <div className="mt-3 min-w-0">{children}</div>
+      <div className="mt-2.5 min-w-0 sm:pl-6">{children}</div>
     </section>
   )
 }
@@ -881,8 +871,8 @@ function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
       : null
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
-      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+    <div className="grid overflow-hidden rounded-md border border-border-subtle bg-surface-inset sm:grid-cols-3 sm:divide-x sm:divide-border-subtle">
+      <div className="border-b border-border-subtle px-4 py-3 sm:border-b-0">
         <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
           <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
           Best suite score
@@ -890,7 +880,7 @@ function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
         <p className="mt-2 truncate text-xl font-semibold text-slate-50">{leader.label}</p>
         <p className="mt-1 text-xs text-slate-400">{formatScore(leader.score)} normalized score</p>
       </div>
-      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+      <div className="border-b border-border-subtle px-4 py-3 sm:border-b-0">
         <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
           Winning queries
         </p>
@@ -901,7 +891,7 @@ function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
           Fastest completed results ({leader.label})
         </p>
       </div>
-      <div className="rounded-lg border border-border-subtle bg-surface-inset px-4 py-3">
+      <div className="px-4 py-3">
         <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
           Scored workload
         </p>
@@ -984,14 +974,14 @@ function ChoiceChips<T extends string | number>({
 
 function ScoreRanking({ rows }: { rows: readonly ScoredComparisonRow[] }) {
   return (
-    <div className="grid gap-2">
+    <div className="divide-y divide-border-subtle overflow-hidden rounded-md border border-border-subtle bg-surface-primary/25">
       {rows.map((row, index) => (
         <div
           key={row.id}
           data-score-ranking-row={row.id}
           className={cn(
-            "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border bg-surface-primary/35 px-3 py-2.5",
-            index === 0 ? "border-amber-300/35" : "border-border-subtle",
+            "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5",
+            index === 0 && "bg-amber-300/[0.035]",
           )}
         >
           <span className="flex w-7 items-center gap-1 text-xs font-semibold text-slate-500">
@@ -1191,7 +1181,7 @@ function QueryHeatmapHeaderBlock({
     <div
       data-heatmap-header-block
       className="grid shrink-0 gap-0.5 text-xs"
-      style={{ gridTemplateColumns: `11rem repeat(${rows.length}, 5.25rem)` }}
+      style={{ gridTemplateColumns: `10rem repeat(${rows.length}, 4.6875rem)` }}
     >
       <div className="flex h-9 items-center border-r border-border-default bg-surface-inset pr-2 font-semibold text-slate-500">
         Query
@@ -1251,7 +1241,7 @@ function QueryHeatmapRowsBlock({
     <div
       data-heatmap-block
       className="grid shrink-0 gap-0.5 text-xs"
-      style={{ gridTemplateColumns: `11rem repeat(${rows.length}, 5.25rem)` }}
+      style={{ gridTemplateColumns: `10rem repeat(${rows.length}, 4.6875rem)` }}
     >
       {queryRows.map((queryRow) => {
         const availableValues = queryRow.values.filter((value): value is number => value !== null)
@@ -1326,9 +1316,7 @@ function useHeatmapColumnCount(seriesCount: number, queryCount: number): 1 | 2 {
     return () => window.removeEventListener("resize", updateViewportWidth)
   }, [])
 
-  const canSplit =
-    queryCount > 1 &&
-    ((seriesCount <= 4 && viewportWidth >= 1280) || (seriesCount === 5 && viewportWidth >= 1536))
+  const canSplit = seriesCount > 0 && queryCount > 12 && viewportWidth >= 1280
   return canSplit ? 2 : 1
 }
 
