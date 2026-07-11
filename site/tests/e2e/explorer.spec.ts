@@ -26,10 +26,6 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await expect(page.getByText("Scale factor", { exact: true }).first()).toBeVisible()
   await page.getByRole("button", { name: "Done" }).click()
 
-  await page.getByRole("button", { name: "Version", exact: true }).click()
-  await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
-  await expect(page).toHaveURL(/mode=version/)
-
   await page.getByRole("combobox", { name: "Query" }).click()
   await expect(page.getByRole("option")).toHaveCount(10)
   await page.getByRole("searchbox", { name: "Filter queries" }).fill("Q22")
@@ -38,6 +34,20 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   )
   await page.getByRole("option", { name: "Q22", exact: true }).click()
   await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q22")
+  await expect(page).toHaveURL(/query=Q22/)
+  await expect(page.getByRole("button", { name: "QuestDB", exact: true })).toHaveAttribute(
+    "data-sql-variant",
+    "different",
+  )
+  await expect(page.getByRole("button", { name: "DuckDB", exact: true })).toHaveAttribute(
+    "data-sql-variant",
+    "default",
+  )
+  await expect(page.getByText("Differs from default SQL")).toBeVisible()
+
+  await page.getByRole("button", { name: "Version", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
+  await expect(page).toHaveURL(/mode=version/)
   await expect(page).toHaveURL(/query=Q22/)
   await expectNoHorizontalPageOverflow(page)
 

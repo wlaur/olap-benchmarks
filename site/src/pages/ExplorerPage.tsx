@@ -187,6 +187,17 @@ export function ExplorerPage({
     : (sqlDatabaseOptions[0] ?? "")
   const selectedSqlEntry = manifestEntries[selectedQuery]
   const selectedSql = resolveSql(selectedSqlEntry, sqlDatabase)
+  const sqlVariants = useMemo(
+    () =>
+      new Map(
+        sqlDatabaseOptions.map((database) => [
+          database,
+          sqlDiffersFromDefault(selectedSqlEntry, database),
+        ]),
+      ),
+    [selectedSqlEntry, sqlDatabaseOptions],
+  )
+  const hasDifferentSql = [...sqlVariants.values()].some(Boolean)
   const selectedQueryRows = useMemo(
     () =>
       rankedRows
@@ -579,20 +590,47 @@ export function ExplorerPage({
                     {selectedQuery}
                   </p>
                 </div>
-                {sqlDatabaseOptions.length > 1 ? (
-                  <div className="panel-scrollbar flex gap-1 overflow-x-auto pb-1">
-                    {sqlDatabaseOptions.map((database) => (
-                      <SegmentedButton
-                        key={database}
-                        selected={sqlDatabase === database}
-                        aria-pressed={sqlDatabase === database}
-                        onClick={() => setRequestedSqlDatabase(database)}
-                        size="xs"
-                        className="shrink-0 rounded-md"
-                      >
-                        {formatDatabaseName(database)}
-                      </SegmentedButton>
-                    ))}
+                {sqlDatabaseOptions.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <div className="panel-scrollbar flex gap-1 overflow-x-auto pb-1">
+                      {sqlDatabaseOptions.map((database) => {
+                        const differsFromDefault = sqlVariants.get(database) ?? false
+                        const databaseName = formatDatabaseName(database)
+                        return (
+                          <SegmentedButton
+                            key={database}
+                            selected={sqlDatabase === database}
+                            aria-pressed={sqlDatabase === database}
+                            onClick={() => setRequestedSqlDatabase(database)}
+                            size="xs"
+                            className="shrink-0 gap-1.5 rounded-md"
+                            data-sql-variant={differsFromDefault ? "different" : "default"}
+                            title={
+                              differsFromDefault
+                                ? `${databaseName} SQL differs from the default`
+                                : `${databaseName} uses the default SQL`
+                            }
+                          >
+                            {differsFromDefault ? (
+                              <span
+                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.12)]"
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                            {databaseName}
+                          </SegmentedButton>
+                        )
+                      })}
+                    </div>
+                    {hasDifferentSql ? (
+                      <p className="flex items-center gap-1.5 text-[0.6875rem] text-slate-500">
+                        <span
+                          className="h-1.5 w-1.5 rounded-full bg-amber-300"
+                          aria-hidden="true"
+                        />
+                        Differs from default SQL
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -1312,6 +1350,37 @@ function makeQueryRows(queryNames: readonly string[], rows: readonly ComparisonR
 function resolveSql(entry: QuerySqlEntry | undefined, database: string) {
   if (!entry) return "-- SQL is not available for this query."
   return entry.db_overrides[database] ?? entry.sql ?? "-- SQL is not available for this database."
+}
+
+function sqlDiffersFromDefault(entry: QuerySqlEntry | undefined, database: string): boolean {
+  if (!entry) return false
+  const databaseSql = entry.db_overrides[database] ?? entry.sql
+  if (!databaseSql) return false
+  const defaultSql = getDefaultSql(entry)
+  return defaultSql === null || normalizeSql(databaseSql) !== defaultSql
+}
+
+function getDefaultSql(entry: QuerySqlEntry): string | null {
+  if (entry.sql) return normalizeSql(entry.sql)
+
+  const counts = new Map<string, number>()
+  for (const sql of Object.values(entry.db_overrides)) {
+    const normalizedSql = normalizeSql(sql)
+    counts.set(normalizedSql, (counts.get(normalizedSql) ?? 0) + 1)
+  }
+  let defaultSql: string | null = null
+  let defaultCount = 1
+  for (const [sql, count] of counts) {
+    if (count > defaultCount) {
+      defaultSql = sql
+      defaultCount = count
+    }
+  }
+  return defaultSql
+}
+
+function normalizeSql(sql: string): string {
+  return sql.replace(/\r\n?/g, "\n").trim()
 }
 
 function parseUrlState(
