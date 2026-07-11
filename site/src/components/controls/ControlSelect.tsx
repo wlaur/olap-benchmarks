@@ -20,7 +20,7 @@ interface ControlSelectProps {
   disabled?: boolean
   className?: string
   menuClassName?: string
-  labelMode?: "responsive" | "always"
+  labelMode?: "responsive" | "always" | "hidden"
 }
 
 const TRIGGER_CLASS =
@@ -44,8 +44,9 @@ export function ControlSelect({
   menuClassName,
   labelMode = "responsive",
 }: ControlSelectProps) {
-  const labelClass = labelMode === "always" ? "inline" : "hidden md:inline"
-  const dividerClass = labelMode === "always" ? "inline" : "hidden md:inline"
+  const labelClass =
+    labelMode === "always" ? "inline" : labelMode === "responsive" ? "hidden md:inline" : "hidden"
+  const dividerClass = labelClass
 
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
@@ -105,7 +106,7 @@ export function ControlSelect({
 interface ControlSelectSkeletonProps {
   label: string
   className?: string
-  labelMode?: "responsive" | "always"
+  labelMode?: "responsive" | "always" | "hidden"
 }
 
 export function ControlSelectSkeleton({
@@ -113,8 +114,9 @@ export function ControlSelectSkeleton({
   className,
   labelMode = "responsive",
 }: ControlSelectSkeletonProps) {
-  const labelClass = labelMode === "always" ? "inline" : "hidden md:inline"
-  const dividerClass = labelMode === "always" ? "inline" : "hidden md:inline"
+  const labelClass =
+    labelMode === "always" ? "inline" : labelMode === "responsive" ? "hidden md:inline" : "hidden"
+  const dividerClass = labelClass
 
   return (
     <div className={cn(TRIGGER_CLASS, className)} aria-hidden="true">

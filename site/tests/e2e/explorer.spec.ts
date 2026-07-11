@@ -13,7 +13,8 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await suiteSelect.click()
   await page.getByRole("option", { name: "RTABench", exact: true }).click()
   await expect(page).toHaveURL(/\/explorer\/rtabench/)
-  await expect(page.getByRole("heading", { name: "RTABench results" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Benchmark results" })).toBeVisible()
+  await expect(page.getByRole("combobox", { name: "Benchmark suite" })).toContainText("RTABench")
   await page.getByRole("combobox", { name: "Benchmark suite" }).click()
   await page.getByRole("option", { name: "ClickBench", exact: true }).click()
 
@@ -62,6 +63,18 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   expect(await questDbSqlButton.evaluate((button) => button.getBoundingClientRect().top)).toBe(
     sqlTabsTop,
   )
+
+  await page.getByRole("button", { name: "Show all 43 query results" }).click()
+  const queryNameCell = page.locator('button[data-query-name="Q22"]')
+  const firstHeatCell = page.locator('[data-query="Q22"]').first()
+  const [queryNameBox, heatCellBox] = await Promise.all([
+    queryNameCell.boundingBox(),
+    firstHeatCell.boundingBox(),
+  ])
+  expect(queryNameBox).not.toBeNull()
+  expect(heatCellBox).not.toBeNull()
+  expect(queryNameBox!.x + queryNameBox!.width).toBeLessThanOrEqual(heatCellBox!.x)
+  expect(heatCellBox!.width).toBeLessThanOrEqual(88)
 
   await page.getByRole("button", { name: "Version", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Version comparison" })).toBeVisible()
