@@ -240,7 +240,7 @@ export function VirtualizedSelect({
                 <span className="sr-only">{filterPlaceholder}</span>
                 <input
                   ref={searchRef}
-                  type="search"
+                  type="text"
                   role="searchbox"
                   aria-label={filterPlaceholder}
                   aria-controls={listId}
@@ -310,7 +310,9 @@ export function VirtualizedSelect({
                             )}
                             strokeWidth={1.8}
                           />
-                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                          <span className="min-w-0 flex-1 truncate">
+                            <HighlightedMatch text={option.label} query={filter} />
+                          </span>
                           {selected ? (
                             <Check
                               className="h-3.5 w-3.5 shrink-0 text-accent-300"
@@ -338,6 +340,23 @@ export function VirtualizedSelect({
             document.body,
           )
         : null}
+    </>
+  )
+}
+
+function HighlightedMatch({ text, query }: { text: string; query: string }) {
+  const normalizedQuery = query.trim()
+  const matchIndex = text.toLocaleLowerCase().indexOf(normalizedQuery.toLocaleLowerCase())
+  if (!normalizedQuery || matchIndex < 0) return text
+
+  const matchEnd = matchIndex + normalizedQuery.length
+  return (
+    <>
+      {text.slice(0, matchIndex)}
+      <mark className="rounded-sm bg-accent-400/20 px-px text-accent-200">
+        {text.slice(matchIndex, matchEnd)}
+      </mark>
+      {text.slice(matchEnd)}
     </>
   )
 }
