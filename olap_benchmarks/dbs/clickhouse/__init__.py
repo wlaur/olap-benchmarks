@@ -343,11 +343,17 @@ class Clickhouse(Database):
     ) -> pl.DataFrame:
         query = query.strip().removesuffix(";")
 
-        with self.record_query_execution(query):
-            df = cast(
-                pl.DataFrame,
-                cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query, settings=settings)),
-            )
+        with (
+            self.record_query_execution(query),
+            cast(Any, self.get_client()).query_arrow_stream(query, settings=settings) as stream,
+        ):
+            frames = [cast(pl.DataFrame, cast(Any, pl).from_arrow(batch)) for batch in stream]
+            if not frames:
+                df = cast(pl.DataFrame, cast(Any, pl).from_arrow(stream.gen.read_all()))
+            elif len(frames) == 1:
+                df = frames[0]
+            else:
+                df = pl.concat(frames, rechunk=False)
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -361,7 +367,7 @@ class Clickhouse(Database):
         if "time" not in time_columns:
             time_columns.append("time")
 
-        # query_arrow returns:
+        # ArrowStream returns:
         #   * DateTime64 / date_trunc()        -> timestamp[ms, tz=UTC] (typed)
         #   * DateTime / toStartOfHour() etc.  -> uint32 (epoch seconds)
         # Normalise both shapes to the naive ms-precision Datetime that the
