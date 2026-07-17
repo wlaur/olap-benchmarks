@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
@@ -26,10 +27,23 @@ from .utils import get_pymonetdb_connection
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "Dec2025-SP3"
-RUNTIME_VERSION = "11.55.7"
-DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
-ARM64_DOCKER_IMAGE = "wlaur/monetdb-container:11.55.7-2"
+
+@dataclass(frozen=True, slots=True)
+class MonetDBRelease:
+    label: str
+    runtime_version: str
+    arm64_image_revision: int
+
+    @property
+    def amd64_container_image(self) -> str:
+        return f"monetdb/monetdb:{self.label}"
+
+    @property
+    def arm64_container_image(self) -> str:
+        return f"wlaur/monetdb-container:{self.runtime_version}-{self.arm64_image_revision}"
+
+
+MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
@@ -91,11 +105,11 @@ class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
 
 class MonetDB(Database):
     name: DatabaseName = "monetdb"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = DOCKER_IMAGE
-    arm64_container_image: ClassVar[str | None] = ARM64_DOCKER_IMAGE
+    version: str = MONETDB_RELEASE.label
+    container_image: ClassVar[str | None] = MONETDB_RELEASE.amd64_container_image
+    arm64_container_image: ClassVar[str | None] = MONETDB_RELEASE.arm64_container_image
     supports_arm64_containers: ClassVar[bool] = True
-    expected_runtime_version: ClassVar[str | None] = RUNTIME_VERSION
+    expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
 
     connection_string: str = MONETDB_CONNECTION_STRING
 
