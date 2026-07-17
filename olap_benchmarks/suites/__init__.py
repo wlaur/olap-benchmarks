@@ -179,7 +179,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
         query_name: str,
         iterations: int,
         query_loader: Callable[[], str],
-        fetch_kwargs: Mapping[str, Any] | None,
+        fetch_kwargs_factory: Callable[[], Mapping[str, Any]],
         progress_label: str,
         log_success: Callable[[int, pl.DataFrame, float], None],
     ) -> bool:
@@ -188,6 +188,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
         try:
             with self.db.query_context(query_name):
                 query = query_loader()
+                fetch_kwargs = fetch_kwargs_factory()
 
                 for iteration in range(1, iterations + 1):
                     failed_iteration = iteration

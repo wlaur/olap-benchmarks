@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 import psutil
 
+from .settings import ContainerPlatform
+
 ExecutionMode = Literal["container", "in_process"]
 IterationRole = Literal["first_run", "warm", "steady_state"]
 StepResultStatus = Literal["ok", "timeout", "unsupported", "wrong_result", "error", "skipped"]
@@ -91,6 +93,8 @@ def build_run_metadata(
     execution_mode: ExecutionMode,
     container_image: str | None = None,
     container_images: Mapping[str, str] | None = None,
+    container_platform: ContainerPlatform | None = None,
+    container_platform_emulated: bool = False,
     start_command: str | None,
 ) -> dict[str, Any]:
     docker_platform = _run_optional_command(["docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])
@@ -121,7 +125,9 @@ def build_run_metadata(
             "container_image_digest": image_digest,
             "container_images": image_map or None,
             "container_image_digests": image_digests or None,
-            "container_platform": docker_platform if execution_mode == "container" else None,
+            "container_platform": container_platform,
+            "container_engine_platform": docker_platform if execution_mode == "container" else None,
+            "container_platform_emulated": container_platform_emulated if execution_mode == "container" else False,
             "start_command": start_command,
         },
     }

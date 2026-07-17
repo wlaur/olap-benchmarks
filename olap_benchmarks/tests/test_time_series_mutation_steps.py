@@ -186,6 +186,16 @@ def test_time_series_concurrent_runs_writer_and_readers(monkeypatch: pytest.Monk
     ]
 
 
+def test_time_series_concurrent_writer_seed_produces_valid_timestamps() -> None:
+    db = FakeMutationDB()
+    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
+    step = MutateStep(action="insert", table="data_large", row_count=100)
+
+    df = suite._generate_insert_data(step, seed=100_001)
+
+    assert df.get_column("time").null_count() == 0
+
+
 def test_time_series_mutate_records_remaining_iterations_after_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     db = FakeMutationDB(
         disabled_steps=set(),

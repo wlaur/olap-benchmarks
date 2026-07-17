@@ -16,6 +16,7 @@ import polars as pl
 from pydantic import BaseModel, PrivateAttr
 from sqlalchemy import Connection, text
 
+from ..container_platform import get_container_engine_platform
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..results.hashing import build_answer_metadata
@@ -30,6 +31,7 @@ from ..run_metadata import (
 from ..settings import (
     REPO_ROOT,
     SETTINGS,
+    ContainerPlatform,
     DatabaseName,
     Operation,
     SuiteName,
@@ -59,6 +61,9 @@ class Database(BaseModel, ABC):
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
     container_image: ClassVar[str | None] = None
+    arm64_container_image: ClassVar[str | None] = None
+    supports_arm64_containers: ClassVar[bool] = False
+    expected_runtime_version: ClassVar[str | None] = None
 
     current_query_name: str | None = None
     _current_suite: SuiteName | None = None
@@ -139,10 +144,49 @@ class Database(BaseModel, ABC):
         return "container"
 
     @property
-    def container_images(self) -> Mapping[str, str]:
+    def resolved_container_image(self) -> str | None:
         if self.container_image is None:
+            return None
+        if self.container_platform == "linux/arm64" and self.arm64_container_image is not None:
+            return self.arm64_container_image
+        return self.container_image
+
+    @property
+    def container_platform(self) -> ContainerPlatform | None:
+        if self.container_image is None and not self.container_images:
+            return None
+
+        engine_platform = get_container_engine_platform()
+        if engine_platform == "linux/arm64" and not self.supports_arm64_containers:
+            return "linux/amd64"
+        return engine_platform
+
+    @property
+    def uses_container_emulation(self) -> bool:
+        platform = self.container_platform
+        return platform is not None and platform != get_container_engine_platform()
+
+    @property
+    def container_platform_warning(self) -> str | None:
+        platform = self.container_platform
+        if platform is None:
+            return None
+
+        engine_platform = get_container_engine_platform()
+        if engine_platform == "linux/arm64" and platform == "linux/amd64":
+            return (
+                f"{self.name} does not provide an ARM64 container image; running linux/amd64 on "
+                f"{engine_platform} through an inefficient CPU virtualization layer. Benchmark results will "
+                "include virtualization overhead."
+            )
+        return None
+
+    @property
+    def container_images(self) -> Mapping[str, str]:
+        image = self.resolved_container_image
+        if image is None:
             return {}
-        return {self.name: self.container_image}
+        return {self.name: image}
 
     @property
     def metric_container_names(self) -> tuple[str, ...]:
@@ -177,9 +221,8 @@ class Database(BaseModel, ABC):
         network: str | None = None,
         ip: str | None = None,
     ) -> str:
-        parts = ["docker run"]
-        if platform is not None:
-            parts.extend(["--platform", platform])
+        resolved_platform = platform or self.container_platform or get_container_engine_platform()
+        parts = ["docker run", "--platform", resolved_platform]
         parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
         if network is not None:
             parts.extend(["--network", network])
@@ -380,7 +423,7 @@ class Database(BaseModel, ABC):
         return None
 
     def is_runtime_version_expected(self, runtime_version: str) -> bool:
-        return self.version in runtime_version
+        return (self.expected_runtime_version or self.version) in runtime_version
 
     def verify_runtime_version(self) -> None:
         runtime_version = self.get_runtime_version()
@@ -388,9 +431,10 @@ class Database(BaseModel, ABC):
             return
 
         if not self.is_runtime_version_expected(runtime_version):
+            expected_version = self.expected_runtime_version or self.version
             raise RuntimeError(
                 f"{self.name} runtime version does not match pinned version: "
-                f"expected {self.version!r}, got {runtime_version!r}"
+                f"expected {expected_version!r}, got {runtime_version!r}"
             )
 
     @contextmanager
@@ -707,8 +751,10 @@ class Database(BaseModel, ABC):
             system_metadata=build_system_metadata(),
             metadata=build_run_metadata(
                 execution_mode=self.execution_mode,
-                container_image=self.container_image,
+                container_image=self.resolved_container_image,
                 container_images=self.container_images,
+                container_platform=self.container_platform,
+                container_platform_emulated=self.uses_container_emulation,
                 start_command=self._last_start_command,
             ),
         )

@@ -2,15 +2,18 @@
 
 Runbook for benchmarking on ephemeral AWS VMs with per-second billing. The
 instance is created for a single campaign, pushes its results to git, and
-terminates itself — there is nothing to keep or pay for between runs.
+terminates itself — there is nothing to keep or pay for between runs. Container
+images automatically follow the Docker engine architecture; x86 and ARM runs
+must still use distinct system labels because their results are not directly
+comparable.
 
 ## Instance choice
 
 Use the storage-optimized `i4i` family: dedicated x86 (Intel Ice Lake) with
 large local NVMe included in the hourly price. Local NVMe matters — network
-volumes (EBS) would bottleneck populate and distort disk-heavy queries. x86
-matters because the MonetDB, StarRocks, and Doris images are amd64-first, and
-mixing architectures would break comparability between machine sizes.
+volumes (EBS) would bottleneck populate and distort disk-heavy queries. This
+runbook uses x86 so all machine sizes in a campaign have the same CPU
+architecture.
 
 | Instance     | vCPU | RAM     | Local NVMe | On-demand (us-east-1, 2026) |
 | ------------ | ---- | ------- | ---------- | --------------------------- |

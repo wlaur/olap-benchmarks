@@ -75,6 +75,10 @@ def _start_db(db_instance: "Database") -> None:
     if not commands:
         return
 
+    platform_warning = db_instance.container_platform_warning
+    if platform_warning is not None:
+        _LOGGER.warning(platform_warning)
+
     _stop_db(db_instance)
     for command in commands:
         _LOGGER.info(f"Starting {db_instance.name}: {command}")

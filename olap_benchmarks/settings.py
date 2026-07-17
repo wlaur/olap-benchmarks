@@ -25,6 +25,7 @@ DatabaseName = Literal[
 SuiteName = Literal["rtabench", "time_series", "clickbench", "jsonbench", "kaggle_airbnb", "tpc_h", "tpc_ds"]
 Operation = Literal["populate", "select", "mutate", "concurrent"]
 Revision = Annotated[str, "Results database revision"]
+ContainerPlatform = Literal["linux/amd64", "linux/arm64"]
 
 type DatabaseArg = DatabaseName | Literal["all"]
 type SuiteArg = SuiteName | Literal["all"]

@@ -510,6 +510,7 @@ class Postgres(Database):
     name: DatabaseName = "postgres"
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 
@@ -530,6 +531,7 @@ class Postgres(Database):
 
         parts = [
             "docker run",
+            f"--platform {self.container_platform}",
             f"--name {self.name}-benchmark",
             "--rm -d -p 5433:5432",
             "--user 0:0",

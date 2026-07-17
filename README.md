@@ -29,6 +29,15 @@ Configuration lives in `.env` (see `olap config` for the resolved values):
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
 
+Container images follow the Docker engine architecture automatically, including
+OrbStack's Linux engine on Apple Silicon. The pinned ClickHouse, TimescaleDB,
+QuestDB, PostgreSQL, StarRocks, and Doris references are multi-architecture.
+MonetDB uses the official `monetdb/monetdb` image on amd64 and
+`wlaur/monetdb-container:11.55.7-2` on ARM64. A connector marked as lacking an
+ARM64 image still runs its amd64 image but emits a prominent warning that CPU
+virtualization overhead will affect the result. The selected image platform
+and virtualization status are saved in run metadata.
+
 Install zsh completions once (rerun after CLI changes):
 
 ```bash

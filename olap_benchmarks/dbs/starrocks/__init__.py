@@ -277,6 +277,7 @@ class StarRocks(Database):
     name: DatabaseName = "starrocks"
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = STARROCKS_CONNECTION_STRING
 
