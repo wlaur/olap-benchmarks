@@ -116,7 +116,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
                 query_name=query_name,
                 iterations=ITERATIONS,
                 query_loader=lambda query=query: query,
-                fetch_kwargs=self.fetch_kwargs,
+                fetch_kwargs_factory=lambda: self.fetch_kwargs,
                 progress_label=progress_label,
                 log_success=lambda it, df, t, query_name=query_name, progress_label=progress_label: _LOGGER.info(
                     f"Executed {query_name} {progress_label} "

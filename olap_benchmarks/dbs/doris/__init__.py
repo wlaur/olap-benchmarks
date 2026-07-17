@@ -155,6 +155,7 @@ class Doris(Database):
     name: DatabaseName = "doris"
     version: str = VERSION
     container_image: ClassVar[str | None] = None
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = DORIS_CONNECTION_STRING
 

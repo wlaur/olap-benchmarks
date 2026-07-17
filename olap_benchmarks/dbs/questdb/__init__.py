@@ -100,6 +100,7 @@ class QuestDB(Database):
     name: DatabaseName = "questdb"
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
 

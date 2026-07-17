@@ -286,6 +286,7 @@ class Clickhouse(Database):
     name: DatabaseName = "clickhouse"
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
 

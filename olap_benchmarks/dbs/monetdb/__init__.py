@@ -27,7 +27,9 @@ from .utils import get_pymonetdb_connection
 _LOGGER = logging.getLogger(__name__)
 
 VERSION = "Dec2025-SP3"
+RUNTIME_VERSION = "11.55.7"
 DOCKER_IMAGE = f"monetdb/monetdb:{VERSION}"
+ARM64_DOCKER_IMAGE = "wlaur/monetdb-container:11.55.7-2"
 
 MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
 
@@ -91,6 +93,9 @@ class MonetDB(Database):
     name: DatabaseName = "monetdb"
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
+    arm64_container_image: ClassVar[str | None] = ARM64_DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
+    expected_runtime_version: ClassVar[str | None] = RUNTIME_VERSION
 
     connection_string: str = MONETDB_CONNECTION_STRING
 
@@ -102,8 +107,12 @@ class MonetDB(Database):
         if not MONETDB_SETTINGS.client_file_transfer:
             mounts[f"{SETTINGS.temporary_directory.as_posix()}/monetdb/data"] = "/data"
 
+        image = self.resolved_container_image
+        if image is None:
+            raise RuntimeError("MonetDB container image is not configured")
+
         return self.docker_run_command(
-            DOCKER_IMAGE,
+            image,
             ports={"50000": "50000"},
             mounts=mounts,
             env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},

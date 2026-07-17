@@ -8,7 +8,9 @@ import polars as pl
 import pytest
 from sqlalchemy import Connection
 
+from .. import dbs as dbs_module
 from ..dbs import Database
+from ..dbs.monetdb import ARM64_DOCKER_IMAGE, DOCKER_IMAGE, RUNTIME_VERSION, MonetDB
 from ..settings import DatabaseName, SuiteName, TableName, resolve_suite_scale_factor, resolve_suite_scale_factors
 from ..suites import BenchmarkSuite
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABench
@@ -257,16 +259,44 @@ def test_current_suite_scale_factor_requires_explicit_value() -> None:
         _ = db.current_suite_scale_factor
 
 
-def test_docker_run_command_uses_native_platform_by_default() -> None:
+def test_docker_run_command_uses_native_platform_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/amd64")
     command = DummyDatabase().docker_run_command("example:latest")
 
-    assert "--platform" not in command
+    assert command.startswith("docker run --platform linux/amd64")
 
 
 def test_docker_run_command_allows_explicit_platform_override() -> None:
     command = DummyDatabase().docker_run_command("example:latest", platform="linux/amd64")
 
     assert command.startswith("docker run --platform linux/amd64")
+
+
+def test_monetdb_selects_image_for_engine_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/amd64")
+    assert MonetDB().resolved_container_image == DOCKER_IMAGE
+
+    monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/arm64")
+    assert MonetDB().resolved_container_image == ARM64_DOCKER_IMAGE
+
+
+def test_monetdb_accepts_numeric_runtime_version_for_release_pin() -> None:
+    db = MonetDB()
+
+    assert db.version == "Dec2025-SP3"
+    assert db.is_runtime_version_expected(RUNTIME_VERSION)
+
+
+def test_arm_host_falls_back_to_amd64_with_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/arm64")
+    monkeypatch.setattr(DummyDatabase, "container_image", "example:latest")
+    db = DummyDatabase()
+
+    assert db.container_platform == "linux/amd64"
+    assert db.uses_container_emulation is True
+    warning = db.container_platform_warning
+    assert warning is not None
+    assert "does not provide an ARM64 container image" in warning
 
 
 def test_active_step_stack_is_thread_local() -> None:

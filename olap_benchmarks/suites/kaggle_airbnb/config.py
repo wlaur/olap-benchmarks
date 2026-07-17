@@ -182,7 +182,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
                 query_name=query_name,
                 iterations=iterations,
                 query_loader=lambda query_name=query_name: self.load_kaggle_airbnb_query(query_name),
-                fetch_kwargs=self.fetch_kwargs,
+                fetch_kwargs_factory=lambda: self.fetch_kwargs,
                 progress_label=progress_label,
                 log_success=log_success,
             )

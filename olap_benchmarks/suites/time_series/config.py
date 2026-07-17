@@ -585,7 +585,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 query_name=query_name,
                 iterations=iterations,
                 query_loader=lambda query_name=query_name: self.load_time_series_query(query_name),
-                fetch_kwargs=self.fetch_kwargs,
+                fetch_kwargs_factory=lambda: self.fetch_kwargs,
                 progress_label=progress_label,
                 log_success=log_success,
             )
@@ -629,7 +629,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
         _rows, n_cols = get_time_series_dataset_sizes(self.scale_factor)[size]
         df = generate_time_series_data(step.row_count, n_cols, seed=seed)
-        start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * 100_000)
+        start_time = datetime(2025, 1, 1) + timedelta(minutes=seed * max(MUTATE_ROW_COUNTS))
         return df.select(self._get_table_column_order(step.table)).with_columns(
             pl.datetime_range(
                 start_time,

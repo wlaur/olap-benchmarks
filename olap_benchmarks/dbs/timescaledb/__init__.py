@@ -293,6 +293,7 @@ class TimescaleDB(Postgres):
     name: DatabaseName = "timescaledb"
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
 
@@ -311,7 +312,7 @@ class TimescaleDB(Postgres):
             junk.unlink(missing_ok=True)
 
         parts = [
-            f"docker run --name {self.name}-benchmark --rm -d -p 5432:5432",
+            f"docker run --platform {self.container_platform} --name {self.name}-benchmark --rm -d -p 5432:5432",
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
