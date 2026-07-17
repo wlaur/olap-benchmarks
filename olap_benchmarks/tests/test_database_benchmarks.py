@@ -10,7 +10,7 @@ from sqlalchemy import Connection
 
 from .. import dbs as dbs_module
 from ..dbs import Database
-from ..dbs.monetdb import ARM64_DOCKER_IMAGE, DOCKER_IMAGE, RUNTIME_VERSION, MonetDB
+from ..dbs.monetdb import MONETDB_RELEASE, MonetDB
 from ..settings import DatabaseName, SuiteName, TableName, resolve_suite_scale_factor, resolve_suite_scale_factors
 from ..suites import BenchmarkSuite
 from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABench
@@ -274,17 +274,17 @@ def test_docker_run_command_allows_explicit_platform_override() -> None:
 
 def test_monetdb_selects_image_for_engine_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/amd64")
-    assert MonetDB().resolved_container_image == DOCKER_IMAGE
+    assert MonetDB().resolved_container_image == MONETDB_RELEASE.amd64_container_image
 
     monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/arm64")
-    assert MonetDB().resolved_container_image == ARM64_DOCKER_IMAGE
+    assert MonetDB().resolved_container_image == MONETDB_RELEASE.arm64_container_image
 
 
 def test_monetdb_accepts_numeric_runtime_version_for_release_pin() -> None:
     db = MonetDB()
 
-    assert db.version == "Dec2025-SP3"
-    assert db.is_runtime_version_expected(RUNTIME_VERSION)
+    assert db.version == MONETDB_RELEASE.label
+    assert db.is_runtime_version_expected(MONETDB_RELEASE.runtime_version)
 
 
 def test_arm_host_falls_back_to_amd64_with_warning(monkeypatch: pytest.MonkeyPatch) -> None:
