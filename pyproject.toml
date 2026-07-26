@@ -38,6 +38,7 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "sqlalchemy-monetdb==2.0.0",
     "adbc-driver-monetdb>=0.8.0",
+    "sqlalchemy-monetdb-adbc>=0.1.0",
 ]
 
 [project.scripts]
