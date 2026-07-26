@@ -5,8 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # binary fetch has a slight overhead (needs to infer the schema via PREPARE ... and process temporary files)
-    default_fetch_method: Literal["adbc", "binary", "pymonetdb"] = "adbc"
-    write_method: Literal["adbc", "staged"] = "adbc"
+    default_fetch_method: Literal["binary", "pymonetdb"] = "pymonetdb"
 
     # set to False to use copy ... on server (for binary export and csv or binary import)
     # this is faster if the client and server are on the same host

@@ -13,7 +13,6 @@ from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
 from ..utils import tracked_commit
 from . import insert as _insert_mod
-from .adbc import fetch_adbc, insert_adbc, upsert_adbc
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import (
     DEFAULT_LAZY_WRITE,
@@ -155,7 +154,7 @@ class MonetDB(Database):
         df = self.fetch(
             "select value as version from sys.env() where name = 'monet_version'",
             schema={"version": pl.String},
-            method="adbc",
+            method="pymonetdb",
         )
         return str(df.item(0, 0))
 
@@ -163,15 +162,13 @@ class MonetDB(Database):
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-        method: Literal["adbc", "binary", "pymonetdb"] | None = None,
+        method: Literal["binary", "pymonetdb"] | None = None,
     ) -> pl.DataFrame:
         method = method or MONETDB_SETTINGS.default_fetch_method
 
         _LOGGER.info(f"Fetching with {method=}")
 
-        if method == "adbc":
-            return fetch_adbc(query, self.connect(), schema)
-        elif method == "binary":
+        if method == "binary":
             return fetch_binary(query, self.connect(), schema)
         elif method == "pymonetdb":
             df = fetch_pymonetdb(query, self.connect())
@@ -187,15 +184,17 @@ class MonetDB(Database):
         if self._connection is None:
             return
 
+        # MonetDB reads and writes may use the raw DBAPI cursor directly, bypassing
+        # SQLAlchemy's transaction bookkeeping. Clear both SQLAlchemy's view and the
+        # underlying MonetDB transaction state.
         super().rollback()
-        if MONETDB_SETTINGS.write_method == "staged":
-            get_pymonetdb_connection(self._connection).rollback()
+        get_pymonetdb_connection(self._connection).rollback()
 
     def get_table_names(self) -> set[TableName]:
         df = self.fetch(
             "select name as table_name from sys.tables where system = false",
             schema={"table_name": pl.String},
-            method="adbc",
+            method="pymonetdb",
         )
         return set(df.get_column("table_name").to_list())
 
@@ -216,24 +215,12 @@ class MonetDB(Database):
         exists = bool(result.scalar())
 
         try:
-            if MONETDB_SETTINGS.write_method == "adbc":
-                return insert_adbc(df, table, self.connect(), primary_key, not_null, create=not exists)
-            return insert(
-                df,
-                table,
-                self.connect(),
-                primary_key,
-                not_null,
-                create=not exists,
-                lazy_write=lazy_write,
-            )
+            return insert(df, table, self.connect(), primary_key, not_null, create=not exists, lazy_write=lazy_write)
         except Exception:
             self.rollback()
             raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        if MONETDB_SETTINGS.write_method == "adbc":
-            return upsert_adbc(df, table, self.connect(), primary_key=primary_key)
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
