@@ -236,7 +236,7 @@ class QuestDB(Database):
 
         if isinstance(df, pl.LazyFrame):
             if method == "parquet":
-                self.insert_parquet(df.with_columns(*cast_expr), table, primary_key, not_null)
+                self._insert_frame_via_parquet(df.with_columns(*cast_expr), table)
                 return
 
             _LOGGER.warning("QuestDB LazyFrame insert with sender method requires collecting to DataFrame")
@@ -248,7 +248,7 @@ class QuestDB(Database):
             # much slower than read_parquet (serializes of http or similar)
             self.insert_sender(df, table, primary_key, not_null, batch_size)
         elif method == "parquet":
-            self.insert_parquet(df, table, primary_key, not_null)
+            self._insert_frame_via_parquet(df, table)
         else:
             raise ValueError(f"Unknown method: '{method}'")
 
@@ -297,12 +297,10 @@ class QuestDB(Database):
 
         _LOGGER.info(f"Finished inserting into '{table}' ({num_rows:_} rows total)")
 
-    def insert_parquet(
+    def _insert_frame_via_parquet(
         self,
         df: pl.DataFrame | pl.LazyFrame,
         table: TableName,
-        primary_key: str | list[str] | None = None,
-        not_null: str | list[str] | None = None,
     ) -> None:
         parquet_fname = f"{table}_{uuid.uuid4().hex}.parquet"
         parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname

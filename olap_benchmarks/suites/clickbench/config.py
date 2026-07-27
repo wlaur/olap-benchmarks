@@ -9,22 +9,19 @@ import polars as pl
 
 from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
-from .. import BenchmarkSuite, ManualPreparationRequired
+from .. import BenchmarkSuite
+from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
 
 ITERATIONS = 5
 CLICKBENCH_QUERY_COUNT = 43
+CLICKBENCH_DATASET_URL = "https://datasets.clickhouse.com/hits_compatible/hits.parquet"
 
 
 def prepare_data() -> None:
-    (SETTINGS.input_data_directory / "clickbench").mkdir(exist_ok=True, parents=True)
-
-    raise ManualPreparationRequired(
-        "ClickBench input data must be downloaded manually: "
-        "download https://datasets.clickhouse.com/hits_compatible/hits.parquet "
-        f"to {SETTINGS.input_data_directory / 'clickbench' / 'hits.parquet'}"
-    )
+    destination = SETTINGS.input_data_directory / "clickbench" / "hits.parquet"
+    download_file(CLICKBENCH_DATASET_URL, destination)
 
 
 # The source parquet stores these as epoch integers; every engine's populate

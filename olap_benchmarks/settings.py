@@ -139,7 +139,7 @@ def resolve_suite_scale_factors(
     try:
         return (resolve_suite_scale_factor(suite, scale_factor),)
     except ValueError:
-        if allow_fixed_default and suite not in SCALE_FACTOR_SUITES:
+        if allow_fixed_default and len(ALL_SUITE_SCALE_FACTORS[suite]) == 1:
             return (DEFAULT_SUITE_SCALE_FACTORS[suite],)
         raise
 

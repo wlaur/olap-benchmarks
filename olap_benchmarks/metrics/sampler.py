@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from multiprocessing import Event as create_event
 from multiprocessing import Process, Queue
 from multiprocessing.synchronize import Event
+from pathlib import Path
 
-from ..settings import DatabaseName, SuiteName, setup_stdout_logging
+from ..settings import setup_stdout_logging
 from .measure import get_database_metrics
 from .storage import Storage, WriterMessage
 
@@ -16,10 +18,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def sampling_loop(
-    db: DatabaseName,
-    suite: SuiteName,
-    suite_scale_factor: int,
+    client_process_id: int,
     container_names: Sequence[str],
+    metric_directories: Sequence[Path],
     run_id: int,
     stop_event: Event,
     queue: Queue[WriterMessage],
@@ -29,9 +30,9 @@ def sampling_loop(
     setup_stdout_logging()
     storage = Storage(queue, result_queue)
 
-    while not stop_event.is_set():
+    def sample_once() -> None:
         now = datetime.now(UTC).replace(tzinfo=None)
-        metric = get_database_metrics(db, suite, suite_scale_factor, container_names)
+        metric = get_database_metrics(client_process_id, container_names, metric_directories)
 
         storage.insert_metric(
             run_id=run_id,
@@ -43,15 +44,24 @@ def sampling_loop(
 
         _LOGGER.info(f"Inserted metrics at {now}")
 
+    while not stop_event.is_set():
+        try:
+            sample_once()
+        except Exception:
+            _LOGGER.exception("Metric sample failed; retrying on the next interval")
+
         if interval_seconds is not None:
             time.sleep(interval_seconds)
 
+    try:
+        sample_once()
+    except Exception:
+        _LOGGER.exception("Final metric sample failed")
+
 
 def start_metric_sampler(
-    db: DatabaseName,
-    suite: SuiteName,
-    suite_scale_factor: int,
     container_names: Sequence[str],
+    metric_directories: Sequence[Path],
     run_id: int,
     storage: Storage,
     interval_seconds: float | None = 1.0,
@@ -61,10 +71,9 @@ def start_metric_sampler(
     process = Process(
         target=sampling_loop,
         args=(
-            db,
-            suite,
-            suite_scale_factor,
+            os.getpid(),
             tuple(container_names),
+            tuple(metric_directories),
             run_id,
             stop_event,
             storage.queue,

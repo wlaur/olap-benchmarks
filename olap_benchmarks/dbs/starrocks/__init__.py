@@ -21,8 +21,6 @@ from ...suites.clickbench.config import (
 )
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.time_series.config import TimeSeries
-from ...suites.tpc_ds.config import TpcDs
-from ...suites.tpc_h.config import TpcH
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
@@ -139,9 +137,7 @@ class StarRocksClickbench(Clickbench["StarRocks"]):
             self.db.restart_event()
 
 
-def insert_source_parquet_via_files(
-    db: "StarRocks", input_data_directory: Path, df: pl.LazyFrame, table_name: TableName
-) -> None:
+def insert_source_parquet_via_files(db: "StarRocks", source: Path, table_name: TableName) -> None:
     """Ingest a per-table source parquet directly via FILES().
 
     The base StarRocks.insert collects LazyFrames into memory before staging;
@@ -154,16 +150,15 @@ def insert_source_parquet_via_files(
     """
     staging = SETTINGS.temporary_directory / "starrocks/data"
     staging.mkdir(parents=True, exist_ok=True)
-    src = input_data_directory / f"{table_name}.parquet"
     dst = staging / f"{table_name}.parquet"
     if dst.exists() or dst.is_symlink():
         dst.unlink()
     try:
-        os.link(src, dst)
+        os.link(source, dst)
     except OSError:
-        shutil.copy2(src, dst)
+        shutil.copy2(source, dst)
 
-    columns = ", ".join(f"`{name}`" for name in df.collect_schema().names())
+    columns = ", ".join(f"`{name}`" for name in pl.scan_parquet(source).collect_schema().names())
     sql = (
         f"INSERT INTO `{table_name}` ({columns}) SELECT {columns} "
         f"FROM FILES('path' = 'file:///staging/{table_name}.parquet', 'format' = 'parquet')"
@@ -173,16 +168,6 @@ def insert_source_parquet_via_files(
         db.execute(sql)
     finally:
         dst.unlink()
-
-
-class StarRocksTpcH(TpcH["StarRocks"]):
-    def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
-        insert_source_parquet_via_files(self.db, self.input_data_directory, df, table_name)
-
-
-class StarRocksTpcDs(TpcDs["StarRocks"]):
-    def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
-        insert_source_parquet_via_files(self.db, self.input_data_directory, df, table_name)
 
 
 class StarRocksTimeSeries(TimeSeries["StarRocks"]):
@@ -512,6 +497,18 @@ class StarRocks(Database):
         finally:
             parquet_path.unlink(missing_ok=True)
 
+    def insert_parquet(
+        self,
+        path: Path,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        schema = pl.scan_parquet(path).collect_schema()
+        if table not in self.get_table_names():
+            self.create_table(schema, table, primary_key, not_null)
+        insert_source_parquet_via_files(self, path, table)
+
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:  # noqa: ARG002
         # PRIMARY KEY tables (used by the time_series suite) auto-upsert on
         # INSERT: matching keys overwrite, new ones append. So we just go
@@ -543,6 +540,4 @@ class StarRocks(Database):
             "time_series": StarRocksTimeSeries,
             "clickbench": StarRocksClickbench,
             "jsonbench": StarRocksJSONBench,
-            "tpc_h": StarRocksTpcH,
-            "tpc_ds": StarRocksTpcDs,
         }

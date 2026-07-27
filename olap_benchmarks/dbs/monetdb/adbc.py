@@ -1,27 +1,23 @@
 import logging
 import uuid
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
-from queue import Full, Queue
-from threading import Event, Thread
+from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
 
 import polars as pl
 import pyarrow as pa
+import pyarrow.parquet as pq
+from adbc_driver_monetdb import PolarsArrowStream, recommended_arrow_batch_rows
 from sqlalchemy import Connection, text
 from sqlalchemy_monetdb_adbc import fetch_arrow_table, ingest_arrow
+from sqlalchemy_monetdb_adbc.arrow import ArrowIngestData
 
 from ...settings import TableName
 from ..utils import drop_table, record_query_execution_context, tracked_commit
 from .utils import create_table, get_table
 
 _LOGGER = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class _ProducerError:
-    error: BaseException
 
 
 def fetch_adbc(
@@ -38,53 +34,12 @@ def fetch_adbc(
     return frame
 
 
-def _iter_arrow_batches(
-    frame: pl.LazyFrame,
-    row_counter: list[int],
-) -> Iterator[pa.RecordBatch]:
-    queue: Queue[pl.DataFrame | _ProducerError | None] = Queue(maxsize=1)
-    consumed = Event()
-    stopped = Event()
-
-    def put(item: pl.DataFrame | _ProducerError | None) -> bool:
-        while not stopped.is_set():
-            try:
-                queue.put(item, timeout=0.1)
-                return True
-            except Full:
-                pass
-        return False
-
-    def receive(batch: pl.DataFrame) -> bool:
-        if not put(batch):
-            return True
-        while not stopped.is_set():
-            if consumed.wait(timeout=0.1):
-                consumed.clear()
-                return False
-        return True
-
-    def produce() -> None:
-        try:
-            frame.sink_batches(receive, lazy=False, engine="streaming")
-        except BaseException as error:
-            put(_ProducerError(error))
-        finally:
-            put(None)
-
-    producer = Thread(target=produce, name="monetdb-adbc-producer", daemon=True)
-    producer.start()
-    try:
-        while (item := queue.get()) is not None:
-            if isinstance(item, _ProducerError):
-                raise item.error
-            row_counter[0] += item.height
-            yield from item.to_arrow(compat_level=pl.CompatLevel.newest()).to_batches()
-            consumed.set()
-    finally:
-        stopped.set()
-        consumed.set()
-        producer.join()
+def _validated_ingest_row_count(reported_rows: int, expected_rows: int, context: str) -> int:
+    if reported_rows == -1:
+        return expected_rows
+    if reported_rows != expected_rows:
+        raise RuntimeError(f"ADBC reported {reported_rows:_} inserted rows for a {expected_rows:_}-row {context}")
+    return reported_rows
 
 
 def insert_adbc(
@@ -96,20 +51,113 @@ def insert_adbc(
     create: bool = True,
     commit: bool = True,
 ) -> None:
-    started = perf_counter()
     schema = frame.schema if isinstance(frame, pl.DataFrame) else frame.collect_schema()
-    destination = get_table(table, schema, primary_key=primary_key, not_null=not_null)
 
-    row_counter = [0]
+    lazy_stream: PolarsArrowStream | None = None
     if isinstance(frame, pl.DataFrame):
         expected_rows = frame.height
-        data: pa.Table | pa.RecordBatchReader = frame.to_arrow()
+        data: pl.DataFrame | PolarsArrowStream = frame
     else:
         expected_rows = 0
-        data = pa.RecordBatchReader.from_batches(
-            schema.to_arrow(),
-            _iter_arrow_batches(frame, row_counter),
+        lazy_stream = PolarsArrowStream(frame)
+        data = lazy_stream
+
+    _insert_arrow_adbc(
+        data,
+        table,
+        schema,
+        connection,
+        primary_key,
+        not_null,
+        expected_rows=expected_rows if lazy_stream is None else None,
+        lazy_stream=lazy_stream,
+        create=create,
+        commit=commit,
+    )
+
+
+def insert_parquet_adbc(
+    path: Path,
+    table: TableName,
+    connection: Connection,
+    primary_key: str | list[str] | None = None,
+    not_null: str | list[str] | None = None,
+    *,
+    create: bool = True,
+    commit: bool = True,
+) -> None:
+    parquet_file = pq.ParquetFile(path)
+    schema = parquet_file.schema_arrow
+    metadata = parquet_file.metadata
+    del parquet_file
+
+    previous_memory_pool = pa.default_memory_pool()
+    memory_pool = pa.system_memory_pool()
+    pa.set_memory_pool(memory_pool)
+    try:
+        reader = pa.RecordBatchReader.from_batches(
+            schema,
+            _iter_parquet_batches(
+                path,
+                batch_rows=recommended_arrow_batch_rows(schema),
+                row_groups=metadata.num_row_groups,
+                memory_pool=memory_pool,
+            ),
         )
+        try:
+            _insert_arrow_adbc(
+                reader,
+                table,
+                pl.Schema(schema),
+                connection,
+                primary_key,
+                not_null,
+                expected_rows=metadata.num_rows,
+                create=create,
+                commit=commit,
+            )
+        finally:
+            reader.close()
+    finally:
+        memory_pool.release_unused()
+        pa.set_memory_pool(previous_memory_pool)
+
+
+def _iter_parquet_batches(
+    path: Path,
+    *,
+    batch_rows: int,
+    row_groups: int,
+    memory_pool: pa.MemoryPool,
+) -> Iterator[pa.RecordBatch]:
+    for row_group in range(row_groups):
+        with pa.memory_map(str(path), "r") as source:
+            parquet_file = pq.ParquetFile(source)
+            yield from cast(
+                Iterator[pa.RecordBatch],
+                cast(Any, parquet_file).iter_batches(
+                    batch_size=batch_rows,
+                    row_groups=[row_group],
+                ),
+            )
+        memory_pool.release_unused()
+
+
+def _insert_arrow_adbc(
+    data: ArrowIngestData,
+    table: TableName,
+    schema: pl.Schema,
+    connection: Connection,
+    primary_key: str | list[str] | None,
+    not_null: str | list[str] | None,
+    *,
+    expected_rows: int | None,
+    create: bool,
+    commit: bool,
+    lazy_stream: PolarsArrowStream | None = None,
+) -> None:
+    started = perf_counter()
+    destination = get_table(table, schema, primary_key=primary_key, not_null=not_null)
 
     with record_query_execution_context(f'ADBC INGEST INTO "{table}"', connection):
         inserted_rows = ingest_arrow(
@@ -120,10 +168,11 @@ def insert_adbc(
             create=create,
         )
 
-    if isinstance(frame, pl.LazyFrame):
-        expected_rows = row_counter[0]
-    if inserted_rows != expected_rows:
-        raise RuntimeError(f"ADBC reported {inserted_rows:_} inserted rows for a {expected_rows:_}-row dataset")
+    if lazy_stream is not None:
+        expected_rows = lazy_stream.rows_read
+    if expected_rows is None:
+        raise RuntimeError("ADBC ingest completed without an expected row count")
+    inserted_rows = _validated_ingest_row_count(inserted_rows, expected_rows, "dataset")
 
     if commit:
         tracked_commit(connection)
@@ -150,14 +199,11 @@ def upsert_adbc(
             inserted_rows = ingest_arrow(
                 connection,
                 source,
-                frame.to_arrow(),
+                frame,
                 mode="append",
                 temporary=True,
             )
-        if inserted_rows != frame.height:
-            raise RuntimeError(
-                f"ADBC reported {inserted_rows:_} inserted rows for a {frame.height:_}-row upsert dataset"
-            )
+        _validated_ingest_row_count(inserted_rows, frame.height, "upsert dataset")
 
         primary_keys = [primary_key] if isinstance(primary_key, str) else list(primary_key)
         shared_columns = [column.name for column in destination.columns if column.name in source.columns]
@@ -211,14 +257,11 @@ def delete_adbc(
             inserted_rows = ingest_arrow(
                 connection,
                 source,
-                keys.to_arrow(),
+                keys,
                 mode="append",
                 temporary=True,
             )
-        if inserted_rows != keys.height:
-            raise RuntimeError(
-                f"ADBC reported {inserted_rows:_} inserted rows for a {keys.height:_}-row delete key dataset"
-            )
+        _validated_ingest_row_count(inserted_rows, keys.height, "delete key dataset")
 
         predicate = " and ".join(f'dest."{column}" = source."{column}"' for column in primary_keys)
         statement = (
