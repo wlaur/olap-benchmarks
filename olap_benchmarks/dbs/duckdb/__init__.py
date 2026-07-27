@@ -2,6 +2,8 @@ import logging
 import uuid
 from collections.abc import Mapping
 from importlib.metadata import version as package_version
+from pathlib import Path
+from shutil import rmtree
 from typing import Any, cast
 
 import polars as pl
@@ -10,9 +12,11 @@ from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from .. import Database
-from ..utils import tracked_commit
+from ..utils import normalize_columns, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +60,53 @@ def polars_dtype_to_duckdb(dtype: pl.DataType) -> str:
     raise ValueError(f"Unsupported Polars dtype: {dtype}")
 
 
+def duckdb_string_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+class DuckDBJSONBench(JSONBench["DuckDB"]):
+    def _stage_input_files(self) -> Path:
+        temp_dir = SETTINGS.temporary_directory / "duckdb/data"
+        staging_dir = temp_dir / self.data_directory_name
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        staging_dir.mkdir(parents=True)
+
+        for input_file in get_jsonbench_input_files(self.scale_factor):
+            staged_file = staging_dir / input_file.name.removesuffix(".gz")
+            write_jsonbench_input_file(input_file, staged_file)
+
+        return staging_dir
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        staging_dir = self._stage_input_files()
+        try:
+            input_files = ", ".join(
+                duckdb_string_literal(fpath.as_posix()) for fpath in sorted(staging_dir.glob("file_*.json"))
+            )
+
+            with self.db.phase_context("insert", table_name="bluesky"):
+                self.db.execute(
+                    f"""
+                    CREATE TABLE bluesky AS
+                    SELECT json AS j
+                    FROM read_ndjson_objects([{input_files}])
+                    """
+                )
+        finally:
+            rmtree(staging_dir)
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+
 class DuckDB(Database):
     name: DatabaseName = "duckdb"
     version: str = VERSION
@@ -76,6 +127,9 @@ class DuckDB(Database):
         return None
 
     def connect(self, reconnect: bool = False) -> Connection:
+        if reconnect:
+            self.close_connection()
+
         if self._connection is not None and not reconnect:
             return self._connection
 
@@ -128,8 +182,8 @@ class DuckDB(Database):
         schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
 
         if not table_exists:
-            not_null_cols = {not_null} if isinstance(not_null, str) else set(not_null or [])
-            primary_keys = [primary_key] if isinstance(primary_key, str) else (primary_key or [])
+            not_null_cols = set(normalize_columns(not_null))
+            primary_keys = normalize_columns(primary_key)
 
             col_defs: list[str] = []
             for name, dtype in schema.items():
@@ -143,8 +197,7 @@ class DuckDB(Database):
 
             pk_clause = f", primary key ({', '.join(f'"{pk}"' for pk in primary_keys)})" if primary_keys else ""
             ddl = f"create table {table} (\n  " + ",\n  ".join(col_defs) + pk_clause + "\n)"
-            with self.record_query_execution(ddl):
-                con.execute(ddl)
+            self.execute(ddl, commit=False)
 
         if isinstance(df, pl.LazyFrame):
             fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
@@ -152,63 +205,46 @@ class DuckDB(Database):
             _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
 
             try:
-                sql = f"insert into {table} select * from '{fpath.as_posix()}'"
-                with self.record_query_execution(sql):
-                    con.execute(sql)
+                self.execute(f"insert into {table} select * from '{fpath.as_posix()}'", commit=False)
             finally:
                 fpath.unlink()
         else:
             con.register("source", df)
             _LOGGER.info(f"Inserting from in-memory dataset with shape ({df.shape[0]:_}, {df.shape[1]:_})")
 
-            sql = f"insert into {table} select * from source"
-            with self.record_query_execution(sql):
-                con.execute(sql)
+            self.execute(f"insert into {table} select * from source", commit=False)
 
-        tracked_commit(con, recorder_source=connection)
+        tracked_commit(connection)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         # DuckDB 1.5.0 crashes when creating UNIQUE/PRIMARY KEY constraints on
         # TIMESTAMP columns in persistent databases beyond ~15K rows.
         # Work around by using DELETE + INSERT instead of ON CONFLICT.
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
 
         for pk in primary_keys:
             if pk not in df.columns:
                 raise ValueError(f"Primary key column '{pk}' not found in DataFrame columns")
 
-        connection = self.connect()
-        con = get_duckdb_connection(connection)
+        con = get_duckdb_connection(self.connect())
 
         con.register("upsert_source", df)
 
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
-        delete_sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM upsert_source)"
-        with self.record_query_execution(delete_sql):
-            con.execute(delete_sql)
-
-        insert_sql = f"INSERT INTO {table} SELECT * FROM upsert_source"
-        with self.record_query_execution(insert_sql):
-            con.execute(insert_sql)
-
-        tracked_commit(con, recorder_source=connection)
+        self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM upsert_source)", commit=False)
+        self.execute(f"INSERT INTO {table} SELECT * FROM upsert_source")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+        primary_keys = require_columns(primary_key)
 
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
-
-        connection = self.connect()
-        con = get_duckdb_connection(connection)
+        con = get_duckdb_connection(self.connect())
         con.register("delete_keys", keys)
 
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
-        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM delete_keys)"
+        self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM delete_keys)")
 
-        with self.record_query_execution(sql):
-            con.execute(sql)
-        tracked_commit(con, recorder_source=connection)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "jsonbench": DuckDBJSONBench,
+        }

@@ -1,25 +1,28 @@
 import logging
-import subprocess
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-import connectorx
 import polars as pl
-from sqlalchemy import Connection, create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, text
 
-from ...settings import REPO_ROOT, SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import REPO_ROOT, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import TimeSeries, get_time_series_input_files
-from .. import Database
-from ..postgres import generate_create_table_sql, table_exists
-from ..utils import tracked_commit
+from ...suites.time_series.config import (
+    MutateStep,
+    get_time_series_input_files,
+)
+from ..postgres import Postgres, PostgresTimeSeries
+from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2.25.0"
+VERSION = "2.28.2"
 
 DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg18"
 TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
@@ -41,21 +44,12 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
 
         for idx, chunk in enumerate(chunks):
             _LOGGER.info(f"Compressing chunk {idx + 1:_}/{len(chunks):_}: {chunk}")
-            statement = f"select compress_chunk('{chunk}'::regclass)"
-            with self.db.record_query_execution(statement):
-                conn.execute(text(statement))
+            self.db.execute(f"select compress_chunk('{chunk}'::regclass)", commit=False)
 
         tracked_commit(conn)
 
-        con = self.db.connect(reconnect=True)
-        statement = "vacuum freeze analyze orders"
-        with self.db.record_query_execution(statement):
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
-
-        con = self.db.connect(reconnect=True)
-        statement = "vacuum freeze analyze order_events"
-        with self.db.record_query_execution(statement):
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
+        self.db.execute("vacuum freeze analyze orders", autocommit=True)
+        self.db.execute("vacuum freeze analyze order_events", autocommit=True)
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -69,18 +63,8 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
 
 class TimescaleClickbench(Clickbench["TimescaleDB"]):
     def compress_table(self) -> None:
-        con = self.db.connect()
-
-        statement = "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-
-        tracked_commit(con)
-
-        con = self.db.connect(reconnect=True)
-        statement = "vacuum freeze analyze hits"
-        with self.db.record_query_execution(statement):
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
+        self.db.execute("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i")
+        self.db.execute("vacuum freeze analyze hits", autocommit=True)
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -92,38 +76,161 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
             self.db.restart_event()
 
 
-class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
-    POST_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
-        "data_tall": "tall_post_insert.sql",
-        "data_wide": "wide_post_insert.sql",
-        "data_large": "large_post_insert.sql",
+class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
+    # Unlike plain Postgres, the columnstore compression makes data_large fit
+    # the disk budget, so nothing is skipped.
+    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset()
+
+    PRE_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
+        "data_tall": "tall_pre_insert.sql",
+        "data_wide": "wide_pre_insert.sql",
+        "data_large": "large_pre_insert.sql",
     }
 
-    # wide columnar tables can exceed PostgreSQL's max tuple size for compressed rows
-    # on TimescaleDB 2.25.0 / PG 18.
-    SKIP_COMPRESS: ClassVar[set[str]] = {"data_large", "data_wide"}
+    # Chunk_time_interval per table -- must match the create_hypertable() calls
+    # in the *_pre_insert.sql files. EAV inserts are flushed at this granularity
+    # so just-completed chunks can be compressed before too much uncompressed
+    # heap accumulates; otherwise data_large would build up ~300 GB of EAV heap.
+    EAV_CHUNK_INTERVAL_DAYS: ClassVar[Mapping[str, int]] = {
+        "data_wide": 7,
+        "data_large": 30,
+    }
 
-    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
-        _ = table_name
-        return "time"
+    # Each compress_chunk() call is single-threaded inside TimescaleDB but
+    # different chunks compress on independent backends. Two workers is the
+    # sweet spot here -- more compress backends end up fighting the COPY
+    # workers for the WALInsert / WALWrite LWLocks and slow the inserts down
+    # enough to net negative on the EAV bulk load.
+    MAX_PARALLEL_COMPRESSIONS: ClassVar[int] = 2
+
+    _compress_engine: Engine | None = None
+
+    def _get_compress_engine(self) -> Engine:
+        # Compression runs on background threads, so it cannot share the main
+        # SQLAlchemy connection. A QueuePool sized to the worker count avoids
+        # repeated connect/auth overhead across the ~50 chunk compressions.
+        if self._compress_engine is None:
+            self._compress_engine = create_engine(
+                self.db.connection_string,
+                pool_size=self.MAX_PARALLEL_COMPRESSIONS,
+                max_overflow=2,
+                pool_pre_ping=False,
+            )
+        return self._compress_engine
+
+    def _list_uncompressed_chunks_before(self, table_name: TableName, before: datetime) -> list[str]:
+        engine = self._get_compress_engine()
+        with engine.connect() as con:
+            self.db.bind_query_recorder(con)
+            before_str = before.strftime("%Y-%m-%d %H:%M:%S")
+            list_sql = (
+                "SELECT format('%I.%I', chunk_schema, chunk_name) "
+                "FROM timescaledb_information.chunks "
+                f"WHERE hypertable_name = '{table_name}' AND NOT is_compressed "
+                f"AND range_end <= '{before_str}' "
+                "ORDER BY range_end"
+            )
+            with self.db.record_query_execution(list_sql):
+                rows = con.execute(text(list_sql)).fetchall()
+        return [row[0] for row in rows]
+
+    def _compress_chunk_threadsafe(self, chunk_name: str) -> None:
+        engine = self._get_compress_engine()
+        with engine.connect() as con:
+            self.db.bind_query_recorder(con)
+            stmt = f"SELECT compress_chunk('{chunk_name}'::regclass, if_not_compressed => true)"
+            with self.db.record_query_execution(stmt):
+                con.execute(text(stmt))
+            tracked_commit(con)
+
+    def _drain_completed(self, futures: list[Future[None]], max_in_flight: int) -> None:
+        # Surface exceptions eagerly while bounding pool depth.
+        while len(futures) > max_in_flight:
+            done, _ = wait(futures, return_when="FIRST_COMPLETED")
+            for fut in done:
+                fut.result()
+                futures.remove(fut)
+
+    def _eav_streaming_insert(self, table_name: TableName, fpath: Path) -> None:
+        """Single-pass stream of `fpath` → unpivot → COPY into the hypertable.
+        Buffers wide rows up to one chunk_time_interval per flush and compresses
+        completed chunks on a thread pool so compression of chunk N overlaps
+        with the COPY for chunk N+1. The previous implementation re-scanned the
+        9 GB parquet ~200 times and serialised the ~30 s/chunk compression."""
+        days = self.EAV_CHUNK_INTERVAL_DAYS[table_name]
+        target_wide_rows = days * 24 * 60  # one row per minute → one chunk's worth
+
+        executor = ThreadPoolExecutor(
+            max_workers=self.MAX_PARALLEL_COMPRESSIONS,
+            thread_name_prefix=f"ts-compress-{table_name}",
+        )
+        in_flight: list[Future[None]] = []
+        # Chunks already handed to the pool. The catalog query returns
+        # not-yet-compressed chunks, so an in-flight compress would otherwise
+        # keep showing up in successive flushes and get submitted twice.
+        submitted_chunks: set[str] = set()
+
+        buffer: list[pl.DataFrame] = []
+        buffer_rows = 0
+        batch_idx = 0
+
+        def flush() -> None:
+            nonlocal buffer_rows, batch_idx
+            if not buffer:
+                return
+            batch_idx += 1
+            df_wide = pl.concat(buffer, how="vertical") if len(buffer) > 1 else buffer[0]
+            max_t = cast(datetime, df_wide["time"].max())
+            df_eav = self._wide_to_eav(df_wide)
+            self.db.insert(df_eav, table_name)
+            _LOGGER.info(
+                f"Inserted EAV batch {batch_idx} for {table_name}: "
+                f"wide={df_wide.shape[0]:_}, eav={df_eav.shape[0]:_}, max_t={max_t}"
+            )
+            buffer.clear()
+            buffer_rows = 0
+
+            # Schedule compression of every newly-completed chunk independently
+            # so the worker pool can parallelise them. Only chunks with
+            # range_end <= max_t are fully filled; the chunk currently being
+            # written (range_end > max_t) is left alone.
+            new_chunks = [
+                c for c in self._list_uncompressed_chunks_before(table_name, max_t) if c not in submitted_chunks
+            ]
+            for chunk in new_chunks:
+                submitted_chunks.add(chunk)
+                in_flight.append(executor.submit(self._compress_chunk_threadsafe, chunk))
+            if new_chunks:
+                _LOGGER.info(f"Submitted {len(new_chunks)} compress task(s) for {table_name}")
+            self._drain_completed(in_flight, self.MAX_PARALLEL_COMPRESSIONS * 2)
+
+        try:
+            for df in iter_parquet_frames(fpath, self.PARQUET_STREAM_BATCH_ROWS):
+                buffer.append(df)
+                buffer_rows += df.height
+                if buffer_rows >= target_wide_rows:
+                    flush()
+            flush()
+
+            # Drain remaining compressions before declaring this table done so
+            # the next phase doesn't race with background work.
+            self._drain_completed(in_flight, 0)
+        finally:
+            executor.shutdown(wait=True)
 
     def compress_tables(self) -> None:
-        for table_name in get_time_series_input_files():
-            if table_name in self.SKIP_COMPRESS:
-                _LOGGER.warning(f"Skipping compression for {table_name} (exceeds PG max tuple size)")
-            else:
-                con = self.db.connect(reconnect=True)
-                statement = f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i"
-                with self.db.record_query_execution(statement):
-                    con.execute(text(statement))
-                tracked_commit(con)
-                _LOGGER.info(f"Compressed table {table_name}")
+        # data_wide / data_large are already fully compressed by the streaming
+        # insert path; the call below is a no-op for those (if_not_compressed
+        # => true). data_tall is still loaded as one big batch and is
+        # compressed here.
+        for table_name in get_time_series_input_files(self.scale_factor):
+            self.db.execute(
+                f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i",
+                reconnect=True,
+            )
+            _LOGGER.info(f"Compressed table {table_name}")
 
-            con = self.db.connect(reconnect=True)
-            statement = f"vacuum freeze analyze {table_name}"
-            with self.db.record_query_execution(statement):
-                con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
-
+            self.db.execute(f"vacuum freeze analyze {table_name}", autocommit=True)
             _LOGGER.info(f"Vacuumed table {table_name}")
 
     def populate(self, restart: bool = True) -> None:
@@ -131,36 +238,35 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
             if not self.should_populate():
                 return
 
-        input_files = get_time_series_input_files()
+        input_files = get_time_series_input_files(self.scale_factor)
 
+        # 1. Create empty tables (regular wide for tall, EAV for wide/large).
         for table_name, fpath in input_files.items():
-            primary_key = self.get_primary_key(table_name)
-            not_null = self.get_not_null(table_name)
+            if table_name in self.EAV_TABLES:
+                self._eav_create_table(table_name)
+            else:
+                schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
+                self.db.create_table(schema, table_name, primary_key=None, not_null="time")
 
-            schema = cast(pl.Schema, pl.read_parquet_schema(fpath))
-
-            self.db.create_table(schema, table_name, primary_key, not_null)
-
-        for table_name, fpath in input_files.items():
-            primary_key = self.get_primary_key(table_name)
-            not_null = self.get_not_null(table_name)
-
-            df = pl.scan_parquet(fpath)
-
-            _LOGGER.info(f"Streaming {table_name} from parquet to staged CSV")
-
-            with self.db.phase_context("insert", table_name=table_name):
-                self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
-                _LOGGER.info(f"Inserted {table_name} for {self.name}")
-
-        for table_name, schema_file in self.POST_INSERT_SCHEMA_FILES.items():
+        # 2. Convert each table to a hypertable + columnstore config (empty
+        #    table → no migrate_data needed, much faster than retro-conversion).
+        for table_name, sql_file in self.PRE_INSERT_SCHEMA_FILES.items():
             with self.db.phase_context("create_hypertable", table_name=table_name):
                 self.db.execute_schema_file(
-                    REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / schema_file
+                    REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / sql_file
                 )
 
-        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+        # 3. Ingest data.
+        for table_name, fpath in input_files.items():
+            with self.db.phase_context("insert", table_name=table_name):
+                if table_name in self.EAV_TABLES:
+                    self._eav_streaming_insert(table_name, fpath)
+                else:
+                    df = pl.scan_parquet(fpath)
+                    self.db.insert(df, table_name, primary_key=None, not_null="time")
+            _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
+        # 4. Compress all chunks.
         with self.db.phase_context("compress"):
             self.compress_tables()
 
@@ -170,221 +276,90 @@ class TimescaleTimeSeries(TimeSeries["TimescaleDB"]):
         if restart:
             self.db.restart_event()
 
+    def _apply_upsert(self, step: MutateStep, df: pl.DataFrame) -> None:
+        # None of the time_series tables here have a unique constraint on
+        # `time` (data_tall is wide with no PK; data_wide/data_large are EAV
+        # with no (time, metric_name) unique). ON CONFLICT therefore cannot
+        # bind, so we emulate upsert with DELETE-by-time + INSERT for every
+        # table.
+        keys = df.select("time").unique()
+        self.db.delete(step.table, primary_key="time", keys=keys)
+        primary_key = None if step.table in self.EAV_TABLES else self.get_primary_key(step.table)
+        not_null = self.get_not_null(step.table)
+        self.db.insert(df, step.table, primary_key=primary_key, not_null=not_null)
 
-class TimescaleDB(Database):
+
+class TimescaleDB(Postgres):
     name: DatabaseName = "timescaledb"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
-    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
-        "time_series": frozenset(
-            {
-                "insert_data_large_10000",
-            }
-        )
-    }
+
+    # Plain Postgres disables the data_large mutation steps because the table
+    # is never populated there; with columnstore compression it is.
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
 
     @property
     def start(self) -> str:
-        (SETTINGS.temporary_directory / "timescaledb/data").mkdir(exist_ok=True, parents=True)
+        # macOS Finder writes .DS_Store into bind-mounted dirs as soon as it's
+        # browsed; PG's initdb refuses to run on a non-empty PGDATA, so scrub
+        # macOS metadata before handing the dir over.
+        for junk in self.database_directory.glob(".DS_Store"):
+            junk.unlink(missing_ok=True)
+        for junk in self.database_directory.glob("._*"):
+            junk.unlink(missing_ok=True)
 
         parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 5432:5432",
+            f"docker run --platform {self.container_platform} --name {self.name}-benchmark --rm -d -p 5432:5432",
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
+            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
+            # naive Polars datetimes round-trip without offset surprises.
+            "-e TZ=UTC",
+            "-e PGTZ=UTC",
             DOCKER_IMAGE,
+            # Postgres settings tuned for the EAV bulk-load + columnstore
+            # compression workload. shared_buffers / parallelism are already
+            # auto-tuned by the Timescale image (timescaledb-tune); the rest
+            # relax checkpoint / WAL pressure for the multi-billion-row insert
+            # and let compress_chunk() sort 130 M-row chunks in memory instead
+            # of spilling to BufFile temp files (the original bottleneck on
+            # data_large -- per-chunk compress jumped from ~50 s to >300 s
+            # once sorts spilled).
+            "-c max_wal_size=16GB",
+            "-c min_wal_size=2GB",
+            # WAL compression saves disk but the CPU cost of zstd on every
+            # WALInsert dominates under heavy concurrent COPY traffic; leaving
+            # it off let the COPY workers spend less time waiting on the
+            # WALInsert LWLock.
+            "-c wal_compression=off",
+            "-c synchronous_commit=off",
+            "-c checkpoint_timeout=30min",
+            "-c work_mem=4GB",
+            "-c max_parallel_maintenance_workers=4",
+            "-c bgwriter_lru_maxpages=1000",
+            "-c bgwriter_delay=10ms",
         ]
 
         return " ".join(parts)
 
-    def connect(self, reconnect: bool = False) -> Connection:
-        if reconnect:
-            self._connection = None
-
-        if self._connection is not None:
-            return self._connection
-
-        engine = create_engine(self.connection_string)
-        self._connection = self.bind_query_recorder(engine.connect())
-
-        return self._connection
-
-    def fetch(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        # fetch_python is fastest for small result sets
-        # fetch_connectorx might be better for large results and simple queries
-        # (e.g. "select time, col_23 from data order by time")
-        # fetch_polars is slightly slower than fetch_connectorx
-
-        # schemas do not match exactly between these (i32 vs i64 for example)
-        return self.fetch_python(query, schema)
-
-    def get_table_names(self) -> set[TableName]:
+    def get_runtime_version(self) -> str:
         df = self.fetch(
-            "select table_name from information_schema.tables "
-            "where table_schema = 'public' and table_type = 'BASE TABLE'",
-            schema={"table_name": pl.String},
+            "select extversion as version from pg_extension where extname = 'timescaledb'",
+            schema={"version": pl.String},
         )
-        return set(df.get_column("table_name").to_list())
+        return str(df.item(0, 0))
 
-    def fetch_python(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        # escape literal ":" to avoid SQLAlchemy interpreting bind params
-        # bind params are not supported in this method
-        sql = query.strip().removesuffix(";").replace(":", r"\:")
-        with self.record_query_execution(query):
-            result = self.connect().execute(text(sql))
-
-        columns = result.keys()
-        rows = result.fetchall()
-
-        if not rows:
-            if schema:
-                return pl.DataFrame(schema=cast(pl.Schema, schema))
-            return pl.DataFrame({col: [] for col in columns})
-
-        df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def fetch_connectorx(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        with self.record_query_execution(query):
-            df = cast(
-                pl.DataFrame,
-                cast(Any, connectorx).read_sql(
-                    TIMESCALEDB_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
-                ),
-            )
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def fetch_polars(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        # (maybe) emits a separate "select ... limit 1" query to determine the output schema
-        # avoid doing this for complex queries with small result sizes
-        # not clear if postgres actually does this, could check source if this is important to know
-        # engine="adbc" is slower that "connectorx"
-        with self.record_query_execution(query):
-            df = pl.read_database_uri(
-                query.strip().removesuffix(";"),
-                TIMESCALEDB_CONNECTION_STRING,
-                engine="connectorx",
-            )
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def create_table(
-        self,
-        schema: pl.Schema,
-        table: TableName,
-        primary_key: str | list[str] | None = None,
-        not_null: str | list[str] | None = None,
-    ) -> None:
-        con = self.connect()
-
-        create_sql = generate_create_table_sql(table, schema, primary_key, not_null)
-        with self.record_query_execution(create_sql):
-            con.execute(text(create_sql))
-        tracked_commit(con)
-        _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
-
-    def insert(
-        self,
-        df: pl.DataFrame | pl.LazyFrame,
-        table: TableName,
-        primary_key: str | list[str] | None = None,
-        not_null: str | list[str] | None = None,
-    ) -> None:
-        con = self.connect()
-
-        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
-
-        if not table_exists(con, table):
-            self.create_table(schema, table, primary_key, not_null)
-
-        temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
-
-        temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.csv"
-        temp_file_str = temp_file.resolve().as_posix()
-
-        if isinstance(df, pl.LazyFrame):
-            df.sink_csv(temp_file)
-            _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
-        else:
-            df.write_csv(temp_file)
-            _LOGGER.info(
-                f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
-            )
-
-        db_host = "localhost"
-        db_name = "postgres"
-        db_user = "postgres"
-        db_password = "password"
-        db_port = "5432"
-
-        connection_string = f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_password}"
-
-        # install timescaledb-parallel-copy first
-        # on macos: brew tap timescale/tap && brew install timescaledb-tools
-        command = [
-            "timescaledb-parallel-copy",
-            "--connection",
-            connection_string,
-            "--table",
-            table,
-            "--file",
-            temp_file_str,
-            "--workers",
-            # possible that using more workers could speed things up, but this is not linear
-            "12",
-            "--batch-size",
-            "50000",
-            "--skip-header",
-        ]
-        copy_sql = f"COPY {table} FROM '{temp_file_str}' WITH (FORMAT csv, HEADER true)"
-
-        try:
-            with self.record_query_execution(copy_sql):
-                subprocess.run(command, capture_output=True, text=True, check=True)
-        finally:
-            temp_file.unlink()
-
-    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path) -> None:
-        raw_conn = con.connection.dbapi_connection
-        assert raw_conn is not None
-        cursor = raw_conn.cursor()
-        copy_sql = f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)"
-        with open(csv_path) as f, self.record_query_execution(copy_sql):
-            cursor.copy_expert(copy_sql, f)
+    def _dml_session_setup(self, con: Connection) -> None:
+        # Compressed chunks cap how many tuples a DML transaction may
+        # decompress; the mutation benchmarks need that limit lifted.
+        self.execute("SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0", commit=False)
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
 
         for pk in primary_keys:
             if pk not in df.columns:
@@ -394,22 +369,10 @@ class TimescaleDB(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
-        statement = f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._dml_session_setup(con)
 
-        temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
-        temp_file = temp_dir / f"{table}_upsert_{uuid.uuid4().hex}.csv"
-
-        try:
-            df.write_csv(temp_file)
-            self._copy_csv_to_table(con, staging_table, temp_file)
-        finally:
-            temp_file.unlink(missing_ok=True)
-
-        statement = "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
         all_columns = ", ".join(f'"{col}"' for col in df.columns)
         non_key_columns = [col for col in df.columns if col not in primary_keys]
 
@@ -419,64 +382,20 @@ class TimescaleDB(Database):
         else:
             on_conflict_clause = f"ON CONFLICT ({pk_cols}) DO NOTHING"
 
-        statement = (
-            f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table} {on_conflict_clause}"
+        self.execute(
+            f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table} {on_conflict_clause}",
+            commit=False,
         )
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
 
-        statement = f"DROP TABLE {staging_table}"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"DROP TABLE {staging_table}", commit=False)
         tracked_commit(con)
 
         _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
-    def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
-
-        con = self.connect()
-
-        staging_table = f"_staging_del_{table}_{uuid.uuid4().hex[:8]}"
-        pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
-
-        statement = f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
-
-        temp_dir = SETTINGS.temporary_directory / "timescaledb/data"
-        temp_file = temp_dir / f"{table}_delete_{uuid.uuid4().hex}.csv"
-
-        try:
-            keys.select(primary_keys).write_csv(temp_file)
-            self._copy_csv_to_table(con, staging_table, temp_file)
-        finally:
-            temp_file.unlink(missing_ok=True)
-
-        statement = "SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
-        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
-        with self.record_query_execution(sql):
-            con.execute(text(sql))
-        statement = f"DROP TABLE {staging_table}"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
-
-        _LOGGER.info(f"Deleted rows from {table} by primary key")
-
-    @property
-    def rtabench(self) -> TimescaleRTABench:
-        return TimescaleRTABench(db=self)
-
-    @property
-    def clickbench(self) -> TimescaleClickbench:
-        return TimescaleClickbench(db=self)
-
-    @property
-    def time_series(self) -> TimescaleTimeSeries:
-        return TimescaleTimeSeries(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "rtabench": TimescaleRTABench,
+            "clickbench": TimescaleClickbench,
+            "time_series": TimescaleTimeSeries,
+        }

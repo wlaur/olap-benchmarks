@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import tempfile
 from datetime import UTC, datetime
@@ -16,10 +17,30 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 
-from ..settings import REPO_ROOT, SETTINGS, Revision
+from ..settings import (
+    ALL_SUITE_SCALE_FACTORS,
+    DEFAULT_SUITE_SCALE_FACTORS,
+    REPO_ROOT,
+    SCALE_FACTOR_SUITES,
+    SETTINGS,
+    SUITE_DISPLAY_ORDER,
+    SUITE_LABELS,
+    SUITE_NAV_LABELS,
+    SUITE_OPERATIONS,
+    SUITE_PUBLIC_ROLES,
+    SUITE_QUERY_NAME_PARSERS,
+    Revision,
+)
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
-from .models import QueryExecution, Run, RunMetric, RunStep
+from .merge import MergeStats, merge_results
+from .models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from .schema import ensure_results_schema
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _serialize_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def get_results_db_path(revision: Revision = "default") -> Path:
@@ -73,6 +94,7 @@ def get_results_engine(read_only: bool = True, db_path: Path | None = None, revi
     return create_engine(
         f"duckdb:///{path}",
         connect_args={"read_only": read_only},
+        json_serializer=_serialize_json,
     )
 
 
@@ -110,7 +132,49 @@ def query_results(sql: str, revision: Revision = "default") -> None:
             con.close()
 
 
-def publish(revision: Revision = "default") -> Path:
+def compact_results(revision: Revision = "default", db_path: Path | None = None) -> tuple[Path, int, int]:
+    path = (db_path or _require_revision(revision)).expanduser().resolve()
+    size_before = path.stat().st_size
+
+    tmp_path = path.with_name(f"{path.name}.compact")
+
+    try:
+        tmp_path.unlink(missing_ok=True)
+        con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect()
+
+        try:
+            con.execute(f"ATTACH '{path.as_posix()}' AS src (READ_ONLY)")
+            con.execute(f"ATTACH '{tmp_path.as_posix()}' AS dst")
+            # copies tables, views, and sequences including their current state
+            con.execute("COPY FROM DATABASE src TO dst")
+        finally:
+            con.close()
+
+        tmp_path.replace(path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    size_after = path.stat().st_size
+    _LOGGER.info(f"Compacted {path.name}: {size_before / 1e6:.1f} MB -> {size_after / 1e6:.1f} MB")
+    return path, size_before, size_after
+
+
+def _published_table_counts(db_path: Path) -> dict[str, int]:
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
+
+    try:
+        counts: dict[str, int] = {}
+        for table in ("system_snapshot", "run", "run_step", "run_metric", "query_execution"):
+            row = con.execute(f"select count(*) from {table}").fetchone()
+            assert row is not None
+            counts[table] = int(row[0])
+        return counts
+    finally:
+        con.close()
+
+
+def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, MergeStats | None]:
     source_db_path = _require_revision(revision)
     output_dir = REPO_ROOT / "site" / "public" / "data"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -122,28 +186,29 @@ def publish(revision: Revision = "default") -> Path:
 
     try:
         ensure_results_schema(engine, allow_create=False)
-
-        with Session(engine) as session:
-            table_counts = {
-                "run": int(session.scalar(select(func.count()).select_from(Run)) or 0),
-                "run_step": int(session.scalar(select(func.count()).select_from(RunStep)) or 0),
-                "run_metric": int(session.scalar(select(func.count()).select_from(RunMetric)) or 0),
-                "query_execution": int(session.scalar(select(func.count()).select_from(QueryExecution)) or 0),
-            }
     finally:
         engine.dispose()
 
-    if output_db_path.is_file():
-        output_db_path.unlink()
+    merge_stats: MergeStats | None = None
 
-    shutil.copy2(source_db_path, output_db_path)
+    if merge and output_db_path.is_file():
+        merge_stats = merge_results(source_db_path, output_db_path, head_revision=get_results_head_revision())
+    else:
+        if merge:
+            _LOGGER.info(f"No published database at {output_db_path}, copying instead of merging")
+
+        if output_db_path.is_file():
+            output_db_path.unlink()
+
+        shutil.copy2(source_db_path, output_db_path)
 
     manifest = {
         "published_at": datetime.now(UTC).isoformat(),
         "revision": revision,
         "source": source_db_path.as_posix(),
+        "merged": merge_stats is not None,
         "schema_revision": get_results_head_revision(),
-        "table_counts": table_counts,
+        "table_counts": _published_table_counts(output_db_path),
     }
 
     manifest_path.write_text(f"{json.dumps(manifest, indent=2)}\n")
@@ -152,7 +217,31 @@ def publish(revision: Revision = "default") -> Path:
     queries_path = output_dir / "queries.json"
     queries_path.write_text(f"{json.dumps(queries_manifest, indent=2)}\n")
 
-    return output_dir
+    suites_manifest = _build_suites_manifest()
+    suites_path = output_dir / "suites.json"
+    suites_path.write_text(f"{json.dumps(suites_manifest, indent=2)}\n")
+
+    return output_dir, merge_stats
+
+
+def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:
+    return {
+        "suites": [
+            {
+                "id": suite,
+                "title": SUITE_LABELS[suite],
+                "nav_label": SUITE_NAV_LABELS[suite],
+                "queries_key": suite,
+                "default_scale_factor": DEFAULT_SUITE_SCALE_FACTORS[suite],
+                "supported_scale_factors": list(ALL_SUITE_SCALE_FACTORS[suite]),
+                "scale_factor_supported": suite in SCALE_FACTOR_SUITES,
+                "operations": list(SUITE_OPERATIONS[suite]),
+                "query_name_parser": SUITE_QUERY_NAME_PARSERS[suite],
+                "public_role": SUITE_PUBLIC_ROLES[suite],
+            }
+            for suite in SUITE_DISPLAY_ORDER
+        ]
+    }
 
 
 def _build_queries_manifest() -> dict[str, dict[str, dict[str, str | None | dict[str, str]]]]:
@@ -229,6 +318,7 @@ def list_runs(
                 {
                     "id": run.id,
                     "suite": run.suite,
+                    "suite_scale_factor": run.suite_scale_factor,
                     "db": run.db,
                     "operation": run.operation,
                     "status": run.status,
@@ -242,19 +332,32 @@ def list_runs(
         engine.dispose()
 
 
+def _delete_run_subtrees(session: Session, run_ids: list[int]) -> None:
+    snapshot_ids = list(
+        session.scalars(
+            select(Run.system_snapshot_id).where(Run.id.in_(run_ids)).where(Run.system_snapshot_id.is_not(None))
+        ).all()
+    )
+    session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
+    session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
+    session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
+    session.execute(delete(Run).where(Run.id.in_(run_ids)))
+    if snapshot_ids:
+        snapshot_is_referenced = select(Run.id).where(Run.system_snapshot_id == SystemSnapshot.id).exists()
+        session.execute(
+            delete(SystemSnapshot).where(SystemSnapshot.id.in_(snapshot_ids)).where(~snapshot_is_referenced)
+        )
+    session.commit()
+
+
 def delete_runs(run_ids: list[int], revision: Revision = "default", db_path: Path | None = None) -> int:
     db_path = db_path or _require_revision(revision)
     engine = get_results_engine(read_only=False, db_path=db_path)
 
     try:
         with Session(engine) as session:
-            count = len(run_ids)
-            session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
-            session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
-            session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
-            session.execute(delete(Run).where(Run.id.in_(run_ids)))
-            session.commit()
-            return count
+            _delete_run_subtrees(session, run_ids)
+            return len(run_ids)
     finally:
         engine.dispose()
 
@@ -275,11 +378,7 @@ def delete_runs_by_status(status: str, revision: Revision = "default", db_path: 
             if not run_ids:
                 return 0
 
-            session.execute(delete(QueryExecution).where(QueryExecution.run_id.in_(run_ids)))
-            session.execute(delete(RunMetric).where(RunMetric.run_id.in_(run_ids)))
-            session.execute(delete(RunStep).where(RunStep.run_id.in_(run_ids)))
-            session.execute(delete(Run).where(Run.id.in_(run_ids)))
-            session.commit()
+            _delete_run_subtrees(session, run_ids)
             return len(run_ids)
     finally:
         engine.dispose()
@@ -364,12 +463,15 @@ def mark_running_runs_failed(
 
 
 def config(as_json: bool = False) -> None:
+    from ..dbs.monetdb.settings import SETTINGS as monetdb_settings
+
     settings_dict = {
         "input_data_directory": str(SETTINGS.input_data_directory),
         "results_directory": str(SETTINGS.results_directory),
         "database_directory": str(SETTINGS.database_directory),
         "temporary_directory": str(SETTINGS.temporary_directory),
         "system": SETTINGS.system,
+        "monetdb_driver": monetdb_settings.driver,
     }
 
     if as_json:
@@ -383,4 +485,5 @@ def config(as_json: bool = False) -> None:
     print(f"  OLAP_BENCHMARKS_DATABASE_DIRECTORY:    {SETTINGS.database_directory}")
     print(f"  OLAP_BENCHMARKS_TEMPORARY_DIRECTORY:   {SETTINGS.temporary_directory}")
     print(f"  OLAP_BENCHMARKS_SYSTEM:                {SETTINGS.system}")
+    print(f"  OLAP_BENCHMARKS_MONETDB_DRIVER:        {monetdb_settings.driver}")
     print()

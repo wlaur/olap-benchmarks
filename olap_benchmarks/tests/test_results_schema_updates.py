@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
+import duckdb
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..results import (
@@ -15,17 +19,23 @@ from ..results import (
     migrate_results,
     rename_database,
 )
-from ..results.models import QueryExecution, Run, RunMetric, RunStep
+from ..results.models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from ..results.schema import ensure_results_schema
 
 
-def _insert_run(session: Session, suite: str, db: str = "monetdb") -> Run:
+def _insert_run(
+    session: Session,
+    suite: str,
+    db: str = "monetdb",
+    system_snapshot_id: int | None = None,
+) -> Run:
     run = Run(
         suite=suite,
         db=db,
         db_version="test",
         operation="populate",
         system="test",
+        system_snapshot_id=system_snapshot_id,
         status="running",
         started_at=datetime.now(),
     )
@@ -80,10 +90,323 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
 
             assert session.get(Run, run.id) is not None
             assert session.get(Run, run.id).status == "completed"  # pyright: ignore[reportOptionalMemberAccess]
+            assert session.get(Run, run.id).suite_scale_factor == 1  # pyright: ignore[reportOptionalMemberAccess]
 
             with engine.begin() as connection:
                 head_revision = connection.exec_driver_sql("select version_num from alembic_version").scalar_one()
-            assert head_revision == get_results_head_revision()
+                assert head_revision == get_results_head_revision()
+
+                scale_column = next(
+                    row
+                    for row in connection.exec_driver_sql("pragma table_info('run')").mappings()
+                    if row["name"] == "suite_scale_factor"
+                )
+                assert scale_column["notnull"] is True
+    finally:
+        engine.dispose()
+
+
+def test_run_natural_key_is_unique_but_includes_scale_factor(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    started_at = datetime(2026, 1, 1, 12, 0, 0)
+
+    try:
+        with Session(engine) as session:
+            session.add(
+                Run(
+                    suite="time_series",
+                    suite_scale_factor=1,
+                    db="duckdb",
+                    db_version="test",
+                    operation="select",
+                    system="test",
+                    status="completed",
+                    started_at=started_at,
+                    finished_at=started_at,
+                )
+            )
+            session.commit()
+
+            session.add(
+                Run(
+                    suite="time_series",
+                    suite_scale_factor=1,
+                    db="duckdb",
+                    db_version="test",
+                    operation="select",
+                    system="test",
+                    status="completed",
+                    started_at=started_at,
+                    finished_at=started_at,
+                )
+            )
+            with pytest.raises(IntegrityError):
+                session.commit()
+
+            session.rollback()
+            session.add(
+                Run(
+                    suite="time_series",
+                    suite_scale_factor=2,
+                    db="duckdb",
+                    db_version="test",
+                    operation="select",
+                    system="test",
+                    status="completed",
+                    started_at=started_at,
+                    finished_at=started_at,
+                )
+            )
+            session.commit()
+
+            assert session.scalars(select(Run).order_by(Run.suite_scale_factor)).all()[1].suite_scale_factor == 2
+    finally:
+        engine.dispose()
+
+
+def test_suite_scale_factor_migration_normalizes_legacy_tpc_suite_names(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="2f5d7f0e8a21")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, db, db_version, operation, system, status, started_at
+            ) values
+                ('tpch', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00'),
+                ('tpch_sf10', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-02 00:00:00'),
+                ('tpch_sf50', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-03 00:00:00'),
+                ('tpcds', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-04 00:00:00'),
+                ('tpcds_sf1', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-05 00:00:00')
+            """
+        )
+        con.close()
+
+        migrate_results(db_path=db_path)
+
+        con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+        rows = con.execute("select suite, suite_scale_factor from run order by started_at").fetchall()
+        assert rows == [
+            ("tpc_h", 10),
+            ("tpc_h", 10),
+            ("tpc_h", 50),
+            ("tpc_ds", 1),
+            ("tpc_ds", 1),
+        ]
+
+        scale_column = next(
+            row for row in con.execute("pragma table_info('run')").fetchall() if row[1] == "suite_scale_factor"
+        )
+        assert scale_column[3] is True
+    finally:
+        con.close()
+
+
+def test_suite_scale_factor_migration_rejects_unknown_legacy_suite_names(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="2f5d7f0e8a21")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, db, db_version, operation, system, status, started_at
+            ) values
+                ('jsonbench', 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00')
+            """
+        )
+    finally:
+        con.close()
+
+    with pytest.raises(RuntimeError, match="unknown legacy suites: jsonbench"):
+        migrate_results(db_path=db_path)
+
+
+def test_run_natural_key_migration_removes_duplicate_runs(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="9c1e5f0a7b6d")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                id, suite, suite_scale_factor, db, db_version, operation, system, status, started_at, finished_at
+            ) values
+                (
+                    1, 'time_series', 1, 'duckdb', 'test', 'select', 'test', 'failed',
+                    timestamp '2026-01-01 00:00:00', timestamp '2026-01-01 00:01:00'
+                ),
+                (
+                    2, 'time_series', 1, 'duckdb', 'test', 'select', 'test', 'completed',
+                    timestamp '2026-01-01 00:00:00', timestamp '2026-01-01 00:02:00'
+                )
+            """
+        )
+        con.execute(
+            """
+            insert into run_step (
+                id, run_id, step_type, step_name, query_name, iteration, started_at, status
+            ) values
+                (1, 1, 'query', 'query', 'q1', 1, timestamp '2026-01-01 00:00:01', 'failed'),
+                (2, 2, 'query', 'query', 'q1', 1, timestamp '2026-01-01 00:00:01', 'completed')
+            """
+        )
+        con.execute(
+            """
+            insert into run_metric (id, run_id, time, cpu_percent, mem_mb, disk_mb) values
+                (1, 1, timestamp '2026-01-01 00:00:01', 0.0, 0, 0),
+                (2, 2, timestamp '2026-01-01 00:00:01', 0.0, 0, 0)
+            """
+        )
+        con.execute(
+            """
+            insert into query_execution (id, run_id, run_step_id, query, start_time, end_time) values
+                (1, 1, 1, 'select 1', timestamp '2026-01-01 00:00:01', timestamp '2026-01-01 00:00:02'),
+                (2, 2, 2, 'select 1', timestamp '2026-01-01 00:00:01', timestamp '2026-01-01 00:00:02')
+            """
+        )
+    finally:
+        con.close()
+
+    migrate_results(db_path=db_path)
+
+    con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        assert con.execute("select id, status from run").fetchall() == [(2, "completed")]
+        assert con.execute("select run_id from run_step").fetchall() == [(2,)]
+        assert con.execute("select run_id from run_metric").fetchall() == [(2,)]
+        assert con.execute("select run_id from query_execution").fetchall() == [(2,)]
+    finally:
+        con.close()
+
+
+def test_methodology_metadata_migration_backfills_step_fields(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="4d9c2b7e6f10")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, suite_scale_factor, db, db_version, operation, system, status, started_at
+            ) values
+                ('time_series', 1, 'duckdb', 'test', 'select', 'test', 'completed', timestamp '2026-01-01 00:00:00')
+            """
+        )
+        con.execute(
+            """
+            insert into run_step (
+                run_id, step_type, step_name, query_name, iteration, started_at, status
+            ) values
+                (1, 'query', 'query', 'q1', 1, timestamp '2026-01-01 00:00:01', 'completed'),
+                (1, 'query', 'query', 'q2', 2, timestamp '2026-01-01 00:00:02', 'failed'),
+                (1, 'phase', 'restart', null, null, timestamp '2026-01-01 00:00:03', 'completed')
+            """
+        )
+        con.close()
+
+        migrate_results(db_path=db_path)
+
+        con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+        run_columns = {row[1] for row in con.execute("pragma table_info('run')").fetchall()}
+        step_columns = {row[1] for row in con.execute("pragma table_info('run_step')").fetchall()}
+        rows = con.execute(
+            """
+            select query_name, result_status, iteration_role
+            from run_step
+            order by id
+            """
+        ).fetchall()
+
+        assert "metadata" in run_columns
+        assert {"result_status", "iteration_role"}.issubset(step_columns)
+        assert rows == [
+            ("q1", "ok", "first_run"),
+            ("q2", "error", "warm"),
+            (None, None, None),
+        ]
+    finally:
+        con.close()
+
+
+def test_system_snapshot_migration_normalizes_and_deduplicates_run_metadata(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="b7c4d9a8e6f2")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        system_metadata = {
+            "host": {
+                "os": "Darwin",
+                "os_release": "25",
+                "machine": "arm64",
+                "processor": "M4",
+                "cpu_count_logical": 14,
+                "memory_total_mb": 49_152,
+            },
+            "python": {"version": "3.14"},
+            "docker": {"version": "28"},
+            "methodology": {"cache_policy": "test"},
+        }
+        con.executemany(
+            """
+            insert into run (
+                suite, suite_scale_factor, db, db_version, operation, system, status, started_at, "metadata"
+            ) values (?, 1, ?, 'test', 'select', 'shared-label', 'completed', ?, ?)
+            """,
+            [
+                (
+                    "time_series",
+                    "duckdb",
+                    datetime(2026, 1, 1),
+                    json.dumps(system_metadata | {"execution": {"mode": "in_process"}}),
+                ),
+                (
+                    "time_series",
+                    "clickhouse",
+                    datetime(2026, 1, 2),
+                    json.dumps(system_metadata | {"execution": {"mode": "container"}}),
+                ),
+            ],
+        )
+    finally:
+        con.close()
+
+    migrate_results(db_path=db_path)
+
+    con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        snapshots = con.execute(
+            """
+            select id, system, os, os_release, machine, processor, cpu_count_logical, memory_total_mb
+            from system_snapshot
+            """
+        ).fetchall()
+        runs = con.execute(
+            "select system_snapshot_id, \"metadata\"->'execution'->>'mode' from run order by started_at"
+        ).fetchall()
+
+        assert snapshots == [(1, "shared-label", "Darwin", "25", "arm64", "M4", 14, 49_152)]
+        assert runs == [(1, "in_process"), (1, "container")]
+    finally:
+        con.close()
+
+    engine = get_results_engine(read_only=True, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            snapshot_id = session.scalar(
+                select(SystemSnapshot.id)
+                .where(SystemSnapshot.system == "shared-label")
+                .where(SystemSnapshot.metadata_json == system_metadata)
+            )
+            assert snapshot_id == 1
     finally:
         engine.dispose()
 
@@ -243,14 +566,34 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
         ensure_results_schema(engine)
 
         with Session(engine) as session:
-            failed_run = _insert_run(session, suite="time_series", db="timescaledb")
+            deleted_snapshot = SystemSnapshot(system="test", os="TestOS")
+            retained_snapshot = SystemSnapshot(system="test", os="OtherOS")
+            session.add_all([deleted_snapshot, retained_snapshot])
+            session.commit()
+
+            failed_run = _insert_run(
+                session,
+                suite="time_series",
+                db="timescaledb",
+                system_snapshot_id=deleted_snapshot.id,
+            )
             failed_run_id = failed_run.id
             failed_run.status = "failed"
             failed_run.finished_at = datetime.now()
 
-            running_run = _insert_run(session, suite="time_series", db="monetdb")
+            running_run = _insert_run(
+                session,
+                suite="time_series",
+                db="monetdb",
+                system_snapshot_id=deleted_snapshot.id,
+            )
             running_run_id = running_run.id
-            completed_run = _insert_run(session, suite="clickbench", db="duckdb")
+            completed_run = _insert_run(
+                session,
+                suite="clickbench",
+                db="duckdb",
+                system_snapshot_id=retained_snapshot.id,
+            )
             completed_run_id = completed_run.id
             completed_run.status = "completed"
             completed_run.finished_at = datetime.now()
@@ -323,6 +666,9 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
 
             remaining_query_run_ids = session.scalars(select(QueryExecution.run_id).order_by(QueryExecution.id)).all()
             assert remaining_query_run_ids == [completed_run_id]
+
+            snapshots = session.scalars(select(SystemSnapshot).order_by(SystemSnapshot.id)).all()
+            assert [snapshot.os for snapshot in snapshots] == ["OtherOS"]
     finally:
         engine.dispose()
 

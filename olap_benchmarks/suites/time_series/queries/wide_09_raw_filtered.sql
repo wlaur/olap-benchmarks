@@ -4,7 +4,7 @@ select
 from
     data_wide
 where
-    time > '2024-10-01'
-    and time < '2024-10-08'
+    time > '2024-12-10'
+    and time < '2024-12-17'
 order by
     time

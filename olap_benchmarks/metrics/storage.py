@@ -1,19 +1,22 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Process, Queue
 from queue import Empty
+from threading import Lock
 from typing import Any, Literal, TypedDict, cast
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..results import get_results_engine
-from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep
+from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from ..results.schema import ensure_results_schema
+from ..run_metadata import IterationRole, StepResultStatus
 from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +41,41 @@ class WriterMessage(TypedDict):
     args: list[Any]
 
 
+def _get_or_create_system_snapshot(
+    session: Session,
+    system: str,
+    metadata: dict[str, Any] | None,
+) -> int | None:
+    if metadata is None:
+        return None
+
+    canonical_metadata = cast(dict[str, Any], json.loads(json.dumps(metadata, sort_keys=True)))
+    existing_id = session.scalar(
+        select(SystemSnapshot.id)
+        .where(SystemSnapshot.system == system)
+        .where(SystemSnapshot.metadata_json == canonical_metadata)
+        .limit(1)
+    )
+    if existing_id is not None:
+        return existing_id
+
+    host_value = canonical_metadata.get("host")
+    host = cast(dict[str, Any], host_value) if isinstance(host_value, dict) else {}
+    snapshot = SystemSnapshot(
+        system=system,
+        os=cast(str | None, host.get("os")),
+        os_release=cast(str | None, host.get("os_release")),
+        machine=cast(str | None, host.get("machine")),
+        processor=cast(str | None, host.get("processor")),
+        cpu_count_logical=cast(int | None, host.get("cpu_count_logical")),
+        memory_total_mb=cast(int | None, host.get("memory_total_mb")),
+        metadata_json=canonical_metadata,
+    )
+    session.add(snapshot)
+    session.flush()
+    return snapshot.id
+
+
 def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revision: Revision = "default") -> None:
     setup_stdout_logging()
 
@@ -60,14 +98,23 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     result_queue.put(row.id)
 
                 case "insert_run":
+                    system = cast(str, msg["args"][5])
+                    system_snapshot_id = _get_or_create_system_snapshot(
+                        session,
+                        system,
+                        cast(dict[str, Any] | None, msg["args"][8]),
+                    )
                     row = Run(
                         suite=cast(str, msg["args"][0]),
-                        db=cast(str, msg["args"][1]),
-                        db_version=cast(str, msg["args"][2]),
-                        operation=cast(str, msg["args"][3]),
-                        system=cast(str, msg["args"][4]),
-                        status=cast(str, msg["args"][5]),
-                        started_at=cast(datetime, msg["args"][6]),
+                        suite_scale_factor=cast(int, msg["args"][1]),
+                        db=cast(str, msg["args"][2]),
+                        db_version=cast(str, msg["args"][3]),
+                        operation=cast(str, msg["args"][4]),
+                        system=system,
+                        system_snapshot_id=system_snapshot_id,
+                        status=cast(str, msg["args"][6]),
+                        started_at=cast(datetime, msg["args"][7]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][9]),
                     )
                     session.add(row)
                     session.commit()
@@ -118,7 +165,9 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                         table_name=cast(str | None, msg["args"][5]),
                         started_at=cast(datetime, msg["args"][6]),
                         status=cast(str, msg["args"][7]),
-                        metadata_json=cast(dict[str, Any] | None, msg["args"][8]),
+                        result_status=cast(str | None, msg["args"][8]),
+                        iteration_role=cast(str | None, msg["args"][9]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][10]),
                     )
                     session.add(row)
                     session.commit()
@@ -128,17 +177,18 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     update_values: dict[str, Any] = {
                         "finished_at": cast(datetime, msg["args"][0]),
                         "status": cast(str, msg["args"][1]),
-                        "row_count": cast(int | None, msg["args"][2]),
-                        "error_type": cast(str | None, msg["args"][3]),
-                        "error_message": cast(str | None, msg["args"][4]),
+                        "result_status": cast(str | None, msg["args"][2]),
+                        "row_count": cast(int | None, msg["args"][3]),
+                        "error_type": cast(str | None, msg["args"][4]),
+                        "error_message": cast(str | None, msg["args"][5]),
                     }
 
-                    metadata_value = cast(dict[str, Any] | None, msg["args"][5])
+                    metadata_value = cast(dict[str, Any] | None, msg["args"][6])
                     if metadata_value is not None:
                         update_values["metadata_json"] = metadata_value
 
                     session.execute(
-                        update(RunStep).where(RunStep.id == cast(int, msg["args"][6])).values(**update_values)
+                        update(RunStep).where(RunStep.id == cast(int, msg["args"][7])).values(**update_values)
                     )
                     session.commit()
 
@@ -195,21 +245,43 @@ class Storage:
     def __init__(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self.queue = queue
         self.result_queue = result_queue
+        self._response_lock = Lock()
 
     def put(self, type: MessageType, args: list[Any]) -> None:
         self.queue.put({"type": type, "args": args})
 
+    def put_and_get_id(self, type: MessageType, args: list[Any]) -> int:
+        with self._response_lock:
+            self.put(type, args)
+            return cast(int, self.result_queue.get())
+
     def insert_run(
         self,
         suite: SuiteName,
+        suite_scale_factor: int,
         db: DatabaseName,
         db_version: str,
         operation: Operation,
         system: str,
         started_at: datetime,
+        system_metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
-        self.put("insert_run", [suite, db, db_version, operation, system, "running", started_at])
-        return cast(int, self.result_queue.get())
+        return self.put_and_get_id(
+            "insert_run",
+            [
+                suite,
+                suite_scale_factor,
+                db,
+                db_version,
+                operation,
+                system,
+                "running",
+                started_at,
+                system_metadata,
+                metadata,
+            ],
+        )
 
     def finish_run(
         self,
@@ -230,19 +302,33 @@ class Storage:
         query_name: str | None = None,
         iteration: int | None = None,
         table_name: str | None = None,
+        result_status: StepResultStatus | None = None,
+        iteration_role: IterationRole | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
-        self.put(
+        return self.put_and_get_id(
             "start_step",
-            [run_id, step_type, step_name, query_name, iteration, table_name, started_at, "running", metadata],
+            [
+                run_id,
+                step_type,
+                step_name,
+                query_name,
+                iteration,
+                table_name,
+                started_at,
+                "running",
+                result_status,
+                iteration_role,
+                metadata,
+            ],
         )
-        return cast(int, self.result_queue.get())
 
     def finish_step(
         self,
         step_id: int,
         finished_at: datetime,
         status: RunStatus,
+        result_status: StepResultStatus | None = None,
         row_count: int | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
@@ -250,7 +336,7 @@ class Storage:
     ) -> None:
         self.put(
             "finish_step",
-            [finished_at, status, row_count, error_type, error_message, metadata, step_id],
+            [finished_at, status, result_status, row_count, error_type, error_message, metadata, step_id],
         )
 
     def insert_metric(self, run_id: int, time: datetime, cpu_percent: float, mem_mb: int, disk_mb: int) -> None:
@@ -270,8 +356,7 @@ class Storage:
         if content is None:
             content = uuid.uuid4().hex
 
-        self.put("debug", [content])
-        return cast(int, self.result_queue.get())
+        return self.put_and_get_id("debug", [content])
 
     def shutdown(self, timeout_seconds: float = 10.0) -> None:
         self.put("shutdown", [])

@@ -12,10 +12,30 @@ class Base(DeclarativeBase):
 
 
 run_id_sequence = Sequence("seq_run")
+system_snapshot_id_sequence = Sequence("seq_system_snapshot")
 run_step_id_sequence = Sequence("seq_run_step")
 run_metric_id_sequence = Sequence("seq_run_metric")
 query_execution_id_sequence = Sequence("seq_query_execution")
 debug_id_sequence = Sequence("seq_debug")
+
+
+class SystemSnapshot(Base):
+    __tablename__ = "system_snapshot"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        system_snapshot_id_sequence,
+        server_default=system_snapshot_id_sequence.next_value(),
+        primary_key=True,
+    )
+    system: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    os: Mapped[str | None] = mapped_column(String)
+    os_release: Mapped[str | None] = mapped_column(String)
+    machine: Mapped[str | None] = mapped_column(String)
+    processor: Mapped[str | None] = mapped_column(String)
+    cpu_count_logical: Mapped[int | None] = mapped_column(Integer)
+    memory_total_mb: Mapped[int | None] = mapped_column(Integer)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
 
 
 class Run(Base):
@@ -28,19 +48,34 @@ class Run(Base):
         primary_key=True,
     )
     suite: Mapped[str] = mapped_column(String, nullable=False)
+    suite_scale_factor: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     db: Mapped[str] = mapped_column(String, nullable=False)
     db_version: Mapped[str] = mapped_column(String, nullable=False)
     operation: Mapped[str] = mapped_column(String, nullable=False)
     system: Mapped[str] = mapped_column(String, nullable=False)
+    system_snapshot_id: Mapped[int | None] = mapped_column(Integer, index=True)
     status: Mapped[str] = mapped_column(String, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     error_type: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
 
     __table_args__ = (
         CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
-        Index("idx_run_suite_db_operation", "suite", "db", "operation"),
+        CheckConstraint("suite_scale_factor >= 1", name="ck_run_suite_scale_factor"),
+        Index(
+            "uq_run_natural_key",
+            "system",
+            "db",
+            "db_version",
+            "suite",
+            "suite_scale_factor",
+            "operation",
+            "started_at",
+            unique=True,
+        ),
+        Index("idx_run_suite_db_operation", "suite", "suite_scale_factor", "db", "operation"),
         Index("idx_run_status_started_at", "status", "started_at"),
     )
 
@@ -65,6 +100,8 @@ class RunStep(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     status: Mapped[str] = mapped_column(String, nullable=False)
+    result_status: Mapped[str | None] = mapped_column(String)
+    iteration_role: Mapped[str | None] = mapped_column(String)
     row_count: Mapped[int | None] = mapped_column(Integer)
     error_type: Mapped[str | None] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(Text)

@@ -4,7 +4,7 @@ select
 from
     data_tall
 where
-    time > '2023-06-01'
-    and time < '2023-06-08'
+    time > '2024-08-01'
+    and time < '2024-08-08'
 order by
     time

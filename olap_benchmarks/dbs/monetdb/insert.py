@@ -1,14 +1,14 @@
 import logging
 import shutil
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
 from time import perf_counter
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 import polars as pl
 from sqlalchemy import Connection, text
@@ -46,10 +46,6 @@ type LazyWrite = RowBatchWrite | ColumnGroupWrite
 DEFAULT_LAZY_WRITE = RowBatchWrite()
 
 
-class MonetDBInsertKwargs(TypedDict, total=False):
-    lazy_write: LazyWrite
-
-
 def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
     return record_query_execution_context(query, connection)
 
@@ -60,7 +56,7 @@ def _raise_insert_error(table: TableName, columns: Sequence[str], exc: Exception
 
 
 @contextmanager
-def _temporary_binary_directory() -> Iterator[Path]:
+def _temporary_binary_directory() -> Generator[Path]:
     temp_dir = MONETDB_TEMPORARY_DIRECTORY / "data" / str(uuid.uuid4())[:4]
     temp_dir.mkdir()
 
@@ -331,7 +327,7 @@ def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_k
     insert(df, source.name, connection, create=False, commit=False)
 
     primary_keys = [primary_key] if isinstance(primary_key, str) else list(primary_key)
-    shared_cols = sorted({c.name for c in dest.columns} & {c.name for c in dest.columns})
+    shared_cols = sorted({c.name for c in dest.columns} & {c.name for c in source.columns})
 
     if not shared_cols:
         raise ValueError("No overlapping columns to upsert")

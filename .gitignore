@@ -194,13 +194,19 @@ cython_debug/
 
 .python-version
 
+# benchmark inputs, db files and local result revisions
 **/temp
 **/data
-/results/
+/results/*
+!/results/shared/
+!/results/shared/.gitkeep
+!/results/shared/*.db
 
 .claude
 
-# Frontend (site/) exceptions
+# Frontend (site/) exceptions: **/data above would otherwise ignore these,
+# but site/src/lib and the published results.db under site/public/data must
+# stay committed (results.db is the file `olap publish` writes/merges into)
 !site/src/lib/
 !site/public/data/
 !site/dist/

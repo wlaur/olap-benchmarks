@@ -30,15 +30,34 @@ class FakeTimescaleDB:
         return self.connection
 
 
-def test_timescaledb_time_series_primary_keys_match_mutation_keys() -> None:
+def test_timescaledb_time_series_tables_have_no_primary_keys() -> None:
     suite = TimescaleTimeSeries.model_construct(
         db=FakeTimescaleDB(FakeConnection()),
         name="time_series",
+        scale_factor=1,
     )
 
-    assert suite.get_primary_key("data_tall") == "time"
-    assert suite.get_primary_key("data_wide") == "time"
-    assert suite.get_primary_key("data_large") == "time"
+    assert suite.get_primary_key("data_tall") is None
+    assert suite.get_primary_key("data_wide") is None
+    assert suite.get_primary_key("data_large") is None
+
+    assert suite.get_not_null("data_tall") == "time"
+    assert suite.get_not_null("data_wide") == ["time", "metric_name"]
+    assert suite.get_not_null("data_large") == ["time", "metric_name"]
+
+
+def test_timescaledb_time_series_marks_wide_export_shape_unsupported() -> None:
+    suite = TimescaleTimeSeries.model_construct(
+        db=FakeTimescaleDB(FakeConnection()),
+        name="time_series",
+        scale_factor=1,
+    )
+
+    assert suite.query_skip("large_23_batch_export") == (
+        "unsupported",
+        "query requires wide-row export shape, but this database stores data_large as EAV",
+    )
+    assert suite.query_skip("large_09_raw_filtered") is None
 
 
 def test_timescaledb_upsert_uses_on_conflict_instead_of_delete_insert(
@@ -64,7 +83,7 @@ def test_timescaledb_upsert_uses_on_conflict_instead_of_delete_insert(
     data_dir = tmp_path / "timescaledb" / "data"
     data_dir.mkdir(parents=True)
 
-    monkeypatch.setattr("olap_benchmarks.dbs.timescaledb.SETTINGS.temporary_directory", tmp_path)
+    monkeypatch.setattr("olap_benchmarks.settings.SETTINGS.temporary_directory", tmp_path)
     monkeypatch.setattr(TimescaleDB, "connect", fake_connect)
     monkeypatch.setattr(TimescaleDB, "_copy_csv_to_table", fake_copy_csv_to_table)
 

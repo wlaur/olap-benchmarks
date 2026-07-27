@@ -20,17 +20,17 @@ interface ControlSelectProps {
   disabled?: boolean
   className?: string
   menuClassName?: string
-  labelMode?: "responsive" | "always"
+  labelMode?: "responsive" | "always" | "hidden"
 }
 
 const TRIGGER_CLASS =
-  "inline-flex min-w-0 items-center justify-between gap-1.5 rounded-full border border-border-default bg-surface-primary/72 py-1 pr-2 pl-1.5 text-left text-slate-100 transition-colors outline-none hover:border-slate-600 focus-visible:border-slate-400/60 focus-visible:ring-2 focus-visible:ring-slate-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+  "inline-flex min-w-0 items-center justify-between gap-1.5 rounded-md border border-border-default bg-surface-primary/80 py-1 pr-2 pl-1.5 text-left text-slate-100 transition-colors outline-none hover:border-slate-500 focus-visible:border-accent-300/70 focus-visible:ring-2 focus-visible:ring-accent-400/15 disabled:cursor-not-allowed disabled:opacity-60"
 
 const CONTENT_CLASS =
-  "z-50 max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-border-default bg-surface-primary/98 p-2 text-slate-100 shadow-2xl shadow-black/40 backdrop-blur data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1"
+  "z-50 max-h-80 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border-strong bg-surface-primary p-1.5 text-slate-100 shadow-2xl shadow-black/60 data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1"
 
 const ITEM_CLASS =
-  "relative flex cursor-default items-center rounded-xl py-2.5 pr-8 pl-3 text-[0.8125rem] font-medium text-slate-300 transition outline-none data-[highlighted]:bg-surface-raised data-[highlighted]:text-slate-100 data-[state=checked]:bg-white/[0.05] data-[state=checked]:text-slate-50"
+  "relative flex cursor-default items-center rounded-md py-2 pr-8 pl-3 text-[0.8125rem] font-medium text-slate-300 transition outline-none data-[highlighted]:bg-surface-raised data-[highlighted]:text-slate-100 data-[state=checked]:bg-accent-400/10 data-[state=checked]:text-slate-50"
 
 export function ControlSelect({
   ariaLabel,
@@ -44,17 +44,18 @@ export function ControlSelect({
   menuClassName,
   labelMode = "responsive",
 }: ControlSelectProps) {
-  const labelClass = labelMode === "always" ? "inline" : "hidden md:inline"
-  const dividerClass = labelMode === "always" ? "inline" : "hidden md:inline"
+  const labelClass =
+    labelMode === "always" ? "inline" : labelMode === "responsive" ? "hidden md:inline" : "hidden"
+  const dividerClass = labelClass
 
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger aria-label={ariaLabel} className={cn(TRIGGER_CLASS, className)}>
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/[0.04] text-slate-300">
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border-subtle bg-surface-raised text-slate-300">
             {icon}
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
+          <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
             <span
               className={cn(
                 "shrink-0 text-[0.6rem] font-semibold tracking-[0.18em] text-slate-500 uppercase",
@@ -105,7 +106,7 @@ export function ControlSelect({
 interface ControlSelectSkeletonProps {
   label: string
   className?: string
-  labelMode?: "responsive" | "always"
+  labelMode?: "responsive" | "always" | "hidden"
 }
 
 export function ControlSelectSkeleton({
@@ -113,8 +114,9 @@ export function ControlSelectSkeleton({
   className,
   labelMode = "responsive",
 }: ControlSelectSkeletonProps) {
-  const labelClass = labelMode === "always" ? "inline" : "hidden md:inline"
-  const dividerClass = labelMode === "always" ? "inline" : "hidden md:inline"
+  const labelClass =
+    labelMode === "always" ? "inline" : labelMode === "responsive" ? "hidden md:inline" : "hidden"
+  const dividerClass = labelClass
 
   return (
     <div className={cn(TRIGGER_CLASS, className)} aria-hidden="true">

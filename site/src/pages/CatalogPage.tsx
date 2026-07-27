@@ -1,0 +1,247 @@
+import { Database, ExternalLink, Layers3, Server, type LucideIcon } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
+
+import { CatalogCoverageMatrix } from "../components/catalog/CatalogCoverageMatrix"
+import { CatalogQueryList } from "../components/catalog/CatalogQueryList"
+import { CatalogSuiteList } from "../components/catalog/CatalogSuiteList"
+import { QuietButton } from "../components/controls/Control"
+import { ControlSelect, ControlSelectSkeleton } from "../components/controls/ControlSelect"
+import { PanelCard, PanelHeader } from "../components/layout/Panel"
+import { MetaLabel, SectionTitle } from "../components/Typography"
+import { useCatalogData } from "../hooks/useCatalogData"
+import { isBenchmarkSuiteId } from "../lib/benchmarks"
+import { buildCatalogSuiteSummary, getSqlDialects } from "../lib/catalog"
+import { useAppStore } from "../stores/useAppStore"
+
+export function CatalogPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const benchmarkDefinitions = useAppStore((state) => state.benchmarkDefinitions)
+  const suitesLoading = useAppStore((state) => state.suitesLoading)
+  const suitesError = useAppStore((state) => state.suitesError)
+  const catalog = useCatalogData()
+  const [showCoverage, setShowCoverage] = useState(false)
+  const summaries = useMemo(
+    () =>
+      benchmarkDefinitions.map((definition) =>
+        buildCatalogSuiteSummary(definition, catalog.dimensions, catalog.queriesManifest),
+      ),
+    [benchmarkDefinitions, catalog.dimensions, catalog.queriesManifest],
+  )
+  const requestedSuite = searchParams.get("suite") ?? undefined
+  const selectedSuiteId = isBenchmarkSuiteId(requestedSuite, benchmarkDefinitions)
+    ? requestedSuite
+    : (benchmarkDefinitions[0]?.id ?? null)
+  const selectedSummary =
+    summaries.find((summary) => summary.definition.id === selectedSuiteId) ?? null
+  const manifestEntries = selectedSummary
+    ? (catalog.queriesManifest[selectedSummary.definition.queriesKey] ?? {})
+    : {}
+  const requestedQuery = searchParams.get("query") ?? ""
+  const selectedQuery = selectedSummary?.queryNames.includes(requestedQuery)
+    ? requestedQuery
+    : (selectedSummary?.queryNames[0] ?? "")
+  const selectedSqlEntry = manifestEntries[selectedQuery]
+  const sqlDialects = getSqlDialects(selectedSqlEntry)
+  const requestedDialect = searchParams.get("sql_database") ?? ""
+  const selectedDialect = sqlDialects.includes(requestedDialect)
+    ? requestedDialect
+    : (sqlDialects[0] ?? "")
+  const loading = suitesLoading || catalog.loading
+  const error = suitesError ?? catalog.error
+  const systems = unique(catalog.dimensions.map((row) => row.system))
+  const databases = unique(catalog.dimensions.map((row) => row.db))
+  const explorerScale = selectedSummary?.scales[0] ?? 1
+
+  function handleSuiteSelect(suiteId: string) {
+    setSearchParams({ suite: suiteId }, { replace: true })
+  }
+
+  function handleQuerySelect(query: string) {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (selectedSuiteId) nextSearchParams.set("suite", selectedSuiteId)
+    nextSearchParams.set("query", query)
+    nextSearchParams.delete("sql_database")
+    setSearchParams(nextSearchParams, { replace: true })
+  }
+
+  function handleDialectSelect(dialect: string) {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (dialect === "base") nextSearchParams.delete("sql_database")
+    else nextSearchParams.set("sql_database", dialect)
+    setSearchParams(nextSearchParams, { replace: true })
+  }
+
+  return (
+    <div className="flex min-h-full w-full min-w-0 flex-col gap-4 pb-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <MetaLabel>Inventory</MetaLabel>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-50">Benchmark catalog</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
+          <CatalogStat
+            icon={Layers3}
+            value={benchmarkDefinitions.length}
+            label={benchmarkDefinitions.length === 1 ? "suite" : "suites"}
+          />
+          <CatalogStat
+            icon={Database}
+            value={databases.length}
+            label={databases.length === 1 ? "database" : "databases"}
+          />
+          <CatalogStat
+            icon={Server}
+            value={systems.length}
+            label={systems.length === 1 ? "system" : "systems"}
+          />
+        </div>
+      </header>
+
+      <div className="xl:hidden">
+        {loading || selectedSuiteId === null ? (
+          <ControlSelectSkeleton label="Suite" labelMode="always" className="w-full" />
+        ) : (
+          <ControlSelect
+            ariaLabel="Suite"
+            label="Suite"
+            value={selectedSuiteId}
+            onChange={handleSuiteSelect}
+            options={benchmarkDefinitions.map((definition) => ({
+              value: definition.id,
+              label: definition.title,
+            }))}
+            icon={<Layers3 className="h-3 w-3" strokeWidth={1.8} />}
+            labelMode="always"
+            className="min-h-10 w-full"
+          />
+        )}
+      </div>
+
+      {error ? (
+        <div className="border-y border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+          Failed to load catalog: {error}
+        </div>
+      ) : null}
+
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)]">
+        <PanelCard className="hidden p-3 xl:sticky xl:top-4 xl:block">
+          <PanelHeader className="px-1 pb-2">
+            <div>
+              <SectionTitle as="h2">Suites</SectionTitle>
+              <p className="mt-1 text-xs text-slate-500">
+                {benchmarkDefinitions.length} configured
+              </p>
+            </div>
+          </PanelHeader>
+          <CatalogSuiteList
+            summaries={summaries}
+            selectedSuiteId={selectedSuiteId}
+            loading={loading}
+            onSelect={handleSuiteSelect}
+          />
+        </PanelCard>
+
+        <div className="grid min-w-0 gap-4">
+          <PanelCard className="p-3 sm:p-4">
+            <PanelHeader className="mb-4 flex-wrap">
+              <div>
+                <MetaLabel>Queries</MetaLabel>
+                <SectionTitle as="h2" className="mt-1">
+                  {selectedSummary?.definition.title ?? "Benchmark"} SQL
+                </SectionTitle>
+                <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
+                  {selectedSummary?.queryNames.length ?? 0} queries · select one, then switch
+                  database dialects.
+                </p>
+              </div>
+            </PanelHeader>
+            <CatalogQueryList
+              key={selectedSuiteId}
+              queryNames={selectedSummary?.queryNames ?? []}
+              selectedQuery={selectedQuery}
+              selectedDialect={selectedDialect}
+              sqlEntry={selectedSqlEntry}
+              loading={loading}
+              onSelectQuery={handleQuerySelect}
+              onSelectDialect={handleDialectSelect}
+            />
+          </PanelCard>
+
+          <PanelCard className="p-3 sm:p-4">
+            <PanelHeader className="flex-wrap sm:items-center">
+              <div className="min-w-0">
+                <MetaLabel>Availability</MetaLabel>
+                <SectionTitle as="h2" className="mt-1">
+                  Result coverage
+                </SectionTitle>
+                <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
+                  {selectedSummary?.databases.length ?? 0} databases ·{" "}
+                  {selectedSummary?.systems.length ?? 0} completed{" "}
+                  {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <QuietButton
+                  size="sm"
+                  aria-expanded={showCoverage}
+                  onClick={() => setShowCoverage((current) => !current)}
+                >
+                  {showCoverage ? "Hide coverage" : "Show coverage"}
+                </QuietButton>
+                {selectedSummary ? (
+                  <Link
+                    to={makeExplorerHref(
+                      selectedSummary.definition.id,
+                      explorerScale,
+                      selectedQuery,
+                      selectedDialect,
+                    )}
+                    className="inline-flex min-h-8 items-center gap-2 rounded-md border border-border-default bg-surface-inset px-2.5 text-xs font-medium text-slate-300 transition-colors outline-none hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20"
+                  >
+                    Open explorer
+                    <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </Link>
+                ) : null}
+              </div>
+            </PanelHeader>
+            {showCoverage ? (
+              <div className="mt-3 border-t border-border-subtle pt-3">
+                <CatalogCoverageMatrix summary={selectedSummary} loading={loading} />
+              </div>
+            ) : null}
+          </PanelCard>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CatalogStat({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: LucideIcon
+  value: number
+  label: string
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon className="h-3.5 w-3.5 text-slate-500" strokeWidth={1.8} />
+      <strong className="font-semibold text-slate-200 tabular-nums">{value}</strong>
+      {label}
+    </span>
+  )
+}
+
+function unique(values: readonly string[]) {
+  return [...new Set(values)]
+}
+
+function makeExplorerHref(suiteId: string, scale: number, query: string, dialect: string) {
+  const searchParams = new URLSearchParams({ scale: String(scale) })
+  if (query) searchParams.set("query", query)
+  if (dialect && dialect !== "base") searchParams.set("sql_database", dialect)
+  return `/explorer/${suiteId}?${searchParams.toString()}`
+}

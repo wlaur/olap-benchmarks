@@ -1,73 +1,43 @@
-# OLAP Benchmarks
+## Suites
 
-Run the same SQL queries against different OLAP databases on the same machine and compare how they do.
-
----
-
-## Time Series
-
-Time-series ingestion and analytical queries across table shapes (wide, tall, large).
-
-**Databases tested:** ClickHouse, MonetDB (more coming)
-
-| Metric                | ClickHouse | MonetDB |
-| --------------------- | ---------- | ------- |
-| Populate (data load)  | ~45s       | ~120s   |
-| Median SELECT latency | ~0.02s     | ~0.08s  |
-| Median MUTATE latency | ~0.15s     | ~0.40s  |
-| Peak memory           | ~1.2 GB    | ~2.8 GB |
-
-[Explore Time Series results](#/explorer/time_series)
-
----
-
-## RTABench
-
-Group-bys, distinct counts, and filtered aggregations over a normalized order-tracking schema. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale.
-
-**Status:** Benchmark defined, results pending.
-
-[Explore RTABench results](#/explorer/rtabench)
-
----
-
-## ClickBench
-
-Full-table scans, filters, and aggregations over a single wide table. Based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse.
-
-**Status:** Benchmark defined, results pending.
-
-[Explore ClickBench results](#/explorer/clickbench)
-
----
-
-## Kaggle Airbnb
-
-Multi-table joins and mixed aggregations over Airbnb listings data. Based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy.
-
-**Status:** Benchmark defined, results pending.
-
-[Explore Kaggle Airbnb results](#/explorer/kaggle_airbnb)
-
----
+- **Time Series** — time-series ingestion and analytical queries across wide, tall, and large table shapes. [Results](#/explorer/time_series)
+- **RTABench** — group-bys, distinct counts, and filtered aggregations over a normalized order-tracking schema. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale. [Results](#/explorer/rtabench)
+- **ClickBench** — full-table scans, filters, and aggregations over a single wide table. Based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse. [Results](#/explorer/clickbench)
+- **Kaggle Airbnb** — small smoke/example coverage for multi-table joins and mixed aggregations over Airbnb listings data. Based on [a comparison](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy. [Results](#/explorer/kaggle_airbnb)
+- **TPC-H** — the 22 ad-hoc decision-support queries over a normalized order/lineitem schema, derived from the [TPC-H benchmark](https://www.tpc.org/tpch/) (not comparable to published TPC-H results). [Results](#/explorer/tpc_h)
+- **TPC-DS** — the 99 decision-support queries over a retail snowflake schema (24 tables), derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/) (not comparable to published TPC-DS results). [Results](#/explorer/tpc_ds)
 
 ## Methodology
 
-All benchmarks for a given **system** (e.g. `macbook-pro-m4`) run on the same machine. Results from different systems are never compared directly.
+All results for a given system (e.g. `macbook-m4-pro`) come from the same machine. The main suite-score table is scoped to the selected system; explorer pages also include a cross-system panel for comparing the same suite and scale factor across recorded systems.
 
-- Runs are fully automated: schema creation, data loading, query execution, metric collection
-- Database versions, config, and SQL are pinned per revision
-- Raw results are stored in DuckDB and checked into git
+The current public data still contains older local Apple Silicon runs under `macbook-pro-m4`. Treat those as development data: Docker engines ran inside the macOS Docker VM, while DuckDB ran in process. Clean public comparisons should be rerun on a controlled x86_64 Linux host, or clearly labeled with the selected system and per-run methodology metadata.
+
+Coverage is based on completed published runs. QuestDB currently appears only for ClickBench in the published data; RTABench, time-series, and Kaggle Airbnb runs have not been published for it yet, and the TPC suites are not registered for QuestDB.
+
+- Runs are automated end to end: schema creation, data loading, query execution, metric collection
+- Database versions, configuration, and SQL are pinned per revision
+- Raw results are stored in DuckDB files checked into git
 
 ### Metrics
 
 - **Populate** — time to create tables and load data
-- **Query latency** — wall-clock time per query (median of multiple iterations)
+- **Query latency** — wall-clock time per query, warm median when repeated iterations exist; one-iteration queries fall back to their single recorded run
 - **Resources** — CPU, memory, and disk usage sampled throughout each phase
 
-## Using the explorer
+### Tuning policy
 
-- Switch between suites and filter databases
-- Toggle linear / log duration scales
-- Click queries for per-database breakdowns and SQL source
-- Inspect CPU, memory, and disk trends per step
+Vendor-recommended server settings, storage layout, and per-suite physical design are allowed when they are documented here. Results should be read as configured benchmark runs, not stock-default engine comparisons.
+
+- **DuckDB** runs in process with the installed Python package and no server process.
+- DuckDB is not cold-started between populate and select; its in-process buffer manager can remain warm while container databases are restarted after populate.
+- **ClickHouse** uses the pinned Docker image and suite schemas/query variants without extra server tuning.
+- **MonetDB** uses the pinned Docker image; selected large-result queries use MonetDB's binary fetch path.
+- **Postgres** uses explicit server settings for memory, WAL, and parallel workers, plus suite-specific indexes where defined by the schema; query results are fetched through Polars/ConnectorX.
+- **TimescaleDB** uses Timescale tuning, hypertables, compression/chunk options where defined, and the same Postgres-family server settings; query results are fetched through Polars/ConnectorX.
+- **QuestDB** uses the pinned Docker image; ClickBench input is sorted by event time before ingest.
+- **StarRocks** uses the pinned Docker image and suite schemas/query variants without extra server tuning; query results are fetched through Polars/ConnectorX.
+
+## Explorer
+
+Each suite links to an explorer with overall rankings, per-query latency breakdowns, and database-specific SQL.

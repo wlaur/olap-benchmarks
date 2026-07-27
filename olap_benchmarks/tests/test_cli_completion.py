@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import Callable
 
 import pytest
+from cyclopts.exceptions import CoercionError
 
 from .. import __main__
 from ..__main__ import app
 from ..settings import DatabaseArg, DatabaseName, SuiteArg, SuiteName
+from ..suites import ManualPreparationRequired
 
 
 def test_cli_registers_install_completion_command() -> None:
@@ -15,7 +19,7 @@ def test_cli_registers_install_completion_command() -> None:
     assert app.generate_completion(shell="zsh").splitlines()[0] == "#compdef olap"
 
 
-def test_failed_runs_shortcut_lists_failed_runs(
+def test_runs_lists_filtered_runs(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -46,7 +50,7 @@ def test_failed_runs_shortcut_lists_failed_runs(
 
     monkeypatch.setattr(__main__, "list_runs", fake_list_runs)
 
-    __main__.failed_runs(revision="candidate", suite="time_series", db="timescaledb")
+    __main__.runs(status="failed", revision="candidate", suite="time_series", db="timescaledb")
 
     assert capsys.readouterr().out == f"{json.dumps(rows, indent=2)}\n"
 
@@ -71,16 +75,9 @@ def test_delete_cmd_deletes_orphaned_runs_by_status(
     assert capsys.readouterr().out == "Deleted 2 run(s) and their associated steps and metrics.\n"
 
 
-def test_delete_cmd_rejects_completed_status(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def unexpected_delete_runs_by_status(_status: str, _revision: str = "default") -> int:
-        raise AssertionError("delete_runs_by_status should not be called")
-
-    monkeypatch.setattr(__main__, "delete_runs_by_status", unexpected_delete_runs_by_status)
-
-    with pytest.raises(SystemExit, match="only supports 'failed' or 'orphaned'"):
-        __main__.delete_cmd(status="completed")
+def test_delete_cmd_rejects_completed_status() -> None:
+    with pytest.raises(CoercionError):
+        app(["results", "delete", "--status", "completed"], exit_on_error=False)
 
 
 def test_delete_cmd_aborts_without_yes(
@@ -118,6 +115,52 @@ def test_delete_cmd_force_skips_confirmation(
     assert capsys.readouterr().out == "Deleted 1 run(s) and their associated steps and metrics.\n"
 
 
+def test_prepare_all_skips_manual_preparation_suites(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    prepared: list[tuple[SuiteName, int]] = []
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["rtabench", "clickbench", "time_series"]
+
+    def fake_get_suite_preparer(suite_name: SuiteName, scale_factor: int) -> Callable[[], None]:
+        def prepare_suite() -> None:
+            if suite_name == "clickbench":
+                raise ManualPreparationRequired("download hits.parquet")
+            prepared.append((suite_name, scale_factor))
+
+        return prepare_suite
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "get_suite_preparer", fake_get_suite_preparer)
+
+    with caplog.at_level(logging.WARNING):
+        __main__.prepare(suite="all")
+
+    assert prepared == [("rtabench", 1), ("time_series", 1), ("time_series", 10)]
+    assert "Skipping clickbench: download hits.parquet" in caplog.text
+
+
+def test_prepare_explicit_manual_preparation_suite_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench"]
+
+    def fake_get_suite_preparer(_suite_name: SuiteName, _scale_factor: int) -> Callable[[], None]:
+        def prepare_suite() -> None:
+            raise ManualPreparationRequired("download hits.parquet")
+
+        return prepare_suite
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "get_suite_preparer", fake_get_suite_preparer)
+
+    with pytest.raises(SystemExit, match="download hits.parquet"):
+        __main__.prepare(suite="clickbench")
+
+
 def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -141,7 +184,8 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
 
-        def benchmark(self, _suite: str, _operation: str) -> None:
+        def benchmark(self, _suite: str, _operation: str, scale_factor: int | None = None) -> None:
+            assert scale_factor == 1
             raise KeyboardInterrupt
 
     writer = DummyWriter()
@@ -154,13 +198,14 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     def fake_resolve_dbs(_db: object) -> list[str]:
         return ["timescaledb"]
 
-    def fake_check_input_data(_suite_name: str) -> None:
+    def fake_check_input_data(_suite_name: str, scale_factor: int) -> None:
+        assert scale_factor == 1
         return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
 
-    def fake_get_dbs() -> dict[str, DummyDatabase]:
+    def fake_get_databases() -> dict[str, DummyDatabase]:
         return {"timescaledb": db_instance}
 
     def fake_start_db(_db: object) -> None:
@@ -177,7 +222,7 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
     monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
-    monkeypatch.setattr(__main__, "_get_dbs", fake_get_dbs)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
     monkeypatch.setattr(__main__, "mark_running_runs_failed", fake_mark_running_runs_failed)
@@ -207,13 +252,13 @@ def test_benchmark_all_uses_suite_supported_operations(
         def __init__(self) -> None:
             self._current_suite = None
             self.benchmarks = {"clickbench": DummyClickbenchSuite()}
-            self.operations: list[tuple[str, str]] = []
+            self.operations: list[tuple[str, str, int | None]] = []
 
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
 
-        def benchmark(self, suite: str, operation: str) -> None:
-            self.operations.append((suite, operation))
+        def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
+            self.operations.append((suite, operation, scale_factor))
 
     writer = DummyWriter()
     db_instance = DummyDatabase()
@@ -224,13 +269,14 @@ def test_benchmark_all_uses_suite_supported_operations(
     def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
         return ["clickhouse"]
 
-    def fake_check_input_data(_suite_name: SuiteName) -> None:
+    def fake_check_input_data(_suite_name: SuiteName, scale_factor: int) -> None:
+        assert scale_factor == 1
         return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
 
-    def fake_get_dbs() -> dict[DatabaseName, DummyDatabase]:
+    def fake_get_databases() -> dict[DatabaseName, DummyDatabase]:
         return {"clickhouse": db_instance}
 
     def fake_start_db(_db: DummyDatabase) -> None:
@@ -239,14 +285,283 @@ def test_benchmark_all_uses_suite_supported_operations(
     def fake_stop_db(_db: DummyDatabase) -> None:
         return None
 
+    validated_row_counts: list[tuple[str, str, int]] = []
+    validated_answer_hashes: list[tuple[str, str, int]] = []
+
+    def fake_assert_latest_query_row_counts(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_row_counts.append((system, suite, suite_scale_factor))
+
+    def fake_assert_latest_query_answer_hashes(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_answer_hashes.append((system, suite, suite_scale_factor))
+
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
     monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
-    monkeypatch.setattr(__main__, "_get_dbs", fake_get_dbs)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
+    monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
 
     __main__.benchmark(db="clickhouse", suite="clickbench", operation="all")
 
-    assert db_instance.operations == [("clickbench", "populate"), ("clickbench", "select")]
+    assert db_instance.operations == [("clickbench", "populate", 1), ("clickbench", "select", 1)]
+    assert validated_row_counts == [(__main__.SETTINGS.system, "clickbench", 1)]
+    assert validated_answer_hashes == [(__main__.SETTINGS.system, "clickbench", 1)]
+
+
+def test_benchmark_all_fans_out_time_series_scale_factors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyTimeSeriesSuite:
+        supported_operations = ("select",)
+
+    class DummyWriter:
+        def __init__(self) -> None:
+            self.queue = object()
+            self.result_queue = object()
+
+        def close(self) -> None:
+            return None
+
+    class DummyDatabase:
+        def __init__(self) -> None:
+            self._current_suite = None
+            self._current_suite_scale_factor = None
+            self.benchmarks = {"time_series": DummyTimeSeriesSuite()}
+            self.operations: list[tuple[str, str, int | None]] = []
+
+        def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
+            self.operations.append((suite, operation, scale_factor))
+
+    writer = DummyWriter()
+    db_instance = DummyDatabase()
+    checked_inputs: list[tuple[SuiteName, int]] = []
+    validated_row_counts: list[tuple[SuiteName, int]] = []
+    validated_answer_hashes: list[tuple[SuiteName, int]] = []
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["time_series"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["duckdb"]
+
+    def fake_check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
+        checked_inputs.append((suite_name, scale_factor))
+
+    def fake_start_writer_process(revision: str = "default") -> DummyWriter:
+        return writer
+
+    def fake_get_databases() -> dict[DatabaseName, DummyDatabase]:
+        return {"duckdb": db_instance}
+
+    def fake_start_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_stop_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_assert_latest_query_row_counts(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_row_counts.append((suite, suite_scale_factor))
+
+    def fake_assert_latest_query_answer_hashes(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_answer_hashes.append((suite, suite_scale_factor))
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
+    monkeypatch.setattr(__main__, "_start_db", fake_start_db)
+    monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
+    monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
+
+    __main__.benchmark(db="duckdb", suite="all", operation="all")
+
+    assert checked_inputs == [("time_series", 1), ("time_series", 10)]
+    assert db_instance.operations == [("time_series", "select", 1), ("time_series", "select", 10)]
+    assert validated_row_counts == [("time_series", 1), ("time_series", 10)]
+    assert validated_answer_hashes == [("time_series", 1), ("time_series", 10)]
+
+
+def test_benchmark_filters_unsupported_suites_before_input_checks_and_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyJsonbenchSuite:
+        supported_operations = ("select",)
+
+    class DummyWriter:
+        def __init__(self) -> None:
+            self.queue = object()
+            self.result_queue = object()
+
+        def close(self) -> None:
+            return None
+
+    class DummyDatabase:
+        def __init__(self) -> None:
+            self._current_suite = None
+            self._current_suite_scale_factor = None
+            self.benchmarks = {"jsonbench": DummyJsonbenchSuite()}
+            self.operations: list[tuple[str, str, int | None]] = []
+
+        def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
+            self.operations.append((suite, operation, scale_factor))
+
+    writer = DummyWriter()
+    db_instance = DummyDatabase()
+    checked_inputs: list[tuple[SuiteName, int]] = []
+    validated_row_counts: list[tuple[SuiteName, int]] = []
+    validated_answer_hashes: list[tuple[SuiteName, int]] = []
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench", "jsonbench"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["polars"]
+
+    def fake_check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
+        checked_inputs.append((suite_name, scale_factor))
+
+    def fake_start_writer_process(revision: str = "default") -> DummyWriter:
+        return writer
+
+    def fake_get_databases() -> dict[DatabaseName, DummyDatabase]:
+        return {"polars": db_instance}
+
+    def fake_start_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_stop_db(_db: DummyDatabase) -> None:
+        return None
+
+    def fake_assert_latest_query_row_counts(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_row_counts.append((suite, suite_scale_factor))
+
+    def fake_assert_latest_query_answer_hashes(
+        revision: str,
+        system: str,
+        suite: SuiteName,
+        suite_scale_factor: int,
+        mark_wrong_results: bool = False,
+    ) -> None:
+        assert revision == "default"
+        assert system == __main__.SETTINGS.system
+        assert mark_wrong_results is True
+        validated_answer_hashes.append((suite, suite_scale_factor))
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
+    monkeypatch.setattr(__main__, "_start_db", fake_start_db)
+    monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
+    monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
+
+    __main__.benchmark(db="polars", suite="all", operation="select")
+
+    assert checked_inputs == [("jsonbench", 10)]
+    assert db_instance.operations == [("jsonbench", "select", 10)]
+    assert validated_row_counts == [("jsonbench", 10)]
+    assert validated_answer_hashes == [("jsonbench", 10)]
+
+
+def test_default_benchmark_plan_skips_row_store_optional_suites(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench", "tpc_h", "tpc_ds", "time_series"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["duckdb", "postgres", "timescaledb"]
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+
+    plan = __main__._resolve_benchmark_plan(db="all", suite="all", scale_factor=None)
+
+    assert ("duckdb", "tpc_h", 10) in plan
+    assert ("duckdb", "tpc_h", 50) in plan
+    assert ("duckdb", "tpc_ds", 1) in plan
+    assert ("postgres", "clickbench", 1) in plan
+    assert ("postgres", "time_series", 1) in plan
+    assert ("postgres", "time_series", 10) in plan
+    assert ("postgres", "tpc_h", 10) not in plan
+    assert ("postgres", "tpc_h", 50) not in plan
+    assert ("postgres", "tpc_ds", 1) not in plan
+    assert ("timescaledb", "tpc_h", 10) not in plan
+    assert ("timescaledb", "tpc_h", 50) not in plan
+    assert ("timescaledb", "tpc_ds", 1) not in plan
+
+
+def test_explicit_row_store_optional_suite_stays_in_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["tpc_h"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["postgres", "timescaledb"]
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+
+    assert __main__._resolve_benchmark_plan(db="all", suite="tpc_h", scale_factor=None) == [
+        ("postgres", "tpc_h", 10),
+        ("timescaledb", "tpc_h", 10),
+    ]

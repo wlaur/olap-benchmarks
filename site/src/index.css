@@ -1,20 +1,33 @@
 @import "tailwindcss";
-@import "react-grid-layout/css/styles.css";
-@import "react-resizable/css/styles.css";
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-surface-primary: #090b10;
-  --color-surface-raised: #1e2330;
-  --color-surface-inset: #0e1018;
+  --color-surface-primary: #070a0f;
+  --color-surface-raised: #111722;
+  --color-surface-inset: #0b1018;
+  --color-surface-elevated: #182232;
 
-  --color-border-subtle: rgba(148, 163, 184, 0.08);
-  --color-border-default: rgba(148, 163, 184, 0.18);
+  --color-border-subtle: rgba(148, 163, 184, 0.15);
+  --color-border-default: rgba(148, 163, 184, 0.3);
+  --color-border-strong: rgba(148, 163, 184, 0.48);
 
-  --color-accent-200: #d6e6ff;
-  --color-accent-300: #9fc5ff;
-  --color-accent-400: #5a97ff;
-  --color-accent-500: #2f6fde;
+  --color-text-primary: #f4f7fb;
+  --color-text-secondary: #d3dce8;
+  --color-text-muted: #9dacbf;
+  --color-text-faint: #7f8fa6;
+
+  --color-slate-50: #f4f7fb;
+  --color-slate-100: #e8eef6;
+  --color-slate-200: #d3dce8;
+  --color-slate-300: #b8c5d5;
+  --color-slate-400: #9dacbf;
+  --color-slate-500: #7f8fa6;
+  --color-slate-600: #536176;
+
+  --color-accent-200: #dceaff;
+  --color-accent-300: #a8c8ff;
+  --color-accent-400: #6da0ff;
+  --color-accent-500: #3a78e8;
 }
 
 @layer base {
@@ -26,6 +39,13 @@
 
   body {
     margin: 0;
+    background: var(--color-surface-primary);
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+      monospace;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
   }
 
   button:not(:disabled),
@@ -69,59 +89,91 @@
   animation: panel-enter 200ms ease-out;
 }
 
-.panel-scrollbar,
-.panel-scrollbar .cm-scroller {
+.panel-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
-}
-
-.panel-scrollbar,
-.panel-scrollbar .cm-scroller {
   scrollbar-gutter: stable;
 }
 
-.panel-scrollbar::-webkit-scrollbar,
-.panel-scrollbar .cm-scroller::-webkit-scrollbar {
+.panel-scrollbar::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
 
-.panel-scrollbar::-webkit-scrollbar-track,
-.panel-scrollbar .cm-scroller::-webkit-scrollbar-track {
+.panel-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.panel-scrollbar::-webkit-scrollbar-thumb,
-.panel-scrollbar .cm-scroller::-webkit-scrollbar-thumb {
+.panel-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(100, 116, 139, 0.4);
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
 
-.panel-scrollbar::-webkit-scrollbar-thumb:hover,
-.panel-scrollbar .cm-scroller::-webkit-scrollbar-thumb:hover {
+.panel-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.55);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 
-.panel-scrollbar::-webkit-scrollbar-corner,
-.panel-scrollbar .cm-scroller::-webkit-scrollbar-corner {
+.panel-scrollbar::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-.react-grid-item > .react-resizable-handle::after {
-  border-color: rgba(148, 163, 184, 0.3) !important;
+/* One Dark token colors for inline SQL highlighting (matches CodeMirror viewer). */
+.tok-keyword {
+  color: #c678dd;
 }
-
-.react-grid-item.react-grid-placeholder {
-  background: rgba(90, 151, 255, 0.15) !important;
-  border: 1px dashed rgba(90, 151, 255, 0.4);
-  border-radius: 1rem;
+.tok-controlKeyword,
+.tok-modifier,
+.tok-operatorKeyword {
+  color: #c678dd;
 }
-
-.react-grid-layout,
-.react-grid-item {
-  min-width: 0;
+.tok-string,
+.tok-string2 {
+  color: #98c379;
+}
+.tok-number,
+.tok-bool,
+.tok-null {
+  color: #d19a66;
+}
+.tok-comment,
+.tok-lineComment,
+.tok-blockComment {
+  color: #5c6370;
+  font-style: italic;
+}
+.tok-typeName,
+.tok-className {
+  color: #e5c07b;
+}
+.tok-function,
+.tok-macroName,
+.tok-propertyName {
+  color: #61afef;
+}
+.tok-variableName,
+.tok-name {
+  color: #e06c75;
+}
+.tok-operator,
+.tok-derefOperator,
+.tok-arithmeticOperator,
+.tok-logicOperator,
+.tok-bitwiseOperator,
+.tok-compareOperator,
+.tok-updateOperator,
+.tok-definitionOperator {
+  color: #56b6c2;
+}
+.tok-punctuation,
+.tok-separator,
+.tok-bracket,
+.tok-paren,
+.tok-brace,
+.tok-squareBracket,
+.tok-angleBracket {
+  color: #abb2bf;
 }

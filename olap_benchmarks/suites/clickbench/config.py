@@ -10,17 +10,24 @@ import polars as pl
 from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
+from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
 
-ITERATIONS = 3
+ITERATIONS = 5
+CLICKBENCH_QUERY_COUNT = 43
+CLICKBENCH_DATASET_URL = "https://datasets.clickhouse.com/hits_compatible/hits.parquet"
 
 
 def prepare_data() -> None:
-    (SETTINGS.input_data_directory / "clickbench").mkdir(exist_ok=True, parents=True)
+    destination = SETTINGS.input_data_directory / "clickbench" / "hits.parquet"
+    download_file(CLICKBENCH_DATASET_URL, destination)
 
-    # TODO: download https://datasets.clickhouse.com/hits_compatible/hits.parquet and move to data/input/clickbench
-    raise NotImplementedError
+
+# The source parquet stores these as epoch integers; every engine's populate
+# path must cast them to real timestamp/date columns.
+CLICKBENCH_TIMESTAMP_COLUMNS = ("EventTime", "ClientEventTime", "LocalEventTime")
+CLICKBENCH_DATE_COLUMNS = ("EventDate",)
 
 
 class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
@@ -31,13 +38,10 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
 
     def load_dataset(self) -> pl.LazyFrame:
         # parquet file stores these as integers, the schema expects correct dtypes
-        timestamp_columns = ["EventTime", "ClientEventTime", "LocalEventTime"]
-        date_columns = ["EventDate"]
-
         return (
             pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
-            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in timestamp_columns)
-            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in date_columns)
+            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in CLICKBENCH_TIMESTAMP_COLUMNS)
+            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in CLICKBENCH_DATE_COLUMNS)
         )
 
     @property
@@ -79,32 +83,51 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return True
 
-    def select(self) -> None:
-        t0 = perf_counter()
-
-        # NOTE: clickbench query files should not be formatted, need to have one query per line
+    def load_queries(self) -> list[str]:
         with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.db.name}.sql").open() as f:
             queries = f.readlines()
 
+        if len(queries) != CLICKBENCH_QUERY_COUNT:
+            raise RuntimeError(f"Expected {CLICKBENCH_QUERY_COUNT} ClickBench queries for {self.db.name}")
+        return queries
+
+    def select(self) -> None:
+        t0 = perf_counter()
+        queries = self.load_queries()
+
+        failed_queries = 0
         for idx, query in enumerate(queries):
             query_name = f"Q{idx}"
+            progress_label = f"({idx + 1:_}/{len(queries):_})"
 
             if not self.include_query(query_name):
+                self.record_skipped_query_steps(
+                    query_name,
+                    ITERATIONS,
+                    result_status="skipped",
+                    reason="query excluded by suite/database",
+                )
                 continue
 
-            with self.db.query_context("clickbench", query_name):
-                for it in range(1, ITERATIONS + 1):
-                    df, t = self.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=it,
-                        query=query,
-                        fetch_kwargs=self.fetch_kwargs,
-                    )
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                iterations=ITERATIONS,
+                query_loader=lambda query=query: query,
+                fetch_kwargs_factory=lambda: self.fetch_kwargs,
+                progress_label=progress_label,
+                log_success=lambda it, df, t, query_name=query_name, progress_label=progress_label: _LOGGER.info(
+                    f"Executed {query_name} {progress_label} "
+                    f"iteration {it:_}/{ITERATIONS:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                ),
+            )
+            if not ok:
+                failed_queries += 1
 
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(queries):_}) "
-                        f"iteration {it:_}/{ITERATIONS:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+        if failed_queries:
+            _LOGGER.warning(
+                f"ClickBench select completed on {self.db.name} with {failed_queries:_} failed "
+                f"{'queries' if failed_queries != 1 else 'query'}"
+            )
 
         _LOGGER.info(f"Executed {len(queries):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds")

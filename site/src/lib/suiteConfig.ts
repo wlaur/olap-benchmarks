@@ -1,4 +1,4 @@
-import type { BenchmarkSuiteId } from "./benchmarks"
+import type { BenchmarkDefinition, BenchmarkSuiteId } from "./benchmarks"
 import type { BenchmarkOperation } from "./types"
 
 export interface ParsedQueryName {
@@ -10,13 +10,12 @@ export interface ParsedQueryName {
 export interface SuiteConfig {
   id: BenchmarkSuiteId
   label: string
+  defaultScaleFactor: number
+  /** Key into queries.json, which is keyed by suite source directory name. */
+  queriesKey: string
   operations: BenchmarkOperation[]
   parseQueryName: (queryName: string) => ParsedQueryName
   compareQueryNames: (left: string, right: string) => number
-}
-
-function toTitleCase(value: string): string {
-  return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function parseTimeSeriesQueryName(queryName: string): ParsedQueryName {
@@ -72,50 +71,31 @@ function parseGenericQueryName(queryName: string): ParsedQueryName {
 }
 
 function compareGenericQueryNames(left: string, right: string): number {
-  return left.localeCompare(right)
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })
 }
 
-const TIME_SERIES_CONFIG: SuiteConfig = {
-  id: "time_series",
-  label: "Time Series",
-  operations: ["populate", "mutate", "select"],
-  parseQueryName: parseTimeSeriesQueryName,
-  compareQueryNames: compareTimeSeriesQueryNames,
+export function getSuiteConfig(definition: BenchmarkDefinition): SuiteConfig {
+  const parser =
+    definition.queryNameParser === "time_series"
+      ? {
+          parseQueryName: parseTimeSeriesQueryName,
+          compareQueryNames: compareTimeSeriesQueryNames,
+        }
+      : {
+          parseQueryName: parseGenericQueryName,
+          compareQueryNames: compareGenericQueryNames,
+        }
+
+  return {
+    id: definition.id,
+    queriesKey: definition.queriesKey,
+    label: definition.title,
+    defaultScaleFactor: definition.defaultScaleFactor,
+    operations: definition.operations,
+    ...parser,
+  }
 }
 
-const RTABENCH_CONFIG: SuiteConfig = {
-  id: "rtabench",
-  label: "RTABench",
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
+function toTitleCase(value: string): string {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
-
-const CLICKBENCH_CONFIG: SuiteConfig = {
-  id: "clickbench",
-  label: "ClickBench",
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const KAGGLE_AIRBNB_CONFIG: SuiteConfig = {
-  id: "kaggle_airbnb",
-  label: "Kaggle Airbnb",
-  operations: ["populate", "select"],
-  parseQueryName: parseGenericQueryName,
-  compareQueryNames: compareGenericQueryNames,
-}
-
-const SUITE_CONFIGS: Record<BenchmarkSuiteId, SuiteConfig> = {
-  time_series: TIME_SERIES_CONFIG,
-  rtabench: RTABENCH_CONFIG,
-  clickbench: CLICKBENCH_CONFIG,
-  kaggle_airbnb: KAGGLE_AIRBNB_CONFIG,
-}
-
-export function getSuiteConfig(suiteId: BenchmarkSuiteId): SuiteConfig {
-  return SUITE_CONFIGS[suiteId]
-}
-
-export const METRIC_SAMPLE_RATE_S = 2

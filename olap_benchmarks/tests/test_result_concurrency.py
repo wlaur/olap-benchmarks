@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..metrics.storage import Storage, WriterMessage, start_writer_process
 from ..results import get_results_engine
-from ..results.models import QueryExecution
+from ..results.models import QueryExecution, Run, RunStep, SystemSnapshot
 from ..settings import setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,5 +89,109 @@ def test_writer_persists_query_execution_rows(tmp_path: Path, monkeypatch: pytes
             assert rows[0].run_id == 123
             assert rows[0].run_step_id == 456
             assert rows[0].query == "select 1"
+    finally:
+        engine.dispose()
+
+
+def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OLAP_BENCHMARKS_RESULTS_DIRECTORY", str(tmp_path))
+
+    writer = start_writer_process()
+    storage = Storage(writer.queue, writer.result_queue)
+
+    run_id = storage.insert_run(
+        suite="time_series",
+        suite_scale_factor=1,
+        db="duckdb",
+        db_version="test",
+        operation="select",
+        system="test",
+        started_at=datetime(2026, 1, 1, 12, 0, 0),
+        system_metadata={
+            "host": {
+                "os": "TestOS",
+                "os_release": "1",
+                "machine": "test-machine",
+                "processor": "test-cpu",
+                "cpu_count_logical": 8,
+                "memory_total_mb": 16_384,
+            },
+            "python": {"version": "3.14"},
+        },
+        metadata={"execution": {"mode": "in_process"}},
+    )
+    second_run_id = storage.insert_run(
+        suite="time_series",
+        suite_scale_factor=1,
+        db="clickhouse",
+        db_version="test",
+        operation="select",
+        system="test",
+        started_at=datetime(2026, 1, 1, 12, 0, 3),
+        system_metadata={
+            "python": {"version": "3.14"},
+            "host": {
+                "memory_total_mb": 16_384,
+                "cpu_count_logical": 8,
+                "processor": "test-cpu",
+                "machine": "test-machine",
+                "os_release": "1",
+                "os": "TestOS",
+            },
+        },
+        metadata={"execution": {"mode": "container"}},
+    )
+    step_id = storage.start_step(
+        run_id=run_id,
+        step_type="query",
+        step_name="query",
+        query_name="q1",
+        iteration=1,
+        started_at=datetime(2026, 1, 1, 12, 0, 1),
+        result_status=None,
+        iteration_role="first_run",
+    )
+    storage.finish_step(
+        step_id=step_id,
+        finished_at=datetime(2026, 1, 1, 12, 0, 2),
+        status="completed",
+        result_status="ok",
+        row_count=1,
+    )
+    writer.close()
+
+    engine = get_results_engine(read_only=False, db_path=tmp_path / "default.db")
+
+    try:
+        with Session(engine) as session:
+            run = session.get_one(Run, run_id)
+            second_run = session.get_one(Run, second_run_id)
+            step = session.get_one(RunStep, step_id)
+            assert run.system_snapshot_id is not None
+            assert second_run.system_snapshot_id == run.system_snapshot_id
+            snapshot = session.get_one(SystemSnapshot, run.system_snapshot_id)
+
+            assert run.metadata_json == {"execution": {"mode": "in_process"}}
+            assert snapshot.system == "test"
+            assert snapshot.os == "TestOS"
+            assert snapshot.machine == "test-machine"
+            assert snapshot.cpu_count_logical == 8
+            assert snapshot.memory_total_mb == 16_384
+            assert snapshot.metadata_json == {
+                "host": {
+                    "cpu_count_logical": 8,
+                    "machine": "test-machine",
+                    "memory_total_mb": 16_384,
+                    "os": "TestOS",
+                    "os_release": "1",
+                    "processor": "test-cpu",
+                },
+                "python": {"version": "3.14"},
+            }
+            assert step.result_status == "ok"
+            assert step.iteration_role == "first_run"
+            assert step.row_count == 1
     finally:
         engine.dispose()

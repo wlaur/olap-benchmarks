@@ -1,11 +1,7 @@
-import { sql } from "@codemirror/lang-sql"
-import { syntaxHighlighting } from "@codemirror/language"
-import { EditorState } from "@codemirror/state"
-import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark"
-import { EditorView, lineNumbers } from "@codemirror/view"
-import { useEffect, useRef } from "react"
+import { Fragment, useMemo } from "react"
 
 import { cn } from "../lib/cn"
+import { highlightSqlLines } from "../lib/highlightSql"
 
 interface SqlCodeViewProps {
   code: string
@@ -14,114 +10,50 @@ interface SqlCodeViewProps {
   fillHeight?: boolean
 }
 
-function createSqlViewerTheme(wrapLines: boolean, fillHeight: boolean) {
-  return EditorView.theme(
-    {
-      "&": {
-        backgroundColor: "transparent",
-        color: "#cbd5e1",
-        fontSize: "0.875rem",
-        height: fillHeight ? "100%" : "auto",
-        minHeight: 0,
-      },
-      ".cm-editor": {
-        backgroundColor: "transparent",
-        display: "flex",
-        flexDirection: "column",
-        height: fillHeight ? "100%" : "auto",
-        minHeight: 0,
-        maxWidth: "100%",
-      },
-      ".cm-content": {
-        padding: "1rem",
-        fontFamily:
-          "ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace",
-        lineHeight: "1.65",
-        minWidth: wrapLines ? "0" : "max-content",
-      },
-      ".cm-focused": {
-        outline: "none",
-      },
-      ".cm-gutters": {
-        minWidth: "2.75rem",
-        border: "none",
-        backgroundColor: "transparent",
-        color: "#475569",
-        position: "relative",
-        left: "auto",
-      },
-      ".cm-activeLine, .cm-activeLineGutter": {
-        backgroundColor: "transparent",
-      },
-      ".cm-selectionBackground, ::selection": {
-        backgroundColor: "rgba(108, 142, 239, 0.12) !important",
-      },
-      ".cm-lineNumbers .cm-gutterElement": {
-        padding: "0 0.75rem 0 1rem",
-      },
-      ".cm-scroller": {
-        flex: fillHeight ? "1 1 auto" : "0 1 auto",
-        height: fillHeight ? "100%" : "auto",
-        overflowX: wrapLines ? "hidden" : "auto",
-        overflowY: "auto",
-        minWidth: 0,
-        minHeight: 0,
-        maxWidth: "100%",
-        overscrollBehavior: "contain",
-      },
-    },
-    { dark: true },
-  )
-}
-
-function createSqlViewerState(code: string, wrapLines: boolean, fillHeight: boolean): EditorState {
-  return EditorState.create({
-    doc: code,
-    extensions: [
-      lineNumbers(),
-      sql(),
-      createSqlViewerTheme(wrapLines, fillHeight),
-      syntaxHighlighting(oneDarkHighlightStyle),
-      EditorState.readOnly.of(true),
-      EditorView.editable.of(false),
-      wrapLines ? EditorView.lineWrapping : [],
-    ],
-  })
-}
-
 export function SqlCodeView({
   code,
   wrapLines = false,
   className,
   fillHeight = true,
 }: SqlCodeViewProps) {
-  const hostRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
-
-    const view = new EditorView({
-      state: createSqlViewerState(code, wrapLines, fillHeight),
-      parent: host,
-    })
-
-    return () => {
-      view.destroy()
-    }
-  }, [code, wrapLines, fillHeight])
+  const lines = useMemo(() => highlightSqlLines(code), [code])
+  const gutterWidth = `calc(${Math.max(2, String(lines.length).length)}ch + 1.75rem)`
 
   return (
     <div
-      ref={hostRef}
       aria-label="SQL query viewer"
       className={cn(
-        wrapLines
-          ? "panel-scrollbar min-h-0 w-full min-w-0 overflow-hidden"
-          : "panel-scrollbar min-h-0 w-full min-w-0 overflow-hidden",
+        "panel-scrollbar overflow-auto font-mono text-sm leading-[1.65] text-[#cbd5e1]",
         fillHeight ? "h-full" : "h-auto",
         className,
       )}
-    />
+    >
+      <div
+        className={cn("grid items-start py-3", wrapLines ? "min-w-full" : "min-w-max")}
+        style={{ gridTemplateColumns: `${gutterWidth} minmax(0, 1fr)` }}
+      >
+        {lines.map((line, index) => (
+          <Fragment key={index}>
+            <span className="pr-3 pl-4 text-right text-[#475569] tabular-nums select-none">
+              {index + 1}
+            </span>
+            <span
+              className={cn(
+                "pr-4",
+                wrapLines ? "break-words whitespace-pre-wrap" : "whitespace-pre",
+              )}
+            >
+              {line.length === 0
+                ? " "
+                : line.map((token, tokenIdx) => (
+                    <span key={tokenIdx} className={token.className || undefined}>
+                      {token.text}
+                    </span>
+                  ))}
+            </span>
+          </Fragment>
+        ))}
+      </div>
+    </div>
   )
 }

@@ -21,8 +21,10 @@ const DUCKDB_BUNDLES: duckdb.DuckDBBundles = {
   },
 }
 
+export type ResultsDb = Kysely<DB>
+
 let duckDbPromise: Promise<duckdb.AsyncDuckDB> | null = null
-let kyselyInstance: Kysely<DB> | null = null
+let kyselyInstance: ResultsDb | null = null
 
 async function initDuckDb(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await duckdb.selectBundle(DUCKDB_BUNDLES)

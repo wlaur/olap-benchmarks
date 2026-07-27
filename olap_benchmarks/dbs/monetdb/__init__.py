@@ -1,21 +1,31 @@
 import logging
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name
+from ...suites import BenchmarkSuite
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
-from ...suites.time_series.config import TimeSeries
+from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
+from ..utils import tracked_commit
 from . import insert as _insert_mod
+from .adbc import (
+    delete_adbc,
+    fetch_adbc,
+    insert_adbc,
+    insert_parquet_adbc,
+    upsert_adbc,
+)
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import (
     DEFAULT_LAZY_WRITE,
     ColumnGroupWrite,
     LazyWrite,
-    MonetDBInsertKwargs,
     insert,
     upsert,
 )
@@ -24,30 +34,28 @@ from .utils import get_pymonetdb_connection
 
 _LOGGER = logging.getLogger(__name__)
 
-LOCAL_IMAGE = False
 
-if LOCAL_IMAGE:
-    # built from https://github.com/MonetDBSolutions/monetdb-docker
-    # docker build -t monetdb-local:Mar2025-11 -f ubuntu.dockerfile --platform linux/amd64 --build-arg BRANCH=Mar2025_11 . # noqa: E501
-    # NOTE: getting 401 error from https://www.monetdb.org/hg/MonetDB/archive/${BRANCH}.tar.bz2
-    # need to modify Dockerfile to use https://github.com/MonetDB/MonetDB/archive/refs/tags/${BRANCH}.tar.gz instead
-    # change in monetdb-docker/ubuntu.Dockerfile:
-    # RUN curl -L -o MonetDB.tar.gz https://github.com/MonetDB/MonetDB/archive/refs/tags/${BRANCH}.tar.gz
-    # RUN tar zxf MonetDB.tar.gz
+@dataclass(frozen=True, slots=True)
+class MonetDBRelease:
+    label: str
+    runtime_version: str
+    arm64_image_revision: int
 
-    # TODO: fails with "#main-thread: log_read_types_file: ERROR: unknown type in log file 'mbr'"
-    # when starting a db created with Mar2025-SP1
-    # (this is an unreleased version, will probably be fixed before SP2 is released)
-    _version = "Mar2025-11"
-    _docker_image = f"monetdb-local:{_version}"
-else:
-    _version = "Dec2025-SP1"
-    _docker_image = f"monetdb/monetdb:{_version}"
+    @property
+    def amd64_container_image(self) -> str:
+        return f"monetdb/monetdb:{self.label}"
 
-VERSION = _version
-DOCKER_IMAGE = _docker_image
+    @property
+    def arm64_container_image(self) -> str:
+        return f"wlaur/monetdb-container:{self.runtime_version}-{self.arm64_image_revision}"
 
-MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
+
+MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
+
+MONETDB_CONNECTION_STRINGS = {
+    "staged": "monetdb+pymonetdb://monetdb:monetdb@localhost:50000/benchmark",
+    "adbc": "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark",
+}
 
 
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
@@ -58,14 +66,29 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
-        kwargs: MonetDBInsertKwargs = {"lazy_write": ColumnGroupWrite(group_size=10)}
-        self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **kwargs)
+        if MONETDB_SETTINGS.driver == "adbc":
+            self.db.insert_parquet(
+                get_time_series_input_files(self.scale_factor)[table_name],
+                table_name,
+                primary_key=primary_key,
+                not_null=not_null,
+            )
+            return
+        self.db.insert(
+            df,
+            table_name,
+            primary_key=primary_key,
+            not_null=not_null,
+            lazy_write=ColumnGroupWrite(group_size=10),
+        )
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        assert self.db.context is not None
+        assert self.db.current_query_name is not None
 
-        if "batch_export" in self.db.context.query_name:
+        if MONETDB_SETTINGS.driver == "adbc":
+            return {"method": "adbc"}
+        if "batch_export" in self.db.current_query_name:
             return {"method": "binary"}
 
         return {"method": "pymonetdb"}
@@ -74,13 +97,15 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
 class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        assert self.db.context is not None
+        assert self.db.current_query_name is not None
 
+        if MONETDB_SETTINGS.driver == "adbc":
+            return {"method": "adbc"}
         pymonetdb_queries = [
             "01_calendar_count",
         ]
 
-        if any(n in self.db.context.query_name for n in pymonetdb_queries):
+        if any(n in self.db.current_query_name for n in pymonetdb_queries):
             return {"method": "pymonetdb"}
 
         return {"method": "binary"}
@@ -88,29 +113,51 @@ class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
 
 class MonetDB(Database):
     name: DatabaseName = "monetdb"
-    version: str = VERSION
+    version: str = MONETDB_RELEASE.label
+    container_image: ClassVar[str | None] = MONETDB_RELEASE.amd64_container_image
+    arm64_container_image: ClassVar[str | None] = MONETDB_RELEASE.arm64_container_image
+    supports_arm64_containers: ClassVar[bool] = True
+    expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
 
-    connection_string: str = MONETDB_CONNECTION_STRING
+    connection_string: str = MONETDB_CONNECTION_STRINGS[MONETDB_SETTINGS.driver]
+
+    @property
+    def database_directory(self) -> Path:
+        directory = (
+            SETTINGS.database_directory
+            / self.name
+            / format_suite_data_directory_name(self.current_suite, self.current_suite_scale_factor)
+            / MONETDB_SETTINGS.driver
+        )
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @property
+    def metric_directories(self) -> tuple[Path, ...]:
+        return (self.database_directory, SETTINGS.temporary_directory / "monetdb")
 
     @property
     def start(self) -> str:
         (SETTINGS.temporary_directory / "monetdb/data").mkdir(exist_ok=True, parents=True)
 
-        parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 50000:50000",
-            f"-v {self.database_directory.as_posix()}:/var/monetdb5/dbfarm",
-            f"-v {SETTINGS.temporary_directory.as_posix()}/monetdb/data:/data"
-            if not MONETDB_SETTINGS.client_file_transfer
-            else "",
-            "-e MDB_DB_ADMIN_PASS=monetdb -e MDB_CREATE_DBS=benchmark",
-            DOCKER_IMAGE,
-        ]
+        mounts = {self.database_directory.as_posix(): "/var/monetdb5/dbfarm"}
+        if not MONETDB_SETTINGS.client_file_transfer:
+            mounts[f"{SETTINGS.temporary_directory.as_posix()}/monetdb/data"] = "/data"
 
-        return " ".join(parts)
+        image = self.resolved_container_image
+        if image is None:
+            raise RuntimeError("MonetDB container image is not configured")
+
+        return self.docker_run_command(
+            image,
+            ports={"50000": "50000"},
+            mounts=mounts,
+            env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},
+        )
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
-            self._connection = None
+            self.close_connection()
 
         if self._connection is not None:
             return self._connection
@@ -126,13 +173,26 @@ class MonetDB(Database):
 
         return self._connection
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch(
+            "select value as version from sys.env() where name = 'monet_version'",
+            schema={"version": pl.String},
+            method="adbc" if MONETDB_SETTINGS.driver == "adbc" else "pymonetdb",
+        )
+        return str(df.item(0, 0))
+
     def fetch(
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-        method: Literal["binary", "pymonetdb"] | None = None,
+        method: Literal["binary", "pymonetdb", "adbc"] | None = None,
     ) -> pl.DataFrame:
-        method = method or MONETDB_SETTINGS.default_fetch_method
+        if MONETDB_SETTINGS.driver == "adbc":
+            if method not in (None, "adbc"):
+                raise ValueError(f"Fetch method '{method}' is unavailable with the ADBC connection")
+            method = "adbc"
+        else:
+            method = method or MONETDB_SETTINGS.default_fetch_method
 
         _LOGGER.info(f"Fetching with {method=}")
 
@@ -140,6 +200,8 @@ class MonetDB(Database):
             return fetch_binary(query, self.connect(), schema)
         elif method == "pymonetdb":
             df = fetch_pymonetdb(query, self.connect())
+        elif method == "adbc":
+            return fetch_adbc(query, self.connect(), schema)
         else:
             raise ValueError(f"Invalid method: '{method}'")
 
@@ -152,17 +214,15 @@ class MonetDB(Database):
         if self._connection is None:
             return
 
-        # MonetDB reads and writes may use the raw DBAPI cursor directly, bypassing
-        # SQLAlchemy's transaction bookkeeping. Clear both SQLAlchemy's view and the
-        # underlying MonetDB transaction state.
         super().rollback()
-        get_pymonetdb_connection(self._connection).rollback()
+        if MONETDB_SETTINGS.driver == "staged":
+            get_pymonetdb_connection(self._connection).rollback()
 
     def get_table_names(self) -> set[TableName]:
         df = self.fetch(
             "select name as table_name from sys.tables where system = false",
             schema={"table_name": pl.String},
-            method="pymonetdb",
+            method="adbc" if MONETDB_SETTINGS.driver == "adbc" else "pymonetdb",
         )
         return set(df.get_column("table_name").to_list())
 
@@ -183,21 +243,93 @@ class MonetDB(Database):
         exists = bool(result.scalar())
 
         try:
-            return insert(df, table, self.connect(), primary_key, not_null, create=not exists, lazy_write=lazy_write)
+            if MONETDB_SETTINGS.driver == "adbc":
+                return insert_adbc(
+                    df,
+                    table,
+                    self.connect(),
+                    primary_key,
+                    not_null,
+                    create=not exists,
+                )
+            return insert(
+                df,
+                table,
+                self.connect(),
+                primary_key,
+                not_null,
+                create=not exists,
+                lazy_write=lazy_write,
+            )
         except Exception:
             self.rollback()
             raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        if MONETDB_SETTINGS.driver == "adbc":
+            return upsert_adbc(df, table, self.connect(), primary_key=primary_key)
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
+    def insert_parquet(
+        self,
+        path: Path,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        if MONETDB_SETTINGS.driver != "adbc":
+            return super().insert_parquet(path, table, primary_key=primary_key, not_null=not_null)
+
+        statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
+        with self.record_query_execution(statement):
+            result = self.connect().execute(
+                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
+                {"table_name": table},
+            )
+        exists = bool(result.scalar())
+
+        try:
+            insert_parquet_adbc(
+                path,
+                table,
+                self.connect(),
+                primary_key,
+                not_null,
+                create=not exists,
+            )
+        except Exception:
+            self.rollback()
+            raise
+
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        if MONETDB_SETTINGS.driver == "adbc":
+            return delete_adbc(table, self.connect(), primary_key=primary_key, keys=keys)
         return _insert_mod.delete(table, self.connect(), primary_key=primary_key, keys=keys)
 
-    @property
-    def time_series(self) -> MonetDBTimeSeries:
-        return MonetDBTimeSeries(db=self)
+    def analyze_table(self, table: TableName, columns: list[str] | None = None) -> None:
+        # ANALYZE refreshes column statistics (min/max, sortedness, uniqueness)
+        # used by the optimiser. After a bulk binary copy the catalog otherwise
+        # reports defaults, which silently disables some predicate-pushdown
+        # optimisations on time-bounded queries. MonetDB's ANALYZE always
+        # requires a schema-qualified name -- unqualified is parsed as
+        # ANALYZE <schema>.
+        #
+        # On wide tables (1500+ columns) analysing every column is expensive
+        # (~3 min for data_large) and most of those columns hold random
+        # process values that don't benefit query planning. Passing a column
+        # list restricts the work to the columns that actually drive plans
+        # (typically the time column).
+        cols_clause = " (" + ", ".join(f'"{c}"' for c in columns) + ")" if columns else ""
+        statement = f'ANALYZE sys."{table}"{cols_clause}'
+        con = self.connect(reconnect=True)
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+        tracked_commit(con)
+        _LOGGER.info(f"Analyzed table {table}{' columns ' + ', '.join(columns) if columns else ''}")
 
-    @property
-    def kaggle_airbnb(self) -> MonetDBKaggleAirbnb:
-        return MonetDBKaggleAirbnb(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "time_series": MonetDBTimeSeries,
+            "kaggle_airbnb": MonetDBKaggleAirbnb,
+        }
