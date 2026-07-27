@@ -102,6 +102,10 @@ class Database(BaseModel, ABC):
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
+    @property
+    def metric_directories(self) -> tuple[Path, ...]:
+        return (self.database_directory,)
+
     def set_queues(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self._queue = queue
         self._result_queue = result_queue
@@ -559,6 +563,7 @@ class Database(BaseModel, ABC):
             return
 
         with self.phase_context("restart"):
+            self.close_connection()
             _LOGGER.info(f"Restarting service {self.name}")
             for command in commands:
                 rc = run_shell(command)
@@ -663,6 +668,15 @@ class Database(BaseModel, ABC):
         not_null: str | list[str] | None = None,
     ) -> None: ...
 
+    def insert_parquet(
+        self,
+        path: Path,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        self.insert(pl.scan_parquet(path), table, primary_key=primary_key, not_null=not_null)
+
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
 
@@ -760,13 +774,10 @@ class Database(BaseModel, ABC):
         )
 
         metric_process, stop_event = start_metric_sampler(
-            db=self.name,
-            suite=suite,
-            suite_scale_factor=benchmark.scale_factor,
             container_names=self.metric_container_names,
+            metric_directories=self.metric_directories,
             run_id=self.run_id,
             storage=self.result_storage,
-            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
         )
 
         status: RunStatus = "completed"
@@ -790,10 +801,10 @@ class Database(BaseModel, ABC):
             error_message = str(exc)
             raise
         finally:
+            finished_at = datetime.now(UTC).replace(tzinfo=None)
             stop_event.set()
             metric_process.join()
 
-            finished_at = datetime.now(UTC).replace(tzinfo=None)
             self.result_storage.finish_run(
                 run_id=self.run_id,
                 finished_at=finished_at,

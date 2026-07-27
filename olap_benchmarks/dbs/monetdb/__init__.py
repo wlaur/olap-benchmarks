@@ -1,12 +1,13 @@
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name
 from ...suites import BenchmarkSuite
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries, get_time_series_input_files
@@ -17,6 +18,7 @@ from .adbc import (
     delete_adbc,
     fetch_adbc,
     insert_adbc,
+    insert_parquet_adbc,
     upsert_adbc,
 )
 from .fetch import fetch_binary, fetch_pymonetdb
@@ -64,6 +66,14 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
+        if MONETDB_SETTINGS.driver == "adbc":
+            self.db.insert_parquet(
+                get_time_series_input_files(self.scale_factor)[table_name],
+                table_name,
+                primary_key=primary_key,
+                not_null=not_null,
+            )
+            return
         self.db.insert(
             df,
             table_name,
@@ -76,29 +86,12 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.current_query_name is not None
 
+        if MONETDB_SETTINGS.driver == "adbc":
+            return {"method": "adbc"}
         if "batch_export" in self.db.current_query_name:
             return {"method": "binary"}
 
         return {"method": "pymonetdb"}
-
-    def populate(self, restart: bool = True) -> None:
-        # Skip the parent class's restart so we can slot ANALYZE in between
-        # the inserts and the final restart event.
-        super().populate(restart=False)
-
-        # MonetDB does not auto-collect column statistics on the load path; the
-        # optimizer falls back to defaults until ANALYZE has been run, which
-        # leaves predicate pushdown on the time column off the table.
-        # We only analyse the time column -- value columns hold random
-        # process readings whose stats don't help any of the benchmark queries
-        # and a full ANALYZE on the 1500-column wide tables would otherwise
-        # add ~3 min for ~250 ms of total query speed-up.
-        with self.db.phase_context("analyze"):
-            for table_name in get_time_series_input_files(self.scale_factor):
-                self.db.analyze_table(table_name, columns=["time"])
-
-        if restart:
-            self.db.restart_event()
 
 
 class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
@@ -106,6 +99,8 @@ class MonetDBKaggleAirbnb(KaggleAirbnb["MonetDB"]):
     def fetch_kwargs(self) -> dict[str, Any]:
         assert self.db.current_query_name is not None
 
+        if MONETDB_SETTINGS.driver == "adbc":
+            return {"method": "adbc"}
         pymonetdb_queries = [
             "01_calendar_count",
         ]
@@ -125,6 +120,21 @@ class MonetDB(Database):
     expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
 
     connection_string: str = MONETDB_CONNECTION_STRINGS[MONETDB_SETTINGS.driver]
+
+    @property
+    def database_directory(self) -> Path:
+        directory = (
+            SETTINGS.database_directory
+            / self.name
+            / format_suite_data_directory_name(self.current_suite, self.current_suite_scale_factor)
+            / MONETDB_SETTINGS.driver
+        )
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @property
+    def metric_directories(self) -> tuple[Path, ...]:
+        return (self.database_directory, SETTINGS.temporary_directory / "monetdb")
 
     @property
     def start(self) -> str:
@@ -167,7 +177,7 @@ class MonetDB(Database):
         df = self.fetch(
             "select value as version from sys.env() where name = 'monet_version'",
             schema={"version": pl.String},
-            method="pymonetdb",
+            method="adbc" if MONETDB_SETTINGS.driver == "adbc" else "pymonetdb",
         )
         return str(df.item(0, 0))
 
@@ -177,7 +187,12 @@ class MonetDB(Database):
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
         method: Literal["binary", "pymonetdb", "adbc"] | None = None,
     ) -> pl.DataFrame:
-        method = "adbc" if MONETDB_SETTINGS.driver == "adbc" else method or MONETDB_SETTINGS.default_fetch_method
+        if MONETDB_SETTINGS.driver == "adbc":
+            if method not in (None, "adbc"):
+                raise ValueError(f"Fetch method '{method}' is unavailable with the ADBC connection")
+            method = "adbc"
+        else:
+            method = method or MONETDB_SETTINGS.default_fetch_method
 
         _LOGGER.info(f"Fetching with {method=}")
 
@@ -207,7 +222,7 @@ class MonetDB(Database):
         df = self.fetch(
             "select name as table_name from sys.tables where system = false",
             schema={"table_name": pl.String},
-            method="pymonetdb",
+            method="adbc" if MONETDB_SETTINGS.driver == "adbc" else "pymonetdb",
         )
         return set(df.get_column("table_name").to_list())
 
@@ -254,6 +269,37 @@ class MonetDB(Database):
         if MONETDB_SETTINGS.driver == "adbc":
             return upsert_adbc(df, table, self.connect(), primary_key=primary_key)
         return upsert(df, table, self.connect(), primary_key=primary_key)
+
+    def insert_parquet(
+        self,
+        path: Path,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        if MONETDB_SETTINGS.driver != "adbc":
+            return super().insert_parquet(path, table, primary_key=primary_key, not_null=not_null)
+
+        statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
+        with self.record_query_execution(statement):
+            result = self.connect().execute(
+                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
+                {"table_name": table},
+            )
+        exists = bool(result.scalar())
+
+        try:
+            insert_parquet_adbc(
+                path,
+                table,
+                self.connect(),
+                primary_key,
+                not_null,
+                create=not exists,
+            )
+        except Exception:
+            self.rollback()
+            raise
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         if MONETDB_SETTINGS.driver == "adbc":

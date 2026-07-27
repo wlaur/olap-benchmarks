@@ -4,7 +4,6 @@ from collections.abc import Iterator
 from gzip import open as gzip_open
 from pathlib import Path
 from time import perf_counter
-from urllib.request import urlretrieve
 
 import polars as pl
 
@@ -18,6 +17,7 @@ from ...settings import (
     resolve_suite_scale_factor,
 )
 from .. import BenchmarkSuite
+from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,13 +107,8 @@ def prepare_data(scale_factor: int) -> None:
     input_directory.mkdir(parents=True, exist_ok=True)
 
     for fpath in get_jsonbench_input_files(scale_factor):
-        if fpath.is_file():
-            _LOGGER.info(f"Reusing JSONBench file {fpath.name}")
-            continue
-
         url = f"{JSONBENCH_DATASET_BASE_URL}/{fpath.name}"
-        _LOGGER.info(f"Downloading {url} to {fpath}")
-        urlretrieve(url, fpath)
+        download_file(url, fpath)
 
 
 class JSONBench[DBT: Database](BenchmarkSuite[DBT]):

@@ -125,9 +125,6 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def insert_table(self, df: pl.LazyFrame, table_name: TableName) -> None:
-        self.db.insert(df, table_name, **self.populate_kwargs)
-
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -136,10 +133,10 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("tpc_h")
 
         for table_name in TPCH_TABLES:
-            df = pl.scan_parquet(self.input_data_directory / f"{table_name}.parquet")
+            source = self.input_data_directory / f"{table_name}.parquet"
 
             with self.db.phase_context("insert", table_name=table_name):
-                self.insert_table(df, table_name)
+                self.db.insert_parquet(source, table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all tpc_h tables for {self.name} scale factor {self.scale_factor}")

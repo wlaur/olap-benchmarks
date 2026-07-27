@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from time import sleep
 from typing import Any, cast
 
@@ -13,9 +14,10 @@ import docker
 import psutil
 from pydantic import BaseModel
 
-from ..settings import MAIN_PROCESS_TITLE, SETTINGS, DatabaseName, SuiteName, format_suite_data_directory_name
-
 _LOGGER = logging.getLogger(__name__)
+DOCKER_API_TIMEOUT_SECONDS = 5
+_CONTAINER_CPU_SNAPSHOTS: dict[str, tuple[int, int]] = {}
+_CONTAINER_CPU_SNAPSHOTS_LOCK = Lock()
 
 
 def get_docker_socket() -> str:
@@ -52,7 +54,10 @@ def get_docker_socket() -> str:
 
 @lru_cache(maxsize=1)
 def get_docker_client() -> docker.DockerClient:
-    return docker.DockerClient(base_url=get_docker_socket())
+    return docker.DockerClient(
+        base_url=get_docker_socket(),
+        timeout=DOCKER_API_TIMEOUT_SECONDS,
+    )
 
 
 class BenchmarkMetric(BaseModel):
@@ -61,14 +66,25 @@ class BenchmarkMetric(BaseModel):
     disk_mb: int
 
 
-def get_database_directory(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> Path:
-    return SETTINGS.database_directory / db / format_suite_data_directory_name(suite, suite_scale_factor)
-
-
 def calculate_cpu_percent(cpu_stats: dict[str, Any], precpu_stats: dict[str, Any]) -> float:
-    cpu_delta = cpu_stats["cpu_usage"]["total_usage"] - precpu_stats["cpu_usage"]["total_usage"]
-    system_delta = cpu_stats["system_cpu_usage"] - precpu_stats["system_cpu_usage"]
-    online_cpus = cpu_stats["online_cpus"]
+    return calculate_cpu_percent_from_totals(
+        cpu_total=cpu_stats["cpu_usage"]["total_usage"],
+        previous_cpu_total=precpu_stats["cpu_usage"]["total_usage"],
+        system_total=cpu_stats["system_cpu_usage"],
+        previous_system_total=precpu_stats["system_cpu_usage"],
+        online_cpus=cpu_stats["online_cpus"],
+    )
+
+
+def calculate_cpu_percent_from_totals(
+    cpu_total: int,
+    previous_cpu_total: int,
+    system_total: int,
+    previous_system_total: int,
+    online_cpus: int,
+) -> float:
+    cpu_delta = cpu_total - previous_cpu_total
+    system_delta = system_total - previous_system_total
 
     if cpu_delta > 0 and system_delta > 0 and online_cpus > 0:
         return (cpu_delta / system_delta) * online_cpus * 100.0
@@ -76,20 +92,32 @@ def calculate_cpu_percent(cpu_stats: dict[str, Any], precpu_stats: dict[str, Any
     return 0.0
 
 
-def find_main_process() -> psutil.Process:
-    # this process title is set in __main__.py, so the result writer subprocess will not have it
-    for proc in psutil.process_iter(attrs=["pid", "name", "cmdline"]):
-        try:
-            if proc.info["cmdline"] is not None and MAIN_PROCESS_TITLE in " ".join(proc.info["cmdline"]):
-                return proc
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) -> float:
+    cpu_stats = cast(dict[str, Any], stats["cpu_stats"])
+    precpu_stats = cast(dict[str, Any], stats["precpu_stats"])
+    if "system_cpu_usage" in precpu_stats:
+        return calculate_cpu_percent(cpu_stats, precpu_stats)
 
-    raise RuntimeError(f"Process with title '{MAIN_PROCESS_TITLE}' not found")
+    cpu_total = cast(int, cpu_stats["cpu_usage"]["total_usage"])
+    system_total = cast(int, cpu_stats["system_cpu_usage"])
+    online_cpus = cast(int, cpu_stats["online_cpus"])
+    with _CONTAINER_CPU_SNAPSHOTS_LOCK:
+        previous = _CONTAINER_CPU_SNAPSHOTS.get(container_name)
+        _CONTAINER_CPU_SNAPSHOTS[container_name] = (cpu_total, system_total)
+
+    if previous is None:
+        return 0.0
+    return calculate_cpu_percent_from_totals(
+        cpu_total=cpu_total,
+        previous_cpu_total=previous[0],
+        system_total=system_total,
+        previous_system_total=previous[1],
+        online_cpus=online_cpus,
+    )
 
 
-def get_main_process_metrics(db: DatabaseName, suite: SuiteName, suite_scale_factor: int) -> BenchmarkMetric:
-    proc = find_main_process()
+def get_main_process_metrics(process_id: int) -> BenchmarkMetric:
+    proc = psutil.Process(process_id)
 
     proc.cpu_percent(interval=None)  # snapshot baseline
 
@@ -98,25 +126,15 @@ def get_main_process_metrics(db: DatabaseName, suite: SuiteName, suite_scale_fac
     mem_info = proc.memory_info()
     mem_mb = int(mem_info.rss / (1024 * 1024))
 
-    return BenchmarkMetric(
-        cpu_percent=cpu_percent,
-        mem_mb=mem_mb,
-        disk_mb=get_directory_size_mb(get_database_directory(db, suite, suite_scale_factor)),
-    )
+    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=0)
 
 
 def get_container_metrics(container_name: str) -> BenchmarkMetric:
     container = cast(Any, get_docker_client().containers).get(container_name)
 
-    # this takes around ~1 sec, needs to collect cpu data before and after a sampling period of 1 second
-    stats = cast(dict[str, Any], container.stats(stream=False))
+    stats = cast(dict[str, Any], container.stats(stream=False, one_shot=True))
 
-    try:
-        cpu_percent = calculate_cpu_percent(stats["cpu_stats"], stats["precpu_stats"])
-    except KeyError as e:
-        _LOGGER.warning(f"docker stats output invalid (KeyError: {e}): {stats}, sleeping and retrying...")
-        sleep(1)
-        return get_container_metrics(container_name)
+    cpu_percent = calculate_container_cpu_percent(container_name, stats)
 
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))
@@ -125,26 +143,21 @@ def get_container_metrics(container_name: str) -> BenchmarkMetric:
 
 
 def get_database_metrics(
-    db: DatabaseName,
-    suite: SuiteName,
-    suite_scale_factor: int,
+    client_process_id: int,
     container_names: Sequence[str],
+    metric_directories: Sequence[Path],
 ) -> BenchmarkMetric:
-    if not container_names:
-        # Contains potentially significant overhead from e.g. insert methods
-        # that read and process input Parquet files in the main Python process.
-        return get_main_process_metrics(db, suite, suite_scale_factor)
-
-    if len(container_names) == 1:
-        container_metrics = [get_container_metrics(container_names[0])]
-    else:
-        with ThreadPoolExecutor(max_workers=len(container_names)) as executor:
-            container_metrics = list(executor.map(get_container_metrics, container_names))
+    # The Python client can dominate ingestion memory even when the database
+    # runs in a container.
+    with ThreadPoolExecutor(max_workers=len(container_names) + 1) as executor:
+        main_future = executor.submit(get_main_process_metrics, client_process_id)
+        container_metrics = list(executor.map(get_container_metrics, container_names))
+        process_metrics = [main_future.result(), *container_metrics]
 
     return BenchmarkMetric(
-        cpu_percent=sum(metric.cpu_percent for metric in container_metrics),
-        mem_mb=sum(metric.mem_mb for metric in container_metrics),
-        disk_mb=get_directory_size_mb(get_database_directory(db, suite, suite_scale_factor)),
+        cpu_percent=sum(metric.cpu_percent for metric in process_metrics),
+        mem_mb=sum(metric.mem_mb for metric in process_metrics),
+        disk_mb=sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories)),
     )
 
 
