@@ -1,6 +1,9 @@
 import logging
 import uuid
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+from queue import Full, Queue
+from threading import Event, Thread
 from time import perf_counter
 from typing import Any, cast
 
@@ -14,15 +17,11 @@ from ..utils import drop_table, record_query_execution_context, tracked_commit
 from .utils import create_table, get_table
 
 _LOGGER = logging.getLogger(__name__)
-MAX_ARROW_BATCH_ROWS = 131_072
-ARROW_BATCH_MEMORY_BUDGET = 1024 * 1024 * 1024
-ESTIMATED_COLUMN_VALUE_BYTES = 8
 
 
-def get_rows_per_batch(schema: Mapping[str, pl.DataType | type[pl.DataType]]) -> int:
-    estimated_row_bytes = max(1, len(schema)) * ESTIMATED_COLUMN_VALUE_BYTES
-    memory_limited_rows = max(1, ARROW_BATCH_MEMORY_BUDGET // estimated_row_bytes)
-    return min(MAX_ARROW_BATCH_ROWS, memory_limited_rows)
+@dataclass(frozen=True, slots=True)
+class _ProducerError:
+    error: BaseException
 
 
 def fetch_adbc(
@@ -41,12 +40,51 @@ def fetch_adbc(
 
 def _iter_arrow_batches(
     frame: pl.LazyFrame,
-    rows_per_batch: int,
     row_counter: list[int],
 ) -> Iterator[pa.RecordBatch]:
-    for batch in frame.collect_batches(chunk_size=rows_per_batch):
-        row_counter[0] += batch.height
-        yield from batch.to_arrow().to_batches()
+    queue: Queue[pl.DataFrame | _ProducerError | None] = Queue(maxsize=1)
+    consumed = Event()
+    stopped = Event()
+
+    def put(item: pl.DataFrame | _ProducerError | None) -> bool:
+        while not stopped.is_set():
+            try:
+                queue.put(item, timeout=0.1)
+                return True
+            except Full:
+                pass
+        return False
+
+    def receive(batch: pl.DataFrame) -> bool:
+        if not put(batch):
+            return True
+        while not stopped.is_set():
+            if consumed.wait(timeout=0.1):
+                consumed.clear()
+                return False
+        return True
+
+    def produce() -> None:
+        try:
+            frame.sink_batches(receive, lazy=False, engine="streaming")
+        except BaseException as error:
+            put(_ProducerError(error))
+        finally:
+            put(None)
+
+    producer = Thread(target=produce, name="monetdb-adbc-producer", daemon=True)
+    producer.start()
+    try:
+        while (item := queue.get()) is not None:
+            if isinstance(item, _ProducerError):
+                raise item.error
+            row_counter[0] += item.height
+            yield from item.to_arrow(compat_level=pl.CompatLevel.newest()).to_batches()
+            consumed.set()
+    finally:
+        stopped.set()
+        consumed.set()
+        producer.join()
 
 
 def insert_adbc(
@@ -60,8 +98,7 @@ def insert_adbc(
 ) -> None:
     started = perf_counter()
     schema = frame.schema if isinstance(frame, pl.DataFrame) else frame.collect_schema()
-    if create:
-        create_table(table, schema, connection, primary_key, not_null)
+    destination = get_table(table, schema, primary_key=primary_key, not_null=not_null)
 
     row_counter = [0]
     if isinstance(frame, pl.DataFrame):
@@ -71,11 +108,17 @@ def insert_adbc(
         expected_rows = 0
         data = pa.RecordBatchReader.from_batches(
             schema.to_arrow(),
-            _iter_arrow_batches(frame, get_rows_per_batch(schema), row_counter),
+            _iter_arrow_batches(frame, row_counter),
         )
 
     with record_query_execution_context(f'ADBC INGEST INTO "{table}"', connection):
-        inserted_rows = ingest_arrow(connection, table, data, mode="append")
+        inserted_rows = ingest_arrow(
+            connection,
+            destination,
+            data,
+            mode="append",
+            create=create,
+        )
 
     if isinstance(frame, pl.LazyFrame):
         expected_rows = row_counter[0]
@@ -106,7 +149,7 @@ def upsert_adbc(
         with record_query_execution_context(f'ADBC INGEST INTO TEMPORARY "{source.name}"', connection):
             inserted_rows = ingest_arrow(
                 connection,
-                source.name,
+                source,
                 frame.to_arrow(),
                 mode="append",
                 temporary=True,
@@ -149,4 +192,51 @@ def upsert_adbc(
     _LOGGER.info(
         f"Upserted dataset with shape ({frame.height:_}, {frame.width:_}) "
         f"into table {table} with ADBC in {perf_counter() - started:_.2f} seconds"
+    )
+
+
+def delete_adbc(
+    table: TableName,
+    connection: Connection,
+    primary_key: str | list[str],
+    keys: pl.DataFrame,
+) -> None:
+    started = perf_counter()
+    source_name = f"_temporary_{uuid.uuid4().hex[:8]}"
+    source = create_table(source_name, keys.schema, connection, temporary=True)
+    primary_keys = [primary_key] if isinstance(primary_key, str) else list(primary_key)
+
+    try:
+        with record_query_execution_context(f'ADBC INGEST INTO TEMPORARY "{source.name}"', connection):
+            inserted_rows = ingest_arrow(
+                connection,
+                source,
+                keys.to_arrow(),
+                mode="append",
+                temporary=True,
+            )
+        if inserted_rows != keys.height:
+            raise RuntimeError(
+                f"ADBC reported {inserted_rows:_} inserted rows for a {keys.height:_}-row delete key dataset"
+            )
+
+        predicate = " and ".join(f'dest."{column}" = source."{column}"' for column in primary_keys)
+        statement = (
+            f'DELETE FROM "{table}" AS dest WHERE EXISTS (SELECT 1 FROM "{source.name}" AS source WHERE {predicate})'
+        )
+        with record_query_execution_context(statement, connection):
+            connection.execute(text(statement))
+        drop_table(source.name, connection, commit=False)
+        tracked_commit(connection)
+    except Exception:
+        connection.rollback()
+        try:
+            drop_table(source.name, connection)
+        except Exception:
+            connection.rollback()
+            _LOGGER.exception(f"Failed to clean up temporary ADBC delete table {source.name}")
+        raise
+
+    _LOGGER.info(
+        f"Deleted from table {table} using {keys.height:_} ADBC key rows in {perf_counter() - started:_.2f} seconds"
     )

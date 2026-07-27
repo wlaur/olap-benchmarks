@@ -13,12 +13,17 @@ from ...suites.time_series.config import TimeSeries, get_time_series_input_files
 from .. import Database
 from ..utils import tracked_commit
 from . import insert as _insert_mod
+from .adbc import (
+    delete_adbc,
+    fetch_adbc,
+    insert_adbc,
+    upsert_adbc,
+)
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import (
     DEFAULT_LAZY_WRITE,
     ColumnGroupWrite,
     LazyWrite,
-    MonetDBInsertKwargs,
     insert,
     upsert,
 )
@@ -45,7 +50,10 @@ class MonetDBRelease:
 
 MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
 
-MONETDB_CONNECTION_STRING = "monetdb://monetdb:monetdb@localhost:50000/benchmark"
+MONETDB_CONNECTION_STRINGS = {
+    "staged": "monetdb+pymonetdb://monetdb:monetdb@localhost:50000/benchmark",
+    "adbc": "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark",
+}
 
 
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
@@ -56,8 +64,13 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
-        kwargs: MonetDBInsertKwargs = {"lazy_write": ColumnGroupWrite(group_size=10)}
-        self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **kwargs)
+        self.db.insert(
+            df,
+            table_name,
+            primary_key=primary_key,
+            not_null=not_null,
+            lazy_write=ColumnGroupWrite(group_size=10),
+        )
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
@@ -111,7 +124,7 @@ class MonetDB(Database):
     supports_arm64_containers: ClassVar[bool] = True
     expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
 
-    connection_string: str = MONETDB_CONNECTION_STRING
+    connection_string: str = MONETDB_CONNECTION_STRINGS[MONETDB_SETTINGS.driver]
 
     @property
     def start(self) -> str:
@@ -162,9 +175,9 @@ class MonetDB(Database):
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-        method: Literal["binary", "pymonetdb"] | None = None,
+        method: Literal["binary", "pymonetdb", "adbc"] | None = None,
     ) -> pl.DataFrame:
-        method = method or MONETDB_SETTINGS.default_fetch_method
+        method = "adbc" if MONETDB_SETTINGS.driver == "adbc" else method or MONETDB_SETTINGS.default_fetch_method
 
         _LOGGER.info(f"Fetching with {method=}")
 
@@ -172,6 +185,8 @@ class MonetDB(Database):
             return fetch_binary(query, self.connect(), schema)
         elif method == "pymonetdb":
             df = fetch_pymonetdb(query, self.connect())
+        elif method == "adbc":
+            return fetch_adbc(query, self.connect(), schema)
         else:
             raise ValueError(f"Invalid method: '{method}'")
 
@@ -184,11 +199,9 @@ class MonetDB(Database):
         if self._connection is None:
             return
 
-        # MonetDB reads and writes may use the raw DBAPI cursor directly, bypassing
-        # SQLAlchemy's transaction bookkeeping. Clear both SQLAlchemy's view and the
-        # underlying MonetDB transaction state.
         super().rollback()
-        get_pymonetdb_connection(self._connection).rollback()
+        if MONETDB_SETTINGS.driver == "staged":
+            get_pymonetdb_connection(self._connection).rollback()
 
     def get_table_names(self) -> set[TableName]:
         df = self.fetch(
@@ -215,15 +228,36 @@ class MonetDB(Database):
         exists = bool(result.scalar())
 
         try:
-            return insert(df, table, self.connect(), primary_key, not_null, create=not exists, lazy_write=lazy_write)
+            if MONETDB_SETTINGS.driver == "adbc":
+                return insert_adbc(
+                    df,
+                    table,
+                    self.connect(),
+                    primary_key,
+                    not_null,
+                    create=not exists,
+                )
+            return insert(
+                df,
+                table,
+                self.connect(),
+                primary_key,
+                not_null,
+                create=not exists,
+                lazy_write=lazy_write,
+            )
         except Exception:
             self.rollback()
             raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        if MONETDB_SETTINGS.driver == "adbc":
+            return upsert_adbc(df, table, self.connect(), primary_key=primary_key)
         return upsert(df, table, self.connect(), primary_key=primary_key)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
+        if MONETDB_SETTINGS.driver == "adbc":
+            return delete_adbc(table, self.connect(), primary_key=primary_key, keys=keys)
         return _insert_mod.delete(table, self.connect(), primary_key=primary_key, keys=keys)
 
     def analyze_table(self, table: TableName, columns: list[str] | None = None) -> None:
