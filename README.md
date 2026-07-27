@@ -28,6 +28,7 @@ Configuration lives in `.env` (see `olap config` for the resolved values):
 | `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY` | Scratch space used during populate                  |
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
+| `OLAP_BENCHMARKS_MONETDB_DRIVER`     | MonetDB bulk path: `staged` (default) or streaming `adbc` |
 
 Container images follow the Docker engine architecture automatically, including
 OrbStack's Linux engine on Apple Silicon. The pinned ClickHouse, TimescaleDB,
@@ -99,6 +100,13 @@ uv run olap benchmark all tpc_h --scale-factor 10  # every db, explicit suite/sc
 uv run olap benchmark duckdb all                # one db, every default suite/scale
 uv run olap benchmark starrocks clickbench select   # re-run only the select queries
 uv run olap benchmark all all --omit questdb    # the default matrix, minus one db
+```
+
+The MonetDB ADBC replacement can be tested against the retained staged binary
+implementation without any batch or dataset tuning:
+
+```bash
+OLAP_BENCHMARKS_MONETDB_DRIVER=adbc uv run olap benchmark monetdb all
 ```
 
 To start a database manually (e.g. to poke at loaded data):
