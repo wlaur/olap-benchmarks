@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    driver: Literal["staged", "adbc"] = "staged"
+
     # binary fetch has a slight overhead (needs to infer the schema via PREPARE ... and process temporary files)
     default_fetch_method: Literal["binary", "pymonetdb"] = "pymonetdb"
 

@@ -1,4 +1,4 @@
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -35,34 +35,50 @@ class FakeTimescaleDB:
     def connect(self, reconnect: bool = False) -> FakeConnection:
         return self.connection
 
-    def record_query_execution(self, _query: str) -> object:
+    def record_query_execution(self, _query: str) -> AbstractContextManager[None]:
         return nullcontext()
 
+    def execute(self, statement: str, commit: bool = True, autocommit: bool = False, reconnect: bool = False) -> None:
+        con = self.connect(reconnect=reconnect or autocommit)
 
-def test_timescaledb_time_series_compression_skips_too_wide_tables(
+        if autocommit:
+            con = con.execution_options(isolation_level="AUTOCOMMIT")
+
+        with self.record_query_execution(statement):
+            con.execute(statement)
+
+        if commit and not autocommit:
+            con.commit()
+
+
+def test_timescaledb_time_series_compresses_all_tables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connection = FakeConnection()
     suite = TimescaleTimeSeries.model_construct(
         db=FakeTimescaleDB(connection),
         name="time_series",
+        scale_factor=1,
     )
+
+    def fake_time_series_input_files(_scale_factor: int) -> dict[str, Path]:
+        return {
+            "data_wide": Path("data_wide.parquet"),
+            "data_tall": Path("data_tall.parquet"),
+        }
 
     monkeypatch.setattr(
         "olap_benchmarks.dbs.timescaledb.get_time_series_input_files",
-        lambda: {
-            "data_wide": Path("data_wide.parquet"),
-            "data_tall": Path("data_tall.parquet"),
-        },
+        fake_time_series_input_files,
     )
 
     suite.compress_tables()
 
     executed_sql = "\n".join(connection.executed_sql)
 
-    assert "show_chunks('data_wide')" not in executed_sql
+    assert "show_chunks('data_wide')" in executed_sql
     assert "show_chunks('data_tall')" in executed_sql
     assert "vacuum freeze analyze data_wide" in executed_sql
     assert "vacuum freeze analyze data_tall" in executed_sql
-    assert connection.commit_calls == 1
+    assert connection.commit_calls == 2
     assert connection.rollback_calls == 0

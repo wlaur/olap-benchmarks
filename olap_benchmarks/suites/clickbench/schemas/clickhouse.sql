@@ -1,3 +1,6 @@
+-- Schema mirrors the official ClickBench ClickHouse schema
+-- (https://github.com/ClickHouse/ClickBench/blob/main/clickhouse/create.sql)
+-- with an explicit ORDER BY for auditability.
 CREATE OR REPLACE TABLE hits
 (
     WatchID BIGINT NOT NULL,
@@ -104,8 +107,8 @@ CREATE OR REPLACE TABLE hits
     HasGCLID SMALLINT NOT NULL,
     RefererHash BIGINT NOT NULL,
     URLHash BIGINT NOT NULL,
-    CLID INTEGER NOT NULL,
-    PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)
+    CLID INTEGER NOT NULL
 )
 ENGINE = MergeTree
+ORDER BY (CounterID, EventDate, UserID, EventTime, WatchID)
 SETTINGS old_parts_lifetime = 5;  -- ensure files are cleaned up

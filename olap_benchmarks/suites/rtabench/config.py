@@ -1,19 +1,18 @@
 # Based on RTABench by Timescale
 # https://github.com/timescale/rtabench
 
-import asyncio
 import logging
-import os
-from pathlib import Path
+import shutil
+from gzip import open as gzip_open
 from time import perf_counter
 from typing import Any
 
-import httpx
 import polars as pl
 
 from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
+from ..download import download_file
 
 RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
 
@@ -51,6 +50,16 @@ RTABENCH_QUERY_NAMES = {
     "0028_sales_volume_by_age_group": 5,
     "0029_top_product_in_age_group": 5,
     "0030_customers_with_most_orders_delivered": 5,
+    "1000_terminal_hourly_stats": 3,
+    "1004_count_delayed_orders_per_day": 5,
+    "1008_most_week_delayed_order": 5,
+    "1012_max_satisfaction_for_order_per_week": 5,
+    "1013_satisfaction_with_without_backup": 5,
+    "1017_top_selling_month_product": 5,
+    "1023_top_sales_volume_product_from_terminal": 2,
+    "1025_product_category_performance": 5,
+    "1027_country_category_performance": 5,
+    "1030_customers_with_most_orders_delivered": 5,
 }
 
 RTABENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
@@ -96,55 +105,32 @@ RTABENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
 }
 
 
-async def download_file(client: httpx.AsyncClient, url: str, dest_path: Path) -> None:
-    if dest_path.exists():
-        raise ValueError(f"Already exists: {dest_path.name}")
-
-    _LOGGER.info(f"Downloading {url} to {dest_path}")
-
-    response = await client.get(url, follow_redirects=True)
-    response.raise_for_status()
-    dest_path.write_bytes(response.content)
-
-    os.system(f"cd {dest_path.parent.as_posix()} && gzip -d {dest_path.name}")
-
-    _LOGGER.info(f"Downloaded and extracted {dest_path.name}")
-
-
-async def download_rtabench_data_async(output_directory: Path) -> None:
-    output_directory.mkdir(parents=True, exist_ok=True)
-
-    urls = [f"https://rtadatasets.timescale.com/{name}.csv.gz" for name in RTABENCH_SCHEMAS]
-
-    async with httpx.AsyncClient() as client:
-        tasks: list[asyncio.Task[None]] = []
-        for url in urls:
-            filename = url.split("/")[-1]
-            dest_path = output_directory / filename
-            tasks.append(asyncio.create_task(download_file(client, url, dest_path)))
-
-        await asyncio.gather(*tasks)
-
-
-def convert_rtabench_data_to_parquet(data_dir: Path) -> None:
-    for name, schema in RTABENCH_SCHEMAS.items():
-        fname = data_dir / f"{name}.csv"
-        df = pl.read_csv(fname, has_header=False, schema=schema)
-        df.write_parquet(fname.with_suffix(".parquet"))
-        fname.unlink()
-
-        _LOGGER.info(f"Converted {fname} to Parquet")
-
-
 def prepare_data() -> None:
     output_directory = SETTINGS.input_data_directory / "rtabench"
     output_directory.mkdir(exist_ok=True, parents=True)
 
-    asyncio.run(download_rtabench_data_async(output_directory))
+    for name, schema in RTABENCH_SCHEMAS.items():
+        parquet_path = output_directory / f"{name}.parquet"
+        if parquet_path.is_file():
+            _LOGGER.info("Reusing %s", parquet_path)
+            continue
 
-    # convert to Parquet, size goes from 22 GB to 3.8 GB
-    # benchmark assumes Parquet inputs for all batch data
-    convert_rtabench_data_to_parquet(output_directory)
+        compressed_path = output_directory / f"{name}.csv.gz"
+        csv_path = output_directory / f"{name}.csv"
+        download_file(f"https://rtadatasets.timescale.com/{compressed_path.name}", compressed_path)
+
+        if not csv_path.is_file():
+            partial_csv_path = csv_path.with_name(f"{csv_path.name}.part")
+            with gzip_open(compressed_path, "rb") as compressed, partial_csv_path.open("wb") as output:
+                shutil.copyfileobj(compressed, output)
+            partial_csv_path.replace(csv_path)
+
+        partial_parquet_path = parquet_path.with_name(f"{parquet_path.name}.part")
+        pl.read_csv(csv_path, has_header=False, schema=schema).write_parquet(partial_parquet_path)
+        partial_parquet_path.replace(parquet_path)
+        csv_path.unlink()
+        compressed_path.unlink()
+        _LOGGER.info("Converted %s to Parquet", csv_path)
 
 
 class RTABench[DBT: Database](BenchmarkSuite[DBT]):
@@ -193,34 +179,53 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
             return f.read()
 
     def include_query(self, query_name: str) -> bool:
-        return True
+        return (RTABENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql").is_file()
 
     def select(self) -> None:
         t0 = perf_counter()
+        failed_queries = 0
         for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
+            progress_label = f"({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_})"
             if not self.include_query(query_name):
+                self.record_skipped_query_steps(
+                    query_name,
+                    iterations,
+                    result_status="unsupported",
+                    reason="query file is not defined for suite/database",
+                )
                 continue
 
-            with self.db.query_context(self.name, query_name):
-                query = self.load_rtabench_query(query_name)
+            def log_success(
+                it: int,
+                df: pl.DataFrame,
+                t: float,
+                *,
+                query_name: str = query_name,
+                progress_label: str = progress_label,
+                iterations: int = iterations,
+            ) -> None:
+                _LOGGER.info(
+                    f"Executed {query_name} {progress_label} "
+                    f"iteration {it:_}/{iterations:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                )
 
-                for it in range(1, iterations + 1):
-                    df, t = self.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=it,
-                        query=query,
-                        fetch_kwargs=self.fetch_kwargs,
-                    )
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                iterations=iterations,
+                query_loader=lambda query_name=query_name: self.load_rtabench_query(query_name),
+                fetch_kwargs_factory=lambda: self.fetch_kwargs,
+                progress_label=progress_label,
+                log_success=log_success,
+            )
+            if not ok:
+                failed_queries += 1
 
-                    # time delta t will not match time at end - time at start exactly,
-                    # but within a couple of milliseconds
-                    # there is a small overhead when the step result is sent to the queue
-                    # (the actual write to the results db happens later)
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+        if failed_queries:
+            _LOGGER.warning(
+                f"RTABench select completed on {self.db.name} with {failed_queries:_} failed "
+                f"{'queries' if failed_queries != 1 else 'query'}"
+            )
 
         _LOGGER.info(
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"

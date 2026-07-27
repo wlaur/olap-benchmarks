@@ -4,18 +4,27 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, cast
+from typing import Any, ClassVar, Literal, cast
 
-import connectorx
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
+from sqlalchemy.engine import make_url
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...run_metadata import StepResultStatus
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import TimeSeries
+from ...suites.time_series.config import (
+    MutateStep,
+    TimeSeries,
+    get_time_series_dataset_sizes,
+    get_time_series_input_files,
+    get_time_series_table_name,
+)
 from .. import Database
-from ..utils import tracked_commit
+from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +32,7 @@ VERSION = "18.3"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
+PostgresFetchMethod = Literal["connectorx", "python"]
 
 
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
@@ -43,7 +53,11 @@ def polars_to_postgres_type(dtype: pl.DataType) -> str:
     elif dtype == pl.Date:
         return "DATE"
     elif isinstance(dtype, pl.Datetime):
-        return "TIMESTAMP WITHOUT TIME ZONE"
+        # TimescaleDB / Postgres best-practice is TIMESTAMPTZ (it warns about
+        # TIMESTAMP on hypertables). Polars naive datetimes are interpreted
+        # against the cluster's `timezone` GUC, which the docker entrypoints
+        # below pin to UTC so the round-trip is loss-less.
+        return "TIMESTAMPTZ"
     else:
         _LOGGER.warning(f"Falling back to type JSONB for Polars dtype {dtype}")
         return "JSONB"
@@ -87,17 +101,14 @@ def table_exists(connection: Connection, table: str) -> bool:
 
 class PostgresRTABench(RTABench["Postgres"]):
     def index_tables(self) -> None:
-        con = self.db.connect()
-
         for statement in (
             "CREATE INDEX orders_customer_id_index ON orders (customer_id);",
             "CREATE INDEX order_events_order_id_index ON order_events (order_id);",
             "CREATE INDEX order_events_event_type_index ON order_events (event_type);",
         ):
-            with self.db.record_query_execution(statement):
-                con.execute(text(statement))
+            self.db.execute(statement, commit=False)
 
-        tracked_commit(con)
+        tracked_commit(self.db.connect())
 
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
@@ -131,45 +142,26 @@ class PostgresClickbench(Clickbench["Postgres"]):
 
         """)
 
-        con = self.db.connect()
-
         for n in statements.strip().split(";"):
             n = n.strip()
 
             if not n:
                 continue
 
-            with self.db.record_query_execution(n):
-                con.execute(text(n))
-
+            self.db.execute(n)
             _LOGGER.info(f"Executed {n}")
-            tracked_commit(con)
 
-        con = self.db.connect(reconnect=True)
-        statement = "CREATE EXTENSION IF NOT EXISTS pg_trgm"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm", reconnect=True)
 
-        statement = "CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.db.execute("CREATE INDEX trgm_idx_title ON hits USING gin (title gin_trgm_ops);")
         _LOGGER.info("Created index trgm_idx_title")
 
-        statement = "CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        tracked_commit(con)
+        self.db.execute("CREATE INDEX trgm_idx_url ON hits USING gin (url gin_trgm_ops);")
         _LOGGER.info("Created index trgm_idx_url")
 
         _LOGGER.info("Generated indexes for table hits")
 
-        con = self.db.connect(reconnect=True)
-        statement = "VACUUM ANALYZE hits"
-        with self.db.record_query_execution(statement):
-            con.execution_options(isolation_level="AUTOCOMMIT").execute(text(statement))
-
+        self.db.execute("VACUUM ANALYZE hits", autocommit=True)
         _LOGGER.info("Ran vacuum analyze for table hits")
 
     def populate(self, restart: bool = True) -> None:
@@ -304,42 +296,232 @@ class PostgresClickbench(Clickbench["Postgres"]):
             self.db.restart_event()
 
 
-class PostgresTimeSeries(TimeSeries["Postgres"]):
+class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
+    # Wide telemetry tables (1500+ cols) blow past PG's 8160-byte tuple limit, so
+    # the row-store engines (Postgres, TimescaleDB) use the idiomatic EAV layout
+    # for them. Tall (10 cols) stays wide.
+    EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
+
+    # data_large EAV is ≈ 6 billion rows × ~50 bytes ≈ 300 GB heap on plain
+    # Postgres (no columnar compression) plus a ~70 GB (metric_name, time)
+    # btree index, so the populate would not fit into the per-(db, suite) disk
+    # budget on this host. Skipping it here also disables the corresponding
+    # large_* select queries and *_data_large_* mutation steps. The EAV insert
+    # code path is still wired up so re-enabling is just emptying this set.
+    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
+    UNSUPPORTED_EAV_QUERIES: ClassVar[frozenset[str]] = frozenset({"large_23_batch_export"})
+
+    # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
+    # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch. Each
+    # flush stages ~5 GB of CSV before it's COPYed into the heap.
+    PARQUET_STREAM_BATCH_ROWS: ClassVar[int] = 100_000
+
+    def expected_table_row_counts(self) -> Mapping[TableName, int]:
+        counts: dict[TableName, int] = {}
+        for size, (n_rows, n_cols) in get_time_series_dataset_sizes(self.scale_factor).items():
+            table_name = get_time_series_table_name(size)
+            if table_name in self.SKIP_TABLES:
+                continue
+            counts[table_name] = n_rows * n_cols if table_name in self.EAV_TABLES else n_rows
+        return counts
+
+    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
+        _ = table_name
+        return None
+
+    def get_not_null(self, table_name: TableName) -> str | list[str] | None:
+        if table_name in self.EAV_TABLES:
+            return ["time", "metric_name"]
+        return "time"
+
+    def include_query(self, query_name: str) -> bool:
+        # Queries against tables we never populated must be skipped.
+        for table in self.SKIP_TABLES:
+            size = table.removeprefix("data_")
+            if query_name.startswith(f"{size}_"):
+                return False
+        return True
+
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        skipped = super().query_skip(query_name)
+        if skipped is not None:
+            return skipped
+
+        if query_name in self.UNSUPPORTED_EAV_QUERIES:
+            return ("unsupported", "query requires wide-row export shape, but this database stores data_large as EAV")
+
+        return None
+
     def index_tables(self) -> None:
-        con = self.db.connect()
+        for table_name in get_time_series_input_files(self.scale_factor):
+            if table_name in self.SKIP_TABLES:
+                continue
+            if table_name in self.EAV_TABLES:
+                statement = f'CREATE INDEX {table_name}_metric_time_index ON "{table_name}" ("metric_name", "time")'
+            else:
+                statement = f'CREATE INDEX {table_name}_time_index ON "{table_name}" ("time")'
 
-        statement = "CREATE INDEX data_tall_time_index ON data_tall (time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_tall")
+            self.db.execute(statement, commit=False)
+            _LOGGER.info(f"Indexed {table_name}")
 
-        statement = "CREATE INDEX data_wide_time_index ON data_wide (time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_wide")
+        tracked_commit(self.db.connect())
 
-        statement = "CREATE INDEX data_large_time_index ON data_large (time)"
-        with self.db.record_query_execution(statement):
-            con.execute(text(statement))
-        _LOGGER.info("Indexed data_large")
+    def _eav_create_table(self, table_name: TableName) -> None:
+        self.db.execute(
+            f'CREATE TABLE "{table_name}" ("time" TIMESTAMPTZ NOT NULL, "metric_name" TEXT NOT NULL, "value" REAL)'
+        )
+        _LOGGER.info(f"Created EAV table {table_name}")
 
-        tracked_commit(con)
+    @staticmethod
+    def _wide_to_eav(df: pl.DataFrame) -> pl.DataFrame:
+        metric_cols = [c for c in df.columns if c != "time"]
+        bool_cols = [c for c, t in df.schema.items() if c != "time" and t == pl.Boolean]
+        casted = df.with_columns([pl.col(c).cast(pl.Float32) for c in bool_cols]) if bool_cols else df
+        return casted.unpivot(
+            index="time",
+            on=metric_cols,
+            variable_name="metric_name",
+            value_name="value",
+        )
+
+    def _eav_streaming_insert(self, table_name: TableName, fpath: Path) -> None:
+        """Single-pass stream of `fpath` → unpivot → COPY. Replaces the previous
+        offset-based loop that called `pl.scan_parquet().slice(offset, n)` per
+        batch and re-decoded the parquet from the start each time."""
+        frames = iter_parquet_frames(fpath, self.PARQUET_STREAM_BATCH_ROWS)
+        for batch_idx, df_wide in enumerate(frames, start=1):
+            df_eav = self._wide_to_eav(df_wide)
+            self.db.insert(df_eav, table_name)
+            _LOGGER.info(
+                f"Inserted EAV batch {batch_idx} for {table_name}: wide={df_wide.shape[0]:_}, eav={df_eav.shape[0]:_}"
+            )
 
     def populate(self, restart: bool = True) -> None:
-        super().populate(restart=False)
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.initialize_schema("time_series")
+
+        for table_name, fpath in get_time_series_input_files(self.scale_factor).items():
+            if table_name in self.SKIP_TABLES:
+                _LOGGER.info(f"Skipping {table_name} for {self.name} (would not fit in disk budget)")
+                continue
+            if table_name in self.EAV_TABLES:
+                with self.db.phase_context("create_eav_table", table_name=table_name):
+                    self._eav_create_table(table_name)
+
+                with self.db.phase_context("insert", table_name=table_name):
+                    self._eav_streaming_insert(table_name, fpath)
+                    _LOGGER.info(f"Inserted {table_name} for {self.name}")
+            else:
+                primary_key = self.get_primary_key(table_name)
+                not_null = self.get_not_null(table_name)
+                df = pl.scan_parquet(fpath)
+
+                with self.db.phase_context("insert", table_name=table_name):
+                    self.insert_table(df, table_name, primary_key, not_null)
+                    _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         with self.db.phase_context("index"):
             self.index_tables()
 
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
         if restart:
             self.db.restart_event()
+
+    def _generate_insert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        df_wide = super()._generate_insert_data(step, seed)
+        if step.table in self.EAV_TABLES:
+            return self._wide_to_eav(df_wide)
+        return df_wide
+
+    def _generate_upsert_data(self, step: MutateStep, seed: int) -> pl.DataFrame:
+        df_wide = super()._generate_upsert_data(step, seed)
+        if step.table in self.EAV_TABLES:
+            return self._wide_to_eav(df_wide)
+        return df_wide
+
+
+class PostgresJSONBench(JSONBench["Postgres"]):
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        with self.db.phase_context("schema", table_name="bluesky"):
+            self.db.execute(
+                """
+                CREATE TABLE bluesky (
+                    data JSONB COMPRESSION lz4 NOT NULL
+                )
+                """
+            )
+
+        with self.db.phase_context("insert", table_name="bluesky"):
+            for input_file in get_jsonbench_input_files(self.scale_factor):
+                self._copy_json_file(input_file)
+
+        with self.db.phase_context("index", table_name="bluesky"):
+            self.db.execute(
+                """
+                CREATE INDEX idx_bluesky
+                ON bluesky (
+                    (data ->> 'kind'),
+                    (data -> 'commit' ->> 'operation'),
+                    (data -> 'commit' ->> 'collection'),
+                    (data ->> 'did'),
+                    (TO_TIMESTAMP((data ->> 'time_us')::BIGINT / 1000000.0))
+                )
+                """
+            )
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+    def _copy_json_file(self, input_file: Path) -> None:
+        con = self.db.connect()
+        raw_conn = con.connection.dbapi_connection
+        assert raw_conn is not None
+        cursor = raw_conn.cursor()
+        temp_file = self.db._staging_directory / f"bluesky_{uuid.uuid4().hex}.json"
+        copy_sql = "COPY bluesky FROM STDIN WITH (FORMAT csv, QUOTE E'\\x01', DELIMITER E'\\x02', ESCAPE E'\\x01')"
+
+        try:
+            with temp_file.open("w", encoding="utf-8") as out:
+                out.writelines(iter_jsonbench_input_lines(input_file))
+
+            with temp_file.open(encoding="utf-8") as f, self.db.record_query_execution(copy_sql):
+                cursor.copy_expert(copy_sql, f)
+
+            tracked_commit(con)
+            _LOGGER.info(f"Copied JSONBench file {input_file.name} into bluesky")
+        finally:
+            cursor.close()
+            temp_file.unlink(missing_ok=True)
 
 
 class Postgres(Database):
     name: DatabaseName = "postgres"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = POSTGRES_CONNECTION_STRING
+
+    # Mirrors PostgresTimeSeries.SKIP_TABLES: data_large EAV does not fit in
+    # the per-(db, suite) disk budget on plain Postgres, so its mutate steps
+    # have to be disabled too.
+    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
+        "time_series": frozenset(
+            f"{action}_data_large_{count}" for action in ("insert", "upsert", "delete") for count in (1, 100, 10_000)
+        )
+    }
 
     @property
     def start(self) -> str:
@@ -348,20 +530,44 @@ class Postgres(Database):
         host_pgdata.chmod(0o777)  # macOS bind-friendly
 
         parts = [
-            "docker run --platform linux/amd64",
+            "docker run",
+            f"--platform {self.container_platform}",
             f"--name {self.name}-benchmark",
             "--rm -d -p 5433:5432",
             "--user 0:0",
             f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
             "-e PGDATA=/var/lib/postgresql/pgdata",
             "-e POSTGRES_PASSWORD=password",
+            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
+            # naive Polars datetimes round-trip without offset surprises.
+            "-e TZ=UTC",
+            "-e PGTZ=UTC",
             DOCKER_IMAGE,  # e.g. postgres:18
+            # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
+            # with shared_buffers=128MB and max_wal_size=1GB, which forces a
+            # checkpoint storm during multi-hundred-million-row inserts.
+            "-c shared_buffers=8GB",
+            "-c effective_cache_size=24GB",
+            "-c work_mem=4GB",
+            "-c maintenance_work_mem=4GB",
+            "-c max_wal_size=16GB",
+            "-c min_wal_size=2GB",
+            "-c wal_compression=off",
+            "-c synchronous_commit=off",
+            "-c checkpoint_timeout=30min",
+            "-c max_parallel_maintenance_workers=4",
+            "-c max_parallel_workers_per_gather=4",
+            "-c max_parallel_workers=8",
         ]
         return " ".join(parts)
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch("select current_setting('server_version') as version", schema={"version": pl.String})
+        return str(df.item(0, 0))
+
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
-            self._connection = None
+            self.close_connection()
 
         if self._connection is not None:
             return self._connection
@@ -375,14 +581,28 @@ class Postgres(Database):
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+        method: PostgresFetchMethod = "connectorx",
     ) -> pl.DataFrame:
-        # fetch_python is fastest for small result sets
-        # fetch_connectorx might be better for large results and simple queries
-        # (e.g. "select time, col_23 from data order by time")
-        # fetch_polars is slightly slower than fetch_connectorx
+        if method == "connectorx":
+            return self.fetch_connectorx(query, schema)
+        if method == "python":
+            return self.fetch_python(query, schema)
 
-        # schemas do not match exactly between these (i32 vs i64 for example)
-        return self.fetch_python(query, schema)
+        raise ValueError(f"Unknown method: {method}")
+
+    def fetch_connectorx(
+        self,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+    ) -> pl.DataFrame:
+        sql = query.strip().removesuffix(";")
+        with self.record_query_execution(sql):
+            df = pl.read_database_uri(sql, self.connection_string)
+
+        if schema is not None:
+            df = df.cast(cast(pl.Schema, schema))
+
+        return df
 
     def get_table_names(self) -> set[TableName]:
         df = self.fetch(
@@ -418,41 +638,6 @@ class Postgres(Database):
 
         return df
 
-    def fetch_connectorx(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        with self.record_query_execution(query):
-            df = cast(
-                pl.DataFrame,
-                cast(Any, connectorx).read_sql(
-                    POSTGRES_CONNECTION_STRING, query.strip().removesuffix(";"), return_type="polars"
-                ),
-            )
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
-    def fetch_polars(
-        self,
-        query: str,
-        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
-    ) -> pl.DataFrame:
-        # (maybe) emits a separate "select ... limit 1" query to determine the output schema
-        # avoid doing this for complex queries with small result sizes
-        # not clear if postgres actually does this, could check source if this is important to know
-        # engine="adbc" is slower that "connectorx"
-        with self.record_query_execution(query):
-            df = pl.read_database_uri(query.strip().removesuffix(";"), POSTGRES_CONNECTION_STRING, engine="connectorx")
-
-        if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
-
-        return df
-
     def create_table(
         self,
         schema: pl.Schema,
@@ -467,6 +652,15 @@ class Postgres(Database):
             con.execute(text(create_sql))
         tracked_commit(con)
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
+
+    @property
+    def _staging_directory(self) -> Path:
+        directory = SETTINGS.temporary_directory / self.name / "data"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _dml_session_setup(self, con: Connection) -> None:
+        """Hook for session settings needed before DML statements."""
 
     def insert(
         self,
@@ -483,9 +677,7 @@ class Postgres(Database):
         if not table_exists(con, table):
             self.create_table(schema, table, primary_key, not_null)
 
-        temp_dir = SETTINGS.temporary_directory / "postgres/data"
-
-        temp_file = temp_dir / f"{table}_{uuid.uuid4().hex}.csv"
+        temp_file = self._staging_directory / f"{table}_{uuid.uuid4().hex}.csv"
         temp_file_str = temp_file.resolve().as_posix()
 
         if isinstance(df, pl.LazyFrame):
@@ -497,13 +689,10 @@ class Postgres(Database):
                 f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
             )
 
-        db_host = "localhost"
-        db_name = "postgres"
-        db_user = "postgres"
-        db_password = "password"
-        db_port = "5433"
-
-        connection_string = f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_password}"
+        url = make_url(self.connection_string)
+        connection_string = (
+            f"host={url.host} port={url.port} dbname={url.database} user={url.username} password={url.password}"
+        )
 
         # install timescaledb-parallel-copy first
         # on macos: brew tap timescale/tap && brew install timescaledb-tools
@@ -538,11 +727,17 @@ class Postgres(Database):
         with open(csv_path) as f, self.record_query_execution(copy_sql):
             cursor.copy_expert(copy_sql, f)
 
-    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
+    def _copy_dataframe(self, con: Connection, table: str, df: pl.DataFrame, label: str) -> None:
+        temp_file = self._staging_directory / f"{label}_{uuid.uuid4().hex}.csv"
 
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        try:
+            df.write_csv(temp_file)
+            self._copy_csv_to_table(con, table, temp_file)
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
+        primary_keys = require_columns(primary_key)
 
         for pk in primary_keys:
             if pk not in df.columns:
@@ -552,78 +747,43 @@ class Postgres(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
-        statement = f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._dml_session_setup(con)
 
-        temp_dir = SETTINGS.temporary_directory / "postgres/data"
-        temp_file = temp_dir / f"{table}_upsert_{uuid.uuid4().hex}.csv"
-
-        try:
-            df.write_csv(temp_file)
-            self._copy_csv_to_table(con, staging_table, temp_file)
-        finally:
-            temp_file.unlink(missing_ok=True)
-
-        delete_sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
-        with self.record_query_execution(delete_sql):
-            con.execute(text(delete_sql))
+        self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
 
         all_columns = ", ".join(f'"{col}"' for col in df.columns)
-        insert_sql = f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}"
-        with self.record_query_execution(insert_sql):
-            con.execute(text(insert_sql))
+        self.execute(f"INSERT INTO {table} ({all_columns}) SELECT {all_columns} FROM {staging_table}", commit=False)
 
-        statement = f"DROP TABLE {staging_table}"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"DROP TABLE {staging_table}", commit=False)
         tracked_commit(con)
 
         _LOGGER.info(f"Upserted {df.shape[0]:_} rows into {table}")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
 
         con = self.connect()
 
         staging_table = f"_staging_del_{table}_{uuid.uuid4().hex[:8]}"
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
-        statement = f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false", commit=False)
+        self._copy_dataframe(con, staging_table, keys.select(primary_keys), f"{table}_delete")
+        self._dml_session_setup(con)
 
-        temp_dir = SETTINGS.temporary_directory / "postgres/data"
-        temp_file = temp_dir / f"{table}_delete_{uuid.uuid4().hex}.csv"
-
-        try:
-            keys.select(primary_keys).write_csv(temp_file)
-            self._copy_csv_to_table(con, staging_table, temp_file)
-        finally:
-            temp_file.unlink(missing_ok=True)
-
-        sql = f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})"
-        with self.record_query_execution(sql):
-            con.execute(text(sql))
-
-        statement = f"DROP TABLE {staging_table}"
-        with self.record_query_execution(statement):
-            con.execute(text(statement))
+        self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
+        self.execute(f"DROP TABLE {staging_table}", commit=False)
         tracked_commit(con)
 
         _LOGGER.info(f"Deleted rows from {table} by primary key")
 
-    @property
-    def rtabench(self) -> PostgresRTABench:
-        return PostgresRTABench(db=self)
-
-    @property
-    def clickbench(self) -> PostgresClickbench:
-        return PostgresClickbench(db=self)
-
-    @property
-    def time_series(self) -> PostgresTimeSeries:
-        return PostgresTimeSeries(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "rtabench": PostgresRTABench,
+            "clickbench": PostgresClickbench,
+            "jsonbench": PostgresJSONBench,
+            "time_series": PostgresTimeSeries,
+        }

@@ -16,25 +16,6 @@ function Text({
   return <Tag className={className}>{children}</Tag>
 }
 
-export function Eyebrow({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <Text
-      as={as}
-      className={cn("text-sm font-medium tracking-wide text-accent-300 uppercase", className)}
-    >
-      {children}
-    </Text>
-  )
-}
-
 export function MetaLabel({
   as,
   children,
@@ -47,7 +28,10 @@ export function MetaLabel({
   return (
     <Text
       as={as}
-      className={cn("text-xs font-medium tracking-wide text-slate-500 uppercase", className)}
+      className={cn(
+        "text-[0.6875rem] font-semibold tracking-[0.13em] text-slate-400 uppercase",
+        className,
+      )}
     >
       {children}
     </Text>
@@ -80,23 +64,7 @@ export function SectionTitle({
   className?: string
 }) {
   return (
-    <Text as={as} className={cn("text-lg font-semibold text-slate-50", className)}>
-      {children}
-    </Text>
-  )
-}
-
-export function FeatureTitle({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <Text as={as} className={cn("text-2xl font-semibold text-slate-50", className)}>
+    <Text as={as} className={cn("text-lg font-semibold tracking-tight text-slate-50", className)}>
       {children}
     </Text>
   )
@@ -112,7 +80,7 @@ export function BodyText({
   className?: string
 }) {
   return (
-    <Text as={as} className={cn("text-sm text-slate-400", className)}>
+    <Text as={as} className={cn("font-sans text-sm text-slate-300", className)}>
       {children}
     </Text>
   )

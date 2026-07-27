@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from alembic.ddl import impl
 from alembic.ddl.postgresql import PostgresqlImpl
@@ -22,7 +22,7 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 _existing_tables_for_autogen: set[str] = set()
@@ -169,7 +169,7 @@ def _patch_duckdb_reflection_for_autogenerate() -> None:
                         }
                     )
 
-            columns = self._get_columns_info(reflected_rows, domains={}, enums={}, schema=schema)
+            columns = cast(Any, self)._get_columns_info(reflected_rows, domains={}, enums={}, schema=schema)
             return columns.items()
 
     dialect_cls.get_multi_columns = _get_multi_columns_with_fallback

@@ -1,17 +1,28 @@
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import polars as pl
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..dbs import Database
-from ..settings import Operation, SuiteName, TableName
+from ..run_metadata import StepResultStatus
+from ..settings import (
+    SETTINGS,
+    Operation,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ManualPreparationRequired(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -34,6 +45,15 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select")
     db: DBT
     name: SuiteName
+    scale_factor: int = Field(default=1, ge=1)
+
+    @property
+    def data_directory_name(self) -> str:
+        return format_suite_data_directory_name(self.name, self.scale_factor)
+
+    @property
+    def input_data_directory(self) -> Path:
+        return SETTINGS.input_data_directory / self.data_directory_name
 
     @staticmethod
     def parquet_row_count(fpath: Path) -> int:
@@ -133,5 +153,105 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     @abstractmethod
     def select(self) -> None: ...
 
+    def record_skipped_query_steps(
+        self,
+        query_name: str,
+        iterations: int,
+        *,
+        result_status: StepResultStatus,
+        reason: str,
+        start_iteration: int = 1,
+    ) -> None:
+        if result_status not in ("skipped", "unsupported"):
+            raise ValueError(f"Skipped query steps cannot use result_status={result_status!r}")
+
+        for iteration in range(start_iteration, iterations + 1):
+            self.db.record_skipped_query_step(
+                query_name=query_name,
+                iteration=iteration,
+                reason=reason,
+                result_status=result_status,
+            )
+
+    def execute_query_with_isolation(
+        self,
+        *,
+        query_name: str,
+        iterations: int,
+        query_loader: Callable[[], str],
+        fetch_kwargs_factory: Callable[[], Mapping[str, Any]],
+        progress_label: str,
+        log_success: Callable[[int, pl.DataFrame, float], None],
+    ) -> bool:
+        failed_iteration: int | None = None
+
+        try:
+            with self.db.query_context(query_name):
+                query = query_loader()
+                fetch_kwargs = fetch_kwargs_factory()
+
+                for iteration in range(1, iterations + 1):
+                    failed_iteration = iteration
+                    df, duration_seconds = self.db.execute_query_iteration(
+                        query_name=query_name,
+                        iteration=iteration,
+                        query=query,
+                        fetch_kwargs=fetch_kwargs,
+                    )
+                    log_success(iteration, df, duration_seconds)
+                    failed_iteration = None
+        except Exception as exc:
+            self.db.rollback()
+            start_iteration = 1 if failed_iteration is None else failed_iteration + 1
+            if start_iteration <= iterations:
+                self.record_skipped_query_steps(
+                    query_name,
+                    iterations,
+                    result_status="skipped",
+                    reason=f"query aborted after {type(exc).__name__}: {exc}",
+                    start_iteration=start_iteration,
+                )
+            _LOGGER.exception(
+                f"Failed {query_name} {progress_label} on {self.db.name}; continuing with remaining queries: {exc}"
+            )
+            return False
+
+        return True
+
     def mutate(self) -> None:
         raise NotImplementedError(f"{type(self).__name__} does not support the mutate operation")
+
+    def concurrent(self) -> None:
+        raise NotImplementedError(f"{type(self).__name__} does not support the concurrent operation")
+
+
+def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None]:
+    match suite:
+        case "rtabench":
+            from .rtabench.config import prepare_data as prepare_static_data
+
+            return prepare_static_data
+        case "clickbench":
+            from .clickbench.config import prepare_data as prepare_static_data
+
+            return prepare_static_data
+        case "jsonbench":
+            from .jsonbench.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "time_series":
+            from .time_series.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "kaggle_airbnb":
+            from .kaggle_airbnb.config import prepare_data as prepare_static_data
+
+            return prepare_static_data
+        case "tpc_h":
+            from .tpc_h.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "tpc_ds":
+            from .tpc_ds.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)

@@ -5,7 +5,7 @@ from math import ceil
 from pathlib import Path
 from shutil import rmtree
 from time import perf_counter, sleep
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from urllib.parse import urlparse
 
 import clickhouse_connect
@@ -15,15 +15,19 @@ import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, DatabaseName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
+from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
+from ...suites.tpc_ds.config import TpcDs
 from .. import Database
+from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "26.1.1.912"
+VERSION = "26.6.1.1193"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
@@ -49,8 +53,12 @@ POLARS_CLICKHOUSE_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
 
 def get_clickhouse_type(dtype: pl.DataType | type[pl.DataType], nullable: bool = False) -> str:
     if dtype == pl.Datetime:
+        # DateTime64(3) preserves the ms-precision of the source parquet
+        # (datetime[ms]); plain DateTime would silently truncate to seconds.
+        # query_arrow returns DateTime64 as a typed timestamp[ms,tz=UTC] so
+        # the fetch path no longer needs the from_epoch round-trip dance.
         # NOTE: timestamp is never nullable (overrides parameter not_null to the insert method)
-        return "DateTime('UTC')"
+        return "DateTime64(3, 'UTC')"
 
     sql_type = POLARS_CLICKHOUSE_TYPE_MAP.get(dtype)
 
@@ -104,15 +112,181 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
             self.db.restart_event()
 
 
-class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
+class ClickhouseTpcDs(TpcDs["Clickhouse"]):
+    # Query-level session settings from the official ClickHouse TPC-DS kit
+    # (tests/benchmarks/tpc-ds/settings.json): standard-SQL NULL semantics for
+    # outer joins and ROLLUP grouping sets, and DISTINCT set-operation
+    # defaults. Without these, several queries return wrong results rather
+    # than fail.
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["time", "time_", "max(time)"]}
+        return {
+            "settings": {
+                "group_by_use_nulls": 1,
+                "join_use_nulls": 1,
+                "intersect_default_mode": "DISTINCT",
+                "union_default_mode": "DISTINCT",
+                "joined_subquery_requires_alias": 0,
+            }
+        }
+
+
+class ClickhouseJSONBench(JSONBench["Clickhouse"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["first_post_ts"]}
+
+    def _stage_input_files(self) -> Path:
+        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        staging_dir = temp_dir / self.data_directory_name
+        if staging_dir.exists():
+            rmtree(staging_dir)
+        staging_dir.mkdir(parents=True)
+
+        for input_file in get_jsonbench_input_files(self.scale_factor):
+            staged_file = staging_dir / input_file.name.removesuffix(".gz")
+            write_jsonbench_input_file(input_file, staged_file)
+
+        return staging_dir
+
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        ddl = """
+            CREATE TABLE bluesky
+            (
+                `data` JSON(
+                    max_dynamic_paths = 0,
+                    kind LowCardinality(String),
+                    commit.operation LowCardinality(String),
+                    commit.collection LowCardinality(String),
+                    did String,
+                    time_us UInt64) CODEC(ZSTD(1))
+            )
+            ORDER BY (
+                data.kind,
+                data.commit.operation,
+                data.commit.collection,
+                data.did,
+                fromUnixTimestamp64Micro(data.time_us))
+            SETTINGS object_serialization_version = 'v3',
+                     dynamic_serialization_version = 'v3',
+                     object_shared_data_serialization_version = 'advanced',
+                     object_shared_data_serialization_version_for_zero_level_parts = 'map_with_buckets'
+        """
+
+        with self.db.phase_context("schema", table_name="bluesky"):
+            self.db.run_sql(ddl)
+
+        staging_dir = self._stage_input_files()
+        try:
+            with self.db.phase_context("insert", table_name="bluesky"):
+                self.db.run_sql(
+                    f"""
+                    INSERT INTO bluesky
+                    SELECT *
+                    FROM file('{staging_dir.name}/file_*.json', 'JSONAsObject')
+                    SETTINGS min_insert_block_size_rows = 1000000,
+                             min_insert_block_size_bytes = 0
+                    """
+                )
+        finally:
+            rmtree(staging_dir)
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        if restart:
+            self.db.restart_event()
+
+
+class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
+    # Columnar codecs applied per dtype. DoubleDelta is the textbook codec for
+    # monotonically increasing timestamps with regular intervals (one row per
+    # minute in this suite), and Gorilla compresses correlated float
+    # time-series an order of magnitude better than the LZ4 default. Wrapping
+    # both with ZSTD(1) gives an additional ~2x for free at negligible
+    # decompression cost. Together they compress this workload ~2.5x.
+    TIME_CODEC: ClassVar[str] = "CODEC(DoubleDelta, ZSTD(1))"
+    FLOAT_CODEC: ClassVar[str] = "CODEC(Gorilla, ZSTD(1))"
+    # No PARTITION BY: monthly partitioning is the canonical recipe for
+    # time-series in ClickHouse, but on this workload it tripled populate time
+    # (each batch insert touches ~92 partitions for data_large, creating one
+    # part per partition per block and forcing background merges). The
+    # benchmark queries are mostly full-table aggregates, so partition pruning
+    # gives little back. ORDER BY (time) is enough for time-bounded queries
+    # to use the primary index.
+    PARTITION_EXPR: ClassVar[str] = ""
+
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["time", "time_", "max(time)", "hr", "d"]}
+
+    def _column_codec(self, name: str, dtype: pl.DataType | type[pl.DataType]) -> str:
+        if name == "time":
+            return self.TIME_CODEC
+        if dtype in (pl.Float32, pl.Float64):
+            return self.FLOAT_CODEC
+        return ""
+
+    def _create_time_series_table(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        table_name: TableName,
+        primary_key: str | list[str] | None,
+        not_null: list[str],
+    ) -> None:
+        schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
+
+        columns_def: list[str] = []
+        for name, dtype in schema.items():
+            sql_type = get_clickhouse_type(dtype, nullable=name not in not_null)
+            codec = self._column_codec(name, dtype)
+            columns_def.append(f"`{name}` {sql_type}{(' ' + codec) if codec else ''}")
+
+        order_by = self.db.get_order_by_columns(df, primary_key, not_null)
+        order_by_clause = f"ORDER BY ({order_by})" if order_by is not None else ""
+
+        partition_clause = f"PARTITION BY {self.PARTITION_EXPR}" if self.PARTITION_EXPR else ""
+
+        sql = f"""
+            CREATE TABLE {table_name} (
+                {", ".join(columns_def)}
+            )
+            ENGINE = MergeTree
+            {partition_clause}
+            {order_by_clause}
+            -- Aggressive part GC for the benchmark; default is 480 s.
+            SETTINGS old_parts_lifetime = 5
+        """
+        self.db.run_sql(sql)
+        _LOGGER.info(f"Created time_series table {table_name} with per-column codecs")
+
+    def insert_table(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        table_name: TableName,
+        primary_key: str | list[str] | None,
+        not_null: str | list[str] | None,
+    ) -> None:
+        normalized = normalize_columns(not_null)
+
+        if table_name not in self.db.get_table_names():
+            self._create_time_series_table(df, table_name, primary_key, normalized)
+
+        # Falls through to db.insert which detects the table already exists
+        # and skips the CTAS path, going straight to INSERT INTO ... SELECT
+        # FROM file(...).
+        self.db.insert(df, table_name, primary_key=primary_key, not_null=normalized, **self.populate_kwargs)
 
 
 class Clickhouse(Database):
     name: DatabaseName = "clickhouse"
     version: str = VERSION
+    container_image: ClassVar[str | None] = DOCKER_IMAGE
+    supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
 
@@ -122,23 +296,25 @@ class Clickhouse(Database):
     def start(self) -> str:
         (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
-        parts = [
-            f"docker run --platform linux/amd64 --name {self.name}-benchmark --rm -d -p 18123:8123 -p 19000:9000",
-            f"-v {self.database_directory.as_posix()}:/var/lib/clickhouse",
-            f"-v {SETTINGS.temporary_directory.as_posix()}/clickhouse/data:/var/lib/clickhouse/user_files",
-            # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
-            "-e CLICKHOUSE_DB=default",
-            "-e CLICKHOUSE_PASSWORD=password",
-            "-e CLICKHOUSE_USER=user",
-            "-e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1",
+        return self.docker_run_command(
             DOCKER_IMAGE,
-        ]
-
-        return " ".join(parts)
+            ports={"18123": "8123", "19000": "9000"},
+            mounts={
+                self.database_directory.as_posix(): "/var/lib/clickhouse",
+                f"{SETTINGS.temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
+            },
+            env={
+                # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
+                "CLICKHOUSE_DB": "default",
+                "CLICKHOUSE_PASSWORD": "password",
+                "CLICKHOUSE_USER": "user",
+                "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
+            },
+        )
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
-            self._connection = None
+            self.close_connection()
 
         if self._connection is not None:
             return self._connection
@@ -155,17 +331,30 @@ class Clickhouse(Database):
         self._clickhouse_client = get_clickhouse_client()
         return self._clickhouse_client
 
+    def get_runtime_version(self) -> str:
+        df = self.fetch("select version() as version", schema={"version": pl.String})
+        return str(df.item(0, 0))
+
     def fetch(
         self,
         query: str,
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
         time_columns: str | list[str] | None = None,
+        settings: Mapping[str, Any] | None = None,
     ) -> pl.DataFrame:
         query = query.strip().removesuffix(";")
 
-        # query_arrow converts datetime to epoch second
-        with self.record_query_execution(query):
-            df = cast(pl.DataFrame, cast(Any, pl).from_arrow(cast(Any, self.get_client()).query_arrow(query)))
+        with (
+            self.record_query_execution(query),
+            cast(Any, self.get_client()).query_arrow_stream(query, settings=settings) as stream,
+        ):
+            frames = [cast(pl.DataFrame, cast(Any, pl).from_arrow(batch)) for batch in stream]
+            if not frames:
+                df = cast(pl.DataFrame, cast(Any, pl).from_arrow(stream.gen.read_all()))
+            elif len(frames) == 1:
+                df = frames[0]
+            else:
+                df = pl.concat(frames, rechunk=False)
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -179,8 +368,18 @@ class Clickhouse(Database):
         if "time" not in time_columns:
             time_columns.append("time")
 
+        # ArrowStream returns:
+        #   * DateTime64 / date_trunc()        -> timestamp[ms, tz=UTC] (typed)
+        #   * DateTime / toStartOfHour() etc.  -> uint32 (epoch seconds)
+        # Normalise both shapes to the naive ms-precision Datetime that the
+        # rest of the benchmark assumes.
         for n in time_columns:
-            if n in df.columns:
+            if n not in df.columns:
+                continue
+            dtype = df.schema[n]
+            if isinstance(dtype, pl.Datetime):
+                df = df.with_columns(pl.col(n).cast(pl.Datetime("ms")).dt.replace_time_zone(None))
+            elif dtype.is_integer():
                 df = df.with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")))
 
         return df
@@ -193,6 +392,14 @@ class Clickhouse(Database):
         return set(df.get_column("table_name").to_list())
 
     def run_sql(self, statement: str, settings: dict[str, Any] | None = None) -> None:
+        # Transient errors that can fire under heavy back-to-back DELETE/INSERT
+        # mutation traffic and that ClickHouse itself documents as retry-safe:
+        #   1001  -- generic "try again"
+        #   341   -- mutation UNFINISHED
+        #   424   -- CANNOT_LINK (part vanished mid-mutation, surfaces as
+        #            'Cannot link ... .cmrk2 ... No such file or directory')
+        # All three can show up as the textual code in the exception message.
+        retryable_codes = ("error code 1001", "code: 341", "code: 424", "CANNOT_LINK", "UNFINISHED")
         retries = 10
         for retry in range(retries):
             try:
@@ -200,15 +407,22 @@ class Clickhouse(Database):
                     cast(Any, self.get_client()).command(statement, settings=settings)
                 return
             except Exception as e:
-                if "error code 1001" in str(e):
-                    _LOGGER.warning(f"Could not execute statement: '{e}', retrying {retry + 1:_}/{retries:_}")
-                    sleep(0.1)
+                msg = str(e)
+                if any(token in msg for token in retryable_codes):
+                    backoff = min(2.0, 0.1 * (1 << retry))
+                    _LOGGER.warning(
+                        f"Retrying ClickHouse statement after retryable error "
+                        f"({retry + 1:_}/{retries:_}, sleep={backoff:.1f}s): {msg.splitlines()[0][:200]}"
+                    )
+                    sleep(backoff)
                     continue
                 # might happen if the parquet file is not fully written when clickhouse tries to read it
-                if "error code 636" in str(e):
-                    raise e
+                if "error code 636" in msg:
+                    raise
 
                 raise
+
+        raise RuntimeError(f"ClickHouse statement failed after {retries} retries: {statement[:200]}")
 
     def _build_key_filter(self, input_file_string: str, primary_keys: list[str]) -> str:
         if len(primary_keys) == 1:
@@ -218,7 +432,7 @@ class Clickhouse(Database):
         key_tuple = ", ".join(primary_keys)
         return f"({key_tuple}) in (select distinct {key_tuple} from file('{input_file_string}', parquet))"
 
-    def _get_order_by_columns(
+    def get_order_by_columns(
         self,
         df: pl.DataFrame | pl.LazyFrame,
         primary_key: str | list[str] | None,
@@ -345,11 +559,7 @@ class Clickhouse(Database):
         not_null: str | list[str] | None = None,
         partitions: int | None = None,
     ) -> None:
-        if not_null is None:
-            not_null = []
-
-        if isinstance(not_null, str):
-            not_null = [not_null]
+        not_null = normalize_columns(not_null)
 
         schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
         columns = list(schema.names())
@@ -374,7 +584,7 @@ class Clickhouse(Database):
                 # time is read as epoch integer by default
                 time_col_def = "toDateTime(time) AS time," if "time" in columns else ""
 
-                order_by = self._get_order_by_columns(df, primary_key, not_null)
+                order_by = self.get_order_by_columns(df, primary_key, not_null)
                 order_by_clause = f"order by ({order_by})" if order_by is not None else ""
 
                 sql = f"""
@@ -416,7 +626,7 @@ class Clickhouse(Database):
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
         try:
-            pk_list = [primary_key] if isinstance(primary_key, str) else primary_key
+            pk_list = normalize_columns(primary_key)
 
             where_clause = self._build_key_filter(input_file_string, pk_list)
             delete_sql = f"delete from {table} where {where_clause}"
@@ -433,10 +643,7 @@ class Clickhouse(Database):
             self._cleanup_temporary_parquet(temp_parquet_path)
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
-        primary_keys = [primary_key] if isinstance(primary_key, str) else primary_key
-
-        if not primary_keys:
-            raise ValueError("primary_key must be a non-empty string or list of strings")
+        primary_keys = require_columns(primary_key)
 
         temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(keys, temp_dir, None)
@@ -448,14 +655,12 @@ class Clickhouse(Database):
         finally:
             self._cleanup_temporary_parquet(temp_parquet_path)
 
-    @property
-    def rtabench(self) -> ClickHouseRTABench:
-        return ClickHouseRTABench(db=self)
-
-    @property
-    def clickbench(self) -> ClickhouseClickbench:
-        return ClickhouseClickbench(db=self)
-
-    @property
-    def time_series(self) -> ClickhouseTimeseries:
-        return ClickhouseTimeseries(db=self)
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
+        return {
+            **super().suite_registry(),
+            "rtabench": ClickHouseRTABench,
+            "clickbench": ClickhouseClickbench,
+            "jsonbench": ClickhouseJSONBench,
+            "time_series": ClickhouseTimeseries,
+            "tpc_ds": ClickhouseTpcDs,
+        }

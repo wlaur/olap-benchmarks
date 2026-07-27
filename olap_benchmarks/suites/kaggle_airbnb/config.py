@@ -2,6 +2,9 @@
 # https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef
 
 import logging
+import shutil
+from gzip import open as gzip_open
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
@@ -10,9 +13,19 @@ import polars as pl
 from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
+from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
 KAGGLE_AIRBNB_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/kaggle_airbnb/queries"
+INSIDE_AIRBNB_SNAPSHOT_URL = "https://data.insideairbnb.com/united-states/tx/austin/2024-12-14"
+INSIDE_AIRBNB_FILES = {
+    "calendar": "data/calendar.csv.gz",
+    "listings_detailed": "data/listings.csv.gz",
+    "listings": "visualisations/listings.csv",
+    "neighbourhoods": "visualisations/neighbourhoods.csv",
+    "reviews_detailed": "data/reviews.csv.gz",
+    "reviews": "visualisations/reviews.csv",
+}
 
 
 KAGGLE_AIRBNB_TABLES = [
@@ -33,21 +46,37 @@ KAGGLE_AIRBNB_QUERY_NAMES = {
 }
 
 
+def _download_csv(data_dir: Path, table_name: str, source: str) -> Path:
+    csv_path = data_dir / f"{table_name}.csv"
+    if csv_path.is_file():
+        return csv_path
+
+    url = f"{INSIDE_AIRBNB_SNAPSHOT_URL}/{source}"
+    if not source.endswith(".gz"):
+        download_file(url, csv_path)
+        return csv_path
+
+    compressed_path = data_dir / f"{table_name}.csv.gz"
+    download_file(url, compressed_path)
+    partial_path = csv_path.with_name(f"{csv_path.name}.part")
+    with gzip_open(compressed_path, "rb") as compressed, partial_path.open("wb") as output:
+        shutil.copyfileobj(compressed, output)
+    partial_path.replace(csv_path)
+    return csv_path
+
+
 def prepare_data() -> None:
     data_dir = SETTINGS.input_data_directory / "kaggle_airbnb"
-    # download and unzip *.csv.zip files from
-    # https://www.kaggle.com/datasets/konradb/inside-airbnb-usa (subdirectory Austin)
-    # need to login to Kaggle to be able to download
-    table_name = "calendar"
+    for table_name, source in INSIDE_AIRBNB_FILES.items():
+        _download_csv(data_dir, table_name, source)
 
-    pl.read_csv(data_dir / f"{table_name}.csv").with_columns(
+    pl.read_csv(data_dir / "calendar.csv").with_columns(
         *[pl.col(col).cast(pl.Date).alias(col) for col in ["date"]],
         *[pl.when(pl.col(col) == "t").then(True).otherwise(False).alias(col) for col in ["available"]],
-    ).write_parquet(data_dir / f"{table_name}.parquet")
+    ).write_parquet(data_dir / "calendar.parquet")
 
-    table_name = "listings_detailed"
-
-    pl.read_csv(data_dir / f"{table_name}.csv").with_columns(
+    pl.read_csv(data_dir / "listings_detailed.csv").with_columns(
+        pl.col("bathrooms").cast(pl.String),
         *[
             pl.col(col).cast(pl.Date).alias(col)
             for col in [
@@ -69,29 +98,21 @@ def prepare_data() -> None:
                 "has_availability",
             ]
         ],
-    ).write_parquet(data_dir / f"{table_name}.parquet")
+    ).write_parquet(data_dir / "listings_detailed.parquet")
 
-    table_name = "listings"
-
-    pl.read_csv(data_dir / f"{table_name}.csv").with_columns(
+    pl.read_csv(data_dir / "listings.csv").with_columns(
         *[pl.col(col).cast(pl.Date).alias(col) for col in ["last_review"]],
-    ).write_parquet(data_dir / f"{table_name}.parquet")
+    ).write_parquet(data_dir / "listings.parquet")
 
-    table_name = "neighbourhoods"
+    pl.read_csv(data_dir / "neighbourhoods.csv").write_parquet(data_dir / "neighbourhoods.parquet")
 
-    pl.read_csv(data_dir / f"{table_name}.csv").write_parquet(data_dir / f"{table_name}.parquet")
-
-    table_name = "reviews_detailed"
-
-    pl.read_csv(data_dir / f"{table_name}.csv").with_columns(
+    pl.read_csv(data_dir / "reviews_detailed.csv").with_columns(
         *[pl.col(col).cast(pl.Date).alias(col) for col in ["date"]],
-    ).write_parquet(data_dir / f"{table_name}.parquet")
+    ).write_parquet(data_dir / "reviews_detailed.parquet")
 
-    table_name = "reviews"
-
-    pl.read_csv(data_dir / f"{table_name}.csv").with_columns(
+    pl.read_csv(data_dir / "reviews.csv").with_columns(
         *[pl.col(col).cast(pl.Date).alias(col) for col in ["date"]],
-    ).write_parquet(data_dir / f"{table_name}.parquet")
+    ).write_parquet(data_dir / "reviews.parquet")
 
     assert all((data_dir / f"{n}.parquet").is_file() for n in KAGGLE_AIRBNB_TABLES)
 
@@ -151,26 +172,49 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
 
     def select(self) -> None:
         t0 = perf_counter()
+        failed_queries = 0
         for idx, (query_name, iterations) in enumerate(KAGGLE_AIRBNB_QUERY_NAMES.items()):
+            progress_label = f"({idx + 1:_}/{len(KAGGLE_AIRBNB_QUERY_NAMES):_})"
             if not self.include_query(query_name):
+                self.record_skipped_query_steps(
+                    query_name,
+                    iterations,
+                    result_status="skipped",
+                    reason="query excluded by suite/database",
+                )
                 continue
 
-            with self.db.query_context(self.name, query_name):
-                query = self.load_kaggle_airbnb_query(query_name)
+            def log_success(
+                it: int,
+                df: pl.DataFrame,
+                t: float,
+                *,
+                query_name: str = query_name,
+                progress_label: str = progress_label,
+                iterations: int = iterations,
+            ) -> None:
+                _LOGGER.info(
+                    f"Executed {query_name} {progress_label} "
+                    f"iteration {it:_}/{iterations:_} "
+                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
+                )
 
-                for it in range(1, iterations + 1):
-                    df, t = self.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=it,
-                        query=query,
-                        fetch_kwargs=self.fetch_kwargs,
-                    )
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                iterations=iterations,
+                query_loader=lambda query_name=query_name: self.load_kaggle_airbnb_query(query_name),
+                fetch_kwargs_factory=lambda: self.fetch_kwargs,
+                progress_label=progress_label,
+                log_success=log_success,
+            )
+            if not ok:
+                failed_queries += 1
 
-                    _LOGGER.info(
-                        f"Executed {query_name} ({idx + 1:_}/{len(KAGGLE_AIRBNB_QUERY_NAMES):_}) "
-                        f"iteration {it:_}/{iterations:_} "
-                        f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                    )
+        if failed_queries:
+            _LOGGER.warning(
+                f"Kaggle Airbnb select completed on {self.db.name} with {failed_queries:_} failed "
+                f"{'queries' if failed_queries != 1 else 'query'}"
+            )
 
         _LOGGER.info(
             f"Executed {len(KAGGLE_AIRBNB_QUERY_NAMES):_} queries (with repetitions) "

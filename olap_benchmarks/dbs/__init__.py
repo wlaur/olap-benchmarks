@@ -1,43 +1,57 @@
 from __future__ import annotations
 
 import logging
-import os
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import lru_cache
 from multiprocessing import Queue
 from pathlib import Path
+from threading import get_ident
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 import polars as pl
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 from sqlalchemy import Connection, text
 
+from ..container_platform import get_container_engine_platform
 from ..metrics.sampler import start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
-from ..settings import REPO_ROOT, SETTINGS, DatabaseName, Operation, SuiteName, TableName
+from ..results.hashing import build_answer_metadata
+from ..run_metadata import (
+    ExecutionMode,
+    StepResultStatus,
+    build_run_metadata,
+    build_system_metadata,
+    classify_iteration_role,
+    classify_step_result_status,
+)
+from ..settings import (
+    REPO_ROOT,
+    SETTINGS,
+    ContainerPlatform,
+    DatabaseName,
+    Operation,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+    get_suite_scale_factor,
+    resolve_suite_scale_factor,
+)
+from ..utils import run_shell
 from .utils import tracked_commit
 
 if TYPE_CHECKING:
     from ..suites import BenchmarkSuite
-    from ..suites.clickbench.config import Clickbench
-    from ..suites.kaggle_airbnb.config import KaggleAirbnb
-    from ..suites.rtabench.config import RTABench
-    from ..suites.time_series.config import TimeSeries
 
 _LOGGER = logging.getLogger(__name__)
 LiteralStepType = Literal["phase", "query", "mutation"]
 
 
-def _status_from_exception() -> RunStatus:
-    return "failed"
-
-
-class QueryContext(BaseModel):
-    suite: SuiteName
-    query_name: str
+def _new_active_step_stacks() -> dict[int, list[int]]:
+    return {}
 
 
 class Database(BaseModel, ABC):
@@ -46,17 +60,23 @@ class Database(BaseModel, ABC):
 
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
+    container_image: ClassVar[str | None] = None
+    arm64_container_image: ClassVar[str | None] = None
+    supports_arm64_containers: ClassVar[bool] = False
+    expected_runtime_version: ClassVar[str | None] = None
 
-    context: QueryContext | None = None
+    current_query_name: str | None = None
     _current_suite: SuiteName | None = None
+    _current_suite_scale_factor: int | None = None
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
     _run_id: int | None = None
-    _active_step_ids: list[int] = []
+    _last_start_command: str | None = None
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
+    _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
 
     @property
     def current_suite(self) -> SuiteName:
@@ -65,10 +85,26 @@ class Database(BaseModel, ABC):
         return self._current_suite
 
     @property
+    def current_suite_scale_factor(self) -> int:
+        if self._current_suite is None:
+            raise ValueError("current_suite is not set")
+        if self._current_suite_scale_factor is None:
+            raise ValueError("current_suite_scale_factor is not set")
+        return resolve_suite_scale_factor(self._current_suite, self._current_suite_scale_factor)
+
+    @property
     def database_directory(self) -> Path:
-        directory = SETTINGS.database_directory / self.name / self.current_suite
+        directory = (
+            SETTINGS.database_directory
+            / self.name
+            / format_suite_data_directory_name(self.current_suite, self.current_suite_scale_factor)
+        )
         directory.mkdir(parents=True, exist_ok=True)
         return directory
+
+    @property
+    def metric_directories(self) -> tuple[Path, ...]:
+        return (self.database_directory,)
 
     def set_queues(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
         self._queue = queue
@@ -96,13 +132,112 @@ class Database(BaseModel, ABC):
 
     @property
     def active_step_id(self) -> int | None:
-        if not self._active_step_ids:
+        stack = self._active_step_ids_by_thread.get(get_ident())
+        if not stack:
             return None
-        return self._active_step_ids[-1]
+        return stack[-1]
 
     @property
     @abstractmethod
     def start(self) -> str | None: ...
+
+    @property
+    def execution_mode(self) -> ExecutionMode:
+        if not self.container_images:
+            return "in_process"
+        return "container"
+
+    @property
+    def resolved_container_image(self) -> str | None:
+        if self.container_image is None:
+            return None
+        if self.container_platform == "linux/arm64" and self.arm64_container_image is not None:
+            return self.arm64_container_image
+        return self.container_image
+
+    @property
+    def container_platform(self) -> ContainerPlatform | None:
+        if self.container_image is None and not self.container_images:
+            return None
+
+        engine_platform = get_container_engine_platform()
+        if engine_platform == "linux/arm64" and not self.supports_arm64_containers:
+            return "linux/amd64"
+        return engine_platform
+
+    @property
+    def uses_container_emulation(self) -> bool:
+        platform = self.container_platform
+        return platform is not None and platform != get_container_engine_platform()
+
+    @property
+    def container_platform_warning(self) -> str | None:
+        platform = self.container_platform
+        if platform is None:
+            return None
+
+        engine_platform = get_container_engine_platform()
+        if engine_platform == "linux/arm64" and platform == "linux/amd64":
+            return (
+                f"{self.name} does not provide an ARM64 container image; running linux/amd64 on "
+                f"{engine_platform} through an inefficient CPU virtualization layer. Benchmark results will "
+                "include virtualization overhead."
+            )
+        return None
+
+    @property
+    def container_images(self) -> Mapping[str, str]:
+        image = self.resolved_container_image
+        if image is None:
+            return {}
+        return {self.name: image}
+
+    @property
+    def metric_container_names(self) -> tuple[str, ...]:
+        if not self.container_images:
+            return ()
+        return (f"{self.name}-benchmark",)
+
+    @property
+    def start_commands(self) -> tuple[str, ...]:
+        command = self.start
+        return () if command is None else (command,)
+
+    @property
+    def stop_commands(self) -> tuple[str, ...]:
+        command = self.stop
+        return () if command is None else (command,)
+
+    @property
+    def restart_commands(self) -> tuple[str, ...]:
+        command = self.restart
+        return () if command is None else (command,)
+
+    def docker_run_command(
+        self,
+        image: str,
+        ports: Mapping[str, str] | None = None,
+        mounts: Mapping[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
+        args: Sequence[str] = (),
+        platform: str | None = None,
+        name: str | None = None,
+        network: str | None = None,
+        ip: str | None = None,
+    ) -> str:
+        resolved_platform = platform or self.container_platform or get_container_engine_platform()
+        parts = ["docker run", "--platform", resolved_platform]
+        parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
+        if network is not None:
+            parts.extend(["--network", network])
+        if ip is not None:
+            parts.extend(["--ip", ip])
+        parts.extend(f"-p {host}:{container}" for host, container in (ports or {}).items())
+        parts.extend(f"-v {src}:{dst}" for src, dst in (mounts or {}).items())
+        parts.extend(f"-e {key}={value}" for key, value in (env or {}).items())
+        parts.append(image)
+        parts.extend(args)
+        return " ".join(parts)
 
     @property
     def stop(self) -> str | None:
@@ -119,6 +254,7 @@ class Database(BaseModel, ABC):
         query_name: str | None = None,
         iteration: int | None = None,
         table_name: str | None = None,
+        result_status: StepResultStatus | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
         return self.result_storage.start_step(
@@ -129,6 +265,8 @@ class Database(BaseModel, ABC):
             iteration=iteration,
             table_name=table_name,
             started_at=datetime.now(UTC).replace(tzinfo=None),
+            result_status=result_status,
+            iteration_role=classify_iteration_role(iteration) if step_type in ("query", "mutation") else None,
             metadata=metadata,
         )
 
@@ -136,15 +274,20 @@ class Database(BaseModel, ABC):
         self,
         step_id: int,
         status: RunStatus,
+        step_type: LiteralStepType,
         row_count: int | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
+        result_status: StepResultStatus | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         self.result_storage.finish_step(
             step_id=step_id,
             finished_at=datetime.now(UTC).replace(tzinfo=None),
             status=status,
+            result_status=result_status
+            if result_status is not None
+            else classify_step_result_status(step_type=step_type, status=status, error_type=error_type),
             row_count=row_count,
             error_type=error_type,
             error_message=error_message,
@@ -152,26 +295,54 @@ class Database(BaseModel, ABC):
         )
 
     def _push_active_step(self, step_id: int) -> None:
-        self._active_step_ids.append(step_id)
+        thread_id = get_ident()
+        stack = self._active_step_ids_by_thread.get(thread_id)
+        if stack is None:
+            stack = []
+            self._active_step_ids_by_thread[thread_id] = stack
+        stack.append(step_id)
 
     def _pop_active_step(self, step_id: int) -> None:
-        if not self._active_step_ids:
+        thread_id = get_ident()
+        stack = self._active_step_ids_by_thread.get(thread_id)
+        if not stack:
             return
 
-        if self._active_step_ids[-1] == step_id:
-            self._active_step_ids.pop()
+        if stack[-1] == step_id:
+            stack.pop()
+            if not stack:
+                del self._active_step_ids_by_thread[thread_id]
             return
 
-        self._active_step_ids = [
-            active_step_id for active_step_id in self._active_step_ids if active_step_id != step_id
-        ]
+        remaining = [active_step_id for active_step_id in stack if active_step_id != step_id]
+        if remaining:
+            self._active_step_ids_by_thread[thread_id] = remaining
+        else:
+            del self._active_step_ids_by_thread[thread_id]
 
     def bind_query_recorder(self, connection: Connection) -> Connection:
         connection.info["olap_query_recorder"] = self.record_query_execution
         return connection
 
+    def execute(self, statement: str, commit: bool = True, autocommit: bool = False, reconnect: bool = False) -> None:
+        """Execute a single statement with query-execution recording.
+
+        `autocommit` reconnects and runs the statement outside a transaction
+        (needed for e.g. VACUUM). `commit` is ignored in that case.
+        """
+        con = self.connect(reconnect=reconnect or autocommit)
+
+        if autocommit:
+            con = con.execution_options(isolation_level="AUTOCOMMIT")
+
+        with self.record_query_execution(statement):
+            con.execute(text(statement))
+
+        if commit and not autocommit:
+            tracked_commit(con)
+
     @contextmanager
-    def record_query_execution(self, query: str) -> Iterator[None]:
+    def record_query_execution(self, query: str) -> Generator[None]:
         stripped_query = query.strip()
 
         if not stripped_query or self._result_storage is None or self._run_id is None:
@@ -193,7 +364,7 @@ class Database(BaseModel, ABC):
             )
 
     @contextmanager
-    def phase_context(self, phase_name: str, table_name: str | None = None) -> Iterator[None]:
+    def phase_context(self, phase_name: str, table_name: str | None = None) -> Generator[None]:
         step_id = self._start_step("phase", phase_name, table_name=table_name)
         self._push_active_step(step_id)
 
@@ -202,7 +373,8 @@ class Database(BaseModel, ABC):
         except BaseException as exc:
             self._finish_step(
                 step_id=step_id,
-                status=_status_from_exception(),
+                status="failed",
+                step_type="phase",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -210,82 +382,64 @@ class Database(BaseModel, ABC):
         finally:
             self._pop_active_step(step_id)
 
-        self._finish_step(step_id=step_id, status="completed")
+        self._finish_step(step_id=step_id, status="completed", step_type="phase")
 
     @contextmanager
-    def event_context(self, name: str) -> Iterator[None]:
-        # Backwards-compatible alias for existing suite/database implementations.
-        with self.phase_context(name):
-            yield
-
-    @contextmanager
-    def query_context(self, suite: SuiteName, query_name: str) -> Iterator[None]:
-        self.context = QueryContext(suite=suite, query_name=query_name)
+    def query_context(self, query_name: str) -> Generator[None]:
+        self.current_query_name = query_name
 
         try:
             yield
         finally:
-            self.context = None
+            self.current_query_name = None
 
-    def start_query_step(self, query_name: str, iteration: int) -> int:
-        return self._start_step(
-            step_type="query",
-            step_name="query",
-            query_name=query_name,
-            iteration=iteration,
-        )
-
-    def finish_query_step(
+    def _finish_timed_step(
         self,
         step_id: int,
         status: RunStatus,
+        step_type: LiteralStepType,
         row_count: int | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
         duration_ms: float | None = None,
+        result_status: StepResultStatus | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
+        step_metadata = dict(metadata or {})
+        if duration_ms is not None:
+            step_metadata["duration_ms"] = duration_ms
 
         self._finish_step(
             step_id=step_id,
             status=status,
+            step_type=step_type,
             row_count=row_count,
             error_type=error_type,
             error_message=error_message,
-            metadata=metadata,
-        )
-
-    def start_mutation_step(self, query_name: str, iteration: int, table_name: str | None = None) -> int:
-        return self._start_step(
-            step_type="mutation",
-            step_name="mutation",
-            query_name=query_name,
-            iteration=iteration,
-            table_name=table_name,
-        )
-
-    def finish_mutation_step(
-        self,
-        step_id: int,
-        status: RunStatus,
-        row_count: int | None = None,
-        error_type: str | None = None,
-        error_message: str | None = None,
-        duration_ms: float | None = None,
-    ) -> None:
-        metadata = {"duration_ms": duration_ms} if duration_ms is not None else None
-
-        self._finish_step(
-            step_id=step_id,
-            status=status,
-            row_count=row_count,
-            error_type=error_type,
-            error_message=error_message,
-            metadata=metadata,
+            result_status=result_status,
+            metadata=step_metadata or None,
         )
 
     def is_mutation_step_enabled(self, suite: SuiteName, step_name: str) -> bool:
         return step_name not in self.DISABLED_MUTATION_STEPS.get(suite, frozenset())
+
+    def get_runtime_version(self) -> str | None:
+        return None
+
+    def is_runtime_version_expected(self, runtime_version: str) -> bool:
+        return (self.expected_runtime_version or self.version) in runtime_version
+
+    def verify_runtime_version(self) -> None:
+        runtime_version = self.get_runtime_version()
+        if runtime_version is None:
+            return
+
+        if not self.is_runtime_version_expected(runtime_version):
+            expected_version = self.expected_runtime_version or self.version
+            raise RuntimeError(
+                f"{self.name} runtime version does not match pinned version: "
+                f"expected {expected_version!r}, got {runtime_version!r}"
+            )
 
     @contextmanager
     def mutation_context(
@@ -293,17 +447,20 @@ class Database(BaseModel, ABC):
         query_name: str,
         iteration: int,
         table_name: str | None = None,
-    ) -> Iterator[None]:
-        step_id = self.start_mutation_step(query_name=query_name, iteration=iteration, table_name=table_name)
+    ) -> Generator[None]:
+        step_id = self._start_step(
+            "mutation", "mutation", query_name=query_name, iteration=iteration, table_name=table_name
+        )
         self._push_active_step(step_id)
         try:
             t0 = perf_counter()
             yield
             duration_seconds = perf_counter() - t0
         except BaseException as exc:
-            self.finish_mutation_step(
+            self._finish_timed_step(
                 step_id=step_id,
-                status=_status_from_exception(),
+                status="failed",
+                step_type="mutation",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -311,10 +468,54 @@ class Database(BaseModel, ABC):
         finally:
             self._pop_active_step(step_id)
 
-        self.finish_mutation_step(
+        self._finish_timed_step(
             step_id=step_id,
             status="completed",
+            step_type="mutation",
             duration_ms=1_000 * duration_seconds,
+        )
+
+    def record_skipped_mutation_step(self, query_name: str, iteration: int, table_name: str, reason: str) -> None:
+        metadata = {"skip_reason": reason, "duration_ms": 0.0}
+        step_id = self._start_step(
+            "mutation",
+            "mutation",
+            query_name=query_name,
+            iteration=iteration,
+            table_name=table_name,
+            result_status="skipped",
+            metadata=metadata,
+        )
+        self._finish_step(
+            step_id=step_id,
+            status="completed",
+            step_type="mutation",
+            result_status="skipped",
+            metadata=metadata,
+        )
+
+    def record_skipped_query_step(
+        self,
+        query_name: str,
+        iteration: int,
+        reason: str,
+        result_status: Literal["skipped", "unsupported"] = "skipped",
+    ) -> None:
+        metadata = {"skip_reason": reason, "duration_ms": 0.0}
+        step_id = self._start_step(
+            "query",
+            "query",
+            query_name=query_name,
+            iteration=iteration,
+            result_status=result_status,
+            metadata=metadata,
+        )
+        self._finish_step(
+            step_id=step_id,
+            status="completed",
+            step_type="query",
+            result_status=result_status,
+            metadata=metadata,
         )
 
     def execute_query_iteration(
@@ -324,7 +525,7 @@ class Database(BaseModel, ABC):
         query: str,
         fetch_kwargs: Mapping[str, Any] | None = None,
     ) -> tuple[pl.DataFrame, float]:
-        step_id = self.start_query_step(query_name=query_name, iteration=iteration)
+        step_id = self._start_step("query", "query", query_name=query_name, iteration=iteration)
         self._push_active_step(step_id)
 
         kwargs = dict(fetch_kwargs or {})
@@ -334,9 +535,10 @@ class Database(BaseModel, ABC):
             df = self.fetch(query, **kwargs)
             duration_seconds = perf_counter() - t0
         except BaseException as exc:
-            self.finish_query_step(
+            self._finish_timed_step(
                 step_id=step_id,
-                status=_status_from_exception(),
+                status="failed",
+                step_type="query",
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
@@ -344,23 +546,29 @@ class Database(BaseModel, ABC):
         finally:
             self._pop_active_step(step_id)
 
-        self.finish_query_step(
+        self._finish_timed_step(
             step_id=step_id,
             status="completed",
+            step_type="query",
             row_count=df.shape[0],
             duration_ms=1_000 * duration_seconds,
+            metadata=build_answer_metadata(df),
         )
 
         return df, duration_seconds
 
     def restart_event(self) -> None:
-        cmd = self.restart
-        if cmd is None:
+        commands = self.restart_commands
+        if not commands:
             return
 
         with self.phase_context("restart"):
+            self.close_connection()
             _LOGGER.info(f"Restarting service {self.name}")
-            os.system(cmd)
+            for command in commands:
+                rc = run_shell(command)
+                if rc != 0:
+                    raise RuntimeError(f"Restart command for {self.name} exited with code {rc}: {command}")
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
@@ -376,33 +584,44 @@ class Database(BaseModel, ABC):
 
             # ensure the connection used when initializing the schema is not reused
             # if we use e.g. alter database, it's important that subsequent queries use a new connection
-            con = self.connect(reconnect=True)
-            with self.record_query_execution(stmt):
-                con.execute(text(stmt))
-            tracked_commit(con)
+            self.execute(stmt, reconnect=True)
 
-    def initialize_schema(self, suite: SuiteName) -> None:
-        fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite}/schemas/{self.name}.sql"
+    def initialize_schema(self, suite_directory: str) -> None:
+        fpath = REPO_ROOT / f"olap_benchmarks/suites/{suite_directory}/schemas/{self.name}.sql"
 
         if not fpath.is_file():
-            _LOGGER.info(f"Schema definition for {self.name}:{suite} does not exist, skipping...")
+            _LOGGER.info(f"Schema definition for {self.name}:{suite_directory} does not exist, skipping...")
             return
 
         with self.phase_context("schema"):
             self.execute_schema_file(fpath)
 
         self.connect(reconnect=True)
-        _LOGGER.info(f"Initialized schema for {self.name}:{suite}")
+        _LOGGER.info(f"Initialized schema for {self.name}:{suite_directory}")
 
     @abstractmethod
     def connect(self, reconnect: bool = False) -> Connection: ...
+
+    def close_connection(self) -> None:
+        connection = self._connection
+        if connection is None:
+            return
+
+        self._connection = None
+        engine = connection.engine
+        try:
+            connection.close()
+        except Exception:
+            _LOGGER.debug(f"Error closing {self.name} connection", exc_info=True)
+        finally:
+            engine.dispose()
 
     def rollback(self) -> None:
         if self._connection is None:
             return
         self._connection.rollback()
 
-    def wait_until_accessible(self, timeout_seconds: float = 120.0, interval_seconds: float = 1.0) -> None:
+    def wait_until_accessible(self, timeout_seconds: float = 300.0, interval_seconds: float = 1.0) -> None:
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
 
         deadline = perf_counter() + timeout_seconds
@@ -449,46 +668,57 @@ class Database(BaseModel, ABC):
         not_null: str | list[str] | None = None,
     ) -> None: ...
 
+    def insert_parquet(
+        self,
+        path: Path,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+    ) -> None:
+        self.insert(pl.scan_parquet(path), table, primary_key=primary_key, not_null=not_null)
+
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
 
     @abstractmethod
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None: ...
 
-    @property
-    def rtabench(self) -> RTABench[Any]:
-        from ..suites.rtabench.config import RTABench
-
-        return RTABench(db=self)
-
-    @property
-    def clickbench(self) -> Clickbench[Any]:
+    def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
         from ..suites.clickbench.config import Clickbench
-
-        return Clickbench(db=self)
-
-    @property
-    def time_series(self) -> TimeSeries[Any]:
-        from ..suites.time_series.config import TimeSeries
-
-        return TimeSeries(db=self)
-
-    @property
-    def kaggle_airbnb(self) -> KaggleAirbnb[Any]:
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
+        from ..suites.rtabench.config import RTABench
+        from ..suites.time_series.config import TimeSeries
+        from ..suites.tpc_ds.config import TpcDs
+        from ..suites.tpc_h.config import TpcH
 
-        return KaggleAirbnb(db=self)
+        return {
+            "rtabench": RTABench,
+            "clickbench": Clickbench,
+            "time_series": TimeSeries,
+            "kaggle_airbnb": KaggleAirbnb,
+            "tpc_h": TpcH,
+            "tpc_ds": TpcDs,
+        }
 
     @property
     def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
-        return cast(
-            "dict[SuiteName, BenchmarkSuite[Any]]",
-            {suite_name: getattr(self, suite_name) for suite_name in get_args(SuiteName)},
-        )
+        return {
+            suite_name: suite_class(
+                db=self,
+                name=suite_name,
+                scale_factor=(
+                    self.current_suite_scale_factor
+                    if self._current_suite == suite_name
+                    else get_suite_scale_factor(suite_name)
+                ),
+            )
+            for suite_name, suite_class in self.suite_registry().items()
+        }
 
-    def benchmark(self, suite: SuiteName, operation: Operation) -> None:
+    def benchmark(self, suite: SuiteName, operation: Operation, scale_factor: int | None = None) -> None:
         self._current_suite = suite
-        self._active_step_ids = []
+        self._current_suite_scale_factor = resolve_suite_scale_factor(suite, scale_factor)
+        self._active_step_ids_by_thread = {}
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:
@@ -508,27 +738,46 @@ class Database(BaseModel, ABC):
                 benchmark_func = benchmark.select
             case "mutate":
                 benchmark_func = benchmark.mutate
+            case "concurrent":
+                benchmark_func = benchmark.concurrent
             case _:
                 raise ValueError(f"Invalid operation '{operation}'")
+
+        if operation == "populate" and not benchmark.should_populate():
+            _LOGGER.info(
+                f"Skipping populate run recording for {suite} scale factor {benchmark.scale_factor} on {self.name}"
+            )
+            return
+
+        self.verify_runtime_version()
 
         self._result_storage = self.create_result_storage()
 
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(
             suite=suite,
+            suite_scale_factor=benchmark.scale_factor,
             db=self.name,
             db_version=self.version,
             operation=operation,
             system=SETTINGS.system,
             started_at=started_at,
+            system_metadata=build_system_metadata(),
+            metadata=build_run_metadata(
+                execution_mode=self.execution_mode,
+                container_image=self.resolved_container_image,
+                container_images=self.container_images,
+                container_platform=self.container_platform,
+                container_platform_emulated=self.uses_container_emulation,
+                start_command=self._last_start_command,
+            ),
         )
 
         metric_process, stop_event = start_metric_sampler(
-            db=self.name,
-            suite=suite,
+            container_names=self.metric_container_names,
+            metric_directories=self.metric_directories,
             run_id=self.run_id,
             storage=self.result_storage,
-            interval_seconds=None,  # docker stats takes ~1 sec, no need to wait here
         )
 
         status: RunStatus = "completed"
@@ -538,22 +787,24 @@ class Database(BaseModel, ABC):
         t0 = perf_counter()
 
         _LOGGER.info(
-            f"Starting benchmark run {self.run_id} (database: {self.name}, suite: {suite}, operation: {operation})"
+            f"Starting benchmark run {self.run_id} "
+            f"(database: {self.name}, suite: {suite}, scale_factor: {benchmark.scale_factor}, "
+            f"operation: {operation})"
         )
 
         try:
             with self.phase_context(operation):
                 benchmark_func()
         except BaseException as exc:
-            status = _status_from_exception()
+            status = "failed"
             error_type = type(exc).__name__
             error_message = str(exc)
             raise
         finally:
+            finished_at = datetime.now(UTC).replace(tzinfo=None)
             stop_event.set()
             metric_process.join()
 
-            finished_at = datetime.now(UTC).replace(tzinfo=None)
             self.result_storage.finish_run(
                 run_id=self.run_id,
                 finished_at=finished_at,
@@ -563,3 +814,31 @@ class Database(BaseModel, ABC):
             )
 
         _LOGGER.info(f"Finished benchmark run {self.run_id} with status={status} in {perf_counter() - t0:_.2f} seconds")
+
+
+@lru_cache(maxsize=1)
+def get_databases() -> dict[DatabaseName, Database]:
+    from .clickhouse import Clickhouse
+    from .doris import Doris
+    from .duckdb import DuckDB
+    from .monetdb import MonetDB
+    from .polars import Polars
+    from .postgres import Postgres
+    from .questdb import QuestDB
+    from .starrocks import StarRocks
+    from .timescaledb import TimescaleDB
+
+    databases: dict[DatabaseName, Database] = {
+        "monetdb": MonetDB(),
+        "clickhouse": Clickhouse(),
+        "timescaledb": TimescaleDB(),
+        "duckdb": DuckDB(),
+        "polars": Polars(),
+        "questdb": QuestDB(),
+        "postgres": Postgres(),
+        "starrocks": StarRocks(),
+        "doris": Doris(),
+    }
+
+    assert set(databases) == set(get_args(DatabaseName))
+    return databases

@@ -1,5 +1,11 @@
 -- Optimized column order according to
 -- https://github.com/ClickHouse/ClickBench/issues/234
+-- GUC parity with the TimescaleDB clickbench schema so plain Postgres is not
+-- penalized on full-scan / high-cardinality group-by queries.
+ALTER DATABASE postgres SET work_mem TO '1GB';
+
+ALTER DATABASE postgres SET min_parallel_table_scan_size TO '0';
+
 CREATE TABLE hits
 (
     WatchID BIGINT NOT NULL,

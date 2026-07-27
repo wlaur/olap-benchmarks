@@ -6,7 +6,7 @@ export function PanelCard({ children, className }: { children: ReactNode; classN
   return (
     <div
       className={cn(
-        "min-h-0 min-w-0 overflow-hidden rounded-xl border border-border-default bg-surface-raised p-3",
+        "min-h-0 min-w-0 overflow-hidden rounded-lg border border-border-default bg-surface-raised p-3 shadow-[0_1px_0_rgba(255,255,255,0.025)_inset,0_12px_32px_-24px_rgba(0,0,0,0.9)]",
         className,
       )}
     >
@@ -34,7 +34,10 @@ export function ChartFrame({
 
   return (
     <div
-      className={cn("min-h-0 min-w-0 overflow-hidden rounded-lg bg-surface-inset p-3", className)}
+      className={cn(
+        "min-h-0 min-w-0 overflow-hidden rounded-md border border-border-subtle bg-surface-inset p-3",
+        className,
+      )}
       style={resolvedStyle}
     >
       {children}
