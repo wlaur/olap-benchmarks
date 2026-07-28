@@ -773,7 +773,7 @@ class Database(BaseModel, ABC):
             ),
         )
 
-        metric_process, stop_event = start_metric_sampler(
+        metric_process, stop_event, final_sample_time_queue = start_metric_sampler(
             container_names=self.metric_container_names,
             metric_directories=self.metric_directories,
             run_id=self.run_id,
@@ -802,6 +802,7 @@ class Database(BaseModel, ABC):
             raise
         finally:
             finished_at = datetime.now(UTC).replace(tzinfo=None)
+            final_sample_time_queue.put(finished_at)
             stop_event.set()
             metric_process.join()
 

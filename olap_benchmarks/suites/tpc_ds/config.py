@@ -268,10 +268,6 @@ class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
             for table_name in TPCDS_TABLES
         }
 
-    @property
-    def populate_kwargs(self) -> dict[str, Any]:
-        return {}
-
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
