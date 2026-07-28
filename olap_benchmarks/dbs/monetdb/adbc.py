@@ -35,8 +35,8 @@ def fetch_adbc(
 
 
 def _validated_ingest_row_count(reported_rows: int, expected_rows: int, context: str) -> int:
-    if reported_rows == -1:
-        return expected_rows
+    if reported_rows < 0:
+        raise RuntimeError(f"ADBC did not report an inserted row count for the {expected_rows:_}-row {context}")
     if reported_rows != expected_rows:
         raise RuntimeError(f"ADBC reported {reported_rows:_} inserted rows for a {expected_rows:_}-row {context}")
     return reported_rows
@@ -91,9 +91,7 @@ def insert_parquet_adbc(
     metadata = parquet_file.metadata
     del parquet_file
 
-    previous_memory_pool = pa.default_memory_pool()
-    memory_pool = pa.system_memory_pool()
-    pa.set_memory_pool(memory_pool)
+    memory_pool = pa.default_memory_pool()
     try:
         reader = pa.RecordBatchReader.from_batches(
             schema,
@@ -120,7 +118,6 @@ def insert_parquet_adbc(
             reader.close()
     finally:
         memory_pool.release_unused()
-        pa.set_memory_pool(previous_memory_pool)
 
 
 def _iter_parquet_batches(
