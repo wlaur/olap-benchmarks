@@ -3,14 +3,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
+from urllib.parse import urlencode
 
 import polars as pl
+from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name
 from ...suites import BenchmarkSuite
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
-from ...suites.time_series.config import TimeSeries, get_time_series_input_files
+from ...suites.time_series.config import TimeSeries
 from .. import Database
 from ..utils import tracked_commit
 from . import insert as _insert_mod
@@ -58,6 +60,18 @@ MONETDB_CONNECTION_STRINGS = {
 }
 
 
+def _monetdb_connection_string() -> str:
+    base = MONETDB_CONNECTION_STRINGS[MONETDB_SETTINGS.driver]
+    if MONETDB_SETTINGS.driver == "staged":
+        return base
+    parameters: dict[str, str] = {}
+    if MONETDB_SETTINGS.write_window_bytes is not None:
+        parameters["write_window_bytes"] = str(MONETDB_SETTINGS.write_window_bytes)
+    if MONETDB_SETTINGS.wire_compression != "auto":
+        parameters["wire_compression"] = MONETDB_SETTINGS.wire_compression
+    return f"{base}?{urlencode(parameters)}" if parameters else base
+
+
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
     def insert_table(
         self,
@@ -66,14 +80,6 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
-        if MONETDB_SETTINGS.driver == "adbc":
-            self.db.insert_parquet(
-                get_time_series_input_files(self.scale_factor)[table_name],
-                table_name,
-                primary_key=primary_key,
-                not_null=not_null,
-            )
-            return
         self.db.insert(
             df,
             table_name,
@@ -81,6 +87,7 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
             not_null=not_null,
             lazy_write=ColumnGroupWrite(group_size=10),
         )
+        self.db.analyze_table(table_name, ["time"])
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
@@ -119,7 +126,7 @@ class MonetDB(Database):
     supports_arm64_containers: ClassVar[bool] = True
     expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
 
-    connection_string: str = MONETDB_CONNECTION_STRINGS[MONETDB_SETTINGS.driver]
+    connection_string: str = Field(default_factory=_monetdb_connection_string)
 
     @property
     def database_directory(self) -> Path:

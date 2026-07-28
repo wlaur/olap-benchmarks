@@ -63,6 +63,7 @@ def get_docker_client() -> docker.DockerClient:
 class BenchmarkMetric(BaseModel):
     cpu_percent: float
     mem_mb: int
+    client_mem_mb: int
     disk_mb: int
 
 
@@ -126,7 +127,7 @@ def get_main_process_metrics(process_id: int) -> BenchmarkMetric:
     mem_info = proc.memory_info()
     mem_mb = int(mem_info.rss / (1024 * 1024))
 
-    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=0)
+    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=0, client_mem_mb=mem_mb, disk_mb=0)
 
 
 def get_container_metrics(container_name: str) -> BenchmarkMetric:
@@ -139,7 +140,7 @@ def get_container_metrics(container_name: str) -> BenchmarkMetric:
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))
 
-    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, disk_mb=0)
+    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, client_mem_mb=0, disk_mb=0)
 
 
 def get_database_metrics(
@@ -156,7 +157,8 @@ def get_database_metrics(
 
     return BenchmarkMetric(
         cpu_percent=sum(metric.cpu_percent for metric in process_metrics),
-        mem_mb=sum(metric.mem_mb for metric in process_metrics),
+        mem_mb=sum(metric.mem_mb for metric in container_metrics),
+        client_mem_mb=main_future.result().client_mem_mb,
         disk_mb=sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories)),
     )
 

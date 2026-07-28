@@ -80,6 +80,7 @@ export type RunMetric = {
   time: ColumnType<Date, Date | string, Date | string>
   cpu_percent: number
   mem_mb: number
+  client_mem_mb: number | null
   disk_mb: number
 }
 

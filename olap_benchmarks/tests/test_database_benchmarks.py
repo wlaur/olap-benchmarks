@@ -11,7 +11,7 @@ from sqlalchemy import Connection
 
 from .. import dbs as dbs_module
 from ..dbs import Database
-from ..dbs.monetdb import MONETDB_RELEASE, MonetDB
+from ..dbs.monetdb import MONETDB_RELEASE, MonetDB, MonetDBTimeSeries
 from ..dbs.monetdb.settings import SETTINGS as MONETDB_SETTINGS
 from ..settings import (
     SETTINGS,
@@ -314,6 +314,51 @@ def test_monetdb_database_farms_are_isolated_by_client_driver(
     assert staged != adbc
     assert staged.name == "staged"
     assert adbc.name == "adbc"
+
+
+def test_monetdb_adbc_uri_exposes_ingest_tuning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
+    monkeypatch.setattr(MONETDB_SETTINGS, "write_window_bytes", 268_435_456)
+    monkeypatch.setattr(MONETDB_SETTINGS, "wire_compression", "none")
+
+    assert (
+        MonetDB().connection_string == "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark"
+        "?write_window_bytes=268435456&wire_compression=none"
+    )
+
+
+def test_monetdb_time_series_analyzes_time_after_adbc_ingest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inserted: list[tuple[str, int]] = []
+    analyzed: list[tuple[str, list[str] | None]] = []
+
+    def insert(
+        _self: MonetDB,
+        frame: pl.DataFrame | pl.LazyFrame,
+        table: str,
+        **_kwargs: object,
+    ) -> None:
+        inserted.append((table, frame.collect().height if isinstance(frame, pl.LazyFrame) else frame.height))
+
+    def analyze_table(
+        _self: MonetDB,
+        table: str,
+        columns: list[str] | None = None,
+    ) -> None:
+        analyzed.append((table, columns))
+
+    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
+    monkeypatch.setattr(MonetDB, "insert", insert)
+    monkeypatch.setattr(MonetDB, "analyze_table", analyze_table)
+    suite = MonetDBTimeSeries.model_construct(db=MonetDB(), name="time_series", scale_factor=1)
+
+    suite.insert_table(pl.DataFrame({"time": [1]}), "data_tall", None, "time")
+
+    assert inserted == [("data_tall", 1)]
+    assert analyzed == [("data_tall", ["time"])]
 
 
 def test_monetdb_rejects_incompatible_fetch_method_in_adbc_mode(

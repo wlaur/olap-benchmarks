@@ -130,4 +130,11 @@ def build_run_metadata(
             "container_platform_emulated": container_platform_emulated if execution_mode == "container" else False,
             "start_command": start_command,
         },
+        "metrics": {
+            "version": 2,
+            "cpu_percent": "benchmark client plus all database containers",
+            "mem_mb": "all database containers; excludes the benchmark client",
+            "client_mem_mb": "benchmark client process RSS",
+            "disk_mb": "database storage plus configured temporary and staging directories",
+        },
     }

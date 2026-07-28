@@ -70,7 +70,16 @@ def _insert_run_tree(
     session.add(step)
     session.commit()
 
-    session.add(RunMetric(run_id=run.id, time=datetime(2026, 1, 1), cpu_percent=1.0, mem_mb=10, disk_mb=100))
+    session.add(
+        RunMetric(
+            run_id=run.id,
+            time=datetime(2026, 1, 1),
+            cpu_percent=1.0,
+            mem_mb=10,
+            client_mem_mb=11,
+            disk_mb=100,
+        )
+    )
     session.add(
         QueryExecution(
             run_id=run.id,
@@ -205,6 +214,7 @@ def test_merge_preserves_run_metadata_and_step_status_fields(tmp_path: Path) -> 
 
     assert _query(dest, """select "metadata"->>'source' from run""") == [("monetdb",)]
     assert _query(dest, "select result_status, iteration_role from run_step") == [("ok", "first_run")]
+    assert _query(dest, "select mem_mb, client_mem_mb from run_metric") == [(10, 11)]
 
 
 def test_merge_remaps_and_deduplicates_system_snapshots(tmp_path: Path) -> None:

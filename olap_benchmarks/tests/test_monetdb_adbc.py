@@ -11,9 +11,10 @@ from sqlalchemy import create_engine, text
 from ..dbs.monetdb.adbc import _iter_parquet_batches, _validated_ingest_row_count, insert_adbc
 
 
-def test_unknown_adbc_row_count_uses_the_known_input_count() -> None:
-    assert _validated_ingest_row_count(-1, 42, "dataset") == 42
+def test_adbc_row_count_must_be_exact() -> None:
     assert _validated_ingest_row_count(42, 42, "dataset") == 42
+    with pytest.raises(RuntimeError, match="did not report"):
+        _validated_ingest_row_count(-1, 42, "dataset")
     with pytest.raises(RuntimeError, match="41 inserted rows"):
         _validated_ingest_row_count(41, 42, "dataset")
 

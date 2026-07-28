@@ -411,6 +411,39 @@ def test_system_snapshot_migration_normalizes_and_deduplicates_run_metadata(tmp_
         engine.dispose()
 
 
+def test_client_memory_migration_preserves_historical_memory_semantics(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="d8e4f1a2c6b9")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, suite_scale_factor, db, db_version, operation, system, status, started_at
+            ) values ('time_series', 1, 'monetdb', 'test', 'populate', 'test', 'completed', now())
+            """
+        )
+        run_id = con.execute("select id from run").fetchone()[0]
+        con.execute(
+            """
+            insert into run_metric (run_id, time, cpu_percent, mem_mb, disk_mb)
+            values (?, now(), 10.0, 123, 456)
+            """,
+            [run_id],
+        )
+    finally:
+        con.close()
+
+    migrate_results(db_path=db_path)
+
+    con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        assert con.execute("select mem_mb, client_mem_mb, disk_mb from run_metric").fetchall() == [(123, None, 456)]
+    finally:
+        con.close()
+
+
 def test_ensure_results_schema_initializes_new_db_with_alembic_head(tmp_path: Path) -> None:
     engine = get_results_engine(read_only=False, db_path=tmp_path / "results.db")
 

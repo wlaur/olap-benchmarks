@@ -187,6 +187,7 @@ def run_migrations_offline() -> None:
         compare_type=_compare_type,
         compare_server_default=True,
         include_object=_include_object,
+        transaction_per_migration=True,
     )
 
     with context.begin_transaction():
@@ -203,9 +204,10 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    with connectable.begin() as connection:
+    with connectable.connect() as connection:
         global _existing_tables_for_autogen
         _existing_tables_for_autogen = set(inspect(connection).get_table_names())
+        connection.commit()
 
         context.configure(
             connection=connection,
@@ -213,6 +215,7 @@ def run_migrations_online() -> None:
             compare_type=_compare_type,
             compare_server_default=True,
             include_object=_include_object,
+            transaction_per_migration=True,
         )
 
         with context.begin_transaction():

@@ -22,7 +22,7 @@ class FakeStopEvent:
 
 
 class FakeStorage:
-    inserted: list[tuple[int, datetime, float, int, int]] = []
+    inserted: list[tuple[int, datetime, float, int, int, int]] = []
 
     def __init__(self, _queue: object, _result_queue: object) -> None:
         self.inserted = []
@@ -34,9 +34,18 @@ class FakeStorage:
         time: datetime,
         cpu_percent: float,
         mem_mb: int,
+        client_mem_mb: int,
         disk_mb: int,
     ) -> None:
-        self.inserted.append((run_id, time, cpu_percent, mem_mb, disk_mb))
+        self.inserted.append((run_id, time, cpu_percent, mem_mb, client_mem_mb, disk_mb))
+
+
+class FakeFinalSampleTimeQueue:
+    def __init__(self, final_sample_time: datetime) -> None:
+        self.final_sample_time = final_sample_time
+
+    def get(self) -> datetime:
+        return self.final_sample_time
 
 
 def test_sampling_loop_retries_after_transient_measurement_failure(
@@ -53,7 +62,7 @@ def test_sampling_loop_retries_after_transient_measurement_failure(
         calls += 1
         if calls == 1:
             raise TimeoutError("Docker API stalled")
-        return BenchmarkMetric(cpu_percent=10, mem_mb=20, disk_mb=30)
+        return BenchmarkMetric(cpu_percent=10, mem_mb=20, client_mem_mb=5, disk_mb=30)
 
     monkeypatch.setattr(sampler, "setup_stdout_logging", lambda: None)
     monkeypatch.setattr(sampler, "Storage", FakeStorage)
@@ -67,11 +76,15 @@ def test_sampling_loop_retries_after_transient_measurement_failure(
         stop_event=cast(Event, FakeStopEvent()),
         queue=cast(Queue[WriterMessage], object()),
         result_queue=cast(Queue[object], object()),
+        final_sample_time_queue=cast(
+            Queue[datetime],
+            FakeFinalSampleTimeQueue(datetime(2026, 7, 28, 10, 0)),
+        ),
         interval_seconds=None,
     )
 
     assert calls == 3
     assert FakeStorage.inserted == [
-        (7, FakeStorage.inserted[0][1], 10.0, 20, 30),
-        (7, FakeStorage.inserted[1][1], 10.0, 20, 30),
+        (7, FakeStorage.inserted[0][1], 10.0, 20, 5, 30),
+        (7, datetime(2026, 7, 28, 10, 0), 10.0, 20, 5, 30),
     ]
