@@ -407,6 +407,11 @@ def get_time_series_batch_rows(n_cols: int, target_cells: int = 20_000_000) -> i
     return max(10_000, min(250_000, target_cells // max(1, n_cols)))
 
 
+def get_time_series_row_group_rows(n_cols: int, target_bytes: int = 32 * 1024 * 1024) -> int:
+    estimated_row_bytes = 8 + n_cols * 4
+    return max(1, min(250_000, target_bytes // estimated_row_bytes))
+
+
 def write_time_series_dataset(
     fpath: Path,
     n_rows: int,
@@ -435,7 +440,10 @@ def write_time_series_dataset(
                 f"({batch_end - batch_start:_} rows, {batch_end:_}/{n_rows:_})"
             )
 
-        pl.scan_parquet(str(temp_dir / "*.parquet")).sink_parquet(fpath)
+        pl.scan_parquet(str(temp_dir / "*.parquet")).sink_parquet(
+            fpath,
+            row_group_size=get_time_series_row_group_rows(n_cols),
+        )
         _LOGGER.info(f"Stitched dataset {fpath.name} from {batch_count:_} partition(s)")
     finally:
         if temp_dir.exists():
@@ -488,18 +496,17 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         _ = table_name
         return "time"
 
-    @property
-    def populate_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def insert_table(
+    def prepare_parquet_table(
         self,
-        df: pl.DataFrame | pl.LazyFrame,
+        path: Path,
         table_name: TableName,
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
-        self.db.insert(df, table_name, primary_key=primary_key, not_null=not_null, **self.populate_kwargs)
+        _ = path, table_name, primary_key, not_null
+
+    def finish_parquet_table(self, table_name: TableName) -> None:
+        _ = table_name
 
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
@@ -512,10 +519,15 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
-            df = pl.scan_parquet(fpath)
-
             with self.db.phase_context("insert", table_name=table_name):
-                self.insert_table(df, table_name, primary_key, not_null)
+                self.prepare_parquet_table(fpath, table_name, primary_key, not_null)
+                self.db.insert_parquet(
+                    fpath,
+                    table_name,
+                    primary_key=primary_key,
+                    not_null=not_null,
+                )
+                self.finish_parquet_table(table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all time_series tables for {self.name}")

@@ -55,16 +55,18 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
 
         self.db.initialize_schema("clickbench")
 
-        # this is an expensive operation, would be better to avoid reading with polars
-        # for the databases that can ingest directly from parquet
-        # on the other hand, the purpose of these benchmarks is to measure in-memory polars df
-        # to and from the database, so this is appropriate,
-        # although not directly comparable with the insert times from the official clickbench results
-        df = self.load_dataset()
-        _LOGGER.info("Loaded clickbench dataset (lazy)")
-
         with self.db.phase_context("insert", table_name="hits"):
-            self.db.insert(df, "hits", **self.populate_kwargs)
+            if self.populate_kwargs:
+                self.db.insert(self.load_dataset(), "hits", **self.populate_kwargs)
+            else:
+                self.db.insert_parquet(
+                    SETTINGS.input_data_directory / "clickbench/hits.parquet",
+                    "hits",
+                    epoch_columns={
+                        **dict.fromkeys(CLICKBENCH_TIMESTAMP_COLUMNS, "s"),
+                        **dict.fromkeys(CLICKBENCH_DATE_COLUMNS, "day"),
+                    },
+                )
 
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
 

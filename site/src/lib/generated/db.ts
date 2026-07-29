@@ -66,6 +66,7 @@ export type Run = {
   error_type: string | null
   error_message: string | null
   metadata: Json | null
+  system_snapshot_id: number | null
 }
 
 export type RunInsertable = Insertable<Run>
@@ -80,8 +81,9 @@ export type RunMetric = {
   time: ColumnType<Date, Date | string, Date | string>
   cpu_percent: number
   mem_mb: number
-  client_mem_mb: number | null
   disk_mb: number
+  client_mem_mb: number | null
+  client_uss_mb: number | null
 }
 
 export type RunMetricInsertable = Insertable<RunMetric>
@@ -115,6 +117,24 @@ export type RunStepSelectable = Selectable<RunStep>
 
 export type RunStepUpdateable = Updateable<RunStep>
 
+export type SystemSnapshot = {
+  id: Generated<number>
+  system: string
+  os: string | null
+  os_release: string | null
+  machine: string | null
+  processor: string | null
+  cpu_count_logical: number | null
+  memory_total_mb: number | null
+  metadata: Json | null
+}
+
+export type SystemSnapshotInsertable = Insertable<SystemSnapshot>
+
+export type SystemSnapshotSelectable = Selectable<SystemSnapshot>
+
+export type SystemSnapshotUpdateable = Updateable<SystemSnapshot>
+
 export interface DB {
   alembic_version: AlembicVersion
   debug: Debug
@@ -122,4 +142,5 @@ export interface DB {
   run: Run
   run_metric: RunMetric
   run_step: RunStep
+  system_snapshot: SystemSnapshot
 }

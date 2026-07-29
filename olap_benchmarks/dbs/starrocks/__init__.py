@@ -21,7 +21,7 @@ from ...suites.clickbench.config import (
 )
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.time_series.config import TimeSeries
-from .. import Database
+from .. import Database, ParquetEpochColumns
 from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
@@ -503,7 +503,17 @@ class StarRocks(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        *,
+        epoch_columns: ParquetEpochColumns | None = None,
     ) -> None:
+        if epoch_columns:
+            return super().insert_parquet(
+                path,
+                table,
+                primary_key=primary_key,
+                not_null=not_null,
+                epoch_columns=epoch_columns,
+            )
         schema = pl.scan_parquet(path).collect_schema()
         if table not in self.get_table_names():
             self.create_table(schema, table, primary_key, not_null)

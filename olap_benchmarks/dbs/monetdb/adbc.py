@@ -1,19 +1,18 @@
 import logging
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
 
 import polars as pl
-import pyarrow as pa
-import pyarrow.parquet as pq
-from adbc_driver_monetdb import PolarsArrowStream, recommended_arrow_batch_rows
+from adbc_driver_monetdb import ParquetArrowStream, PolarsArrowStream
 from sqlalchemy import Connection, text
 from sqlalchemy_monetdb_adbc import fetch_arrow_table, ingest_arrow
 from sqlalchemy_monetdb_adbc.arrow import ArrowIngestData
 
 from ...settings import TableName
+from .. import ParquetEpochColumns
 from ..utils import drop_table, record_query_execution_context, tracked_commit
 from .utils import create_table, get_table
 
@@ -85,59 +84,20 @@ def insert_parquet_adbc(
     *,
     create: bool = True,
     commit: bool = True,
+    epoch_columns: ParquetEpochColumns | None = None,
 ) -> None:
-    parquet_file = pq.ParquetFile(path)
-    schema = parquet_file.schema_arrow
-    metadata = parquet_file.metadata
-    del parquet_file
-
-    memory_pool = pa.default_memory_pool()
-    try:
-        reader = pa.RecordBatchReader.from_batches(
-            schema,
-            _iter_parquet_batches(
-                path,
-                batch_rows=recommended_arrow_batch_rows(schema),
-                row_groups=metadata.num_row_groups,
-                memory_pool=memory_pool,
-            ),
+    with ParquetArrowStream(path, epoch_columns=epoch_columns) as stream:
+        _insert_arrow_adbc(
+            stream,
+            table,
+            pl.Schema(stream.schema),
+            connection,
+            primary_key,
+            not_null,
+            expected_rows=stream.num_rows,
+            create=create,
+            commit=commit,
         )
-        try:
-            _insert_arrow_adbc(
-                reader,
-                table,
-                pl.Schema(schema),
-                connection,
-                primary_key,
-                not_null,
-                expected_rows=metadata.num_rows,
-                create=create,
-                commit=commit,
-            )
-        finally:
-            reader.close()
-    finally:
-        memory_pool.release_unused()
-
-
-def _iter_parquet_batches(
-    path: Path,
-    *,
-    batch_rows: int,
-    row_groups: int,
-    memory_pool: pa.MemoryPool,
-) -> Iterator[pa.RecordBatch]:
-    for row_group in range(row_groups):
-        with pa.memory_map(str(path), "r") as source:
-            parquet_file = pq.ParquetFile(source)
-            yield from cast(
-                Iterator[pa.RecordBatch],
-                cast(Any, parquet_file).iter_batches(
-                    batch_size=batch_rows,
-                    row_groups=[row_group],
-                ),
-            )
-        memory_pool.release_unused()
 
 
 def _insert_arrow_adbc(
