@@ -363,11 +363,15 @@ def test_monetdb_adbc_uri_exposes_ingest_tuning(
     monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
     monkeypatch.setattr(MONETDB_SETTINGS, "write_window_bytes", 268_435_456)
     monkeypatch.setattr(MONETDB_SETTINGS, "wire_compression", "none")
+    monkeypatch.setattr(MONETDB_SETTINGS, "constrained_append", "direct")
 
-    assert (
-        MonetDB().connection_string == "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark"
-        "?write_window_bytes=268435456&wire_compression=none"
+    db = MonetDB()
+    assert db.connection_string == (
+        "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark"
+        "?client_application=olap-benchmarks&write_window_bytes=268435456"
+        "&wire_compression=none&constrained_append=direct"
     )
+    assert db.run_options["constrained_append"] == "direct"
 
 
 def test_monetdb_time_series_analyzes_time_after_adbc_ingest(

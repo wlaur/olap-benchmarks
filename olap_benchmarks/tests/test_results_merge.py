@@ -23,6 +23,7 @@ def _insert_run_tree(
     suite_scale_factor: int = 1,
     db: str = "monetdb",
     db_version: str = "1.0",
+    db_driver: str | None = None,
     status: str = "completed",
     started_at: datetime | None = None,
     query: str = "select 1",
@@ -47,6 +48,7 @@ def _insert_run_tree(
         suite_scale_factor=suite_scale_factor,
         db=db,
         db_version=db_version,
+        db_driver=db_driver,
         operation="select",
         system="test-system",
         system_snapshot_id=snapshot_id,
@@ -100,6 +102,7 @@ def _populate(
     suite: str = "rtabench",
     suite_scale_factor: int = 1,
     db: str = "monetdb",
+    db_driver: str | None = None,
     status: str = "completed",
     started_at: datetime | None = None,
     query: str = "select 1",
@@ -113,6 +116,7 @@ def _populate(
                 suite=suite,
                 suite_scale_factor=suite_scale_factor,
                 db=db,
+                db_driver=db_driver,
                 status=status,
                 started_at=started_at,
                 query=query,
@@ -202,6 +206,34 @@ def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
     assert _query(dest, "select count(*) from run_step")[0][0] == 2
     assert _query(dest, "select count(*) from run_metric")[0][0] == 2
     assert _query(dest, "select count(*) from query_execution")[0][0] == 2
+
+
+def test_merge_keeps_distinct_database_drivers_and_matches_null_drivers(
+    tmp_path: Path,
+) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+    started_at = datetime(2026, 3, 1, 12, 0, 0)
+
+    _populate(dest, db_driver="staged", started_at=started_at, query="staged")
+    _populate(source, db_driver="adbc", started_at=started_at, query="adbc")
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert stats.runs_added == 1
+    assert stats.runs_replaced == 0
+    assert _query(dest, "select db_driver from run order by db_driver") == [("adbc",), ("staged",)]
+
+    null_source, null_dest = tmp_path / "null-source.db", tmp_path / "null-dest.db"
+    _create_results_db(null_source)
+    _create_results_db(null_dest)
+    _populate(null_dest, started_at=started_at, query="old null")
+    _populate(null_source, started_at=started_at, query="new null")
+    null_stats = merge_results(null_source, null_dest, head_revision=get_results_head_revision())
+
+    assert null_stats.runs_added == 0
+    assert null_stats.runs_replaced == 1
+    assert _query(null_dest, "select db_driver from run") == [(None,)]
 
 
 def test_merge_preserves_run_metadata_and_step_status_fields(tmp_path: Path) -> None:

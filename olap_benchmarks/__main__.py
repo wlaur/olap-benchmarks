@@ -271,6 +271,7 @@ def benchmark(
             db_instance._current_suite = suite_name
             db_instance._current_suite_scale_factor = resolved_scale_factor
             db_instance.set_queues(writer.queue, writer.result_queue)
+            db_instance._writer_process = getattr(writer, "process", None)
 
             _start_db(db_instance)
 
@@ -384,10 +385,11 @@ def runs(
     status: str | None = None,
     suite: str | None = None,
     db: str | None = None,
+    db_driver: str | None = None,
     revision: Revision = "default",
 ) -> None:
-    """List benchmark runs, optionally filtered by status, suite, or db."""
-    rows = list_runs(revision=revision, status=status, suite=suite, db=db)
+    """List benchmark runs, optionally filtered by status, suite, database, or driver."""
+    rows = list_runs(revision=revision, status=status, suite=suite, db=db, db_driver=db_driver)
 
     if not rows:
         print("No runs found.")

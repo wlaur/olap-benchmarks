@@ -1,11 +1,14 @@
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
+from os import getpid
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any, ClassVar, Literal, cast
 from urllib.parse import urlencode
 
 import polars as pl
+import pymonetdb
 from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
@@ -26,9 +29,9 @@ from .adbc import (
 from .fetch import fetch_binary, fetch_pymonetdb
 from .insert import (
     DEFAULT_LAZY_WRITE,
-    ColumnGroupWrite,
     LazyWrite,
     insert,
+    staged_write_for_column_count,
     upsert,
 )
 from .settings import SETTINGS as MONETDB_SETTINGS
@@ -53,6 +56,8 @@ class MonetDBRelease:
 
 
 MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
+MONETDB_APPLICATION = "olap-benchmarks"
+MONETDB_OBSERVER_URI = "monetdb://monetdb:monetdb@localhost:50000/benchmark?client_application=olap-benchmarks-observer"
 
 MONETDB_CONNECTION_STRINGS = {
     "staged": "monetdb+pymonetdb://monetdb:monetdb@localhost:50000/benchmark",
@@ -62,13 +67,15 @@ MONETDB_CONNECTION_STRINGS = {
 
 def _monetdb_connection_string() -> str:
     base = MONETDB_CONNECTION_STRINGS[MONETDB_SETTINGS.driver]
+    parameters = {"client_application": MONETDB_APPLICATION}
     if MONETDB_SETTINGS.driver == "staged":
         return base
-    parameters: dict[str, str] = {}
     if MONETDB_SETTINGS.write_window_bytes is not None:
         parameters["write_window_bytes"] = str(MONETDB_SETTINGS.write_window_bytes)
     if MONETDB_SETTINGS.wire_compression != "auto":
         parameters["wire_compression"] = MONETDB_SETTINGS.wire_compression
+    if MONETDB_SETTINGS.constrained_append != "auto":
+        parameters["constrained_append"] = MONETDB_SETTINGS.constrained_append
     return f"{base}?{urlencode(parameters)}" if parameters else base
 
 
@@ -112,6 +119,38 @@ class MonetDB(Database):
     arm64_container_image: ClassVar[str | None] = MONETDB_RELEASE.arm64_container_image
     supports_arm64_containers: ClassVar[bool] = True
     expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
+
+    @property
+    def db_driver(self) -> str:
+        return MONETDB_SETTINGS.driver
+
+    @property
+    def run_package_names(self) -> tuple[str, ...]:
+        if MONETDB_SETTINGS.driver == "adbc":
+            return ("olap-benchmarks", "adbc-driver-monetdb", "sqlalchemy-monetdb-adbc")
+        return ("olap-benchmarks", "pymonetdb", "sqlalchemy-monetdb")
+
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        return {
+            "driver": MONETDB_SETTINGS.driver,
+            "client_application": MONETDB_APPLICATION if MONETDB_SETTINGS.driver == "adbc" else None,
+            "session_tracking": (
+                "client_application+clientpid" if MONETDB_SETTINGS.driver == "adbc" else "pymonetdb-client+clientpid"
+            ),
+            "client_file_transfer": MONETDB_SETTINGS.client_file_transfer,
+            "default_fetch_method": (
+                "adbc" if MONETDB_SETTINGS.driver == "adbc" else MONETDB_SETTINGS.default_fetch_method
+            ),
+            "write_window_bytes": MONETDB_SETTINGS.write_window_bytes,
+            "wire_compression": MONETDB_SETTINGS.wire_compression if MONETDB_SETTINGS.driver == "adbc" else None,
+            "constrained_append": (MONETDB_SETTINGS.constrained_append if MONETDB_SETTINGS.driver == "adbc" else None),
+            "staged_parquet_policy": (
+                "column_groups_of_10_at_512_columns_or_wider;row_batches_of_500000_otherwise"
+                if MONETDB_SETTINGS.driver == "staged"
+                else None
+            ),
+        }
 
     connection_string: str = Field(default_factory=_monetdb_connection_string)
 
@@ -166,6 +205,69 @@ class MonetDB(Database):
         self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
+
+    def _session_state(self) -> tuple[int, int]:
+        observer = pymonetdb.connect(MONETDB_OBSERVER_URI)
+        try:
+            cursor = cast(Any, observer.cursor())
+            cursor.execute(
+                "SELECT COUNT(*) FROM sys.sessions "
+                f"WHERE clientpid = {getpid()} AND (application = '{MONETDB_APPLICATION}' "
+                "OR (application = '-' AND client LIKE 'pymonetdb %'))"
+            )
+            session_row = cast(tuple[Any, ...] | None, cursor.fetchone())
+            assert session_row is not None
+            cursor.execute("SELECT COUNT(*) FROM sys.tables WHERE name LIKE 'adbc_ingest_stage_%'")
+            staging_row = cast(tuple[Any, ...] | None, cursor.fetchone())
+            assert staging_row is not None
+            return int(session_row[0]), int(staging_row[0])
+        finally:
+            observer.close()
+
+    def _wait_for_session_state(self, expected_sessions: int, timeout_seconds: float = 5.0) -> tuple[int, int]:
+        deadline = monotonic() + timeout_seconds
+        state = self._session_state()
+        while state != (expected_sessions, 0) and monotonic() < deadline:
+            sleep(0.05)
+            state = self._session_state()
+        if state != (expected_sessions, 0):
+            raise RuntimeError(
+                "MonetDB operation did not return to its session baseline: "
+                f"expected tagged_sessions={expected_sessions}, temporary_ingest_tables=0; "
+                f"observed tagged_sessions={state[0]}, temporary_ingest_tables={state[1]}"
+            )
+        return state
+
+    def _record_session_baseline(self, step_name: str, expected_sessions: int) -> None:
+        step_id = self._start_step("phase", step_name)
+        try:
+            sessions, temporary_tables = self._wait_for_session_state(expected_sessions)
+        except BaseException as exc:
+            self._finish_step(
+                step_id,
+                status="failed",
+                step_type="phase",
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+        self._finish_step(
+            step_id,
+            status="completed",
+            step_type="phase",
+            row_count=sessions,
+            metadata={
+                "tagged_sessions": sessions,
+                "temporary_ingest_tables": temporary_tables,
+            },
+        )
+
+    def before_benchmark_operation(self) -> None:
+        self._record_session_baseline("session_baseline_before", expected_sessions=1)
+
+    def after_benchmark_operation(self) -> None:
+        self.close_connection()
+        self._record_session_baseline("session_baseline_after", expected_sessions=0)
 
     def get_runtime_version(self) -> str:
         df = self.fetch(
@@ -228,13 +330,7 @@ class MonetDB(Database):
         not_null: str | list[str] | None = None,
         lazy_write: LazyWrite = DEFAULT_LAZY_WRITE,
     ) -> None:
-        statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
-        with self.record_query_execution(statement):
-            result = self.connect().execute(
-                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
-                {"table_name": table},
-            )
-        exists = bool(result.scalar())
+        exists = self._table_exists(table)
 
         try:
             if MONETDB_SETTINGS.driver == "adbc":
@@ -274,21 +370,16 @@ class MonetDB(Database):
         epoch_columns: ParquetEpochColumns | None = None,
     ) -> None:
         if MONETDB_SETTINGS.driver != "adbc":
+            frame = apply_parquet_epoch_columns(pl.scan_parquet(path), epoch_columns)
             return self.insert(
-                apply_parquet_epoch_columns(pl.scan_parquet(path), epoch_columns),
+                frame,
                 table,
                 primary_key=primary_key,
                 not_null=not_null,
-                lazy_write=ColumnGroupWrite(group_size=10),
+                lazy_write=staged_write_for_column_count(len(frame.collect_schema())),
             )
 
-        statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
-        with self.record_query_execution(statement):
-            result = self.connect().execute(
-                text("SELECT count(*) FROM sys.tables WHERE name = :table_name"),
-                {"table_name": table},
-            )
-        exists = bool(result.scalar())
+        exists = self._table_exists(table)
 
         try:
             insert_parquet_adbc(
@@ -309,6 +400,12 @@ class MonetDB(Database):
             self.rollback()
         except Exception as rollback_error:
             error.add_note(f"rollback after failed {operation} also failed: {rollback_error}")
+
+    def _table_exists(self, table: TableName) -> bool:
+        statement = "SELECT count(*) FROM sys.tables WHERE name = :table_name"
+        with self.record_query_execution(statement):
+            result = self.connect().execute(text(statement), {"table_name": table})
+        return bool(result.scalar())
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         if MONETDB_SETTINGS.driver == "adbc":

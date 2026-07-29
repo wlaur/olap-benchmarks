@@ -41,11 +41,13 @@ def test_runs_lists_filtered_runs(
         status: str | None = None,
         suite: str | None = None,
         db: str | None = None,
+        db_driver: str | None = None,
     ) -> list[dict[str, object]]:
         assert revision == "candidate"
         assert status == "failed"
         assert suite == "time_series"
         assert db == "timescaledb"
+        assert db_driver is None
         return rows
 
     monkeypatch.setattr(__main__, "list_runs", fake_list_runs)

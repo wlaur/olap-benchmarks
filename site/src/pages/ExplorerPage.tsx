@@ -1703,7 +1703,10 @@ function makeRunVariants(metrics: readonly ExplorerQueryMetric[]): RunVariant[] 
       system: metric.system,
       scale: metric.suite_scale_factor,
       database: metric.db,
-      version: metric.db_version,
+      version:
+        metric.db_driver === null
+          ? metric.db_version
+          : `${metric.db_version} · ${metric.db_driver}`,
       finishedAt: metric.finished_at,
     })
   }

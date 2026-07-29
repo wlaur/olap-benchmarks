@@ -30,6 +30,7 @@ def _insert_select_run(
     suite: str = "time_series",
     suite_scale_factor: int = 1,
     db_version: str = "1.0",
+    db_driver: str | None = None,
     system: str = "test-system",
     query_name: str = "q1",
     iteration: int = 1,
@@ -46,6 +47,7 @@ def _insert_select_run(
                 suite_scale_factor=suite_scale_factor,
                 db=db,
                 db_version=db_version,
+                db_driver=db_driver,
                 operation="select",
                 system=system,
                 status="completed",
@@ -91,6 +93,36 @@ def test_answer_hash_validation_ignores_row_count_mismatches(tmp_path: Path) -> 
     _insert_select_run(db_path, "clickhouse", 12, answer_hash="hash-b")
 
     assert validate_latest_query_answer_hashes(db_path=db_path) == []
+
+
+def test_validation_compares_variants_of_the_same_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "monetdb", 10, db_driver="adbc", answer_hash="hash-a")
+    _insert_select_run(db_path, "monetdb", 11, db_driver="staged", answer_hash="hash-b")
+
+    row_mismatches = validate_latest_query_row_counts(db_path=db_path)
+
+    assert len(row_mismatches) == 1
+    assert [(row.db_driver, row.row_count) for row in row_mismatches[0].observations] == [
+        ("adbc", 10),
+        ("staged", 11),
+    ]
+
+
+def test_answer_hash_validation_compares_variants_of_the_same_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "monetdb", 10, db_driver="adbc", answer_hash="hash-a")
+    _insert_select_run(db_path, "monetdb", 10, db_driver="staged", answer_hash="hash-b")
+
+    hash_mismatches = validate_latest_query_answer_hashes(db_path=db_path)
+
+    assert len(hash_mismatches) == 1
+    assert [(row.db_driver, row.answer_hash) for row in hash_mismatches[0].observations] == [
+        ("adbc", "hash-a"),
+        ("staged", "hash-b"),
+    ]
 
 
 def test_answer_hash_validation_marks_consensus_outlier_wrong_result(tmp_path: Path) -> None:

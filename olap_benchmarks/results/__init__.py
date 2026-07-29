@@ -174,6 +174,199 @@ def _published_table_counts(db_path: Path) -> dict[str, int]:
         con.close()
 
 
+def _validate_publishable_runs(db_path: Path) -> None:
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        running_row = con.execute("select count(*) from run where status = 'running'").fetchone()
+        assert running_row is not None
+        running = int(running_row[0])
+        if running:
+            raise RuntimeError(f"Results database contains {running} running run(s)")
+
+        drivers = {
+            str(row[0])
+            for row in con.execute(
+                "select distinct db_driver from run where db = 'monetdb' and db_driver is not null"
+            ).fetchall()
+        }
+        if not drivers:
+            return
+        unexpected_drivers = sorted(drivers - {"adbc", "staged"})
+        if unexpected_drivers:
+            raise RuntimeError(f"Unknown MonetDB db_driver values: {unexpected_drivers}")
+
+        from ..dbs.monetdb.manifest import monetdb_benchmark_manifest
+
+        expected = {(cell.suite, cell.scale_factor, cell.operation) for cell in monetdb_benchmark_manifest()}
+        completed_pairs = {
+            (str(suite), int(scale_factor), str(operation))
+            for _, suite, scale_factor, operation in con.execute(
+                """
+                select system, suite, suite_scale_factor, operation
+                from run
+                where db = 'monetdb' and status = 'completed' and db_driver is not null
+                group by system, suite, suite_scale_factor, operation
+                having count(distinct db_driver) = 2
+                """
+            ).fetchall()
+        }
+        missing = sorted(expected - completed_pairs)
+        if missing:
+            formatted = ", ".join(f"{suite}:sf{scale}:{operation}" for suite, scale, operation in missing)
+            raise RuntimeError(f"MonetDB release matrix lacks paired ADBC/staged runs on one system: {formatted}")
+
+        missing_baselines = [
+            int(row[0])
+            for row in con.execute(
+                """
+                select r.id
+                from run r
+                where r.db = 'monetdb'
+                  and r.db_driver is not null
+                  and r.status in ('completed', 'failed')
+                  and (
+                    (
+                      select count(*)
+                      from run_step s
+                      where s.run_id = r.id
+                        and s.step_name = 'session_baseline_before'
+                        and s.status = 'completed'
+                        and s.row_count = 1
+                        and coalesce(
+                          cast(json_extract(s."metadata", '$.temporary_ingest_tables') as integer),
+                          -1
+                        ) = 0
+                    ) <> 1
+                    or
+                    (
+                      select count(*)
+                      from run_step s
+                      where s.run_id = r.id
+                        and s.step_name = 'session_baseline_after'
+                        and s.status = 'completed'
+                        and s.row_count = 0
+                        and coalesce(
+                          cast(json_extract(s."metadata", '$.temporary_ingest_tables') as integer),
+                          -1
+                        ) = 0
+                    ) <> 1
+                  )
+                order by r.id
+                """
+            ).fetchall()
+        ]
+        if missing_baselines:
+            raise RuntimeError(f"MonetDB runs lack clean session baselines: {missing_baselines}")
+
+        invalid_query_steps = [
+            int(row[0])
+            for row in con.execute(
+                """
+                select s.id
+                from run_step s
+                join run r on r.id = s.run_id
+                where r.db = 'monetdb'
+                  and r.db_driver is not null
+                  and r.status = 'completed'
+                  and r.operation = 'select'
+                  and s.step_type = 'query'
+                  and (
+                    s.status <> 'completed'
+                    or s.result_status not in ('ok', 'skipped', 'unsupported')
+                    or (
+                      s.result_status = 'ok'
+                      and (
+                        s.row_count is null
+                        or (
+                          json_extract_string(s."metadata", '$.answer_hash') is null
+                          and json_extract_string(s."metadata", '$.answer_hash_skipped_reason') is null
+                        )
+                      )
+                    )
+                    or (
+                      s.result_status in ('skipped', 'unsupported')
+                      and json_extract_string(s."metadata", '$.skip_reason') is null
+                    )
+                  )
+                order by s.id
+                """
+            ).fetchall()
+        ]
+        missing_query_runs = [
+            int(row[0])
+            for row in con.execute(
+                """
+                select r.id
+                from run r
+                where r.db = 'monetdb'
+                  and r.db_driver is not null
+                  and r.status = 'completed'
+                  and r.operation = 'select'
+                  and not exists (
+                    select 1 from run_step s where s.run_id = r.id and s.step_type = 'query'
+                  )
+                order by r.id
+                """
+            ).fetchall()
+        ]
+        if invalid_query_steps or missing_query_runs:
+            raise RuntimeError(
+                "MonetDB select runs lack correctness results: "
+                f"runs_without_queries={missing_query_runs}, invalid_query_steps={invalid_query_steps}"
+            )
+
+        mismatches = con.execute(
+            """
+            with latest_runs as (
+              select
+                *,
+                row_number() over (
+                  partition by system, suite, suite_scale_factor, db_driver
+                  order by finished_at desc, id desc
+                ) as run_rank
+              from run
+              where db = 'monetdb'
+                and db_driver is not null
+                and operation = 'select'
+                and status = 'completed'
+            ),
+            results as (
+              select
+                r.system,
+                r.suite,
+                r.suite_scale_factor,
+                r.db_driver,
+                s.query_name,
+                s.iteration,
+                s.result_status,
+                s.row_count,
+                json_extract_string(s."metadata", '$.answer_hash') as answer_hash
+              from latest_runs r
+              join run_step s on s.run_id = r.id
+              where r.run_rank = 1
+                and s.step_type = 'query'
+            )
+            select system, suite, suite_scale_factor, query_name, iteration
+            from results
+            group by system, suite, suite_scale_factor, query_name, iteration
+            having count(*) <> 2
+               or count(distinct db_driver) <> 2
+               or count(distinct result_status) > 1
+               or count(distinct row_count) > 1
+               or (
+                 count(*) filter (where result_status = 'ok') > 0
+                 and count(answer_hash) = count(*) filter (where result_status = 'ok')
+                 and count(distinct answer_hash) > 1
+               )
+            order by system, suite, suite_scale_factor, query_name, iteration
+            """
+        ).fetchall()
+        if mismatches:
+            raise RuntimeError(f"MonetDB ADBC/staged correctness results disagree: {mismatches}")
+    finally:
+        con.close()
+
+
 def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, MergeStats | None]:
     source_db_path = _require_revision(revision)
     output_dir = REPO_ROOT / "site" / "public" / "data"
@@ -188,6 +381,7 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
         ensure_results_schema(engine, allow_create=False)
     finally:
         engine.dispose()
+    _validate_publishable_runs(source_db_path)
 
     merge_stats: MergeStats | None = None
 
@@ -297,6 +491,7 @@ def list_runs(
     status: str | None = None,
     suite: str | None = None,
     db: str | None = None,
+    db_driver: str | None = None,
 ) -> list[dict[str, object]]:
     db_path = _require_revision(revision)
     engine = get_results_engine(read_only=True, db_path=db_path)
@@ -311,6 +506,8 @@ def list_runs(
                 stmt = stmt.where(Run.suite == suite)
             if db is not None:
                 stmt = stmt.where(Run.db == db)
+            if db_driver is not None:
+                stmt = stmt.where(Run.db_driver == db_driver)
 
             runs = session.scalars(stmt).all()
 
@@ -320,6 +517,7 @@ def list_runs(
                     "suite": run.suite,
                     "suite_scale_factor": run.suite_scale_factor,
                     "db": run.db,
+                    "db_driver": run.db_driver,
                     "operation": run.operation,
                     "status": run.status,
                     "started_at": run.started_at.isoformat(),

@@ -57,7 +57,7 @@ def insert_adbc(
         expected_rows = frame.height
         data: pl.DataFrame | PolarsArrowStream = frame
     else:
-        expected_rows = 0
+        expected_rows = None
         lazy_stream = PolarsArrowStream(frame)
         data = lazy_stream
 
@@ -68,7 +68,7 @@ def insert_adbc(
         connection,
         primary_key,
         not_null,
-        expected_rows=expected_rows if lazy_stream is None else None,
+        expected_rows=expected_rows,
         lazy_stream=lazy_stream,
         create=create,
         commit=commit,

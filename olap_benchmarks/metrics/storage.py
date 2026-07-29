@@ -8,6 +8,7 @@ from datetime import datetime
 from multiprocessing import Process, Queue
 from queue import Empty
 from threading import Lock
+from time import monotonic
 from typing import Any, Literal, TypedDict, cast
 
 from sqlalchemy import select, update
@@ -98,23 +99,24 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     result_queue.put(row.id)
 
                 case "insert_run":
-                    system = cast(str, msg["args"][5])
+                    system = cast(str, msg["args"][6])
                     system_snapshot_id = _get_or_create_system_snapshot(
                         session,
                         system,
-                        cast(dict[str, Any] | None, msg["args"][8]),
+                        cast(dict[str, Any] | None, msg["args"][9]),
                     )
                     row = Run(
                         suite=cast(str, msg["args"][0]),
                         suite_scale_factor=cast(int, msg["args"][1]),
                         db=cast(str, msg["args"][2]),
                         db_version=cast(str, msg["args"][3]),
-                        operation=cast(str, msg["args"][4]),
+                        db_driver=cast(str | None, msg["args"][4]),
+                        operation=cast(str, msg["args"][5]),
                         system=system,
                         system_snapshot_id=system_snapshot_id,
-                        status=cast(str, msg["args"][6]),
-                        started_at=cast(datetime, msg["args"][7]),
-                        metadata_json=cast(dict[str, Any] | None, msg["args"][9]),
+                        status=cast(str, msg["args"][7]),
+                        started_at=cast(datetime, msg["args"][8]),
+                        metadata_json=cast(dict[str, Any] | None, msg["args"][10]),
                     )
                     session.add(row)
                     session.commit()
@@ -216,7 +218,7 @@ class WriterProcessHandle:
             return
 
         try:
-            Storage(self.queue, self.result_queue).shutdown(timeout_seconds=timeout_seconds)
+            Storage(self.queue, self.result_queue, process=self.process).shutdown(timeout_seconds=timeout_seconds)
         except Exception as exc:
             _LOGGER.warning(f"Writer shutdown handshake failed: {exc}")
 
@@ -244,18 +246,40 @@ def start_writer_process(revision: Revision = "default") -> WriterProcessHandle:
 
 
 class Storage:
-    def __init__(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
+    def __init__(
+        self,
+        queue: Queue[WriterMessage],
+        result_queue: Queue[object],
+        process: Process | None = None,
+        response_timeout_seconds: float = 30.0,
+    ) -> None:
         self.queue = queue
         self.result_queue = result_queue
+        self.process = process
+        self.response_timeout_seconds = response_timeout_seconds
         self._response_lock = Lock()
 
+    def _raise_if_writer_exited(self) -> None:
+        if self.process is not None and not self.process.is_alive():
+            raise RuntimeError(f"Results writer exited unexpectedly with code {self.process.exitcode}")
+
     def put(self, type: MessageType, args: list[Any]) -> None:
+        self._raise_if_writer_exited()
         self.queue.put({"type": type, "args": args})
 
     def put_and_get_id(self, type: MessageType, args: list[Any]) -> int:
         with self._response_lock:
             self.put(type, args)
-            return cast(int, self.result_queue.get())
+            deadline = monotonic() + self.response_timeout_seconds
+            while True:
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    self._raise_if_writer_exited()
+                    raise TimeoutError(f"Timed out waiting for results writer response to {type}")
+                try:
+                    return cast(int, self.result_queue.get(timeout=min(0.1, remaining)))
+                except Empty:
+                    self._raise_if_writer_exited()
 
     def insert_run(
         self,
@@ -263,6 +287,7 @@ class Storage:
         suite_scale_factor: int,
         db: DatabaseName,
         db_version: str,
+        db_driver: str | None,
         operation: Operation,
         system: str,
         started_at: datetime,
@@ -276,6 +301,7 @@ class Storage:
                 suite_scale_factor,
                 db,
                 db_version,
+                db_driver,
                 operation,
                 system,
                 "running",
@@ -375,10 +401,17 @@ class Storage:
     def shutdown(self, timeout_seconds: float = 10.0) -> None:
         self.put("shutdown", [])
 
-        try:
-            ack = self.result_queue.get(timeout=timeout_seconds)
-        except Empty as exc:
-            raise TimeoutError("Timed out waiting for writer shutdown acknowledgement") from exc
+        deadline = monotonic() + timeout_seconds
+        while True:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                self._raise_if_writer_exited()
+                raise TimeoutError("Timed out waiting for writer shutdown acknowledgement")
+            try:
+                ack = self.result_queue.get(timeout=min(0.1, remaining))
+                break
+            except Empty:
+                self._raise_if_writer_exited()
 
         if ack != "ok":
             raise RuntimeError(f"Unexpected writer shutdown acknowledgement: {ack}")

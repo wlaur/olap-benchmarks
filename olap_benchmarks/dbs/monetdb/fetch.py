@@ -3,7 +3,6 @@ import re
 import shutil
 import uuid
 from collections.abc import Mapping
-from contextlib import AbstractContextManager, nullcontext
 from time import perf_counter
 from typing import Any, Literal, Protocol, cast
 
@@ -11,6 +10,7 @@ import polars as pl
 from pymonetdb.sql.cursors import Description
 from sqlalchemy import Connection, text
 
+from ..utils import record_query_execution_context
 from .binary import read_binary_column_data
 from .settings import SETTINGS as MONETDB_SETTINGS
 from .utils import (
@@ -29,15 +29,6 @@ SchemaMethod = Literal["infer", "fetch"]
 DEFAULT_SCHEMA_METHOD: SchemaMethod = "infer"
 _SQL_STRING_LITERAL_RE = re.compile(r"'(?:''|[^'])*'")
 _SQLALCHEMY_TEXT_LITERAL_COLON_RE = re.compile(r":(?=[A-Za-z_])")
-
-
-def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
-    recorder = connection.info.get("olap_query_recorder")
-
-    if callable(recorder):
-        return cast(AbstractContextManager[None], recorder(query))
-
-    return nullcontext()
 
 
 class _MonetCursor(Protocol):
@@ -66,7 +57,7 @@ def _escape_literal_colons_for_sqlalchemy_text(query: str) -> str:
 
 
 def fetch_pymonetdb(query: str, connection: Connection) -> pl.DataFrame:
-    with _record_query_execution(connection, query):
+    with record_query_execution_context(query, connection):
         statement = text(_escape_literal_colons_for_sqlalchemy_text(query.strip().removesuffix(";")))
         result = connection.execute(statement)
         columns = list(result.keys())
@@ -85,7 +76,7 @@ def fetch_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     con = get_pymonetdb_connection(connection)
     c = cast(_MonetCursor, con.cursor())
-    with _record_query_execution(connection, query):
+    with record_query_execution_context(query, connection):
         c.execute(query)
 
     description = c.description
@@ -105,7 +96,7 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
     con = get_pymonetdb_connection(connection)
     c = cast(_MonetCursor, con.cursor())
     prepare_query = f"PREPARE {query}"
-    with _record_query_execution(connection, prepare_query):
+    with record_query_execution_context(prepare_query, connection):
         c.execute(prepare_query)
 
     description = c.description
@@ -114,7 +105,7 @@ def infer_schema(query: str, connection: Connection) -> dict[str, tuple[pl.DataT
 
     # could also keep the prepared statement since we'll execute it shortly,
     # probably not worth the extra complexity though
-    with _record_query_execution(connection, "DEALLOCATE ALL"):
+    with record_query_execution_context("DEALLOCATE ALL", connection):
         c.execute("DEALLOCATE ALL")
 
     schema: dict[str, pl.DataType | type[pl.DataType]] = {}
@@ -174,7 +165,7 @@ def fetch_binary(
             f"copy {query} into little endian binary {files_clause} "
             f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
         )
-        with _record_query_execution(connection, copy_query):
+        with record_query_execution_context(copy_query, connection):
             cast(Any, con).execute(copy_query)
 
         columns: dict[str, pl.Series] = {}
