@@ -264,22 +264,18 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
         self.db.run_sql(sql)
         _LOGGER.info(f"Created time_series table {table_name} with per-column codecs")
 
-    def insert_table(
+    def prepare_parquet_table(
         self,
-        df: pl.DataFrame | pl.LazyFrame,
+        path: Path,
         table_name: TableName,
         primary_key: str | list[str] | None,
         not_null: str | list[str] | None,
     ) -> None:
         normalized = normalize_columns(not_null)
+        frame = pl.scan_parquet(path)
 
         if table_name not in self.db.get_table_names():
-            self._create_time_series_table(df, table_name, primary_key, normalized)
-
-        # Falls through to db.insert which detects the table already exists
-        # and skips the CTAS path, going straight to INSERT INTO ... SELECT
-        # FROM file(...).
-        self.db.insert(df, table_name, primary_key=primary_key, not_null=normalized, **self.populate_kwargs)
+            self._create_time_series_table(frame, table_name, primary_key, normalized)
 
 
 class Clickhouse(Database):

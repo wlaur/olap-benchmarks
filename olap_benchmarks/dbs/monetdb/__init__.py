@@ -13,7 +13,7 @@ from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_sui
 from ...suites import BenchmarkSuite
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
-from .. import Database
+from .. import Database, ParquetEpochColumns, apply_parquet_epoch_columns
 from ..utils import tracked_commit
 from . import insert as _insert_mod
 from .adbc import (
@@ -73,20 +73,7 @@ def _monetdb_connection_string() -> str:
 
 
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
-    def insert_table(
-        self,
-        df: pl.DataFrame | pl.LazyFrame,
-        table_name: TableName,
-        primary_key: str | list[str] | None,
-        not_null: str | list[str] | None,
-    ) -> None:
-        self.db.insert(
-            df,
-            table_name,
-            primary_key=primary_key,
-            not_null=not_null,
-            lazy_write=ColumnGroupWrite(group_size=10),
-        )
+    def finish_parquet_table(self, table_name: TableName) -> None:
         self.db.analyze_table(table_name, ["time"])
 
     @property
@@ -268,8 +255,8 @@ class MonetDB(Database):
                 create=not exists,
                 lazy_write=lazy_write,
             )
-        except Exception:
-            self.rollback()
+        except Exception as error:
+            self._rollback_after_failed_ingest(error, "insert")
             raise
 
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
@@ -283,9 +270,17 @@ class MonetDB(Database):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        *,
+        epoch_columns: ParquetEpochColumns | None = None,
     ) -> None:
         if MONETDB_SETTINGS.driver != "adbc":
-            return super().insert_parquet(path, table, primary_key=primary_key, not_null=not_null)
+            return self.insert(
+                apply_parquet_epoch_columns(pl.scan_parquet(path), epoch_columns),
+                table,
+                primary_key=primary_key,
+                not_null=not_null,
+                lazy_write=ColumnGroupWrite(group_size=10),
+            )
 
         statement = f"SELECT count(*) FROM sys.tables WHERE name = '{table}'"
         with self.record_query_execution(statement):
@@ -303,10 +298,17 @@ class MonetDB(Database):
                 primary_key,
                 not_null,
                 create=not exists,
+                epoch_columns=epoch_columns,
             )
-        except Exception:
-            self.rollback()
+        except Exception as error:
+            self._rollback_after_failed_ingest(error, "Parquet insert")
             raise
+
+    def _rollback_after_failed_ingest(self, error: Exception, operation: str) -> None:
+        try:
+            self.rollback()
+        except Exception as rollback_error:
+            error.add_note(f"rollback after failed {operation} also failed: {rollback_error}")
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         if MONETDB_SETTINGS.driver == "adbc":

@@ -6,9 +6,10 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from adbc_driver_monetdb import ParquetArrowStream
 from sqlalchemy import create_engine, text
 
-from ..dbs.monetdb.adbc import _iter_parquet_batches, _validated_ingest_row_count, insert_adbc
+from ..dbs.monetdb.adbc import _validated_ingest_row_count, insert_adbc
 
 
 def test_adbc_row_count_must_be_exact() -> None:
@@ -23,14 +24,8 @@ def test_parquet_arrow_stream_crosses_row_group_boundaries(tmp_path: Path) -> No
     path = tmp_path / "input.parquet"
     cast(Any, pq).write_table(pa.table({"id": range(7), "value": ["x"] * 7}), path, row_group_size=2)
 
-    batches = list(
-        _iter_parquet_batches(
-            path,
-            batch_rows=3,
-            row_groups=4,
-            memory_pool=pa.system_memory_pool(),
-        )
-    )
+    stream = ParquetArrowStream(path, batch_rows=3)
+    batches = list(pa.RecordBatchReader.from_stream(stream))
 
     assert pa.Table.from_batches(batches).to_pydict() == {
         "id": list(range(7)),

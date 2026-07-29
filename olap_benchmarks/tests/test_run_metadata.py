@@ -17,9 +17,10 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
     )
 
     assert metadata["metrics"] == {
-        "version": 2,
+        "version": 3,
         "cpu_percent": "benchmark client plus all database containers",
         "mem_mb": "all database containers; excludes the benchmark client",
         "client_mem_mb": "benchmark client process RSS",
+        "client_uss_mb": "benchmark client process USS",
         "disk_mb": "database storage plus configured temporary and staging directories",
     }

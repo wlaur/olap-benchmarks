@@ -128,6 +128,7 @@ class RunMetric(Base):
     cpu_percent: Mapped[float] = mapped_column(Float, nullable=False)
     mem_mb: Mapped[int] = mapped_column(Integer, nullable=False)
     client_mem_mb: Mapped[int | None] = mapped_column(Integer)
+    client_uss_mb: Mapped[int | None] = mapped_column(Integer)
     disk_mb: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (Index("idx_run_metric_run_time", "run_id", "time"),)
