@@ -124,12 +124,25 @@ connections use their public client name, and both are scoped to the benchmark
 process ID. The post-operation phase disposes the SQLAlchemy engine and
 requires zero matching server sessions and zero residual ADBC staging tables.
 
+Input fingerprints, package provenance, and container-image metadata are collected before the
+recorded run start, so populate wall time excludes harness hashing and metadata probes. Reading
+the inputs for SHA-256 may warm the operating-system page cache; populate results are therefore
+warm-input end-to-end measurements, not cold-cache storage benchmarks.
+
+Populate timings cover each connector's supported end-to-end loading path, which is not always
+the same client pipeline. Current MonetDB and StarRocks paths can load source Parquet directly,
+while connectors without an equivalent path may materialize or transform data through Polars.
+In particular, StarRocks time-series populate results from before the direct `INSERT FROM FILES`
+path are not comparable with current results. ClickBench populate comparisons likewise compare
+database loading paths, not identical client preprocessing.
+
 Benchmark memory is reported as two independent peak series: `mem_mb` is the
 sum of database-container memory and `client_mem_mb` is the benchmark Python
 process RSS. `client_uss_mb` records its unique set size so shared and
 reclaimable file-backed pages can be separated from private memory. Client RSS
-and USS high-water marks are sampled together every 10 ms so short ingestion
-allocations are not hidden by the slower container and disk metric cadence.
+is sampled every 10 ms; the more expensive USS scan runs every 100 ms to avoid
+materially perturbing client CPU on Linux. These are metric schema v4 semantics
+and must not be compared as identical measurements with v2/v3 client-memory data.
 `disk_mb` includes database storage plus configured temporary and
 staging directories. These definitions and a metric-schema version are stored
 with each run so results remain interpretable after methodology changes.

@@ -22,6 +22,8 @@ from .measure import get_database_metrics
 from .storage import Storage, WriterMessage
 
 _LOGGER = logging.getLogger(__name__)
+CLIENT_RSS_SAMPLE_SECONDS = 0.01
+CLIENT_USS_SAMPLE_SECONDS = 0.1
 
 
 class _Lock(Protocol):
@@ -40,16 +42,23 @@ def sample_client_memory(
     peak_rss_mb: _SharedInteger,
     peak_uss_mb: _SharedInteger,
     stop_event: ThreadEvent,
-    interval_seconds: float = 0.01,
+    interval_seconds: float = CLIENT_RSS_SAMPLE_SECONDS,
+    uss_interval_seconds: float = CLIENT_USS_SAMPLE_SECONDS,
 ) -> None:
     process = psutil.Process()
+    next_uss_sample = 0.0
     while True:
-        memory = process.memory_full_info()
-        rss_mb = int(memory.rss / (1024 * 1024))
-        uss_mb = min(rss_mb, int(memory.uss / (1024 * 1024)))
-        with peak_rss_mb.get_lock(), peak_uss_mb.get_lock():
+        rss_mb = int(process.memory_info().rss / (1024 * 1024))
+        now = time.monotonic()
+        uss_mb = None
+        if now >= next_uss_sample:
+            uss_mb = min(rss_mb, int(process.memory_full_info().uss / (1024 * 1024)))
+            next_uss_sample = now + uss_interval_seconds
+        with peak_rss_mb.get_lock():
             peak_rss_mb.value = max(peak_rss_mb.value, rss_mb)
-            peak_uss_mb.value = max(peak_uss_mb.value, uss_mb)
+        if uss_mb is not None:
+            with peak_uss_mb.get_lock():
+                peak_uss_mb.value = max(peak_uss_mb.value, uss_mb)
         if stop_event.wait(interval_seconds):
             return
 

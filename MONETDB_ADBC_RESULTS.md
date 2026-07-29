@@ -4,9 +4,10 @@ This is the release decision based on the preserved 2026-07-29 result databases.
 were not rerun. Times are complete population-run wall times, so ADBC Parquet decoding and staged
 binary-file serialization are both inside the measured boundary.
 
-The implemented stack is `adbc-driver-monetdb` 0.10.0 and
+The measured release stack is `adbc-driver-monetdb` 0.10.0 and
 `sqlalchemy-monetdb-adbc` 0.3.0, both installed from their released PyPI
-artifacts by the benchmark lockfile.
+artifacts by the benchmark lockfile. Patch releases 0.10.1 and 0.3.1 retain
+the measured ingest tuning and add correctness and bounded-memory hardening.
 
 For this decision, latency within 10% is parity. A resource difference is material only when it
 exceeds both 15% and 256 MB of client memory, 512 MB of server memory, or 1 GB of disk. Those
@@ -16,7 +17,7 @@ absolute bands keep small fixed buffers from deciding an otherwise equivalent ru
 
 | Suite | ADBC | Staged binary | ADBC/staged | Decision |
 |---|---:|---:|---:|---|
-| Time Series SF1, median of three | 17.378 s | 19.679 s | 0.883 | ADBC 11.7% faster |
+| Time Series SF1, release-wheel median of three | 19.884 s | 20.432 s | 0.973 | parity; ADBC 2.7% faster |
 | TPC-DS SF1 | 9.534 s | 9.720 s | 0.981 | parity |
 | Kaggle Airbnb | 7.292 s | 10.056 s | 0.725 | ADBC 27.5% faster |
 | TPC-H SF1 | 13.092 s | 17.794 s | 0.736 | ADBC 26.4% faster |
@@ -27,7 +28,7 @@ The current-era resource splits support the same conclusion:
 
 | Suite | ADBC client / server / disk peak | Staged client / server / disk peak | Decision |
 |---|---:|---:|---|
-| Time Series SF1, medians | 620 / 4807 / 4672 MB | 480 / 4772 / 6294 MB | memory parity by the declared absolute bands; ADBC avoids 1.6 GB of peak disk |
+| Time Series SF1, release-wheel medians | 565 / 5408 / 4908 MB | 479 / 4806 / 4689 MB | resource parity by the declared relative and absolute bands |
 | TPC-DS SF1 | 1271 / 1477 / 1564 MB | 1480 / 1483 / 1565 MB | ADBC lower client peak; server and disk parity |
 | Kaggle Airbnb | 781 / 786 / 528 MB | 999 / 896 / 589 MB | ADBC lower on every resource |
 
@@ -59,7 +60,7 @@ paths.
 
 | Measurement | Result revision |
 |---|---|
-| Time Series ADBC / staged, three paired runs | `monetdb-final-paired3-adbc-20260729` / `monetdb-final-paired3-staged-20260729` |
+| Time Series release-wheel ADBC / staged, three paired runs | `monetdb-final-release5-adbc-20260729` / `monetdb-final-release5-staged-20260729` |
 | TPC-DS ADBC / staged | `monetdb-cross-suite-final-tpcds-20260729` / `monetdb-cross-suite-final-default-20260729` |
 | Kaggle Airbnb ADBC / staged | `monetdb-review2-adbc-final` / `monetdb-review-staged-final` |
 | TPC-H ADBC / staged | `monetdb-review2-adbc-final` / `monetdb-staged-full-validation` |
@@ -81,7 +82,9 @@ Reproduce the aggregate rows without opening a database file directly:
 
 Historical files without `client_mem_mb` use `max(m.mem_mb)` as the combined peak. The comparison
 names every source revision rather than selecting a best run, and the repeated Time Series result
-reports medians. New runs record `db_driver`, package/editable revision provenance, container image
+reports medians. The earlier pre-final physical-window pair measured 17.378 seconds for ADBC versus
+19.679 seconds staged; it remains useful tuning evidence but is not the release headline. New runs
+record `db_driver`, package/editable revision provenance, container image
 IDs and digests, effective MonetDB options, and SHA-256 input fingerprints; publication rejects
 running runs, a release matrix without same-system ADBC/staged pairs, missing or
 disagreeing correctness results, mismatched query coverage, and unclean session

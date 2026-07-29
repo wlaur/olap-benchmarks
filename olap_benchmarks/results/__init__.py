@@ -330,6 +330,13 @@ def _validate_publishable_runs(db_path: Path) -> None:
                 and operation = 'select'
                 and status = 'completed'
             ),
+            paired_cells as (
+              select system, suite, suite_scale_factor
+              from latest_runs
+              where run_rank = 1
+              group by system, suite, suite_scale_factor
+              having count(distinct db_driver) = 2
+            ),
             results as (
               select
                 r.system,
@@ -342,6 +349,10 @@ def _validate_publishable_runs(db_path: Path) -> None:
                 s.row_count,
                 json_extract_string(s."metadata", '$.answer_hash') as answer_hash
               from latest_runs r
+              join paired_cells p
+                on p.system = r.system
+               and p.suite = r.suite
+               and p.suite_scale_factor = r.suite_scale_factor
               join run_step s on s.run_id = r.id
               where r.run_rank = 1
                 and s.step_type = 'query'
