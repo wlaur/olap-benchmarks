@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Index, Integer, Sequence, String, Text
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, Index, Integer, Sequence, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -51,6 +51,7 @@ class Run(Base):
     suite_scale_factor: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     db: Mapped[str] = mapped_column(String, nullable=False)
     db_version: Mapped[str] = mapped_column(String, nullable=False)
+    db_driver: Mapped[str | None] = mapped_column(String)
     operation: Mapped[str] = mapped_column(String, nullable=False)
     system: Mapped[str] = mapped_column(String, nullable=False)
     system_snapshot_id: Mapped[int | None] = mapped_column(Integer, index=True)
@@ -65,17 +66,25 @@ class Run(Base):
         CheckConstraint("status in ('running', 'completed', 'failed')", name="ck_run_status"),
         CheckConstraint("suite_scale_factor >= 1", name="ck_run_suite_scale_factor"),
         Index(
-            "uq_run_natural_key",
+            "uq_run_natural_key_driver",
             "system",
             "db",
             "db_version",
+            func.coalesce(db_driver, ""),
             "suite",
             "suite_scale_factor",
             "operation",
             "started_at",
             unique=True,
         ),
-        Index("idx_run_suite_db_operation", "suite", "suite_scale_factor", "db", "operation"),
+        Index(
+            "idx_run_suite_db_driver_operation",
+            "suite",
+            "suite_scale_factor",
+            "db",
+            "db_driver",
+            "operation",
+        ),
         Index("idx_run_status_started_at", "status", "started_at"),
     )
 

@@ -43,7 +43,11 @@ export function buildCatalogSuiteSummary(
 
     return {
       database,
-      versions: unique(databaseRows.map((row) => row.db_version)).sort(),
+      versions: unique(
+        databaseRows.map((row) =>
+          row.db_driver === null ? row.db_version : `${row.db_version} · ${row.db_driver}`,
+        ),
+      ).sort(),
       systemsByScale,
     }
   })

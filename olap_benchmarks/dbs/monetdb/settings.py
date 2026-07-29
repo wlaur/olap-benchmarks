@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     driver: Literal["staged", "adbc"] = "staged"
     write_window_bytes: int | None = None
     wire_compression: Literal["none", "auto", "lz4"] = "auto"
+    constrained_append: Literal["auto", "direct"] = "auto"
 
     # binary fetch has a slight overhead (needs to infer the schema via PREPARE ... and process temporary files)
     default_fetch_method: Literal["binary", "pymonetdb"] = "pymonetdb"

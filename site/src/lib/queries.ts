@@ -58,7 +58,7 @@ export async function fetchCatalogRunDimensions(): Promise<CatalogRunDimension[]
   const db = await getKyselyDb()
   return db
     .selectFrom("run")
-    .select(["system", "suite", "suite_scale_factor", "db", "db_version"])
+    .select(["system", "suite", "suite_scale_factor", "db", "db_version", "db_driver"])
     .distinct()
     .where("operation", "=", "select")
     .where("status", "=", "completed")
@@ -66,6 +66,7 @@ export async function fetchCatalogRunDimensions(): Promise<CatalogRunDimension[]
     .orderBy("suite")
     .orderBy("db")
     .orderBy("db_version")
+    .orderBy("db_driver")
     .orderBy("suite_scale_factor")
     .orderBy("system")
     .execute()
@@ -86,6 +87,7 @@ export async function fetchExplorerQueryMetrics(
           "run.suite_scale_factor",
           "run.db",
           "run.db_version",
+          "run.db_driver",
           "run.finished_at",
         ])
         .select((eb) => [
@@ -94,7 +96,8 @@ export async function fetchExplorerQueryMetrics(
               ${eb.ref("run.system")},
               ${eb.ref("run.suite_scale_factor")},
               ${eb.ref("run.db")},
-              ${eb.ref("run.db_version")}
+              ${eb.ref("run.db_version")},
+              ${eb.ref("run.db_driver")}
             order by ${eb.ref("run.finished_at")} desc, ${eb.ref("run.id")} desc
           )`.as("run_rank"),
         ])
@@ -115,6 +118,7 @@ export async function fetchExplorerQueryMetrics(
         eb.ref("latest_explorer_runs.suite_scale_factor").as("suite_scale_factor"),
         eb.ref("latest_explorer_runs.db").as("db"),
         eb.ref("latest_explorer_runs.db_version").as("db_version"),
+        eb.ref("latest_explorer_runs.db_driver").as("db_driver"),
         isoTimestamp(eb.ref("latest_explorer_runs.finished_at").$notNull()).as("finished_at"),
         eb.ref("run_step.query_name").$notNull().as("query_name"),
         sql<number>`coalesce(median(${duration}) filter (where ${warm}), median(${duration}))`.as(
@@ -134,12 +138,14 @@ export async function fetchExplorerQueryMetrics(
       "latest_explorer_runs.suite_scale_factor",
       "latest_explorer_runs.db",
       "latest_explorer_runs.db_version",
+      "latest_explorer_runs.db_driver",
       "latest_explorer_runs.finished_at",
       "run_step.query_name",
     ])
     .orderBy("latest_explorer_runs.system")
     .orderBy("latest_explorer_runs.db")
     .orderBy("latest_explorer_runs.db_version")
+    .orderBy("latest_explorer_runs.db_driver")
     .orderBy("latest_explorer_runs.suite_scale_factor")
     .orderBy("run_step.query_name")
     .execute()
@@ -162,7 +168,16 @@ function withRunLabels(db: ResultsDb, options: LatestRunsOptions) {
       .select((eb) => [
         eb.ref("run.db").as("db"),
         eb.ref("run.db_version").as("db_version"),
+        eb.ref("run.db_driver").as("db_driver"),
         sql<string>`case
+            when ${eb.ref("run.db_driver")} is not null
+              and count(distinct ${eb.ref("run.db_version")}) over (
+                partition by ${eb.ref("run.db")}, ${eb.ref("run.db_driver")}
+              ) > 1
+            then ${eb.ref("run.db")} || ' ' || ${eb.ref("run.db_version")} ||
+              ' (' || ${eb.ref("run.db_driver")} || ')'
+            when ${eb.ref("run.db_driver")} is not null
+            then ${eb.ref("run.db")} || ' (' || ${eb.ref("run.db_driver")} || ')'
             when count(distinct ${eb.ref("run.db_version")}) over (partition by ${eb.ref("run.db")}) > 1
             then ${eb.ref("run.db")} || ' ' || ${eb.ref("run.db_version")}
             else ${eb.ref("run.db")}
@@ -185,12 +200,14 @@ function withLatestCompletedSelectRuns(db: ResultsDb, options: LatestRunsOptions
         .innerJoin("run_labels", (join) =>
           join
             .onRef("run_labels.db", "=", "run.db")
-            .onRef("run_labels.db_version", "=", "run.db_version"),
+            .onRef("run_labels.db_version", "=", "run.db_version")
+            .on(sql<boolean>`run_labels.db_driver is not distinct from run.db_driver`),
         )
         .select((eb) => [
           eb.ref("run.id").as("run_id"),
           eb.ref("run.db").as("db"),
           eb.ref("run.db_version").as("db_version"),
+          eb.ref("run.db_driver").as("db_driver"),
           eb.ref("run_labels.db_label").as("db_label"),
           eb.ref("run.finished_at").$notNull().as("run_finished_at"),
         ])
@@ -207,7 +224,8 @@ function withLatestCompletedSelectRuns(db: ResultsDb, options: LatestRunsOptions
         .selectAll("scoped_runs")
         .select((eb) => [
           sql<number>`row_number() over (
-            partition by ${eb.ref("scoped_runs.db")}, ${eb.ref("scoped_runs.db_version")}
+            partition by ${eb.ref("scoped_runs.db")}, ${eb.ref("scoped_runs.db_version")},
+              ${eb.ref("scoped_runs.db_driver")}
             order by ${eb.ref("scoped_runs.run_finished_at")} desc, ${eb.ref("scoped_runs.run_id")} desc
           )`.as("run_rank"),
         ]),
@@ -222,12 +240,14 @@ function withLatestAttemptedSelectRuns(db: ResultsDb, options: LatestRunsOptions
         .innerJoin("run_labels", (join) =>
           join
             .onRef("run_labels.db", "=", "run.db")
-            .onRef("run_labels.db_version", "=", "run.db_version"),
+            .onRef("run_labels.db_version", "=", "run.db_version")
+            .on(sql<boolean>`run_labels.db_driver is not distinct from run.db_driver`),
         )
         .select((eb) => [
           eb.ref("run.id").as("run_id"),
           eb.ref("run.db").as("db"),
           eb.ref("run.db_version").as("db_version"),
+          eb.ref("run.db_driver").as("db_driver"),
           eb.ref("run_labels.db_label").as("db_label"),
           sql<Exclude<RunStatus, "running">>`${eb.ref("run.status")}`.as("run_status"),
           sql<Date>`coalesce(${eb.ref("run.finished_at")}, ${eb.ref("run.started_at")})`.as(
@@ -246,7 +266,8 @@ function withLatestAttemptedSelectRuns(db: ResultsDb, options: LatestRunsOptions
         .selectAll("scoped_runs")
         .select((eb) => [
           sql<number>`row_number() over (
-            partition by ${eb.ref("scoped_runs.db")}, ${eb.ref("scoped_runs.db_version")}
+            partition by ${eb.ref("scoped_runs.db")}, ${eb.ref("scoped_runs.db_version")},
+              ${eb.ref("scoped_runs.db_driver")}
             order by ${eb.ref("scoped_runs.run_finished_at")} desc, ${eb.ref("scoped_runs.run_id")} desc
           )`.as("run_rank"),
         ]),
@@ -268,6 +289,7 @@ export async function fetchQueryCoverage(
       eb.ref("latest_runs.db_label").as("db"),
       eb.ref("latest_runs.db").as("db_name"),
       eb.ref("latest_runs.db_version").as("db_version"),
+      eb.ref("latest_runs.db_driver").as("db_driver"),
       eb.ref("latest_runs.run_status").as("latest_status"),
       sql<number>`cast(
         count(distinct ${eb.ref("run_step.query_name")}) filter (
@@ -297,6 +319,7 @@ export async function fetchQueryCoverage(
       "latest_runs.db_label",
       "latest_runs.db",
       "latest_runs.db_version",
+      "latest_runs.db_driver",
       "latest_runs.run_status",
     ])
     .orderBy("latest_runs.db_label")
@@ -323,6 +346,7 @@ export async function fetchQuerySummaries(
         eb.ref("latest_runs.db_label").as("db"),
         eb.ref("latest_runs.db").as("db_name"),
         eb.ref("latest_runs.db_version").as("db_version"),
+        eb.ref("latest_runs.db_driver").as("db_driver"),
         sql<number>`coalesce(median(${duration}) filter (where ${warm}), median(${duration}))`.as(
           "median_duration_s",
         ),
@@ -354,6 +378,7 @@ export async function fetchQuerySummaries(
       "latest_runs.db_label",
       "latest_runs.db",
       "latest_runs.db_version",
+      "latest_runs.db_driver",
     ])
     .orderBy("run_step.query_name")
     .orderBy("latest_runs.db_label")

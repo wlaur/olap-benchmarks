@@ -1,6 +1,20 @@
+from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
-from olap_benchmarks.results import _build_queries_manifest, _build_suites_manifest
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from olap_benchmarks.dbs.monetdb.manifest import monetdb_benchmark_manifest
+from olap_benchmarks.results import (
+    _build_queries_manifest,
+    _build_suites_manifest,
+    _validate_publishable_runs,
+    get_results_engine,
+    migrate_results,
+)
+from olap_benchmarks.results.models import Run, RunStep
 from olap_benchmarks.settings import (
     ALL_SUITE_SCALE_FACTORS,
     DEFAULT_SUITE_SCALE_FACTORS,
@@ -60,3 +74,162 @@ def test_queries_manifest_includes_registered_suites() -> None:
         "postgres",
         "starrocks",
     }
+
+
+def _add_run(
+    session: Session,
+    *,
+    driver: str,
+    suite: str,
+    scale_factor: int,
+    operation: str,
+    status: str = "completed",
+) -> None:
+    run = Run(
+        suite=suite,
+        suite_scale_factor=scale_factor,
+        db="monetdb",
+        db_version="test",
+        db_driver=driver,
+        operation=operation,
+        system="test",
+        status=status,
+        started_at=datetime(2026, 7, 29),
+    )
+    session.add(run)
+    session.flush()
+    for step_name, row_count in (("session_baseline_before", 1), ("session_baseline_after", 0)):
+        session.add(
+            RunStep(
+                run_id=run.id,
+                step_type="phase",
+                step_name=step_name,
+                started_at=datetime(2026, 7, 29),
+                finished_at=datetime(2026, 7, 29),
+                status="completed",
+                row_count=row_count,
+                metadata_json={"temporary_ingest_tables": 0},
+            )
+        )
+    if operation == "select":
+        session.add(
+            RunStep(
+                run_id=run.id,
+                step_type="query",
+                step_name="query",
+                query_name="q1",
+                iteration=1,
+                started_at=datetime(2026, 7, 29),
+                finished_at=datetime(2026, 7, 29),
+                status="completed",
+                result_status="ok",
+                row_count=1,
+                metadata_json={"answer_hash": "blake2b128:test"},
+            )
+        )
+
+
+def test_publish_validation_rejects_running_and_incomplete_monetdb_results(
+    tmp_path: Path,
+) -> None:
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            _add_run(
+                session,
+                driver="adbc",
+                suite="rtabench",
+                scale_factor=1,
+                operation="populate",
+                status="running",
+            )
+            session.commit()
+        engine.dispose()
+        with pytest.raises(RuntimeError, match="running run"):
+            _validate_publishable_runs(db_path)
+
+        engine = get_results_engine(read_only=False, db_path=db_path)
+        with Session(engine) as session:
+            run = session.scalars(select(Run)).one()
+            run.status = "completed"
+            session.commit()
+        engine.dispose()
+        with pytest.raises(RuntimeError, match="lacks paired ADBC/staged runs"):
+            _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()
+
+
+def test_publish_validation_rejects_unknown_monetdb_driver(tmp_path: Path) -> None:
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            _add_run(
+                session,
+                driver="experimental",
+                suite="rtabench",
+                scale_factor=1,
+                operation="populate",
+            )
+            session.commit()
+        engine.dispose()
+
+        with pytest.raises(RuntimeError, match="Unknown MonetDB db_driver"):
+            _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()
+
+
+def test_publish_validation_accepts_the_complete_monetdb_release_matrix(
+    tmp_path: Path,
+) -> None:
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            for driver in ("adbc", "staged"):
+                for cell in monetdb_benchmark_manifest():
+                    _add_run(
+                        session,
+                        driver=driver,
+                        suite=cell.suite,
+                        scale_factor=cell.scale_factor,
+                        operation=cell.operation,
+                    )
+            session.commit()
+        engine.dispose()
+        _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()
+
+
+def test_publish_validation_rejects_missing_select_correctness(tmp_path: Path) -> None:
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            for driver in ("adbc", "staged"):
+                for cell in monetdb_benchmark_manifest():
+                    _add_run(
+                        session,
+                        driver=driver,
+                        suite=cell.suite,
+                        scale_factor=cell.scale_factor,
+                        operation=cell.operation,
+                    )
+            step = session.scalars(
+                select(RunStep)
+                .join(Run, Run.id == RunStep.run_id)
+                .where(Run.db_driver == "adbc", Run.operation == "select", RunStep.step_type == "query")
+                .limit(1)
+            ).one()
+            step.metadata_json = None
+            session.commit()
+        engine.dispose()
+
+        with pytest.raises(RuntimeError, match="lack correctness results"):
+            _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()

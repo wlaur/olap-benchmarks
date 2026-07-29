@@ -32,8 +32,12 @@ const MISSING_QUERY_MIN_RATIO = 10
 const MISSING_QUERY_WORST_MULTIPLIER = 2
 const DURATION_EQUALITY_TOLERANCE = 1e-9
 
-export function databaseVariantKey(dbName: string, dbVersion: string): string {
-  return JSON.stringify([dbName, dbVersion])
+export function databaseVariantKey(
+  dbName: string,
+  dbVersion: string,
+  dbDriver: string | null,
+): string {
+  return JSON.stringify([dbName, dbVersion, dbDriver])
 }
 
 export function computeDatabaseScores(
@@ -46,12 +50,15 @@ export function computeDatabaseScores(
   const queryGroups = new Map<string, Map<string, number>>()
   const databases = new Map<string, { db: string; dbName: string; dbVersion: string }>()
   const coverageByDb = new Map(
-    queryCoverage.map((row) => [databaseVariantKey(row.db_name, row.db_version), row]),
+    queryCoverage.map((row) => [
+      databaseVariantKey(row.db_name, row.db_version, row.db_driver),
+      row,
+    ]),
   )
   const scoredQueryNames = new Set(queryNames)
 
   for (const row of querySummaries) {
-    const dbKey = databaseVariantKey(row.db_name, row.db_version)
+    const dbKey = databaseVariantKey(row.db_name, row.db_version, row.db_driver)
     databases.set(dbKey, { db: row.db, dbName: row.db_name, dbVersion: row.db_version })
     scoredQueryNames.add(row.query_name)
     const group = queryGroups.get(row.query_name) ?? new Map<string, number>()
@@ -59,7 +66,7 @@ export function computeDatabaseScores(
     queryGroups.set(row.query_name, group)
   }
   for (const row of queryCoverage) {
-    databases.set(databaseVariantKey(row.db_name, row.db_version), {
+    databases.set(databaseVariantKey(row.db_name, row.db_version, row.db_driver), {
       db: row.db,
       dbName: row.db_name,
       dbVersion: row.db_version,

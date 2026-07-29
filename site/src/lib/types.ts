@@ -3,6 +3,7 @@ export interface QuerySummary {
   db: string
   db_name: string
   db_version: string
+  db_driver: string | null
   median_duration_s: number
   first_run_duration_s: number | null
   warm_median_duration_s: number | null
@@ -22,6 +23,7 @@ export interface QueryCoverage {
   db: string
   db_name: string
   db_version: string
+  db_driver: string | null
   latest_status: Exclude<RunStatus, "running">
   failed_query_count: number
   attempted_query_count: number
@@ -41,6 +43,7 @@ export interface CatalogRunDimension {
   suite_scale_factor: number
   db: string
   db_version: string
+  db_driver: string | null
 }
 
 export interface ExplorerQueryMetric {
@@ -49,6 +52,7 @@ export interface ExplorerQueryMetric {
   suite_scale_factor: number
   db: string
   db_version: string
+  db_driver: string | null
   finished_at: string
   query_name: string
   median_duration_s: number
