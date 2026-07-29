@@ -11,7 +11,16 @@ _LOGGER = logging.getLogger(__name__)
 
 # Run rows have no stable id across database files (each file starts its
 # sequences at 1), so runs are matched by this natural key when merging.
-RUN_NATURAL_KEY = ("system", "db", "db_version", "suite", "suite_scale_factor", "operation", "started_at")
+RUN_NATURAL_KEY = (
+    "system",
+    "db",
+    "db_version",
+    "db_driver",
+    "suite",
+    "suite_scale_factor",
+    "operation",
+    "started_at",
+)
 
 MERGE_TABLES = ("system_snapshot", "run", "run_step", "run_metric", "query_execution")
 
@@ -86,7 +95,7 @@ def merge_results(source_db_path: Path, dest_db_path: Path, head_revision: str) 
 
 
 def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
-    key_join = " and ".join(f"d.{column} = s.{column}" for column in RUN_NATURAL_KEY)
+    key_join = " and ".join(f"d.{column} is not distinct from s.{column}" for column in RUN_NATURAL_KEY)
 
     con.execute(
         f"""
@@ -185,6 +194,7 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
             suite_scale_factor = s.suite_scale_factor,
             db = s.db,
             db_version = s.db_version,
+            db_driver = s.db_driver,
             operation = s.operation,
             system = s.system,
             system_snapshot_id = (
@@ -221,9 +231,9 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
 
     con.execute(
         """
-        insert into run (id, suite, suite_scale_factor, db, db_version, operation, system, system_snapshot_id, status,
-                         started_at, finished_at, error_type, error_message, "metadata")
-        select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.operation, s.system,
+        insert into run (id, suite, suite_scale_factor, db, db_version, db_driver, operation, system,
+                         system_snapshot_id, status, started_at, finished_at, error_type, error_message, "metadata")
+        select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.db_driver, s.operation, s.system,
                sm.new_id, s.status,
                s.started_at, s.finished_at, s.error_type, s.error_message, s."metadata"
         from src.run s

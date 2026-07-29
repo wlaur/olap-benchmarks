@@ -31,6 +31,7 @@ Configuration lives in `.env` (see `olap config` for the resolved values):
 | `OLAP_BENCHMARKS_MONETDB_DRIVER`     | MonetDB bulk path: `staged` (default) or streaming `adbc` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
+| `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
 
 Container images follow the Docker engine architecture automatically, including
 OrbStack's Linux engine on Apple Silicon. The pinned ClickHouse, TimescaleDB,
@@ -111,6 +112,18 @@ without any batch or dataset tuning:
 OLAP_BENCHMARKS_MONETDB_DRIVER=adbc uv run olap benchmark monetdb all
 ```
 
+The preserved ADBC/staged release decision, source revisions, parity bands, and
+reproduction query are in [MONETDB_ADBC_RESULTS.md](MONETDB_ADBC_RESULTS.md).
+MonetDB runs persist `adbc` or `staged` as a typed run dimension; publication
+requires all 20 cells to have a same-system ADBC/staged pair. It also rejects
+running results, missing or disagreeing query row counts and answer hashes,
+different query coverage, and unclean session baselines. Each MonetDB
+operation records `session_baseline_before` and `session_baseline_after`
+phases. ADBC connections are tagged as `olap-benchmarks`; staged pymonetdb
+connections use their public client name, and both are scoped to the benchmark
+process ID. The post-operation phase disposes the SQLAlchemy engine and
+requires zero matching server sessions and zero residual ADBC staging tables.
+
 Benchmark memory is reported as two independent peak series: `mem_mb` is the
 sum of database-container memory and `client_mem_mb` is the benchmark Python
 process RSS. `client_uss_mb` records its unique set size so shared and
@@ -132,7 +145,7 @@ uv run olap docker clickhouse tpc_h stop --scale-factor 10
 
 ```bash
 uv run olap results revisions                        # list results/*.db
-uv run olap results runs --status failed             # list runs (filters: --status/--suite/--db)
+uv run olap results runs --status failed             # filters: --status/--suite/--db/--db-driver
 uv run olap results query "<sql>"                    # read-only SQL against a revision
 uv run olap results delete --status failed           # delete failed + orphaned runs
 uv run olap results delete --run-id 12 --run-id 13   # delete specific runs
@@ -146,8 +159,8 @@ All `results` commands accept `--revision` (default `default`).
 Copies `results/<revision>.db` to `site/public/data/results.db` along with
 `manifest.json` and `queries.json`. With `--merge`, runs are merged into the
 already-published file instead of replacing it: runs matching an existing
-(system, db, db_version, suite, suite_scale_factor, operation, started_at) are
-replaced, new runs are added, everything else is kept.
+(system, db, db_version, db_driver, suite, suite_scale_factor, operation,
+started_at) are replaced, new runs are added, everything else is kept.
 
 ### Remote benchmark runs
 

@@ -34,9 +34,9 @@ dependencies = [
     "questdb-connect>=1.1.4",
     "setproctitle>=1.3.6",
     "setuptools>=70.0.0,<80",
-    "sqlalchemy>=2.0.41",
-    "adbc-driver-monetdb==0.9.1",
-    "sqlalchemy-monetdb-adbc==0.2.1",
+    "sqlalchemy>=2.0.42",
+    "adbc-driver-monetdb==0.10.0",
+    "sqlalchemy-monetdb-adbc==0.3.0",
     "pymonetdb==1.8.4",
     "sqlalchemy-monetdb==2.0.0",
 ]

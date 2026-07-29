@@ -2,7 +2,7 @@ import logging
 import shutil
 import uuid
 from collections.abc import Generator, Sequence
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_BATCH_SIZE = 500_000
 SQL_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 WIDE_COLUMN_GROUP_SIZE = 10
+WIDE_SCHEMA_COLUMN_THRESHOLD = 512
 
 
 @dataclass(frozen=True)
@@ -46,8 +47,10 @@ type LazyWrite = RowBatchWrite | ColumnGroupWrite
 DEFAULT_LAZY_WRITE = RowBatchWrite()
 
 
-def _record_query_execution(connection: Connection, query: str) -> AbstractContextManager[None]:
-    return record_query_execution_context(query, connection)
+def staged_write_for_column_count(column_count: int) -> LazyWrite:
+    if column_count >= WIDE_SCHEMA_COLUMN_THRESHOLD:
+        return ColumnGroupWrite()
+    return RowBatchWrite()
 
 
 def _raise_insert_error(table: TableName, columns: Sequence[str], exc: Exception) -> None:
@@ -81,7 +84,7 @@ def _copy_binary_files(
         f"on {'client' if MONETDB_SETTINGS.client_file_transfer else 'server'}"
     )
 
-    with _record_query_execution(connection, copy_query):
+    with record_query_execution_context(copy_query, connection):
         cast(Any, con).execute(copy_query)
 
     if commit:
@@ -310,7 +313,7 @@ def delete(table: TableName, connection: Connection, primary_key: str | list[str
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
         delete_sql = f'DELETE FROM "{table}" WHERE ({pk_cols}) IN (VALUES {", ".join(rows)})'
 
-    with _record_query_execution(connection, delete_sql):
+    with record_query_execution_context(delete_sql, connection):
         connection.execute(text(delete_sql))
     tracked_commit(connection)
 
@@ -353,7 +356,7 @@ def upsert(df: pl.DataFrame, table: TableName, connection: Connection, primary_k
             insert ({insert_cols}) values ({insert_values})
     """)
 
-    with _record_query_execution(connection, merge_statement):
+    with record_query_execution_context(merge_statement, connection):
         connection.execute(text(merge_statement))
     tracked_commit(connection)
 

@@ -15,6 +15,7 @@ class RowCountObservation:
     db: str
     db_version: str
     row_count: int
+    db_driver: str | None = None
     run_step_id: int | None = None
 
 
@@ -38,6 +39,7 @@ class AnswerHashObservation:
     db_version: str
     row_count: int
     answer_hash: str
+    db_driver: str | None = None
     run_step_id: int | None = None
 
 
@@ -53,6 +55,11 @@ class AnswerHashMismatch:
 
 class AnswerHashValidationError(RuntimeError):
     pass
+
+
+def _database_label(db: str, db_version: str, db_driver: str | None) -> str:
+    driver = f"/{db_driver}" if db_driver is not None else ""
+    return f"{db}{driver} {db_version}"
 
 
 def _resolve_results_path(revision: Revision, db_path: Path | None) -> Path:
@@ -113,6 +120,7 @@ def _load_latest_query_row_count_mismatches(
             r.suite_scale_factor,
             r.db,
             r.db_version,
+            r.db_driver,
             r.finished_at
           from run r
           where {where_sql}
@@ -121,7 +129,7 @@ def _load_latest_query_row_count_mismatches(
           select
             *,
             row_number() over (
-              partition by system, suite, suite_scale_factor, db
+              partition by system, suite, suite_scale_factor, db, db_driver
               order by finished_at desc, run_id desc
             ) as run_rank
           from scoped_runs
@@ -136,6 +144,7 @@ def _load_latest_query_row_count_mismatches(
             s.id as run_step_id,
             lr.db,
             lr.db_version,
+            lr.db_driver,
             s.row_count
           from latest_runs lr
           join run_step s on s.run_id = lr.run_id
@@ -156,7 +165,7 @@ def _load_latest_query_row_count_mismatches(
           from query_counts
           group by system, suite, suite_scale_factor, query_name, iteration
           having count(distinct row_count) > 1
-             and count(distinct db || chr(31) || db_version) > 1
+             and count(distinct db || chr(31) || db_version || chr(31) || coalesce(db_driver, '')) > 1
         )
         select
           qc.system,
@@ -167,6 +176,7 @@ def _load_latest_query_row_count_mismatches(
           qc.run_step_id,
           qc.db,
           qc.db_version,
+          qc.db_driver,
           qc.row_count
         from query_counts qc
         join mismatches m
@@ -183,7 +193,8 @@ def _load_latest_query_row_count_mismatches(
           qc.iteration,
           qc.row_count,
           qc.db,
-          qc.db_version
+          qc.db_version,
+          qc.db_driver
     """
 
     con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(path), read_only=True)
@@ -206,7 +217,8 @@ def _load_latest_query_row_count_mismatches(
             RowCountObservation(
                 db=str(row[6]),
                 db_version=str(row[7]),
-                row_count=int(row[8]),
+                db_driver=str(row[8]) if row[8] is not None else None,
+                row_count=int(row[9]),
                 run_step_id=int(row[5]),
             )
         )
@@ -239,7 +251,8 @@ def _consensus_row_count(mismatch: RowCountMismatch) -> int | None:
 
 def _format_wrong_result_message(mismatch: RowCountMismatch, expected_row_count: int) -> str:
     values = ", ".join(
-        f"{observation.db} {observation.db_version}: {observation.row_count}" for observation in mismatch.observations
+        f"{_database_label(observation.db, observation.db_version, observation.db_driver)}: {observation.row_count}"
+        for observation in mismatch.observations
     )
     return (
         "Row count differs from latest completed select-run consensus: "
@@ -351,6 +364,7 @@ def _load_latest_query_answer_hash_mismatches(
             r.suite_scale_factor,
             r.db,
             r.db_version,
+            r.db_driver,
             r.finished_at
           from run r
           where {where_sql}
@@ -359,7 +373,7 @@ def _load_latest_query_answer_hash_mismatches(
           select
             *,
             row_number() over (
-              partition by system, suite, suite_scale_factor, db
+              partition by system, suite, suite_scale_factor, db, db_driver
               order by finished_at desc, run_id desc
             ) as run_rank
           from scoped_runs
@@ -374,6 +388,7 @@ def _load_latest_query_answer_hash_mismatches(
             s.id as run_step_id,
             lr.db,
             lr.db_version,
+            lr.db_driver,
             s.row_count,
             json_extract_string(s."metadata", '$.answer_hash') as answer_hash
           from latest_runs lr
@@ -398,7 +413,7 @@ def _load_latest_query_answer_hash_mismatches(
           group by system, suite, suite_scale_factor, query_name, iteration
           having count(distinct answer_hash) > 1
              and count(distinct row_count) = 1
-             and count(distinct db || chr(31) || db_version) > 1
+             and count(distinct db || chr(31) || db_version || chr(31) || coalesce(db_driver, '')) > 1
         )
         select
           qa.system,
@@ -409,6 +424,7 @@ def _load_latest_query_answer_hash_mismatches(
           qa.run_step_id,
           qa.db,
           qa.db_version,
+          qa.db_driver,
           qa.row_count,
           qa.answer_hash
         from query_answers qa
@@ -426,7 +442,8 @@ def _load_latest_query_answer_hash_mismatches(
           qa.iteration,
           qa.answer_hash,
           qa.db,
-          qa.db_version
+          qa.db_version,
+          qa.db_driver
     """
 
     con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(path), read_only=True)
@@ -449,8 +466,9 @@ def _load_latest_query_answer_hash_mismatches(
             AnswerHashObservation(
                 db=str(row[6]),
                 db_version=str(row[7]),
-                row_count=int(row[8]),
-                answer_hash=str(row[9]),
+                db_driver=str(row[8]) if row[8] is not None else None,
+                row_count=int(row[9]),
+                answer_hash=str(row[10]),
                 run_step_id=int(row[5]),
             )
         )
@@ -483,7 +501,8 @@ def _consensus_answer_hash(mismatch: AnswerHashMismatch) -> str | None:
 
 def _format_answer_hash_wrong_result_message(mismatch: AnswerHashMismatch, expected_answer_hash: str) -> str:
     values = ", ".join(
-        f"{observation.db} {observation.db_version}: {observation.answer_hash}" for observation in mismatch.observations
+        f"{_database_label(observation.db, observation.db_version, observation.db_driver)}: {observation.answer_hash}"
+        for observation in mismatch.observations
     )
     return (
         "Answer hash differs from latest completed select-run consensus: "
@@ -551,7 +570,8 @@ def format_answer_hash_mismatches(mismatches: list[AnswerHashMismatch], limit: i
     lines = ["Answer-hash mismatches across latest completed select runs:"]
     for mismatch in mismatches[:limit]:
         values = ", ".join(
-            f"{observation.db} {observation.db_version}: {observation.answer_hash}"
+            f"{_database_label(observation.db, observation.db_version, observation.db_driver)}: "
+            f"{observation.answer_hash}"
             for observation in mismatch.observations
         )
         lines.append(
@@ -598,7 +618,7 @@ def format_row_count_mismatches(mismatches: list[RowCountMismatch], limit: int =
     lines = ["Row-count mismatches across latest completed select runs:"]
     for mismatch in mismatches[:limit]:
         values = ", ".join(
-            f"{observation.db} {observation.db_version}: {observation.row_count}"
+            f"{_database_label(observation.db, observation.db_version, observation.db_driver)}: {observation.row_count}"
             for observation in mismatch.observations
         )
         lines.append(

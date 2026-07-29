@@ -6,7 +6,7 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import lru_cache
-from multiprocessing import Queue
+from multiprocessing import Process, Queue
 from pathlib import Path
 from threading import get_ident
 from time import perf_counter, sleep
@@ -100,6 +100,7 @@ class Database(BaseModel, ABC):
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
+    _writer_process: Process | None = None
     _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
 
     @property
@@ -130,15 +131,21 @@ class Database(BaseModel, ABC):
     def metric_directories(self) -> tuple[Path, ...]:
         return (self.database_directory,)
 
-    def set_queues(self, queue: Queue[WriterMessage], result_queue: Queue[object]) -> None:
+    def set_queues(
+        self,
+        queue: Queue[WriterMessage],
+        result_queue: Queue[object],
+        writer_process: Process | None = None,
+    ) -> None:
         self._queue = queue
         self._result_queue = result_queue
+        self._writer_process = writer_process
 
     def create_result_storage(self) -> Storage:
         if self._queue is None or self._result_queue is None:
             raise ValueError("Result queues are not set")
 
-        return Storage(self._queue, self._result_queue)
+        return Storage(self._queue, self._result_queue, process=self._writer_process)
 
     @property
     def result_storage(self) -> Storage:
@@ -170,6 +177,31 @@ class Database(BaseModel, ABC):
         if not self.container_images:
             return "in_process"
         return "container"
+
+    @property
+    def db_driver(self) -> str | None:
+        return None
+
+    @property
+    def run_package_names(self) -> tuple[str, ...]:
+        return ("olap-benchmarks",)
+
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        return {}
+
+    @property
+    def input_directory(self) -> Path:
+        return SETTINGS.input_data_directory / format_suite_data_directory_name(
+            self.current_suite,
+            self.current_suite_scale_factor,
+        )
+
+    def before_benchmark_operation(self) -> None:
+        pass
+
+    def after_benchmark_operation(self) -> None:
+        pass
 
     @property
     def resolved_container_image(self) -> str | None:
@@ -786,6 +818,7 @@ class Database(BaseModel, ABC):
             suite_scale_factor=benchmark.scale_factor,
             db=self.name,
             db_version=self.version,
+            db_driver=self.db_driver,
             operation=operation,
             system=SETTINGS.system,
             started_at=started_at,
@@ -797,6 +830,9 @@ class Database(BaseModel, ABC):
                 container_platform=self.container_platform,
                 container_platform_emulated=self.uses_container_emulation,
                 start_command=self._last_start_command,
+                package_names=self.run_package_names,
+                input_directory=self.input_directory,
+                options=self.run_options,
             ),
         )
 
@@ -820,8 +856,26 @@ class Database(BaseModel, ABC):
         )
 
         try:
-            with self.phase_context(operation):
-                benchmark_func()
+            operation_error: BaseException | None = None
+            try:
+                self.before_benchmark_operation()
+                with self.phase_context(operation):
+                    benchmark_func()
+            except BaseException as exc:
+                operation_error = exc
+
+            try:
+                self.after_benchmark_operation()
+            except BaseException as cleanup_error:
+                if operation_error is None:
+                    operation_error = cleanup_error
+                else:
+                    operation_error.add_note(
+                        f"post-operation validation also failed: {type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+
+            if operation_error is not None:
+                raise operation_error
         except BaseException as exc:
             status = "failed"
             error_type = type(exc).__name__

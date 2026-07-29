@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
+import time
 from datetime import datetime
 from multiprocessing import Queue
 from pathlib import Path
@@ -11,7 +12,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..metrics.storage import Storage, WriterMessage, start_writer_process
+from ..metrics.storage import Storage, WriterMessage, WriterProcessHandle, start_writer_process
 from ..results import get_results_engine
 from ..results.models import QueryExecution, Run, RunStep, SystemSnapshot
 from ..settings import setup_stdout_logging
@@ -23,6 +24,61 @@ def _subprocess_func(q: Queue[WriterMessage], rq: Queue[object]) -> None:
     setup_stdout_logging()
     id = Storage(q, rq).debug(f"in proc {os.getpid()}")
     _LOGGER.info(f"Inserted id {id} from subprocess {os.getpid()}")
+
+
+def _exit_immediately() -> None:
+    raise SystemExit(17)
+
+
+def _exit_during_request(queue: Queue[WriterMessage]) -> None:
+    queue.get(timeout=5)
+    raise SystemExit(18)
+
+
+def _block_during_request(queue: Queue[WriterMessage]) -> None:
+    queue.get(timeout=5)
+    time.sleep(60)
+
+
+def test_storage_fails_if_writer_dies_before_first_request() -> None:
+    queue: Queue[WriterMessage] = Queue()
+    result_queue: Queue[object] = Queue()
+    process = multiprocessing.Process(target=_exit_immediately)
+    process.start()
+    process.join(timeout=5)
+
+    with pytest.raises(RuntimeError, match="code 17"):
+        Storage(queue, result_queue, process=process).debug()
+
+    queue.close()
+    result_queue.close()
+
+
+def test_storage_fails_if_writer_dies_during_request() -> None:
+    queue: Queue[WriterMessage] = Queue()
+    result_queue: Queue[object] = Queue()
+    process = multiprocessing.Process(target=_exit_during_request, args=(queue,))
+    process.start()
+
+    with pytest.raises(RuntimeError, match="code 18"):
+        Storage(queue, result_queue, process=process, response_timeout_seconds=5).debug()
+
+    process.join(timeout=5)
+    queue.close()
+    result_queue.close()
+
+
+def test_writer_close_terminates_a_blocked_database_request() -> None:
+    queue: Queue[WriterMessage] = Queue()
+    result_queue: Queue[object] = Queue()
+    process = multiprocessing.Process(target=_block_during_request, args=(queue,))
+    process.start()
+    handle = WriterProcessHandle(process=process, queue=queue, result_queue=result_queue)
+    queue.put({"type": "debug", "args": ["blocked"]})
+
+    handle.close(timeout_seconds=0.1)
+
+    assert not process.is_alive()
 
 
 def test_result_concurrency(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, nproc: int = 10) -> None:
@@ -106,6 +162,7 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
         suite_scale_factor=1,
         db="duckdb",
         db_version="test",
+        db_driver=None,
         operation="select",
         system="test",
         started_at=datetime(2026, 1, 1, 12, 0, 0),
@@ -127,6 +184,7 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
         suite_scale_factor=1,
         db="clickhouse",
         db_version="test",
+        db_driver=None,
         operation="select",
         system="test",
         started_at=datetime(2026, 1, 1, 12, 0, 3),
