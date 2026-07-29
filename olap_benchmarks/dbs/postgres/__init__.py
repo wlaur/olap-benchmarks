@@ -417,10 +417,14 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
             else:
                 primary_key = self.get_primary_key(table_name)
                 not_null = self.get_not_null(table_name)
-                df = pl.scan_parquet(fpath)
 
                 with self.db.phase_context("insert", table_name=table_name):
-                    self.insert_table(df, table_name, primary_key, not_null)
+                    self.db.insert_parquet(
+                        fpath,
+                        table_name,
+                        primary_key=primary_key,
+                        not_null=not_null,
+                    )
                     _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         with self.db.phase_context("index"):

@@ -64,6 +64,7 @@ class BenchmarkMetric(BaseModel):
     cpu_percent: float
     mem_mb: int
     client_mem_mb: int
+    client_uss_mb: int
     disk_mb: int
 
 
@@ -117,17 +118,31 @@ def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) 
     )
 
 
-def get_main_process_metrics(process_id: int) -> BenchmarkMetric:
+def get_main_process_metrics(
+    process_id: int,
+    client_mem_mb: int | None = None,
+    client_uss_mb: int | None = None,
+) -> BenchmarkMetric:
     proc = psutil.Process(process_id)
 
     proc.cpu_percent(interval=None)  # snapshot baseline
 
     cpu_percent = proc.cpu_percent(interval=1.0)
 
-    mem_info = proc.memory_info()
-    mem_mb = int(mem_info.rss / (1024 * 1024))
+    if client_mem_mb is None or client_uss_mb is None:
+        full_mem_info = proc.memory_full_info()
+        if client_mem_mb is None:
+            client_mem_mb = int(full_mem_info.rss / (1024 * 1024))
+        if client_uss_mb is None:
+            client_uss_mb = int(full_mem_info.uss / (1024 * 1024))
 
-    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=0, client_mem_mb=mem_mb, disk_mb=0)
+    return BenchmarkMetric(
+        cpu_percent=cpu_percent,
+        mem_mb=0,
+        client_mem_mb=client_mem_mb,
+        client_uss_mb=client_uss_mb,
+        disk_mb=0,
+    )
 
 
 def get_container_metrics(container_name: str) -> BenchmarkMetric:
@@ -140,18 +155,29 @@ def get_container_metrics(container_name: str) -> BenchmarkMetric:
     mem_usage = stats["memory_stats"]["usage"]
     mem_mb = int(mem_usage / (1_024 * 1_024))
 
-    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, client_mem_mb=0, disk_mb=0)
+    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, client_mem_mb=0, client_uss_mb=0, disk_mb=0)
 
 
 def get_database_metrics(
     client_process_id: int,
     container_names: Sequence[str],
     metric_directories: Sequence[Path],
+    client_mem_mb: int | None = None,
+    client_uss_mb: int | None = None,
 ) -> BenchmarkMetric:
     # The Python client can dominate ingestion memory even when the database
     # runs in a container.
     with ThreadPoolExecutor(max_workers=len(container_names) + 1) as executor:
-        main_future = executor.submit(get_main_process_metrics, client_process_id)
+        main_future = (
+            executor.submit(get_main_process_metrics, client_process_id)
+            if client_mem_mb is None and client_uss_mb is None
+            else executor.submit(
+                get_main_process_metrics,
+                client_process_id,
+                client_mem_mb,
+                client_uss_mb,
+            )
+        )
         container_metrics = list(executor.map(get_container_metrics, container_names))
         process_metrics = [main_future.result(), *container_metrics]
 
@@ -159,6 +185,7 @@ def get_database_metrics(
         cpu_percent=sum(metric.cpu_percent for metric in process_metrics),
         mem_mb=sum(metric.mem_mb for metric in container_metrics),
         client_mem_mb=main_future.result().client_mem_mb,
+        client_uss_mb=main_future.result().client_uss_mb,
         disk_mb=sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories)),
     )
 

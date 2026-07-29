@@ -140,7 +140,8 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                         cpu_percent=cast(float, msg["args"][2]),
                         mem_mb=cast(int, msg["args"][3]),
                         client_mem_mb=cast(int, msg["args"][4]),
-                        disk_mb=cast(int, msg["args"][5]),
+                        client_uss_mb=cast(int, msg["args"][5]),
+                        disk_mb=cast(int, msg["args"][6]),
                     )
                     session.add(row)
                     session.commit()
@@ -347,9 +348,13 @@ class Storage:
         cpu_percent: float,
         mem_mb: int,
         client_mem_mb: int,
+        client_uss_mb: int,
         disk_mb: int,
     ) -> None:
-        self.put("insert_metric", [run_id, time, cpu_percent, mem_mb, client_mem_mb, disk_mb])
+        self.put(
+            "insert_metric",
+            [run_id, time, cpu_percent, mem_mb, client_mem_mb, client_uss_mb, disk_mb],
+        )
 
     def insert_query_execution(
         self,

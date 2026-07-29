@@ -48,6 +48,30 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 LiteralStepType = Literal["phase", "query", "mutation"]
+type ParquetEpochUnit = Literal["s", "ms", "us", "ns", "day"]
+type ParquetEpochColumns = Mapping[str, ParquetEpochUnit]
+
+
+def apply_parquet_epoch_columns(
+    frame: pl.LazyFrame,
+    epoch_columns: ParquetEpochColumns | None,
+) -> pl.LazyFrame:
+    if not epoch_columns:
+        return frame
+
+    expressions: list[pl.Expr] = []
+    for name, unit in epoch_columns.items():
+        if unit == "day":
+            expressions.append(pl.col(name).cast(pl.Date))
+        elif unit == "s":
+            expressions.append(pl.from_epoch(name, time_unit="s"))
+        elif unit == "ms":
+            expressions.append(pl.from_epoch(name, time_unit="ms"))
+        elif unit == "us":
+            expressions.append(pl.from_epoch(name, time_unit="us"))
+        else:
+            expressions.append(pl.from_epoch(name, time_unit="ns"))
+    return frame.with_columns(expressions)
 
 
 def _new_active_step_stacks() -> dict[int, list[int]]:
@@ -674,8 +698,11 @@ class Database(BaseModel, ABC):
         table: TableName,
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
+        *,
+        epoch_columns: ParquetEpochColumns | None = None,
     ) -> None:
-        self.insert(pl.scan_parquet(path), table, primary_key=primary_key, not_null=not_null)
+        frame = apply_parquet_epoch_columns(pl.scan_parquet(path), epoch_columns)
+        self.insert(frame, table, primary_key=primary_key, not_null=not_null)
 
     @abstractmethod
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None: ...
@@ -773,7 +800,7 @@ class Database(BaseModel, ABC):
             ),
         )
 
-        metric_process, stop_event, final_sample_time_queue = start_metric_sampler(
+        metric_sampler = start_metric_sampler(
             container_names=self.metric_container_names,
             metric_directories=self.metric_directories,
             run_id=self.run_id,
@@ -802,9 +829,7 @@ class Database(BaseModel, ABC):
             raise
         finally:
             finished_at = datetime.now(UTC).replace(tzinfo=None)
-            final_sample_time_queue.put(finished_at)
-            stop_event.set()
-            metric_process.join()
+            metric_sampler.finish(finished_at)
 
             self.result_storage.finish_run(
                 run_id=self.run_id,

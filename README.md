@@ -113,7 +113,11 @@ OLAP_BENCHMARKS_MONETDB_DRIVER=adbc uv run olap benchmark monetdb all
 
 Benchmark memory is reported as two independent peak series: `mem_mb` is the
 sum of database-container memory and `client_mem_mb` is the benchmark Python
-process RSS. `disk_mb` includes database storage plus configured temporary and
+process RSS. `client_uss_mb` records its unique set size so shared and
+reclaimable file-backed pages can be separated from private memory. Client RSS
+and USS high-water marks are sampled together every 10 ms so short ingestion
+allocations are not hidden by the slower container and disk metric cadence.
+`disk_mb` includes database storage plus configured temporary and
 staging directories. These definitions and a metric-schema version are stored
 with each run so results remain interpretable after methodology changes.
 

@@ -439,7 +439,9 @@ def test_client_memory_migration_preserves_historical_memory_semantics(tmp_path:
 
     con = cast(Any, duckdb).connect(str(db_path), read_only=True)
     try:
-        assert con.execute("select mem_mb, client_mem_mb, disk_mb from run_metric").fetchall() == [(123, None, 456)]
+        assert con.execute("select mem_mb, client_mem_mb, client_uss_mb, disk_mb from run_metric").fetchall() == [
+            (123, None, None, 456)
+        ]
     finally:
         con.close()
 

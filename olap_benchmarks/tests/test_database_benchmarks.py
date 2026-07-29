@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import Connection
 
 from .. import dbs as dbs_module
-from ..dbs import Database
+from ..dbs import Database, apply_parquet_epoch_columns
 from ..dbs.monetdb import MONETDB_RELEASE, MonetDB, MonetDBTimeSeries
 from ..dbs.monetdb.settings import SETTINGS as MONETDB_SETTINGS
 from ..settings import (
@@ -26,8 +26,10 @@ from ..suites.rtabench.config import RTABENCH_QUERY_NAMES, RTABench
 from ..suites.time_series.config import (
     BASE_TIME_SERIES_DATASET_SIZES,
     TimeSeries,
+    get_time_series_batch_rows,
     get_time_series_column_counts,
     get_time_series_dataset_sizes,
+    get_time_series_row_group_rows,
 )
 
 
@@ -67,6 +69,36 @@ class DummyDatabase(Database):
 
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         raise NotImplementedError
+
+
+def test_apply_parquet_epoch_columns_preserves_values_and_nulls() -> None:
+    frame = apply_parquet_epoch_columns(
+        pl.LazyFrame(
+            {
+                "seconds": [0, 1, None, 86_400],
+                "milliseconds": [0, 1_000, None, 86_400_000],
+                "days": [0, 1, None, 20_000],
+            }
+        ),
+        {"seconds": "s", "milliseconds": "ms", "days": "day"},
+    ).collect()
+
+    assert frame.schema == pl.Schema(
+        {
+            "seconds": pl.Datetime("us"),
+            "milliseconds": pl.Datetime("us"),
+            "days": pl.Date,
+        }
+    )
+    assert frame.select(
+        pl.col("seconds").dt.epoch("s"),
+        pl.col("milliseconds").dt.epoch("ms"),
+        pl.col("days").cast(pl.Int32),
+    ).to_dict(as_series=False) == {
+        "seconds": [0, 1, None, 86_400],
+        "milliseconds": [0, 1_000, None, 86_400_000],
+        "days": [0, 1, None, 20_000],
+    }
 
 
 class CountingDatabase(DummyDatabase):
@@ -167,6 +199,15 @@ def test_suite_supported_operations_defaults_to_populate_and_select() -> None:
 
 def test_time_series_suite_declares_mutate_support() -> None:
     assert TimeSeries.supported_operations == ("populate", "select", "mutate", "concurrent")
+
+
+def test_time_series_generation_bounds_batches_and_parquet_row_groups() -> None:
+    assert get_time_series_batch_rows(785) == 25_477
+    assert get_time_series_row_group_rows(785) == 10_658
+    row_bytes = 8 + 785 * 4
+    row_group_bytes = get_time_series_row_group_rows(785) * row_bytes
+    assert 32 * 1024 * 1024 - row_bytes < row_group_bytes <= 32 * 1024 * 1024
+    assert get_time_series_row_group_rows(2_000) == (32 * 1024 * 1024) // 8_008
 
 
 def test_rtabench_schedules_preaggregated_upstream_queries() -> None:
@@ -332,16 +373,7 @@ def test_monetdb_adbc_uri_exposes_ingest_tuning(
 def test_monetdb_time_series_analyzes_time_after_adbc_ingest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    inserted: list[tuple[str, int]] = []
     analyzed: list[tuple[str, list[str] | None]] = []
-
-    def insert(
-        _self: MonetDB,
-        frame: pl.DataFrame | pl.LazyFrame,
-        table: str,
-        **_kwargs: object,
-    ) -> None:
-        inserted.append((table, frame.collect().height if isinstance(frame, pl.LazyFrame) else frame.height))
 
     def analyze_table(
         _self: MonetDB,
@@ -351,13 +383,11 @@ def test_monetdb_time_series_analyzes_time_after_adbc_ingest(
         analyzed.append((table, columns))
 
     monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
-    monkeypatch.setattr(MonetDB, "insert", insert)
     monkeypatch.setattr(MonetDB, "analyze_table", analyze_table)
     suite = MonetDBTimeSeries.model_construct(db=MonetDB(), name="time_series", scale_factor=1)
 
-    suite.insert_table(pl.DataFrame({"time": [1]}), "data_tall", None, "time")
+    suite.finish_parquet_table("data_tall")
 
-    assert inserted == [("data_tall", 1)]
     assert analyzed == [("data_tall", ["time"])]
 
 
