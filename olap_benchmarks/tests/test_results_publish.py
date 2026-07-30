@@ -84,6 +84,7 @@ def _add_run(
     scale_factor: int,
     operation: str,
     status: str = "completed",
+    system: str = "test",
 ) -> None:
     run = Run(
         suite=suite,
@@ -92,7 +93,7 @@ def _add_run(
         db_version="test",
         db_driver=driver,
         operation=operation,
-        system="test",
+        system=system,
         status=status,
         started_at=datetime(2026, 7, 29),
     )
@@ -200,6 +201,38 @@ def test_publish_validation_accepts_the_complete_monetdb_release_matrix(
                     )
             session.commit()
         engine.dispose()
+        _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()
+
+
+def test_publish_validation_ignores_unpaired_secondary_system_for_agreement(
+    tmp_path: Path,
+) -> None:
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            for driver in ("adbc", "staged"):
+                for cell in monetdb_benchmark_manifest():
+                    _add_run(
+                        session,
+                        driver=driver,
+                        suite=cell.suite,
+                        scale_factor=cell.scale_factor,
+                        operation=cell.operation,
+                    )
+            _add_run(
+                session,
+                driver="adbc",
+                suite="time_series",
+                scale_factor=1,
+                operation="select",
+                system="secondary",
+            )
+            session.commit()
+        engine.dispose()
+
         _validate_publishable_runs(db_path)
     finally:
         engine.dispose()

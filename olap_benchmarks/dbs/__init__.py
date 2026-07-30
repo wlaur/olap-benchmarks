@@ -812,6 +812,18 @@ class Database(BaseModel, ABC):
 
         self._result_storage = self.create_result_storage()
 
+        system_metadata = build_system_metadata()
+        run_metadata = build_run_metadata(
+            execution_mode=self.execution_mode,
+            container_image=self.resolved_container_image,
+            container_images=self.container_images,
+            container_platform=self.container_platform,
+            container_platform_emulated=self.uses_container_emulation,
+            start_command=self._last_start_command,
+            package_names=self.run_package_names,
+            input_directory=self.input_directory,
+            options=self.run_options,
+        )
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(
             suite=suite,
@@ -822,18 +834,8 @@ class Database(BaseModel, ABC):
             operation=operation,
             system=SETTINGS.system,
             started_at=started_at,
-            system_metadata=build_system_metadata(),
-            metadata=build_run_metadata(
-                execution_mode=self.execution_mode,
-                container_image=self.resolved_container_image,
-                container_images=self.container_images,
-                container_platform=self.container_platform,
-                container_platform_emulated=self.uses_container_emulation,
-                start_command=self._last_start_command,
-                package_names=self.run_package_names,
-                input_directory=self.input_directory,
-                options=self.run_options,
-            ),
+            system_metadata=system_metadata,
+            metadata=run_metadata,
         )
 
         metric_sampler = start_metric_sampler(
