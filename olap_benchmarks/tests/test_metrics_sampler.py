@@ -66,8 +66,11 @@ def test_sample_client_memory_records_one_consistent_snapshot(
     peak_uss = cast(Any, Value("q", 0))
 
     class FakeProcess:
+        def memory_info(self) -> SimpleNamespace:
+            return SimpleNamespace(rss=512 * 1024 * 1024)
+
         def memory_full_info(self) -> SimpleNamespace:
-            return SimpleNamespace(rss=512 * 1024 * 1024, uss=768 * 1024 * 1024)
+            return SimpleNamespace(uss=768 * 1024 * 1024)
 
     class StopAfterOneSample:
         def wait(self, interval_seconds: float) -> bool:
