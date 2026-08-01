@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from os import getpid
 from pathlib import Path
 from time import monotonic, sleep
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 from urllib.parse import urlencode
 
 import polars as pl
@@ -150,7 +150,7 @@ class MonetDB(Database):
                 staging_count = observer.execute(
                     text("SELECT COUNT(*) FROM sys.tables WHERE name LIKE 'adbc_ingest_stage_%'")
                 ).scalar_one()
-                return int(cast(Any, session_count)), int(cast(Any, staging_count))
+                return int(session_count), int(staging_count)
         finally:
             engine.dispose()
 

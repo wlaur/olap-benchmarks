@@ -1,4 +1,4 @@
--- pymonetdb does not fetch JSON columns correctly, cast to string to match e.g. duckdb
+-- cast the JSON column to string so the result matches e.g. duckdb
 SELECT
   order_id,
   counter,

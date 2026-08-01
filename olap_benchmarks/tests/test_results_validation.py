@@ -99,14 +99,14 @@ def test_validation_compares_variants_of_the_same_database(tmp_path: Path) -> No
     db_path = tmp_path / "results.db"
     _create_results_db(db_path)
     _insert_select_run(db_path, "monetdb", 10, db_driver="adbc", answer_hash="hash-a")
-    _insert_select_run(db_path, "monetdb", 11, db_driver="staged", answer_hash="hash-b")
+    _insert_select_run(db_path, "monetdb", 11, db_driver="native", answer_hash="hash-b")
 
     row_mismatches = validate_latest_query_row_counts(db_path=db_path)
 
     assert len(row_mismatches) == 1
     assert [(row.db_driver, row.row_count) for row in row_mismatches[0].observations] == [
         ("adbc", 10),
-        ("staged", 11),
+        ("native", 11),
     ]
 
 
@@ -114,14 +114,14 @@ def test_answer_hash_validation_compares_variants_of_the_same_database(tmp_path:
     db_path = tmp_path / "results.db"
     _create_results_db(db_path)
     _insert_select_run(db_path, "monetdb", 10, db_driver="adbc", answer_hash="hash-a")
-    _insert_select_run(db_path, "monetdb", 10, db_driver="staged", answer_hash="hash-b")
+    _insert_select_run(db_path, "monetdb", 10, db_driver="native", answer_hash="hash-b")
 
     hash_mismatches = validate_latest_query_answer_hashes(db_path=db_path)
 
     assert len(hash_mismatches) == 1
     assert [(row.db_driver, row.answer_hash) for row in hash_mismatches[0].observations] == [
         ("adbc", "hash-a"),
-        ("staged", "hash-b"),
+        ("native", "hash-b"),
     ]
 
 

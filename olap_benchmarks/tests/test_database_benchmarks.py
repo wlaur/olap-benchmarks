@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Any, cast, get_args
 
 import polars as pl
@@ -14,7 +13,6 @@ from ..dbs import Database, apply_parquet_epoch_columns
 from ..dbs.monetdb import MONETDB_RELEASE, MonetDB, MonetDBTimeSeries
 from ..dbs.monetdb.settings import SETTINGS as MONETDB_SETTINGS
 from ..settings import (
-    SETTINGS,
     DatabaseName,
     SuiteName,
     TableName,
@@ -338,29 +336,9 @@ def test_monetdb_accepts_numeric_runtime_version_for_release_pin() -> None:
     assert db.is_runtime_version_expected(MONETDB_RELEASE.runtime_version)
 
 
-def test_monetdb_database_farms_are_isolated_by_client_driver(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(SETTINGS, "database_directory", tmp_path)
-    db = MonetDB()
-    db._current_suite = "clickbench"
-    db._current_suite_scale_factor = 1
-
-    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "staged")
-    staged = db.database_directory
-    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
-    adbc = db.database_directory
-
-    assert staged != adbc
-    assert staged.name == "staged"
-    assert adbc.name == "adbc"
-
-
 def test_monetdb_adbc_uri_exposes_ingest_tuning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
     monkeypatch.setattr(MONETDB_SETTINGS, "write_window_bytes", 268_435_456)
     monkeypatch.setattr(MONETDB_SETTINGS, "wire_compression", "none")
     monkeypatch.setattr(MONETDB_SETTINGS, "constrained_append", "direct")
@@ -386,22 +364,12 @@ def test_monetdb_time_series_analyzes_time_after_adbc_ingest(
     ) -> None:
         analyzed.append((table, columns))
 
-    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
     monkeypatch.setattr(MonetDB, "analyze_table", analyze_table)
     suite = MonetDBTimeSeries.model_construct(db=MonetDB(), name="time_series", scale_factor=1)
 
     suite.finish_parquet_table("data_tall")
 
     assert analyzed == [("data_tall", ["time"])]
-
-
-def test_monetdb_rejects_incompatible_fetch_method_in_adbc_mode(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(MONETDB_SETTINGS, "driver", "adbc")
-
-    with pytest.raises(ValueError, match="unavailable with the ADBC connection"):
-        MonetDB().fetch("SELECT 1", method="pymonetdb")
 
 
 def test_arm_host_falls_back_to_amd64_with_warning(monkeypatch: pytest.MonkeyPatch) -> None:

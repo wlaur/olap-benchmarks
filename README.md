@@ -28,7 +28,6 @@ Configuration lives in `.env` (see `olap config` for the resolved values):
 | `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY` | Scratch space used during populate                  |
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
-| `OLAP_BENCHMARKS_MONETDB_DRIVER`     | MonetDB bulk path: `staged` (default) or streaming `adbc` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
@@ -105,24 +104,48 @@ uv run olap benchmark starrocks clickbench select   # re-run only the select que
 uv run olap benchmark all all --omit questdb    # the default matrix, minus one db
 ```
 
-The MonetDB ADBC path can be tested against the staged binary-file baseline
-without any batch or dataset tuning:
+MonetDB connects exclusively through ADBC (`adbc-driver-monetdb` +
+`sqlalchemy-monetdb-adbc`). Ingest streams Arrow data over the wire — eager
+Polars frames, lazy frames, and Parquet files all take the same path — and
+reads return Arrow tables that Polars adopts zero-copy:
 
-```bash
-OLAP_BENCHMARKS_MONETDB_DRIVER=adbc uv run olap benchmark monetdb all
+```python
+from pathlib import Path
+
+import polars as pl
+from adbc_driver_monetdb import ParquetArrowStream, PolarsArrowStream
+from sqlalchemy import create_engine
+from sqlalchemy_monetdb_adbc import fetch_arrow_table, ingest_arrow
+
+engine = create_engine("monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark")
+with engine.connect() as connection:
+    # bulk-load a Polars frame (any Arrow PyCapsule source works)
+    ingest_arrow(connection, "events", pl.DataFrame({"id": [1, 2]}), mode="create_append")
+
+    # stream a lazy frame or a Parquet file without materializing it
+    ingest_arrow(connection, "events", PolarsArrowStream(pl.scan_parquet("events.parquet")))
+    with ParquetArrowStream(Path("events.parquet")) as stream:
+        ingest_arrow(connection, "events", stream)
+    connection.commit()
+
+    # read a query result as Arrow and hand it to Polars
+    frame = pl.from_arrow(fetch_arrow_table(connection, "select * from events"))
 ```
 
-The preserved ADBC/staged release decision, source revisions, parity bands, and
-reproduction query are in [MONETDB_ADBC_RESULTS.md](MONETDB_ADBC_RESULTS.md).
-MonetDB runs persist `adbc` or `staged` as a typed run dimension; publication
-requires all 20 cells to have a same-system ADBC/staged pair. It also rejects
-running results, missing or disagreeing query row counts and answer hashes,
-different query coverage, and unclean session baselines. Each MonetDB
-operation records `session_baseline_before` and `session_baseline_after`
-phases. ADBC connections are tagged as `olap-benchmarks`; staged pymonetdb
-connections use their public client name, and both are scoped to the benchmark
-process ID. The post-operation phase disposes the SQLAlchemy engine and
-requires zero matching server sessions and zero residual ADBC staging tables.
+The benchmark adapter in `olap_benchmarks/dbs/monetdb/adbc.py` wraps these
+primitives with constraint-preserving table creation (primary keys, not-null
+columns), ingest row-count validation, and query recording. The historical
+ADBC versus staged-binary comparison that led to this setup is preserved in
+[MONETDB_ADBC_RESULTS.md](MONETDB_ADBC_RESULTS.md).
+
+MonetDB runs persist `adbc` as a typed run dimension; publication requires a
+completed ADBC run for all 20 matrix cells and rejects running results,
+missing query row counts and answer hashes, and unclean session baselines.
+Each MonetDB operation records `session_baseline_before` and
+`session_baseline_after` phases. Connections are tagged as `olap-benchmarks`
+and scoped to the benchmark process ID. The post-operation phase disposes the
+SQLAlchemy engine and requires zero matching server sessions and zero residual
+ADBC staging tables.
 
 Input fingerprints, package provenance, and container-image metadata are collected before the
 recorded run start, so populate wall time excludes harness hashing and metadata probes. Reading

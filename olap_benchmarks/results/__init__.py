@@ -191,29 +191,28 @@ def _validate_publishable_runs(db_path: Path) -> None:
         }
         if not drivers:
             return
-        unexpected_drivers = sorted(drivers - {"adbc", "staged"})
+        unexpected_drivers = sorted(drivers - {"adbc"})
         if unexpected_drivers:
             raise RuntimeError(f"Unknown MonetDB db_driver values: {unexpected_drivers}")
 
         from ..dbs.monetdb.manifest import monetdb_benchmark_manifest
 
         expected = {(cell.suite, cell.scale_factor, cell.operation) for cell in monetdb_benchmark_manifest()}
-        completed_pairs = {
+        completed_cells = {
             (str(suite), int(scale_factor), str(operation))
-            for _, suite, scale_factor, operation in con.execute(
+            for suite, scale_factor, operation in con.execute(
                 """
-                select system, suite, suite_scale_factor, operation
+                select suite, suite_scale_factor, operation
                 from run
-                where db = 'monetdb' and status = 'completed' and db_driver is not null
-                group by system, suite, suite_scale_factor, operation
-                having count(distinct db_driver) = 2
+                where db = 'monetdb' and status = 'completed' and db_driver = 'adbc'
+                group by suite, suite_scale_factor, operation
                 """
             ).fetchall()
         }
-        missing = sorted(expected - completed_pairs)
+        missing = sorted(expected - completed_cells)
         if missing:
             formatted = ", ".join(f"{suite}:sf{scale}:{operation}" for suite, scale, operation in missing)
-            raise RuntimeError(f"MonetDB release matrix lacks paired ADBC/staged runs on one system: {formatted}")
+            raise RuntimeError(f"MonetDB release matrix lacks completed ADBC runs: {formatted}")
 
         missing_baselines = [
             int(row[0])
@@ -314,66 +313,6 @@ def _validate_publishable_runs(db_path: Path) -> None:
                 "MonetDB select runs lack correctness results: "
                 f"runs_without_queries={missing_query_runs}, invalid_query_steps={invalid_query_steps}"
             )
-
-        mismatches = con.execute(
-            """
-            with latest_runs as (
-              select
-                *,
-                row_number() over (
-                  partition by system, suite, suite_scale_factor, db_driver
-                  order by finished_at desc, id desc
-                ) as run_rank
-              from run
-              where db = 'monetdb'
-                and db_driver is not null
-                and operation = 'select'
-                and status = 'completed'
-            ),
-            paired_cells as (
-              select system, suite, suite_scale_factor
-              from latest_runs
-              where run_rank = 1
-              group by system, suite, suite_scale_factor
-              having count(distinct db_driver) = 2
-            ),
-            results as (
-              select
-                r.system,
-                r.suite,
-                r.suite_scale_factor,
-                r.db_driver,
-                s.query_name,
-                s.iteration,
-                s.result_status,
-                s.row_count,
-                json_extract_string(s."metadata", '$.answer_hash') as answer_hash
-              from latest_runs r
-              join paired_cells p
-                on p.system = r.system
-               and p.suite = r.suite
-               and p.suite_scale_factor = r.suite_scale_factor
-              join run_step s on s.run_id = r.id
-              where r.run_rank = 1
-                and s.step_type = 'query'
-            )
-            select system, suite, suite_scale_factor, query_name, iteration
-            from results
-            group by system, suite, suite_scale_factor, query_name, iteration
-            having count(*) <> 2
-               or count(distinct db_driver) <> 2
-               or count(distinct result_status) > 1
-               or count(distinct row_count) > 1
-               or (
-                 count(*) filter (where result_status = 'ok') > 0
-                 and count(answer_hash) = count(*) filter (where result_status = 'ok')
-                 and count(distinct answer_hash) > 1
-               )
-            order by system, suite, suite_scale_factor, query_name, iteration
-            """
-        ).fetchall()
-        if mismatches:
-            raise RuntimeError(f"MonetDB ADBC/staged correctness results disagree: {mismatches}")
     finally:
         con.close()
 

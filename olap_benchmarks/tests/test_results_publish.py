@@ -156,20 +156,21 @@ def test_publish_validation_rejects_running_and_incomplete_monetdb_results(
             run.status = "completed"
             session.commit()
         engine.dispose()
-        with pytest.raises(RuntimeError, match="lacks paired ADBC/staged runs"):
+        with pytest.raises(RuntimeError, match="lacks completed ADBC runs"):
             _validate_publishable_runs(db_path)
     finally:
         engine.dispose()
 
 
-def test_publish_validation_rejects_unknown_monetdb_driver(tmp_path: Path) -> None:
+@pytest.mark.parametrize("driver", ["experimental", "staged"])
+def test_publish_validation_rejects_unknown_monetdb_driver(tmp_path: Path, driver: str) -> None:
     db_path = migrate_results(db_path=tmp_path / "results.db")
     engine = get_results_engine(read_only=False, db_path=db_path)
     try:
         with Session(engine) as session:
             _add_run(
                 session,
-                driver="experimental",
+                driver=driver,
                 suite="rtabench",
                 scale_factor=1,
                 operation="populate",
@@ -190,49 +191,16 @@ def test_publish_validation_accepts_the_complete_monetdb_release_matrix(
     engine = get_results_engine(read_only=False, db_path=db_path)
     try:
         with Session(engine) as session:
-            for driver in ("adbc", "staged"):
-                for cell in monetdb_benchmark_manifest():
-                    _add_run(
-                        session,
-                        driver=driver,
-                        suite=cell.suite,
-                        scale_factor=cell.scale_factor,
-                        operation=cell.operation,
-                    )
+            for cell in monetdb_benchmark_manifest():
+                _add_run(
+                    session,
+                    driver="adbc",
+                    suite=cell.suite,
+                    scale_factor=cell.scale_factor,
+                    operation=cell.operation,
+                )
             session.commit()
         engine.dispose()
-        _validate_publishable_runs(db_path)
-    finally:
-        engine.dispose()
-
-
-def test_publish_validation_ignores_unpaired_secondary_system_for_agreement(
-    tmp_path: Path,
-) -> None:
-    db_path = migrate_results(db_path=tmp_path / "results.db")
-    engine = get_results_engine(read_only=False, db_path=db_path)
-    try:
-        with Session(engine) as session:
-            for driver in ("adbc", "staged"):
-                for cell in monetdb_benchmark_manifest():
-                    _add_run(
-                        session,
-                        driver=driver,
-                        suite=cell.suite,
-                        scale_factor=cell.scale_factor,
-                        operation=cell.operation,
-                    )
-            _add_run(
-                session,
-                driver="adbc",
-                suite="time_series",
-                scale_factor=1,
-                operation="select",
-                system="secondary",
-            )
-            session.commit()
-        engine.dispose()
-
         _validate_publishable_runs(db_path)
     finally:
         engine.dispose()
@@ -243,15 +211,14 @@ def test_publish_validation_rejects_missing_select_correctness(tmp_path: Path) -
     engine = get_results_engine(read_only=False, db_path=db_path)
     try:
         with Session(engine) as session:
-            for driver in ("adbc", "staged"):
-                for cell in monetdb_benchmark_manifest():
-                    _add_run(
-                        session,
-                        driver=driver,
-                        suite=cell.suite,
-                        scale_factor=cell.scale_factor,
-                        operation=cell.operation,
-                    )
+            for cell in monetdb_benchmark_manifest():
+                _add_run(
+                    session,
+                    driver="adbc",
+                    suite=cell.suite,
+                    scale_factor=cell.scale_factor,
+                    operation=cell.operation,
+                )
             step = session.scalars(
                 select(RunStep)
                 .join(Run, Run.id == RunStep.run_id)

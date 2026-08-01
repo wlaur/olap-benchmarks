@@ -83,9 +83,13 @@ Reproduce the aggregate rows without opening a database file directly:
 Historical files without `client_mem_mb` use `max(m.mem_mb)` as the combined peak. The comparison
 names every source revision rather than selecting a best run, and the repeated Time Series result
 reports medians. The earlier pre-final physical-window pair measured 17.378 seconds for ADBC versus
-19.679 seconds staged; it remains useful tuning evidence but is not the release headline. New runs
+19.679 seconds staged; it remains useful tuning evidence but is not the release headline. Runs
 record `db_driver`, package/editable revision provenance, container image
-IDs and digests, effective MonetDB options, and SHA-256 input fingerprints; publication rejects
-running runs, a release matrix without same-system ADBC/staged pairs, missing or
-disagreeing correctness results, mismatched query coverage, and unclean session
-baselines.
+IDs and digests, effective MonetDB options, and SHA-256 input fingerprints; at
+decision time publication rejected running runs, a release matrix without
+same-system ADBC/staged pairs, missing or disagreeing correctness results,
+mismatched query coverage, and unclean session baselines.
+
+The staged binary path was removed after this decision. MonetDB now connects
+only through ADBC, and publication requires a complete ADBC release matrix
+with the same correctness and session-baseline gates.
