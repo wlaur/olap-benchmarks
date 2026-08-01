@@ -672,15 +672,12 @@ def mark_running_runs_failed(
 
 
 def config(as_json: bool = False) -> None:
-    from ..dbs.monetdb.settings import SETTINGS as monetdb_settings
-
     settings_dict = {
         "input_data_directory": str(SETTINGS.input_data_directory),
         "results_directory": str(SETTINGS.results_directory),
         "database_directory": str(SETTINGS.database_directory),
         "temporary_directory": str(SETTINGS.temporary_directory),
         "system": SETTINGS.system,
-        "monetdb_driver": monetdb_settings.driver,
     }
 
     if as_json:
@@ -694,5 +691,4 @@ def config(as_json: bool = False) -> None:
     print(f"  OLAP_BENCHMARKS_DATABASE_DIRECTORY:    {SETTINGS.database_directory}")
     print(f"  OLAP_BENCHMARKS_TEMPORARY_DIRECTORY:   {SETTINGS.temporary_directory}")
     print(f"  OLAP_BENCHMARKS_SYSTEM:                {SETTINGS.system}")
-    print(f"  OLAP_BENCHMARKS_MONETDB_DRIVER:        {monetdb_settings.driver}")
     print()

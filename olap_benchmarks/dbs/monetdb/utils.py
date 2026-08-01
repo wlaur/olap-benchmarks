@@ -1,13 +1,7 @@
-import re
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import Any
 
-import numpy as np
 import polars as pl
-import pymonetdb
-from pydantic import BaseModel
-from pymonetdb import Connection as MonetDBConnection
-from pymonetdb.sql.cursors import Description
 from sqlalchemy import (
     Column,
     Connection,
@@ -17,53 +11,14 @@ from sqlalchemy import (
 from sqlalchemy.schema import CreateTable
 from sqlalchemy.types import UserDefinedType
 
-from ...settings import SETTINGS, TableName
+from ...settings import TableName
 from ..utils import record_query_execution_context, tracked_commit
-from .settings import SETTINGS as MONETDB_SETTINGS
 
 # NOTE: don't change this, possible that MonetDB assumed ms in some places
 PL_DEFAULT_DATETIME = pl.Datetime("ms")
 
-# MonetDB exports booleans as uint8, 128 means null (0 is false and 1 is true)
-BOOLEAN_NULL = 128
-
 MONETDB_DEFAULT_DECIMAL_PRECISION = 18
 MONETDB_DEFAULT_DECIMAL_SCALE = 3
-
-MONETDB_MAX_DECIMAL_PRECISION = 18
-MONETDB_MAX_DECIMAL_SCALE = 3
-
-MONETDB_DATETIME_RECORD_TYPE = np.dtype(
-    [
-        ("ms", "<u4"),  # NOTE: holds microseconds, not milliseconds
-        ("seconds", "u1"),
-        ("minutes", "u1"),
-        ("hours", "u1"),
-        ("padding", "u1"),
-        ("day", "u1"),
-        ("month", "u1"),
-        ("year", "<i2"),
-    ]
-)
-
-MONETDB_TIME_RECORD_TYPE = np.dtype(
-    [
-        ("ms", "<u4"),  # NOTE: holds microseconds, not milliseconds
-        ("seconds", "u1"),
-        ("minutes", "u1"),
-        ("hours", "u1"),
-        ("padding", "u1"),
-    ]
-)
-
-
-MONETDB_DATE_RECORD_TYPE = np.dtype(
-    [
-        ("day", "u1"),
-        ("month", "u1"),
-        ("year", "<i2"),
-    ]
-)
 
 # convert to pl.Struct or dict as necessary, don't let the db engine handle this
 JSON_POLARS_DTYPE = pl.String
@@ -81,7 +36,7 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "double": pl.Float64,
     "boolean": pl.Boolean,
     "timestamp": PL_DEFAULT_DATETIME,
-    "timestamptz": PL_DEFAULT_DATETIME,  # tz info is not stored in binary data, this will be dumped as UTC
+    "timestamptz": PL_DEFAULT_DATETIME,
     "time": pl.Time,
     "date": pl.Date,
     "timetz": pl.Time,
@@ -96,64 +51,12 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
 }
 
 
-POLARS_NUMPY_TYPE_MAP: dict[pl.DataType | type[pl.DataType], np.dtype[Any]] = {
-    pl.Int8: np.dtype(np.int8),
-    pl.Int16: np.dtype(np.int16),
-    pl.Int32: np.dtype(np.int32),
-    pl.Int64: np.dtype(np.int64),
-    pl.UInt8: np.dtype(np.uint8),
-    pl.UInt16: np.dtype(np.uint16),
-    pl.UInt32: np.dtype(np.uint32),
-    pl.UInt64: np.dtype(np.uint64),
-    pl.Float32: np.dtype(np.float32),
-    pl.Float64: np.dtype(np.float64),
-    pl.Boolean: np.dtype(np.uint8),
-}
-
-
-MONETDB_TEMPORARY_DIRECTORY = SETTINGS.temporary_directory / "monetdb"
-
-
 class MonetDBType(UserDefinedType[Any]):
     def __init__(self, type_name: str) -> None:
         self.type_name = type_name
 
     def get_col_spec(self, **kwargs: object) -> str:
         return self.type_name
-
-
-class SchemaMeta(BaseModel):
-    size: int | None = None
-    tz: str | None = None
-
-    precision: int | None = None
-    scale: int | None = None
-
-
-def get_schema_meta(description: Description) -> SchemaMeta:
-    desc = cast(Any, description)
-    meta = SchemaMeta(
-        precision=cast(int | None, desc.precision),
-        scale=cast(int | None, desc.scale),
-    )
-
-    internal_size = cast(int, desc.internal_size)
-    if cast(str, desc.type_code) == "varchar" and internal_size > 0:
-        meta.size = internal_size
-
-    return meta
-
-
-def get_polars_type(
-    type_code: str, precision: int | None = None, scale: int | None = None
-) -> pl.DataType | type[pl.DataType]:
-    if type_code == "decimal":
-        return pl.Decimal(precision or MONETDB_DEFAULT_DECIMAL_PRECISION, scale=scale or MONETDB_DEFAULT_DECIMAL_SCALE)
-
-    if type_code in MONETDB_POLARS_TYPE_MAP:
-        return MONETDB_POLARS_TYPE_MAP[type_code]
-
-    raise ValueError(f"Unknown type code: '{type_code}'") from None
 
 
 def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
@@ -185,34 +88,6 @@ def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
             return k
 
     raise ValueError(f"Could not determine MonetDB type for Polars type: {dtype}")
-
-
-def get_limit_query(query: str) -> str:
-    query = query.rstrip().rstrip(";")
-    limit_regex = re.compile(r"\s+limit\s+\d+\s*$", re.IGNORECASE)
-    query = re.sub(limit_regex, "", query)
-    return f"{query} limit 1"
-
-
-def ensure_downloader_uploader(connection: MonetDBConnection) -> None:
-    if not MONETDB_SETTINGS.client_file_transfer:
-        return
-
-    assert connection.mapi is not None
-
-    if connection.mapi.downloader is not None and connection.mapi.uploader is not None:
-        return
-
-    MONETDB_TEMPORARY_DIRECTORY.mkdir(exist_ok=True, parents=True)
-
-    transfer_handler = pymonetdb.SafeDirectoryHandler(MONETDB_TEMPORARY_DIRECTORY)
-    connection_any = cast(Any, connection)
-    connection_any.set_downloader(transfer_handler)
-    connection_any.set_uploader(transfer_handler)
-
-
-def get_pymonetdb_connection(connection: Connection) -> MonetDBConnection:
-    return cast(MonetDBConnection, connection._dbapi_connection)
 
 
 def get_table(
