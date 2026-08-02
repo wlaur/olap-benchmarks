@@ -1,3 +1,4 @@
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -6,6 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from olap_benchmarks import results as results_module
 from olap_benchmarks.dbs.monetdb.manifest import monetdb_benchmark_manifest
 from olap_benchmarks.results import (
     _build_queries_manifest,
@@ -233,3 +235,48 @@ def test_publish_validation_rejects_missing_select_correctness(tmp_path: Path) -
             _validate_publishable_runs(db_path)
     finally:
         engine.dispose()
+
+
+def _missing_gh(_name: str) -> str | None:
+    return None
+
+
+def _present_gh(_name: str) -> str | None:
+    return "/usr/bin/gh"
+
+
+def test_require_gh_reports_missing_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(results_module.shutil, "which", _missing_gh)
+
+    with pytest.raises(RuntimeError, match="gh not found on PATH"):
+        results_module._require_gh("data")
+
+
+def test_require_gh_reports_unauthenticated_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(results_module.shutil, "which", _present_gh)
+
+    def unauthenticated(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=["gh", "auth", "status"], returncode=1, stdout="", stderr="")
+
+    monkeypatch.setattr(results_module.subprocess, "run", unauthenticated)
+
+    with pytest.raises(RuntimeError, match="not authenticated"):
+        results_module._require_gh("data")
+
+
+def test_require_gh_accepts_authenticated_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(results_module.shutil, "which", _present_gh)
+
+    def authenticated(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=["gh", "auth", "status"], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(results_module.subprocess, "run", authenticated)
+
+    results_module._require_gh("data")
+
+
+def test_upload_published_database_requires_a_published_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(results_module, "REPO_ROOT", tmp_path)
+
+    with pytest.raises(FileNotFoundError, match="run 'olap publish' first"):
+        results_module.upload_published_database()

@@ -198,9 +198,11 @@ cython_debug/
 **/temp
 **/data
 /results/*
+# results/shared holds portable revisions from other hosts; the databases move through the `runs`
+# release (olap results upload / fetch), so only the directory marker is committed
 !/results/shared/
 !/results/shared/.gitkeep
-!/results/shared/*.db
+/results/shared/*.db
 
 .claude
 

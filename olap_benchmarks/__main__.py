@@ -10,9 +10,11 @@ from .metrics.storage import start_writer_process
 from .operation_runner import run_operation
 from .results import (
     PUBLISHED_DATABASE_RELEASE_TAG,
+    SHARED_REVISION_RELEASE_TAG,
     compact_results,
     delete_runs,
     delete_runs_by_status,
+    fetch_results_revision,
     list_revisions,
     list_runs,
     mark_running_runs_failed,
@@ -20,6 +22,7 @@ from .results import (
     query_results,
     rename_database,
     upload_published_database,
+    upload_results_revision,
 )
 from .results import (
     config as show_config,
@@ -536,6 +539,24 @@ def revisions() -> None:
         return
     for name in names:
         print(name)
+
+
+@results_app.command
+def upload(revision: Revision = "default") -> None:
+    """Upload a results revision to the `runs` release so another host can merge it.
+
+    Revision databases are binary and effectively immutable (use one revision name per host and
+    run), so they are shared as release assets rather than committed to the repository.
+    """
+    db_path = upload_results_revision(revision)
+    print(f"Uploaded {db_path.name} to the '{SHARED_REVISION_RELEASE_TAG}' release")
+
+
+@results_app.command
+def fetch(revision: Revision = "default") -> None:
+    """Download a results revision from the `runs` release into the configured results directory."""
+    db_path = fetch_results_revision(revision)
+    print(f"Downloaded {db_path}")
 
 
 @results_app.command

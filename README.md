@@ -9,6 +9,10 @@
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)
 - Docker (OrbStack on macOS)
 - [Bun](https://bun.sh) for the web app in `site/`
+- [GitHub CLI](https://cli.github.com), authenticated with `gh auth login`, for the commands that
+  move result databases through release assets: `olap publish --upload`, `olap results upload` and
+  `olap results fetch`. Nothing else needs it — benchmarks, the site build and CI do not, because
+  the published database is fetched over plain HTTPS from the public repository
 - The TPC data generators, both from `tpchgen-rs` and both pinned to the same commit (the crates.io
   release lags `main`, and `tpcgen-cli` is not published at all):
   `cargo install --git https://github.com/clflushopt/tpchgen-rs --rev e53dea45345d3c934c724147e393983a53a40986 tpchgen-cli tpcgen-cli`
@@ -235,9 +239,12 @@ cd site && bun run fetch-data && bun run dev
 
 ### Remote benchmark runs
 
-Use a named revision when running benchmarks on another host, and keep the
-portable revision under `results/shared/` so it can move through Git without
-mixing with local scratch revisions.
+Use a named revision when running benchmarks on another host. Revision databases
+are binary and effectively immutable, so they move through the `runs` release
+rather than Git: `olap results upload --revision NAME` publishes one and
+`olap results fetch --revision NAME` retrieves it into the configured results
+directory. Use a unique revision name per host and run so independent
+benchmarks never overwrite each other.
 
 On the benchmark host:
 
@@ -247,16 +254,15 @@ export OLAP_BENCHMARKS_SYSTEM="cloud-c7i-4xlarge"
 
 uv run olap benchmark clickhouse tpc_ds --revision cloud-c7i-tpcds-sf1 --scale-factor 1
 uv run olap results migrate --revision cloud-c7i-tpcds-sf1
-
-git add results/shared/cloud-c7i-tpcds-sf1.db
-git commit -m "add cloud c7i tpc ds results"
+uv run olap results upload --revision cloud-c7i-tpcds-sf1
 ```
 
-After merging that branch on the publishing machine:
+Then on the publishing machine:
 
 ```bash
 export OLAP_BENCHMARKS_RESULTS_DIRECTORY="$PWD/results/shared"
 
+uv run olap results fetch --revision cloud-c7i-tpcds-sf1
 uv run olap results migrate --revision cloud-c7i-tpcds-sf1
 uv run olap publish --revision cloud-c7i-tpcds-sf1 --merge --upload
 

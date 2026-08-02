@@ -372,6 +372,32 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
 PUBLISHED_DATABASE_RELEASE_TAG = "data"
 
 
+SHARED_REVISION_RELEASE_TAG = "runs"
+
+
+def _require_gh(tag: str) -> None:
+    """Fail early and clearly when the GitHub CLI is missing or not logged in.
+
+    Only the upload/fetch commands need it; the site build downloads the published asset over
+    plain HTTPS, so CI does not depend on gh.
+    """
+    if shutil.which("gh") is None:
+        raise RuntimeError(
+            "gh not found on PATH; install the GitHub CLI (https://cli.github.com) to manage the "
+            f"'{tag}' release assets, or upload and download them manually"
+        )
+
+    status = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, check=False)
+    if status.returncode != 0:
+        raise RuntimeError(f"gh is installed but not authenticated; run 'gh auth login' to manage the '{tag}' release")
+
+
+def _upload_release_asset(tag: str, path: Path) -> None:
+    _require_gh(tag)
+    _LOGGER.info(f"Uploading {path.name} to the '{tag}' release")
+    subprocess.run(["gh", "release", "upload", tag, path.as_posix(), "--clobber"], check=True)
+
+
 def upload_published_database() -> None:
     """Replace the `data` release asset with the locally published results database.
 
@@ -382,22 +408,42 @@ def upload_published_database() -> None:
     if not output_db_path.is_file():
         raise FileNotFoundError(f"No published database at {output_db_path}; run 'olap publish' first")
 
-    if shutil.which("gh") is None:
-        raise RuntimeError(
-            "gh not found on PATH; install the GitHub CLI or upload the asset manually to the "
-            f"'{PUBLISHED_DATABASE_RELEASE_TAG}' release"
-        )
+    _upload_release_asset(PUBLISHED_DATABASE_RELEASE_TAG, output_db_path)
 
-    command = [
-        "gh",
-        "release",
-        "upload",
-        PUBLISHED_DATABASE_RELEASE_TAG,
-        output_db_path.as_posix(),
-        "--clobber",
-    ]
-    _LOGGER.info(f"Uploading {output_db_path.name} to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
-    subprocess.run(command, check=True)
+
+def upload_results_revision(revision: Revision) -> Path:
+    """Upload a results revision to the `runs` release so another host can merge it.
+
+    Revision databases are binary and effectively immutable (use one revision name per host and
+    run), so they are shared as release assets rather than committed.
+    """
+    db_path = _require_revision(revision)
+    _upload_release_asset(SHARED_REVISION_RELEASE_TAG, db_path)
+    return db_path
+
+
+def fetch_results_revision(revision: Revision) -> Path:
+    """Download a results revision from the `runs` release into the configured results directory."""
+    _require_gh(SHARED_REVISION_RELEASE_TAG)
+    destination = get_results_db_path(revision)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    _LOGGER.info(f"Downloading {destination.name} from the '{SHARED_REVISION_RELEASE_TAG}' release")
+    subprocess.run(
+        [
+            "gh",
+            "release",
+            "download",
+            SHARED_REVISION_RELEASE_TAG,
+            "--pattern",
+            destination.name,
+            "--dir",
+            destination.parent.as_posix(),
+            "--clobber",
+        ],
+        check=True,
+    )
+    return destination
 
 
 def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:
