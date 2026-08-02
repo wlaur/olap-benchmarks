@@ -8,7 +8,7 @@ import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
 FLOAT_ROUND_DECIMALS = 10
-ANSWER_HASH_VERSION = "canonical-v4"
+ANSWER_HASH_VERSION = "canonical-v5"
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
@@ -17,8 +17,16 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
     for name, dtype in df.schema.items():
         expression = pl.col(name)
 
+        # Exact numerics render as their decimal string so that the hash does not depend on which
+        # width or kind the driver reported. Drivers legitimately disagree here: MonetDB narrows an
+        # aggregate's declared type by context, so the same value arrives as int8/int32/int64 or as
+        # DECIMAL(38, 0) for hugeint, and a driver that erases width reports int64 throughout.
+        # Casting to Int64 would also overflow hugeint, and casting to Float64 would corrupt any
+        # integer beyond 2^53.
         if dtype == pl.Boolean or dtype.is_integer():
-            expression = expression.cast(pl.Int64)
+            expression = expression.cast(pl.Int64).cast(pl.String)
+        elif isinstance(dtype, pl.Decimal) and (dtype.scale or 0) == 0:
+            expression = expression.cast(pl.String)
         elif dtype.is_float() or isinstance(dtype, pl.Decimal):
             expression = expression.cast(pl.Float64).round(FLOAT_ROUND_DECIMALS)
         elif isinstance(dtype, pl.Datetime):

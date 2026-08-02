@@ -719,60 +719,68 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         step_name = f"concurrent_{step.name}"
         start_barrier.wait()
 
-        if not suite.db.is_mutation_step_enabled(self.name, step.name):
-            _LOGGER.info(f"Skipping concurrent writer step for {suite.db.name}: {step.name} is disabled")
+        # each worker holds its own connection; close it so the operation returns to its session
+        # baseline instead of leaking one session per worker
+        try:
+            if not suite.db.is_mutation_step_enabled(self.name, step.name):
+                _LOGGER.info(f"Skipping concurrent writer step for {suite.db.name}: {step.name} is disabled")
+                for iteration in range(1, CONCURRENT_WRITER_ITERATIONS + 1):
+                    suite.db.record_skipped_mutation_step(
+                        query_name=step_name,
+                        iteration=iteration,
+                        table_name=step.table,
+                        reason=f"{suite.db.name} disables {step.name}",
+                    )
+                return
+
             for iteration in range(1, CONCURRENT_WRITER_ITERATIONS + 1):
-                suite.db.record_skipped_mutation_step(
+                seed = CONCURRENT_WRITER_SEED_OFFSET + iteration
+                with suite.db.mutation_context(
                     query_name=step_name,
                     iteration=iteration,
                     table_name=step.table,
-                    reason=f"{suite.db.name} disables {step.name}",
-                )
-            return
+                ):
+                    suite._apply_insert(step, suite._generate_insert_data(step, seed))
 
-        for iteration in range(1, CONCURRENT_WRITER_ITERATIONS + 1):
-            seed = CONCURRENT_WRITER_SEED_OFFSET + iteration
-            with suite.db.mutation_context(
-                query_name=step_name,
-                iteration=iteration,
-                table_name=step.table,
-            ):
-                suite._apply_insert(step, suite._generate_insert_data(step, seed))
-
-            _LOGGER.info(f"Executed {step_name} iteration {iteration:_}/{CONCURRENT_WRITER_ITERATIONS:_}")
+                _LOGGER.info(f"Executed {step_name} iteration {iteration:_}/{CONCURRENT_WRITER_ITERATIONS:_}")
+        finally:
+            suite.db.close_connection()
 
     def _run_concurrent_reader(self, reader_id: int, start_barrier: Barrier) -> None:
         suite = self._create_concurrent_worker_suite()
         start_barrier.wait()
 
-        for iteration in range(1, CONCURRENT_READER_ITERATIONS + 1):
-            for query_name in CONCURRENT_QUERY_NAMES:
-                skip = suite.query_skip(query_name)
-                if skip is not None:
-                    result_status, reason = skip
-                    suite.record_skipped_query_steps(
-                        query_name,
-                        iteration,
-                        result_status=result_status,
-                        reason=reason,
-                        start_iteration=iteration,
-                    )
-                    continue
+        try:
+            for iteration in range(1, CONCURRENT_READER_ITERATIONS + 1):
+                for query_name in CONCURRENT_QUERY_NAMES:
+                    skip = suite.query_skip(query_name)
+                    if skip is not None:
+                        result_status, reason = skip
+                        suite.record_skipped_query_steps(
+                            query_name,
+                            iteration,
+                            result_status=result_status,
+                            reason=reason,
+                            start_iteration=iteration,
+                        )
+                        continue
 
-                with suite.db.query_context(query_name):
-                    query = suite.load_time_series_query(query_name)
-                    df, duration_seconds = suite.db.execute_query_iteration(
-                        query_name=query_name,
-                        iteration=iteration,
-                        query=query,
-                        fetch_kwargs=suite.fetch_kwargs,
-                    )
+                    with suite.db.query_context(query_name):
+                        query = suite.load_time_series_query(query_name)
+                        df, duration_seconds = suite.db.execute_query_iteration(
+                            query_name=query_name,
+                            iteration=iteration,
+                            query=query,
+                            fetch_kwargs=suite.fetch_kwargs,
+                        )
 
-                _LOGGER.info(
-                    f"Executed concurrent reader {reader_id:_} query {query_name} "
-                    f"iteration {iteration:_}/{CONCURRENT_READER_ITERATIONS:_} "
-                    f"in {1_000 * duration_seconds:_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})"
-                )
+                    _LOGGER.info(
+                        f"Executed concurrent reader {reader_id:_} query {query_name} "
+                        f"iteration {iteration:_}/{CONCURRENT_READER_ITERATIONS:_} "
+                        f"in {1_000 * duration_seconds:_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})"
+                    )
+        finally:
+            suite.db.close_connection()
 
     def concurrent(self) -> None:
         t0 = perf_counter()

@@ -18,4 +18,8 @@ SELECT
 FROM
     calendar as cl
     LEFT JOIN listings l on cl.listing_id = l.id
-    LEFT JOIN listings_detailed ld on cl.listing_id = ld.id;
+    LEFT JOIN listings_detailed ld on cl.listing_id = ld.id
+ORDER BY
+    -- (listing_id, date) is unique in calendar, so this is a total order
+    listing_id,
+    cl.date;

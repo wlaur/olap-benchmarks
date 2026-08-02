@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import polars as pl
 import pytest
 
@@ -16,7 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v4"
+    assert left["answer_hash_version"] == "canonical-v5"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -38,6 +40,27 @@ def test_answer_metadata_canonicalizes_equivalent_numeric_dtypes() -> None:
     )
 
     assert hashing.build_answer_metadata(narrow)["answer_hash"] == hashing.build_answer_metadata(wide)["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_scale_zero_decimals_to_integers() -> None:
+    # drivers disagree on how they report an exact integer: MonetDB narrows an aggregate's declared
+    # type by context (int8/int32/int64) and reports hugeint as DECIMAL(38, 0), while a driver that
+    # erases width reports int64 throughout. The same number must hash identically either way.
+    integers = pl.DataFrame({"total": pl.Series([12345, -7, 0], dtype=pl.Int64)})
+    decimals = pl.DataFrame({"total": pl.Series([Decimal(12345), Decimal(-7), Decimal(0)], dtype=pl.Decimal(38, 0))})
+
+    assert (
+        hashing.build_answer_metadata(integers)["answer_hash"] == hashing.build_answer_metadata(decimals)["answer_hash"]
+    )
+
+
+def test_answer_metadata_preserves_integers_beyond_float64_precision() -> None:
+    # sum(bigint) can exceed int64, arriving as DECIMAL(38, 0); canonicalizing through Float64
+    # would collapse neighbouring values onto the same hash
+    low = pl.DataFrame({"total": pl.Series([Decimal("18000000000000000000")], dtype=pl.Decimal(38, 0))})
+    high = pl.DataFrame({"total": pl.Series([Decimal("18000000000000000001")], dtype=pl.Decimal(38, 0))})
+
+    assert hashing.build_answer_metadata(low)["answer_hash"] != hashing.build_answer_metadata(high)["answer_hash"]
 
 
 def test_answer_metadata_canonicalizes_booleans_to_integer_values() -> None:

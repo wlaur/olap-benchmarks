@@ -390,7 +390,8 @@ def _load_latest_query_answer_hash_mismatches(
             lr.db_version,
             lr.db_driver,
             s.row_count,
-            json_extract_string(s."metadata", '$.answer_hash') as answer_hash
+            json_extract_string(s."metadata", '$.answer_hash') as answer_hash,
+            json_extract_string(s."metadata", '$.answer_hash_version') as answer_hash_version
           from latest_runs lr
           join run_step s on s.run_id = lr.run_id
           where lr.run_rank = 1
@@ -411,7 +412,10 @@ def _load_latest_query_answer_hash_mismatches(
             iteration
           from query_answers
           group by system, suite, suite_scale_factor, query_name, iteration
+          -- hashes are only comparable within one canonicalisation version; a version bump
+          -- otherwise reports every stored result as a mismatch against freshly measured ones
           having count(distinct answer_hash) > 1
+             and count(distinct coalesce(answer_hash_version, '')) = 1
              and count(distinct row_count) = 1
              and count(distinct db || chr(31) || db_version || chr(31) || coalesce(db_driver, '')) > 1
         )

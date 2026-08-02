@@ -11,7 +11,8 @@ SELECT
     ld.availability_90,
     ld.availability_365,
     count(DISTINCT rd.id) as review_count,
-    array_agg(DISTINCT rd.reviewer_id) as reviewer_ids
+    -- ordered so the array element order is deterministic, not engine-defined
+    array_agg(DISTINCT rd.reviewer_id ORDER BY rd.reviewer_id) as reviewer_ids
 FROM
     calendar as cl
     LEFT JOIN listings l on cl.listing_id = l.id
@@ -28,4 +29,7 @@ GROUP BY
     ld.availability_30,
     ld.availability_60,
     ld.availability_90,
-    ld.availability_365;
+    ld.availability_365
+ORDER BY
+    -- listing_id uniquely identifies each group, so this is a total order
+    cl.listing_id;

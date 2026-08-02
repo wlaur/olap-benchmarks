@@ -29,4 +29,7 @@ GROUP BY
     ld.availability_30,
     ld.availability_60,
     ld.availability_90,
-    ld.availability_365;
+    ld.availability_365
+ORDER BY
+    -- listing_id uniquely identifies each group, so this is a total order
+    cl.listing_id;

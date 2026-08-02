@@ -12,9 +12,11 @@ SELECT
     ld.availability_90,
     ld.availability_365,
     count(DISTINCT rd.id) as review_count,
-    -- MonetDB does not have an array type, this is an approximation
-    -- renders JSON floats (with .0000 decimal), this is not strictly correct
-    json.tojsonarray(DISTINCT reviewer_id) AS reviewer_ids
+    -- MonetDB does not have an array type, this is an approximation.
+    -- json.tojsonarray() is not used here: it silently ignores ORDER BY, so its element order is
+    -- engine-defined and the result differs between runs. group_concat() does honour ORDER BY,
+    -- and renders the ids as integers rather than json.tojsonarray()'s '.000000' floats.
+    '[' || group_concat(DISTINCT reviewer_id, ',' ORDER BY reviewer_id) || ']' AS reviewer_ids
 FROM
     calendar as cl
     LEFT JOIN listings l on cl.listing_id = l.id
@@ -31,4 +33,7 @@ GROUP BY
     ld.availability_30,
     ld.availability_60,
     ld.availability_90,
-    ld.availability_365;
+    ld.availability_365
+ORDER BY
+    -- listing_id uniquely identifies each group, so this is a total order
+    cl.listing_id;
