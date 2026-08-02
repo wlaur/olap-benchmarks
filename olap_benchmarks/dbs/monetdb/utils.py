@@ -20,11 +20,10 @@ PL_DEFAULT_DATETIME = pl.Datetime("ms")
 MONETDB_DEFAULT_DECIMAL_PRECISION = 18
 MONETDB_DEFAULT_DECIMAL_SCALE = 3
 
-# convert to pl.Struct or dict as necessary, don't let the db engine handle this
-JSON_POLARS_DTYPE = pl.String
-
-# NOTE: the order matters, see get_monetdb_type
-MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
+# Polars dtype -> MonetDB type name, used to build DDL. This is a one-way lookup: reads go
+# through ADBC and take their dtype from the Arrow schema the driver reports, never from here.
+# One entry per dtype, so the lookup cannot depend on ordering.
+MONETDB_TYPE_NAMES: dict[str, pl.DataType | type[pl.DataType]] = {
     "tinyint": pl.Int8,
     "smallint": pl.Int16,
     "int": pl.Int32,
@@ -33,22 +32,16 @@ MONETDB_POLARS_TYPE_MAP: dict[str, pl.DataType | type[pl.DataType]] = {
     "blob": pl.Binary,
     "real": pl.Float32,
     "float": pl.Float64,
-    "double": pl.Float64,
     "boolean": pl.Boolean,
     "timestamp": PL_DEFAULT_DATETIME,
-    "timestamptz": PL_DEFAULT_DATETIME,
     "time": pl.Time,
     "date": pl.Date,
-    "timetz": pl.Time,
     "varchar": pl.String,
-    "clob": pl.String,
-    "text": pl.String,
-    "char": pl.String,
-    "json": JSON_POLARS_DTYPE,
-    "sec_interval": pl.Int64,  # int64 ms
-    "day_interval": pl.Int64,  # int64 ms
-    "month_interval": pl.Int32,
 }
+
+assert len({str(dtype) for dtype in MONETDB_TYPE_NAMES.values()}) == len(MONETDB_TYPE_NAMES), (
+    "MONETDB_TYPE_NAMES maps two names to the same Polars dtype; the second would be unreachable"
+)
 
 
 class MonetDBType(UserDefinedType[Any]):
@@ -83,7 +76,7 @@ def get_monetdb_type(dtype: pl.DataType | type[pl.DataType]) -> str:
     if dtype == pl.UInt64:
         dtype = pl.Int64
 
-    for k, v in MONETDB_POLARS_TYPE_MAP.items():
+    for k, v in MONETDB_TYPE_NAMES.items():
         if dtype == v:
             return k
 
