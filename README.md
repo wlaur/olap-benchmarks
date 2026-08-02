@@ -135,9 +135,7 @@ with engine.connect() as connection:
 
 The benchmark adapter in `olap_benchmarks/dbs/monetdb/adbc.py` wraps these
 primitives with constraint-preserving table creation (primary keys, not-null
-columns), ingest row-count validation, and query recording. The historical
-ADBC versus staged-binary comparison that led to this setup is preserved in
-[MONETDB_ADBC_RESULTS.md](MONETDB_ADBC_RESULTS.md).
+columns), ingest row-count validation, and query recording.
 
 MonetDB runs persist `adbc` as a typed run dimension; publication requires a
 completed ADBC run for all 20 matrix cells and rejects running results,
