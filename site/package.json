@@ -7,6 +7,7 @@
     "check": "tsc --noEmit",
     "codegen": "node ./scripts/generate-db-types.mjs && oxfmt --write src/lib/generated/db.ts",
     "dev": "vite",
+    "fetch-data": "curl -fL --create-dirs -o public/data/results.db https://github.com/wlaur/olap-benchmarks/releases/download/data/results.db",
     "fmt": "oxfmt --write .",
     "fmt:check": "oxfmt --check .",
     "lint": "oxlint .",

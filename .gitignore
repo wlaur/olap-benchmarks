@@ -204,9 +204,14 @@ cython_debug/
 
 .claude
 
-# Frontend (site/) exceptions: **/data above would otherwise ignore these,
-# but site/src/lib and the published results.db under site/public/data must
-# stay committed (results.db is the file `olap publish` writes/merges into)
+# Frontend (site/) exceptions: **/data above would otherwise ignore these, but
+# site/src/lib and the small manifests under site/public/data must stay committed
 !site/src/lib/
 !site/public/data/
 !site/dist/
+
+# The published results database is distributed as the `data` release asset instead of being
+# committed: it is large, rewritten on every publish, and git keeps every version forever.
+# `olap publish --upload` replaces the asset; `bun run fetch-data` retrieves it for a build.
+site/public/data/results.db
+site/public/data/results.db.wal

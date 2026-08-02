@@ -63,8 +63,8 @@ uv run olap benchmark clickhouse tpc_h --scale-factor 10
 uv run olap results runs --suite tpc_h --db clickhouse
 uv run olap results query "select * from run order by started_at desc limit 5"
 
-# 4. publish to the site (merge new runs into site/public/data/results.db)
-uv run olap publish --merge
+# 4. publish to the site and upload the database to the `data` release
+uv run olap publish --merge --upload
 
 # 5. view locally
 cd site && bun install && bun run dev
@@ -212,13 +212,26 @@ uv run olap results rename-db old_name new_name      # rename a db in stored run
 
 All `results` commands accept `--revision` (default `default`).
 
-### `olap publish [--revision NAME] [--merge]`
+### `olap publish [--revision NAME] [--merge] [--upload]`
 
 Copies `results/<revision>.db` to `site/public/data/results.db` along with
 `manifest.json` and `queries.json`. With `--merge`, runs are merged into the
 already-published file instead of replacing it: runs matching an existing
 (system, db, db_version, db_driver, suite, suite_scale_factor, operation,
 started_at) are replaced, new runs are added, everything else is kept.
+
+**`results.db` is not committed.** It is large and rewritten on every publish, so
+git would keep every version forever. It ships as the `results.db` asset on the
+`data` release: `--upload` replaces that asset via the GitHub CLI, and the site
+build fetches it with `bun run fetch-data` (the Pages workflow runs this before
+`bun run build` and fails the build if the asset is missing or truncated). The
+small `manifest.json`, `queries.json` and `suites.json` stay in git.
+
+A fresh clone therefore needs the database before the site will run:
+
+```bash
+cd site && bun run fetch-data && bun run dev
+```
 
 ### Remote benchmark runs
 
@@ -245,9 +258,9 @@ After merging that branch on the publishing machine:
 export OLAP_BENCHMARKS_RESULTS_DIRECTORY="$PWD/results/shared"
 
 uv run olap results migrate --revision cloud-c7i-tpcds-sf1
-uv run olap publish --revision cloud-c7i-tpcds-sf1 --merge
+uv run olap publish --revision cloud-c7i-tpcds-sf1 --merge --upload
 
-git add site/public/data/results.db site/public/data/manifest.json site/public/data/queries.json
+git add site/public/data/manifest.json site/public/data/queries.json
 git commit -m "publish cloud c7i tpc ds results"
 ```
 

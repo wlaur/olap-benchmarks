@@ -9,6 +9,7 @@ from .dbs import get_databases
 from .metrics.storage import start_writer_process
 from .operation_runner import run_operation
 from .results import (
+    PUBLISHED_DATABASE_RELEASE_TAG,
     compact_results,
     delete_runs,
     delete_runs_by_status,
@@ -18,6 +19,7 @@ from .results import (
     migrate_results,
     query_results,
     rename_database,
+    upload_published_database,
 )
 from .results import (
     config as show_config,
@@ -361,13 +363,16 @@ def docker(
 
 
 @app.command
-def publish(revision: Revision = "default", merge: bool = False) -> None:
+def publish(revision: Revision = "default", merge: bool = False, upload: bool = False) -> None:
     """Copy a results database to site/public/data for the webpage, with a manifest.
 
     With `--merge`, runs from the revision are merged into the already published
     results.db instead of replacing the whole file: runs matching an existing
     (system, db, db_version, suite, suite_scale_factor, operation, started_at) are replaced, new
     runs are added, and everything else in the published file is kept.
+
+    With `--upload`, the published results.db is uploaded to the `data` GitHub release, which is
+    where the site build fetches it from. The database is not committed to the repository.
     """
     output_dir, merge_stats = publish_results(revision=revision, merge=merge)
 
@@ -378,6 +383,10 @@ def publish(revision: Revision = "default", merge: bool = False) -> None:
         )
     else:
         print(f"Published revision '{revision}' to {output_dir}")
+
+    if upload:
+        upload_published_database()
+        print(f"Uploaded results.db to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
 
 
 @app.command

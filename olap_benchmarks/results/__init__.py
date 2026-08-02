@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import subprocess
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -366,6 +367,37 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
     suites_path.write_text(f"{json.dumps(suites_manifest, indent=2)}\n")
 
     return output_dir, merge_stats
+
+
+PUBLISHED_DATABASE_RELEASE_TAG = "data"
+
+
+def upload_published_database() -> None:
+    """Replace the `data` release asset with the locally published results database.
+
+    The database is not committed: it is large and rewritten on every publish, so git would keep
+    every version forever. The site build fetches this asset instead (`bun run fetch-data`).
+    """
+    output_db_path = REPO_ROOT / "site" / "public" / "data" / "results.db"
+    if not output_db_path.is_file():
+        raise FileNotFoundError(f"No published database at {output_db_path}; run 'olap publish' first")
+
+    if shutil.which("gh") is None:
+        raise RuntimeError(
+            "gh not found on PATH; install the GitHub CLI or upload the asset manually to the "
+            f"'{PUBLISHED_DATABASE_RELEASE_TAG}' release"
+        )
+
+    command = [
+        "gh",
+        "release",
+        "upload",
+        PUBLISHED_DATABASE_RELEASE_TAG,
+        output_db_path.as_posix(),
+        "--clobber",
+    ]
+    _LOGGER.info(f"Uploading {output_db_path.name} to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
+    subprocess.run(command, check=True)
 
 
 def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:

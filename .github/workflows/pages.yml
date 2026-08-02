@@ -28,6 +28,19 @@ jobs:
         working-directory: site
         run: bun install --frozen-lockfile
 
+      # results.db is not committed; it ships as the `data` release asset (see olap publish --upload)
+      - name: Fetch published results database
+        working-directory: site
+        run: bun run fetch-data
+
+      # guard against a truncated or missing asset silently producing a broken site: the DuckDB
+      # magic string sits at byte offset 8, after the header checksum
+      - name: Verify results database is a DuckDB file
+        working-directory: site
+        run: |
+          test "$(head -c 12 public/data/results.db | tail -c 4)" = "DUCK" \
+            || { echo "public/data/results.db is not a DuckDB file; the release asset may be missing"; exit 1; }
+
       - name: Build
         working-directory: site
         run: bun run build
