@@ -2,7 +2,11 @@
 # comparable to published TPC-H results.
 #
 # Data is generated with tpchgen-cli (https://github.com/clflushopt/tpchgen-rs),
-# which produces output byte-identical to the reference dbgen.
+# which produces output byte-identical to the reference dbgen. Pinned to the same
+# commit as tpcgen-cli (see suites/tpc_ds/config.py) rather than the crates.io
+# release, which lags main; install with 'cargo install --git
+# https://github.com/clflushopt/tpchgen-rs
+# --rev e53dea45345d3c934c724147e393983a53a40986 tpchgen-cli'.
 #
 # Query provenance:
 #   * base queries: DuckDB tpch extension (validation substitution parameters,
@@ -93,7 +97,10 @@ def _prepare_tpc_h_data(scale_factor: int) -> None:
         raise ValueError(f"{output_directory} contains a partial dataset ({', '.join(existing)}); remove it first")
 
     if shutil.which("tpchgen-cli") is None:
-        raise RuntimeError("tpchgen-cli not found on PATH; install it with 'cargo install tpchgen-cli'")
+        raise RuntimeError(
+            "tpchgen-cli not found on PATH; install it with 'cargo install --git "
+            "https://github.com/clflushopt/tpchgen-rs --rev e53dea45345d3c934c724147e393983a53a40986 tpchgen-cli'"
+        )
 
     command = [
         "tpchgen-cli",

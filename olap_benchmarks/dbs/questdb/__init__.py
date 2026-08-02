@@ -8,7 +8,7 @@ import polars as pl
 from questdb.ingress import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
@@ -22,6 +22,11 @@ _LOGGER = logging.getLogger(__name__)
 VERSION = "9.4.3"
 
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}"
+
+QUESTDB_HTTP_PORT = host_port("questdb_http")
+QUESTDB_PG_PORT = host_port("questdb_pg")
+
+QUESTDB_CONNECTION_STRING = f"questdb://admin:quest@localhost:{QUESTDB_PG_PORT}/qdb"
 
 
 def _build_clickbench_insert(
@@ -102,7 +107,7 @@ class QuestDB(Database):
     container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
 
-    connection_string: str = "questdb://admin:quest@localhost:8812/qdb"
+    connection_string: str = QUESTDB_CONNECTION_STRING
 
     # No row-level DELETE in QuestDB 9.4.3 (`DELETE FROM t WHERE id = 1` is
     # rejected as "unexpected token [FROM]"); only TRUNCATE TABLE and ALTER
@@ -130,7 +135,7 @@ class QuestDB(Database):
 
         return self.docker_run_command(
             DOCKER_IMAGE,
-            ports={"9000": "9000", "8812": "8812"},
+            ports={str(QUESTDB_HTTP_PORT): "9000", str(QUESTDB_PG_PORT): "8812"},
             mounts={
                 self.database_directory.as_posix(): "/var/lib/questdb",
                 f"{SETTINGS.temporary_directory.as_posix()}/questdb/data": "/import",

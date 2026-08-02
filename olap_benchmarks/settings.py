@@ -5,7 +5,7 @@ from typing import Annotated, Literal, cast, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
-from pydantic import DirectoryPath
+from pydantic import DirectoryPath, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TableName = Annotated[str, "Table name"]
@@ -175,6 +175,26 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()
 MAIN_PROCESS_TITLE = "olap-benchmarks-main"
 
 
+# host ports the benchmark containers bind, keyed by a stable logical name. Override any
+# subset via OLAP_BENCHMARKS_HOST_PORTS, e.g. '{"monetdb": 50010}', to avoid colliding with
+# other local containers. Container-side ports are fixed by the images and are not remapped.
+DEFAULT_HOST_PORTS: dict[str, int] = {
+    "monetdb": 50000,
+    "clickhouse_http": 18123,
+    "clickhouse_native": 19000,
+    "postgres": 5433,
+    "timescaledb": 5432,
+    "questdb_http": 9000,
+    "questdb_pg": 8812,
+    "doris_fe_mysql": 9030,
+    "doris_fe_http": 8030,
+    "doris_be_http": 8040,
+    "starrocks_fe_mysql": 9030,
+    "starrocks_fe_http": 8030,
+    "starrocks_be_http": 8040,
+}
+
+
 class Settings(BaseSettings):
     input_data_directory: DirectoryPath
     results_directory: DirectoryPath
@@ -184,6 +204,19 @@ class Settings(BaseSettings):
 
     system: str
 
+    host_ports: dict[str, int] = {}
+
+    @field_validator("host_ports")
+    @classmethod
+    def _validate_host_ports(cls, value: dict[str, int]) -> dict[str, int]:
+        unknown = sorted(set(value) - set(DEFAULT_HOST_PORTS))
+        if unknown:
+            raise ValueError(
+                f"Unknown host port name(s): {', '.join(unknown)}; valid names are "
+                f"{', '.join(sorted(DEFAULT_HOST_PORTS))}"
+            )
+        return value
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="OLAP_BENCHMARKS_",
@@ -192,6 +225,12 @@ class Settings(BaseSettings):
 
 
 SETTINGS = Settings.model_validate({})
+
+
+def host_port(name: str) -> int:
+    if name not in DEFAULT_HOST_PORTS:
+        raise KeyError(f"Unknown host port name: {name}")
+    return SETTINGS.host_ports.get(name, DEFAULT_HOST_PORTS[name])
 
 
 def setup_stdout_logging(level: int = logging.INFO) -> None:

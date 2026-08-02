@@ -11,7 +11,7 @@ import polars as pl
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
@@ -34,8 +34,9 @@ DORIS_BE_CONTAINER = "doris-be-benchmark"
 DORIS_FE_SERVERS = f"fe1:{DORIS_FE_IP}:9010"
 
 DORIS_HOST = "localhost"
-DORIS_QUERY_PORT = 9030
-DORIS_HTTP_PORT = 8030
+DORIS_QUERY_PORT = host_port("doris_fe_mysql")
+DORIS_HTTP_PORT = host_port("doris_fe_http")
+DORIS_BE_HTTP_PORT = host_port("doris_be_http")
 DORIS_USER = "root"
 DORIS_PASSWORD = ""
 DORIS_DATABASE = "benchmark"
@@ -189,7 +190,7 @@ class Doris(Database):
                 name=DORIS_FE_CONTAINER,
                 network=DORIS_NETWORK,
                 ip=DORIS_FE_IP,
-                ports={"9030": "9030", "8030": "8030"},
+                ports={str(DORIS_QUERY_PORT): "9030", str(DORIS_HTTP_PORT): "8030"},
                 mounts={
                     meta_dir.as_posix(): "/opt/apache-doris/fe/doris-meta",
                     fe_log_dir.as_posix(): "/opt/apache-doris/fe/log",
@@ -201,7 +202,7 @@ class Doris(Database):
                 name=DORIS_BE_CONTAINER,
                 network=DORIS_NETWORK,
                 ip=DORIS_BE_IP,
-                ports={"8040": "8040"},
+                ports={str(DORIS_BE_HTTP_PORT): "8040"},
                 mounts={
                     storage_dir.as_posix(): "/opt/apache-doris/be/storage",
                     be_log_dir.as_posix(): "/opt/apache-doris/be/log",

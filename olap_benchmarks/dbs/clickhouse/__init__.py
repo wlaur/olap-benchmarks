@@ -15,7 +15,7 @@ import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
@@ -31,7 +31,10 @@ VERSION = "26.6.1.1193"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
-CLICKHOUSE_CONNECTION_STRING = "clickhouse://user:password@localhost:18123/default"
+CLICKHOUSE_HTTP_PORT = host_port("clickhouse_http")
+CLICKHOUSE_NATIVE_PORT = host_port("clickhouse_native")
+
+CLICKHOUSE_CONNECTION_STRING = f"clickhouse://user:password@localhost:{CLICKHOUSE_HTTP_PORT}/default"
 
 POLARS_CLICKHOUSE_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
     pl.Int8: "Int8",
@@ -78,7 +81,7 @@ def get_clickhouse_client() -> ClickhouseClient:
         ClickhouseClient,
         cast(Any, clickhouse_connect).get_client(
             host=parsed_sqlalchemy_connection_string.hostname,
-            port=parsed_sqlalchemy_connection_string.port or 18123,
+            port=parsed_sqlalchemy_connection_string.port or CLICKHOUSE_HTTP_PORT,
             username=parsed_sqlalchemy_connection_string.username,
             password=parsed_sqlalchemy_connection_string.password or "no-password",
             database="default",
@@ -294,7 +297,7 @@ class Clickhouse(Database):
 
         return self.docker_run_command(
             DOCKER_IMAGE,
-            ports={"18123": "8123", "19000": "9000"},
+            ports={str(CLICKHOUSE_HTTP_PORT): "8123", str(CLICKHOUSE_NATIVE_PORT): "9000"},
             mounts={
                 self.database_directory.as_posix(): "/var/lib/clickhouse",
                 f"{SETTINGS.temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",

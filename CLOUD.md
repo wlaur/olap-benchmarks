@@ -91,8 +91,7 @@ sudo usermod -aG docker ubuntu
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env && source ~/.local/bin/env
-cargo install tpchgen-cli
-cargo install --git https://github.com/clflushopt/tpchgen-rs --rev 09d609d13b7b45a2aa06d2b86e5a4bfa29aacb1a tpcgen-cli
+cargo install --git https://github.com/clflushopt/tpchgen-rs --rev e53dea45345d3c934c724147e393983a53a40986 tpchgen-cli tpcgen-cli
 
 git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/wlaur/olap-benchmarks.git"
 cd olap-benchmarks

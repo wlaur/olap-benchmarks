@@ -11,7 +11,7 @@ from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
 from ...run_metadata import StepResultStatus
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
@@ -31,7 +31,9 @@ _LOGGER = logging.getLogger(__name__)
 VERSION = "18.3"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
-POSTGRES_CONNECTION_STRING = "postgresql://postgres:password@localhost:5433/postgres"
+POSTGRES_HOST_PORT = host_port("postgres")
+
+POSTGRES_CONNECTION_STRING = f"postgresql://postgres:password@localhost:{POSTGRES_HOST_PORT}/postgres"
 PostgresFetchMethod = Literal["connectorx", "python"]
 
 
@@ -537,7 +539,7 @@ class Postgres(Database):
             "docker run",
             f"--platform {self.container_platform}",
             f"--name {self.name}-benchmark",
-            "--rm -d -p 5433:5432",
+            f"--rm -d -p {POSTGRES_HOST_PORT}:5432",
             "--user 0:0",
             f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
             "-e PGDATA=/var/lib/postgresql/pgdata",

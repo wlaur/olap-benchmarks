@@ -11,7 +11,7 @@ import polars as pl
 from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name, host_port
 from ...suites import BenchmarkSuite
 from ...suites.time_series.config import TimeSeries
 from .. import Database, ParquetEpochColumns
@@ -45,11 +45,11 @@ class MonetDBRelease:
 
 MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
 MONETDB_APPLICATION = "olap-benchmarks"
-MONETDB_OBSERVER_URI = (
-    "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark?client_application=olap-benchmarks-observer"
-)
+MONETDB_CONTAINER_PORT = "50000"
+MONETDB_HOST_PORT = host_port("monetdb")
 
-MONETDB_CONNECTION_STRING = "monetdb+adbc://monetdb:monetdb@localhost:50000/benchmark"
+MONETDB_CONNECTION_STRING = f"monetdb+adbc://monetdb:monetdb@localhost:{MONETDB_HOST_PORT}/benchmark"
+MONETDB_OBSERVER_URI = f"{MONETDB_CONNECTION_STRING}?client_application=olap-benchmarks-observer"
 
 
 def _monetdb_connection_string() -> str:
@@ -114,7 +114,7 @@ class MonetDB(Database):
 
         return self.docker_run_command(
             image,
-            ports={"50000": "50000"},
+            ports={str(MONETDB_HOST_PORT): MONETDB_CONTAINER_PORT},
             mounts={self.database_directory.as_posix(): "/var/monetdb5/dbfarm"},
             env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},
         )

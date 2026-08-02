@@ -2,9 +2,9 @@
 # comparable to published TPC-DS results.
 #
 # Data is generated with tpcgen-cli from https://github.com/clflushopt/tpchgen-rs
-# (commit 09d609d13b7b45a2aa06d2b86e5a4bfa29aacb1a, not yet on crates.io/PyPI;
+# (commit e53dea45345d3c934c724147e393983a53a40986, not yet on crates.io/PyPI;
 # install with 'cargo install --git https://github.com/clflushopt/tpchgen-rs
-# --rev 09d609d13b7b45a2aa06d2b86e5a4bfa29aacb1a tpcgen-cli') using
+# --rev e53dea45345d3c934c724147e393983a53a40986 tpcgen-cli') using
 # '--compat c', which is conformance-tested against the reference dsdgen.
 # The prepare step normalizes the generated Parquet in place: money columns are
 # cast from DECIMAL(38,2) to the spec DECIMAL(7,2) (p_cost to DECIMAL(15,2)),
@@ -223,7 +223,7 @@ def _prepare_tpc_ds_data(scale_factor: int) -> None:
     if shutil.which("tpcgen-cli") is None:
         raise RuntimeError(
             "tpcgen-cli not found on PATH; install it with 'cargo install --git "
-            "https://github.com/clflushopt/tpchgen-rs --rev 09d609d13b7b45a2aa06d2b86e5a4bfa29aacb1a tpcgen-cli'"
+            "https://github.com/clflushopt/tpchgen-rs --rev e53dea45345d3c934c724147e393983a53a40986 tpcgen-cli'"
         )
 
     _require_free_disk_space(

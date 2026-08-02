@@ -12,7 +12,7 @@ from typing import Any, ClassVar, cast
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
@@ -35,8 +35,9 @@ VERSION = "4.0.9"
 DOCKER_IMAGE = f"starrocks/allin1-ubuntu:{VERSION}"
 
 STARROCKS_HOST = "localhost"
-STARROCKS_QUERY_PORT = 9030
-STARROCKS_HTTP_PORT = 8030
+STARROCKS_QUERY_PORT = host_port("starrocks_fe_mysql")
+STARROCKS_HTTP_PORT = host_port("starrocks_fe_http")
+STARROCKS_BE_HTTP_PORT = host_port("starrocks_be_http")
 STARROCKS_USER = "root"
 STARROCKS_PASSWORD = ""
 STARROCKS_DATABASE = "benchmark"
@@ -280,7 +281,11 @@ class StarRocks(Database):
 
         return self.docker_run_command(
             DOCKER_IMAGE,
-            ports={"9030": "9030", "8030": "8030", "8040": "8040"},
+            ports={
+                str(STARROCKS_QUERY_PORT): "9030",
+                str(STARROCKS_HTTP_PORT): "8030",
+                str(STARROCKS_BE_HTTP_PORT): "8040",
+            },
             mounts={
                 meta_dir.as_posix(): "/data/deploy/starrocks/fe/meta",
                 storage_dir.as_posix(): "/data/deploy/starrocks/be/storage",

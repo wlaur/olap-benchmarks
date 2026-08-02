@@ -9,7 +9,7 @@ from typing import Any, ClassVar, cast
 import polars as pl
 from sqlalchemy import Connection, Engine, create_engine, text
 
-from ...settings import REPO_ROOT, DatabaseName, SuiteName, TableName
+from ...settings import REPO_ROOT, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
@@ -25,7 +25,9 @@ _LOGGER = logging.getLogger(__name__)
 VERSION = "2.28.2"
 
 DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg18"
-TIMESCALEDB_CONNECTION_STRING = "postgresql://postgres:password@localhost:5432/postgres"
+TIMESCALEDB_HOST_PORT = host_port("timescaledb")
+
+TIMESCALEDB_CONNECTION_STRING = f"postgresql://postgres:password@localhost:{TIMESCALEDB_HOST_PORT}/postgres"
 
 
 class TimescaleRTABench(RTABench["TimescaleDB"]):
@@ -312,7 +314,8 @@ class TimescaleDB(Postgres):
             junk.unlink(missing_ok=True)
 
         parts = [
-            f"docker run --platform {self.container_platform} --name {self.name}-benchmark --rm -d -p 5432:5432",
+            f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
+            f"--rm -d -p {TIMESCALEDB_HOST_PORT}:5432",
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
