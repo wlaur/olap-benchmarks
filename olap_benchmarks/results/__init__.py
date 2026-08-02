@@ -336,12 +336,19 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
 
     merge_stats: MergeStats | None = None
 
-    if merge and output_db_path.is_file():
+    if merge:
+        # the published database is no longer committed, so a fresh clone has no local copy.
+        # Quietly copying instead of merging would drop every previously published run, and
+        # --upload would then overwrite the release asset with that truncated dataset.
+        if not output_db_path.is_file():
+            raise SystemExit(
+                f"--merge needs the currently published database at {output_db_path}, which is missing.\n"
+                "Fetch it first ('cd site && bun run fetch-data'), or rerun without --merge to "
+                "deliberately replace everything that is published."
+            )
+
         merge_stats = merge_results(source_db_path, output_db_path, head_revision=get_results_head_revision())
     else:
-        if merge:
-            _LOGGER.info(f"No published database at {output_db_path}, copying instead of merging")
-
         if output_db_path.is_file():
             output_db_path.unlink()
 

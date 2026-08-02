@@ -194,26 +194,29 @@ cython_debug/
 
 .python-version
 
-# benchmark inputs, db files and local result revisions
+# Benchmark working directories: suite input data, database files and scratch space. All are
+# regenerable with `olap prepare` / `olap benchmark` and far too large for git.
 **/temp
 **/data
+
+# Local result revisions. No results database is committed: revisions produced on another host
+# travel as assets on the `runs` release (`olap results upload` / `olap results fetch`), so only
+# the directory marker is kept.
 /results/*
-# results/shared holds portable revisions from other hosts; the databases move through the `runs`
-# release (olap results upload / fetch), so only the directory marker is committed
 !/results/shared/
 !/results/shared/.gitkeep
 /results/shared/*.db
 
 .claude
 
-# Frontend (site/) exceptions: **/data above would otherwise ignore these, but
-# site/src/lib and the small manifests under site/public/data must stay committed
+# Frontend (site/): `**/data` above would otherwise ignore the small manifests the web app reads
+# (manifest.json, queries.json, suites.json), and site/src/lib holds generated but committed code.
+# site/dist is build output and stays ignored by the `dist/` rule above.
 !site/src/lib/
 !site/public/data/
-!site/dist/
 
-# The published results database is distributed as the `data` release asset instead of being
-# committed: it is large, rewritten on every publish, and git keeps every version forever.
+# The published results database ships as the `data` release asset rather than being committed:
+# it is large, rewritten on every publish, and git would keep every version forever.
 # `olap publish --upload` replaces the asset; `bun run fetch-data` retrieves it for a build.
 site/public/data/results.db
 site/public/data/results.db.wal

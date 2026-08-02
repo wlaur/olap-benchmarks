@@ -1,7 +1,7 @@
 # Running benchmarks on AWS
 
 Runbook for benchmarking on ephemeral AWS VMs with per-second billing. The
-instance is created for a single campaign, pushes its results to git, and
+instance is created for a single campaign, uploads its results, and
 terminates itself — there is nothing to keep or pay for between runs. Container
 images automatically follow the Docker engine architecture; x86 and ARM runs
 must still use distinct system labels because their results are not directly
@@ -43,8 +43,8 @@ Results are labeled per machine via `OLAP_BENCHMARKS_SYSTEM` (e.g.
   ```
 
 - Create a fine-grained GitHub PAT scoped to this repository only (contents:
-  read/write, short expiry). The VM uses it to push results; revoke it after
-  the campaign.
+  read/write, short expiry). The VM uses it to clone and to upload the results
+  database as a release asset; revoke it after the campaign.
 
 ## Launch
 
@@ -87,6 +87,11 @@ echo '{"data-root": "/mnt/data/docker"}' | sudo tee /etc/docker/daemon.json
 sudo systemctl restart docker
 sudo usermod -aG docker ubuntu
 
+# gh, used to upload the results database as a release asset. It picks up
+# GITHUB_TOKEN from the environment, so no interactive login is needed.
+sudo apt-get update && sudo apt-get install -y gh
+gh auth status
+
 # uv (fetches Python automatically) and the TPC data generators
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -sSf https://sh.rustup.rs | sh -s -- -y
@@ -127,11 +132,12 @@ uv run olap prepare all
 uv run olap prepare tpc_h --scale-factor 50
 ```
 
-Then the campaign, with results pushed and the instance terminated at the end.
-The compact step rewrites the results database into a fresh file before it is
-committed — DuckDB files keep space freed by checkpoints and re-runs, so this
-typically shrinks them 2–3x and keeps `results/*.db` well under GitHub's
-100 MB file limit:
+Then the campaign, with results uploaded and the instance terminated at the end.
+Results databases are not committed: they travel as assets on the `runs` release
+(`olap results upload`), which is why the instance needs `gh`. The compact
+step rewrites the database into a fresh file first — DuckDB keeps space freed by
+checkpoints and re-runs, so this typically shrinks it 2–3x and makes the upload
+correspondingly faster:
 
 ```bash
 REV=$SYSTEM
@@ -139,29 +145,37 @@ uv run olap benchmark all all --revision "$REV" --cleanup
 uv run olap benchmark all tpc_h --scale-factor 50 --revision "$REV" --cleanup
 
 uv run olap results compact --revision "$REV"
-git checkout -b "results-$REV"
-git add "results/$REV.db"
-git commit -m "Results: $REV"
-git push origin "results-$REV"
+uv run olap results upload --revision "$REV"
 sudo shutdown -h now
 ```
 
+Use a revision name unique to the host and campaign: uploading the same name
+twice replaces the existing asset.
+
 Chain the commands with `&&` (or put them in a script) when leaving the run
 unattended overnight, so a finished run terminates itself instead of idling.
-If a benchmark step fails, the push and shutdown still matter — run them
+If a benchmark step fails, the upload and shutdown still matter — run them
 manually rather than leaving the instance up.
 
 ## Back on the laptop
 
 ```bash
-git fetch origin results-aws-i4i-2xlarge
-git checkout results-aws-i4i-2xlarge
+uv run olap results fetch --revision aws-i4i-2xlarge
+uv run olap results migrate --revision aws-i4i-2xlarge
 uv run olap results runs --revision aws-i4i-2xlarge
 ```
 
-Sanity-check the runs, merge the branch to main, then fold the results into
-the site data with `uv run olap publish --merge`. Verify in the AWS console
-that the instance is terminated, and revoke the PAT once the campaign is done.
+Sanity-check the runs, then fold them into the site data. `--merge` adds them to
+what is already published and needs the current published database locally, so
+fetch it first:
+
+```bash
+cd site && bun run fetch-data && cd ..
+uv run olap publish --revision aws-i4i-2xlarge --merge --upload
+```
+
+Verify in the AWS console that the instance is terminated, and revoke the PAT
+once the campaign is done.
 
 ## Cost expectations
 
@@ -169,4 +183,4 @@ Provisioning takes ~15 min (dominated by `cargo install`), a full-matrix
 campaign several hours per machine size. A three-size campaign at ~10 h each
 lands around $25 on-demand, plus a few dollars of EBS root and data transfer.
 The only recurring cost after termination is nothing — data on the local NVMe
-is destroyed with the instance, which is why results are pushed to git first.
+is destroyed with the instance, which is why the results are uploaded first.
