@@ -7,6 +7,7 @@ from setproctitle import setproctitle
 
 from .dbs import get_databases
 from .metrics.storage import start_writer_process
+from .operation_runner import run_operation
 from .results import (
     compact_results,
     delete_runs,
@@ -23,6 +24,10 @@ from .results import (
 )
 from .results import (
     publish as publish_results,
+)
+from .results.resource_usage import (
+    describe_run_resource_usage,
+    load_run_resource_usage,
 )
 from .results.validation import (
     AnswerHashValidationError,
@@ -41,6 +46,7 @@ from .settings import (
     SETTINGS,
     DatabaseArg,
     DatabaseName,
+    Operation,
     Revision,
     SuiteArg,
     SuiteName,
@@ -276,11 +282,20 @@ def benchmark(
             _start_db(db_instance)
 
             try:
-                if operation == "all":
-                    for suite_operation in db_instance.benchmarks[suite_name].supported_operations:
-                        db_instance.benchmark(suite_name, suite_operation, scale_factor=resolved_scale_factor)
-                else:
-                    db_instance.benchmark(suite_name, operation, scale_factor=resolved_scale_factor)
+                operations = (
+                    db_instance.benchmarks[suite_name].supported_operations if operation == "all" else (operation,)
+                )
+                # each operation runs in its own process so that its peak client RSS is its own,
+                # not inherited from a preceding operation (see operation_runner)
+                for suite_operation in operations:
+                    run_operation(
+                        db_instance,
+                        suite_name,
+                        suite_operation,
+                        resolved_scale_factor,
+                        writer.queue,
+                        writer.result_queue,
+                    )
             finally:
                 _stop_db(db_instance)
                 if cleanup:
@@ -431,6 +446,38 @@ def delete_cmd(
 def query(sql: str, revision: Revision = "default") -> None:
     """Run a SQL query against the results database."""
     query_results(sql, revision=revision)
+
+
+@results_app.command
+def resources(
+    revision: Revision = "default",
+    system: str | None = None,
+    db: DatabaseName | None = None,
+    suite: SuiteName | None = None,
+    operation: Operation | None = None,
+    status: Literal["running", "completed", "failed"] | None = None,
+) -> None:
+    """Report per-run peak resource usage with server and client memory kept apart.
+
+    `comparable_peak_memory_mb` is the figure to compare across engines: server memory
+    for containerised engines and client memory for in-process engines such as DuckDB
+    and Polars, whose `server_mem_mb` is always 0 because they have no server. Server
+    and client peaks are never summed; they occur at different times.
+    """
+    rows = load_run_resource_usage(
+        revision=revision,
+        system=system,
+        db=db,
+        suite=suite,
+        operation=operation,
+        status=status,
+    )
+
+    if not rows:
+        print("No runs found.")
+        return
+
+    print(json.dumps([describe_run_resource_usage(row) for row in rows], indent=2))
 
 
 @results_app.command(name="validate-row-counts")

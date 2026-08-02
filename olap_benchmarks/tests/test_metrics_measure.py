@@ -46,7 +46,7 @@ def docker_stats(cpu_delta: int, system_delta: int, online_cpus: int, mem_mb: in
     }
 
 
-def test_database_metrics_sum_client_containers_and_all_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_benchmark_metrics_sum_client_containers_and_all_storage(monkeypatch: pytest.MonkeyPatch) -> None:
     client = FakeDockerClient(
         {
             "doris-fe-benchmark": docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, mem_mb=256),
@@ -54,78 +54,78 @@ def test_database_metrics_sum_client_containers_and_all_storage(monkeypatch: pyt
         }
     )
 
-    def main_process_metrics(_process_id: int) -> measure.BenchmarkMetric:
+    def client_process_metrics(_process_id: int) -> measure.BenchmarkMetric:
         return measure.BenchmarkMetric(
             cpu_percent=25,
-            mem_mb=0,
+            server_mem_mb=0,
             client_mem_mb=128,
             client_uss_mb=96,
             disk_mb=0,
         )
 
     monkeypatch.setattr(measure, "get_docker_client", lambda: client)
-    monkeypatch.setattr(measure, "get_main_process_metrics", main_process_metrics)
+    monkeypatch.setattr(measure, "get_client_process_metrics", client_process_metrics)
     sizes = {Path("/database"): 123, Path("/temporary"): 45}
     monkeypatch.setattr(measure, "get_directory_size_mb", sizes.__getitem__)
 
-    metric = measure.get_database_metrics(
+    metric = measure.get_benchmark_metrics(
         42,
         ("doris-fe-benchmark", "doris-be-benchmark"),
         (Path("/database"), Path("/temporary")),
     )
 
     assert metric.cpu_percent == 145.0
-    assert metric.mem_mb == 768
+    assert metric.server_mem_mb == 768
     assert metric.client_mem_mb == 128
     assert metric.client_uss_mb == 96
     assert metric.disk_mb == 168
 
 
-def test_database_metrics_include_client_without_containers(monkeypatch: pytest.MonkeyPatch) -> None:
-    def main_process_metrics(_process_id: int) -> measure.BenchmarkMetric:
+def test_benchmark_metrics_include_client_without_containers(monkeypatch: pytest.MonkeyPatch) -> None:
+    def client_process_metrics(_process_id: int) -> measure.BenchmarkMetric:
         return measure.BenchmarkMetric(
             cpu_percent=25,
-            mem_mb=0,
+            server_mem_mb=0,
             client_mem_mb=128,
             client_uss_mb=96,
             disk_mb=0,
         )
 
-    monkeypatch.setattr(measure, "get_main_process_metrics", main_process_metrics)
+    monkeypatch.setattr(measure, "get_client_process_metrics", client_process_metrics)
 
     def directory_size(_path: Path) -> int:
         return 10
 
     monkeypatch.setattr(measure, "get_directory_size_mb", directory_size)
 
-    metric = measure.get_database_metrics(42, (), (Path("/database"), Path("/database")))
+    metric = measure.get_benchmark_metrics(42, (), (Path("/database"), Path("/database")))
 
     assert metric == measure.BenchmarkMetric(
         cpu_percent=25,
-        mem_mb=0,
+        server_mem_mb=0,
         client_mem_mb=128,
         client_uss_mb=96,
         disk_mb=10,
     )
 
 
-def test_database_metrics_use_high_frequency_client_memory_peaks(monkeypatch: pytest.MonkeyPatch) -> None:
-    def main_process_metrics(
+def test_benchmark_metrics_use_high_frequency_client_memory_peaks(monkeypatch: pytest.MonkeyPatch) -> None:
+    def client_process_metrics(
         _process_id: int,
         client_mem_mb: int,
         client_uss_mb: int,
     ) -> measure.BenchmarkMetric:
         return measure.BenchmarkMetric(
             cpu_percent=25,
-            mem_mb=0,
+            server_mem_mb=0,
             client_mem_mb=client_mem_mb,
             client_uss_mb=client_uss_mb,
             disk_mb=0,
         )
 
-    monkeypatch.setattr(measure, "get_main_process_metrics", main_process_metrics)
+    monkeypatch.setattr(measure, "get_client_process_metrics", client_process_metrics)
 
-    metric = measure.get_database_metrics(42, (), (), 512, 384)
+    metric = measure.get_benchmark_metrics(42, (), (), 512, 384)
 
     assert metric.client_mem_mb == 512
     assert metric.client_uss_mb == 384

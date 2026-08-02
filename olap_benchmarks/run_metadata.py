@@ -228,12 +228,25 @@ def build_run_metadata(
             "start_command": start_command,
         },
         "metrics": {
-            "version": 4,
-            "cpu_percent": "benchmark client plus all database containers",
-            "mem_mb": "all database containers; excludes the benchmark client",
-            "client_mem_mb": "benchmark client process peak RSS sampled every 10 ms",
-            "client_uss_mb": "benchmark client process peak USS sampled every 100 ms",
-            "disk_mb": "database storage plus configured temporary and staging directories",
+            "version": 5,
+            "cpu_percent": (
+                "combined: benchmark client process plus all database containers; not decomposable into "
+                "a server and a client share"
+            ),
+            "server_mem_mb": (
+                "server side: all database containers, excluding the benchmark client. Always 0 when "
+                "execution.mode is in_process, because there is no server process"
+            ),
+            "client_mem_mb": "client side: benchmark client process peak RSS sampled every 10 ms",
+            "client_uss_mb": "client side: benchmark client process peak USS sampled every 100 ms",
+            "disk_mb": (
+                "server side: the database's own storage directories (Database.metric_directories). "
+                "Client staging files and the benchmark client's own disk use are not measured"
+            ),
+            "comparable_memory": (
+                "server_mem_mb for container engines and client_mem_mb for in_process engines; "
+                "server and client peaks are never summed because they do not coincide in time"
+            ),
         },
         "packages": build_package_provenance(package_names),
         "input": fingerprint_input_directory(input_directory) if input_directory is not None else None,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from typing import Protocol
 
 import pytest
 from cyclopts.exceptions import CoercionError
@@ -11,6 +12,25 @@ from .. import __main__
 from ..__main__ import app
 from ..settings import DatabaseArg, DatabaseName, SuiteArg, SuiteName
 from ..suites import ManualPreparationRequired
+
+
+class _BenchmarkDouble(Protocol):
+    def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None: ...
+
+
+def _fake_run_operation(
+    db_instance: _BenchmarkDouble,
+    suite: str,
+    operation: str,
+    scale_factor: int,
+    _queue: object,
+    _result_queue: object,
+) -> None:
+    """Stand in for the real runner, which spawns a benchmark process per operation.
+
+    These tests assert on the database double, so the operation is dispatched in-process here.
+    """
+    db_instance.benchmark(suite, operation, scale_factor=scale_factor)
 
 
 def test_cli_registers_install_completion_command() -> None:
@@ -227,6 +247,7 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "run_operation", _fake_run_operation)
     monkeypatch.setattr(__main__, "mark_running_runs_failed", fake_mark_running_runs_failed)
 
     with pytest.raises(KeyboardInterrupt):
@@ -321,6 +342,7 @@ def test_benchmark_all_uses_suite_supported_operations(
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "run_operation", _fake_run_operation)
     monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
     monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
 
@@ -416,6 +438,7 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "run_operation", _fake_run_operation)
     monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
     monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
 
@@ -512,6 +535,7 @@ def test_benchmark_filters_unsupported_suites_before_input_checks_and_validation
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
     monkeypatch.setattr(__main__, "_stop_db", fake_stop_db)
+    monkeypatch.setattr(__main__, "run_operation", _fake_run_operation)
     monkeypatch.setattr(__main__, "assert_latest_query_row_counts", fake_assert_latest_query_row_counts)
     monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", fake_assert_latest_query_answer_hashes)
 

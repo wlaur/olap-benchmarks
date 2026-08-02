@@ -69,7 +69,7 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
                     run_id=run.id,
                     time=datetime.now(),
                     cpu_percent=0.0,
-                    mem_mb=0,
+                    server_mem_mb=0,
                     disk_mb=0,
                 )
             )
@@ -439,9 +439,9 @@ def test_client_memory_migration_preserves_historical_memory_semantics(tmp_path:
 
     con = cast(Any, duckdb).connect(str(db_path), read_only=True)
     try:
-        assert con.execute("select mem_mb, client_mem_mb, client_uss_mb, disk_mb from run_metric").fetchall() == [
-            (123, None, None, 456)
-        ]
+        assert con.execute(
+            "select server_mem_mb, client_mem_mb, client_uss_mb, disk_mb from run_metric"
+        ).fetchall() == [(123, None, None, 456)]
     finally:
         con.close()
 
@@ -658,9 +658,11 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
                         finished_at=datetime.now(),
                         status="completed",
                     ),
-                    RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
-                    RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
-                    RunMetric(run_id=completed_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
+                    RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
+                    RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
+                    RunMetric(
+                        run_id=completed_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0
+                    ),
                     QueryExecution(
                         run_id=failed_run_id,
                         run_step_id=None,
@@ -742,8 +744,8 @@ def test_delete_runs_by_status_orphaned_deletes_running_runs_only(tmp_path: Path
                         finished_at=datetime.now(),
                         status="failed",
                     ),
-                    RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
-                    RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, mem_mb=0, disk_mb=0),
+                    RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
+                    RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
                     QueryExecution(
                         run_id=running_run_id,
                         run_step_id=None,

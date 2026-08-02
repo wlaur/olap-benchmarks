@@ -61,10 +61,15 @@ def get_docker_client() -> docker.DockerClient:
 
 
 class BenchmarkMetric(BaseModel):
+    # one source's share in the per-source samplers, the client-plus-containers
+    # total in the aggregate returned by get_benchmark_metrics
     cpu_percent: float
-    mem_mb: int
+    # database-container memory only; always 0 for in-process engines, which have no server
+    server_mem_mb: int
+    # benchmark client process memory; the real footprint of an in-process engine
     client_mem_mb: int
     client_uss_mb: int
+    # the database's own storage directories; never the benchmark client's disk use
     disk_mb: int
 
 
@@ -118,7 +123,7 @@ def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) 
     )
 
 
-def get_main_process_metrics(
+def get_client_process_metrics(
     process_id: int,
     client_mem_mb: int | None = None,
     client_uss_mb: int | None = None,
@@ -138,7 +143,7 @@ def get_main_process_metrics(
 
     return BenchmarkMetric(
         cpu_percent=cpu_percent,
-        mem_mb=0,
+        server_mem_mb=0,
         client_mem_mb=client_mem_mb,
         client_uss_mb=client_uss_mb,
         disk_mb=0,
@@ -153,12 +158,18 @@ def get_container_metrics(container_name: str) -> BenchmarkMetric:
     cpu_percent = calculate_container_cpu_percent(container_name, stats)
 
     mem_usage = stats["memory_stats"]["usage"]
-    mem_mb = int(mem_usage / (1_024 * 1_024))
+    server_mem_mb = int(mem_usage / (1_024 * 1_024))
 
-    return BenchmarkMetric(cpu_percent=cpu_percent, mem_mb=mem_mb, client_mem_mb=0, client_uss_mb=0, disk_mb=0)
+    return BenchmarkMetric(
+        cpu_percent=cpu_percent,
+        server_mem_mb=server_mem_mb,
+        client_mem_mb=0,
+        client_uss_mb=0,
+        disk_mb=0,
+    )
 
 
-def get_database_metrics(
+def get_benchmark_metrics(
     client_process_id: int,
     container_names: Sequence[str],
     metric_directories: Sequence[Path],
@@ -166,26 +177,26 @@ def get_database_metrics(
     client_uss_mb: int | None = None,
 ) -> BenchmarkMetric:
     # The Python client can dominate ingestion memory even when the database
-    # runs in a container.
+    # runs in a container, so server and client memory stay separate series.
     with ThreadPoolExecutor(max_workers=len(container_names) + 1) as executor:
-        main_future = (
-            executor.submit(get_main_process_metrics, client_process_id)
+        client_future = (
+            executor.submit(get_client_process_metrics, client_process_id)
             if client_mem_mb is None and client_uss_mb is None
             else executor.submit(
-                get_main_process_metrics,
+                get_client_process_metrics,
                 client_process_id,
                 client_mem_mb,
                 client_uss_mb,
             )
         )
         container_metrics = list(executor.map(get_container_metrics, container_names))
-        process_metrics = [main_future.result(), *container_metrics]
+        client_metrics = client_future.result()
 
     return BenchmarkMetric(
-        cpu_percent=sum(metric.cpu_percent for metric in process_metrics),
-        mem_mb=sum(metric.mem_mb for metric in container_metrics),
-        client_mem_mb=main_future.result().client_mem_mb,
-        client_uss_mb=main_future.result().client_uss_mb,
+        cpu_percent=client_metrics.cpu_percent + sum(metric.cpu_percent for metric in container_metrics),
+        server_mem_mb=sum(metric.server_mem_mb for metric in container_metrics),
+        client_mem_mb=client_metrics.client_mem_mb,
+        client_uss_mb=client_metrics.client_uss_mb,
         disk_mb=sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories)),
     )
 

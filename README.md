@@ -158,16 +158,38 @@ In particular, StarRocks time-series populate results from before the direct `IN
 path are not comparable with current results. ClickBench populate comparisons likewise compare
 database loading paths, not identical client preprocessing.
 
-Benchmark memory is reported as two independent peak series: `mem_mb` is the
-sum of database-container memory and `client_mem_mb` is the benchmark Python
-process RSS. `client_uss_mb` records its unique set size so shared and
-reclaimable file-backed pages can be separated from private memory. Client RSS
-is sampled every 10 ms; the more expensive USS scan runs every 100 ms to avoid
-materially perturbing client CPU on Linux. These are metric schema v4 semantics
-and must not be compared as identical measurements with v2/v3 client-memory data.
-`disk_mb` includes database storage plus configured temporary and
-staging directories. These definitions and a metric-schema version are stored
-with each run so results remain interpretable after methodology changes.
+#### Resource metrics: server side vs client side
+
+Each `run_metric` row separates the database server from the benchmark client:
+
+| Column | Side | Meaning |
+| --- | --- | --- |
+| `server_mem_mb` | server | Sum of database-container memory. **Always 0 for in-process engines** (`duckdb`, `polars`), which have no server. |
+| `client_mem_mb` | client | Peak RSS of the benchmark Python process, sampled every 10 ms. |
+| `client_uss_mb` | client | Peak unique set size of the same process, sampled every 100 ms, so shared and reclaimable file-backed pages can be separated from private memory. The USS scan is the expensive one, hence the lower rate; it would otherwise materially perturb client CPU on Linux. |
+| `cpu_percent` | combined | Benchmark client process **plus** every database container, summed. It cannot be decomposed into a server and a client share. |
+| `disk_mb` | server | The database's own storage directories (`Database.metric_directories`, today just its data directory). Client staging files under the shared temporary directory and the benchmark client's own disk use are not measured. |
+
+Server and client memory are two independent peak series and are never summed.
+They fund different budgets (the client normally runs on a different host), and
+adding two separately computed maxima overstates the true combined peak because
+the peaks do not coincide in time — on one recorded run `max(server) + max(client)`
+exceeded `max(server + client)` by 31 GB.
+
+For cross-engine comparison use the *comparable* peak memory: `server_mem_mb` for
+containerised engines and `client_mem_mb` for in-process engines. Reading
+`server_mem_mb` alone would rank DuckDB and Polars as using no memory at all.
+`olap results resources` resolves this per run and refuses to report a number it
+cannot interpret:
+
+```bash
+uv run olap results resources --revision default --suite clickbench
+```
+
+These are metric schema v5 semantics (v4 renamed to `server_mem_mb`) and must not
+be compared as identical measurements with v2/v3 client-memory data. The
+definitions and the metric-schema version are stored with each run so results
+remain interpretable after methodology changes.
 
 To start a database manually (e.g. to poke at loaded data):
 
@@ -182,6 +204,7 @@ uv run olap docker clickhouse tpc_h stop --scale-factor 10
 uv run olap results revisions                        # list results/*.db
 uv run olap results runs --status failed             # filters: --status/--suite/--db/--db-driver
 uv run olap results query "<sql>"                    # read-only SQL against a revision
+uv run olap results resources --db duckdb            # peak server/client memory, disk and CPU per run
 uv run olap results delete --status failed           # delete failed + orphaned runs
 uv run olap results delete --run-id 12 --run-id 13   # delete specific runs
 uv run olap results rename-db old_name new_name      # rename a db in stored runs

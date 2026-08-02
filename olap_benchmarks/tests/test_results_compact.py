@@ -39,7 +39,7 @@ def _insert_run_tree(session: Session, db: str, started_at: datetime) -> int:
     session.add(step)
     session.commit()
 
-    session.add(RunMetric(run_id=run.id, time=started_at, cpu_percent=1.0, mem_mb=10, disk_mb=100))
+    session.add(RunMetric(run_id=run.id, time=started_at, cpu_percent=1.0, server_mem_mb=10, disk_mb=100))
     session.add(
         QueryExecution(
             run_id=run.id,

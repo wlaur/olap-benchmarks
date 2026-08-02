@@ -92,6 +92,12 @@ SUITE_PUBLIC_ROLES["kaggle_airbnb"] = "smoke"
 ROW_STORE_DATABASES: frozenset[DatabaseName] = frozenset({"postgres", "timescaledb"})
 ROW_STORE_OPTIONAL_SUITE_NAMES: frozenset[SuiteName] = frozenset({"tpc_h", "tpc_ds"})
 
+# These engines have no server: they execute inside the benchmark client process, so their whole
+# footprint is recorded as client memory and `run_metric.server_mem_mb` is always 0 for them.
+# Kept in sync with `Database.execution_mode` by
+# test_results_resource_usage.test_in_process_databases_match_database_execution_mode.
+IN_PROCESS_DATABASES: frozenset[DatabaseName] = frozenset({"duckdb", "polars"})
+
 assert set(DEFAULT_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
 assert set(ALL_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
 assert set(SUITE_DISPLAY_ORDER) == set(SUITE_NAMES)
@@ -102,6 +108,7 @@ assert set(SUITE_QUERY_NAME_PARSERS) == set(SUITE_NAMES)
 assert set(SUITE_PUBLIC_ROLES) == set(SUITE_NAMES)
 assert ROW_STORE_DATABASES.issubset(set(get_args(DatabaseName)))
 assert ROW_STORE_OPTIONAL_SUITE_NAMES.issubset(set(SUITE_NAMES))
+assert IN_PROCESS_DATABASES.issubset(set(get_args(DatabaseName)))
 
 
 def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None) -> int:

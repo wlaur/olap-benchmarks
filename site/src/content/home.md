@@ -23,7 +23,7 @@ Coverage is based on completed published runs. QuestDB currently appears only fo
 
 - **Populate** — time to create tables and load data
 - **Query latency** — wall-clock time per query, warm median when repeated iterations exist; one-iteration queries fall back to their single recorded run
-- **Resources** — CPU, memory, and disk usage sampled throughout each phase
+- **Resources** — CPU, memory, and disk usage sampled throughout each phase. Memory is recorded as two separate series: server memory (the sum of the database containers) and client memory (the benchmark process that issues the work). They are never added together, because the client usually runs on a different host and the two peaks do not happen at the same moment. Engines that run in process — DuckDB and Polars — have no server, so their entire footprint appears as client memory and their server memory is 0. CPU is a combined client-plus-containers figure, and disk covers database storage only.
 
 ### Tuning policy
 

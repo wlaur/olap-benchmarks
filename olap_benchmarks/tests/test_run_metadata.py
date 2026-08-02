@@ -19,14 +19,24 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
         start_command="docker run database",
     )
 
-    assert metadata["metrics"] == {
-        "version": 4,
-        "cpu_percent": "benchmark client plus all database containers",
-        "mem_mb": "all database containers; excludes the benchmark client",
-        "client_mem_mb": "benchmark client process peak RSS sampled every 10 ms",
-        "client_uss_mb": "benchmark client process peak USS sampled every 100 ms",
-        "disk_mb": "database storage plus configured temporary and staging directories",
+    metrics = cast(dict[str, object], metadata["metrics"])
+
+    assert metrics["version"] == 5
+    assert set(metrics) == {
+        "version",
+        "cpu_percent",
+        "server_mem_mb",
+        "client_mem_mb",
+        "client_uss_mb",
+        "disk_mb",
+        "comparable_memory",
     }
+    assert "mem_mb" not in metrics
+    assert cast(str, metrics["server_mem_mb"]).startswith("server side:")
+    assert cast(str, metrics["client_mem_mb"]).startswith("client side:")
+    assert cast(str, metrics["client_uss_mb"]).startswith("client side:")
+    assert cast(str, metrics["disk_mb"]).startswith("server side:")
+    assert cast(str, metrics["cpu_percent"]).startswith("combined:")
 
 
 def test_input_fingerprint_is_complete_and_changes_with_content(tmp_path: Path) -> None:

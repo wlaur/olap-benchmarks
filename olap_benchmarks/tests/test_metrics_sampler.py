@@ -35,12 +35,12 @@ class FakeStorage:
         run_id: int,
         time: datetime,
         cpu_percent: float,
-        mem_mb: int,
+        server_mem_mb: int,
         client_mem_mb: int,
         client_uss_mb: int,
         disk_mb: int,
     ) -> None:
-        self.inserted.append((run_id, time, cpu_percent, mem_mb, client_mem_mb, client_uss_mb, disk_mb))
+        self.inserted.append((run_id, time, cpu_percent, server_mem_mb, client_mem_mb, client_uss_mb, disk_mb))
 
 
 class FakeFinalSampleTimeQueue:
@@ -104,7 +104,7 @@ def test_sampling_loop_retries_after_transient_measurement_failure(
             raise TimeoutError("Docker API stalled")
         return BenchmarkMetric(
             cpu_percent=10,
-            mem_mb=20,
+            server_mem_mb=20,
             client_mem_mb=5,
             client_uss_mb=4,
             disk_mb=30,
@@ -112,7 +112,7 @@ def test_sampling_loop_retries_after_transient_measurement_failure(
 
     monkeypatch.setattr(sampler, "setup_stdout_logging", lambda: None)
     monkeypatch.setattr(sampler, "Storage", FakeStorage)
-    monkeypatch.setattr(sampler, "get_database_metrics", get_metrics)
+    monkeypatch.setattr(sampler, "get_benchmark_metrics", get_metrics)
 
     sampler.sampling_loop(
         client_process_id=42,

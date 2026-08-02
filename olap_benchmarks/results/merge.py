@@ -260,9 +260,9 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
 
     con.execute(
         f"""
-        insert into run_metric (id, run_id, time, cpu_percent, mem_mb, client_mem_mb, client_uss_mb, disk_mb)
+        insert into run_metric (id, run_id, time, cpu_percent, server_mem_mb, client_mem_mb, client_uss_mb, disk_mb)
         select {metric_offset} + row_number() over (order by s.id),
-               rm.new_id, s.time, s.cpu_percent, s.mem_mb, s.client_mem_mb, s.client_uss_mb, s.disk_mb
+               rm.new_id, s.time, s.cpu_percent, s.server_mem_mb, s.client_mem_mb, s.client_uss_mb, s.disk_mb
         from src.run_metric s join run_map rm on s.run_id = rm.src_id
         """
     )

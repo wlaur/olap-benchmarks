@@ -134,8 +134,11 @@ class RunMetric(Base):
     )
     run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # cpu_percent is the benchmark client process plus every database container combined.
+    # server_mem_mb is database-container memory only and is 0 for in-process engines
+    # (see settings.IN_PROCESS_DATABASES); their footprint is client_mem_mb instead.
     cpu_percent: Mapped[float] = mapped_column(Float, nullable=False)
-    mem_mb: Mapped[int] = mapped_column(Integer, nullable=False)
+    server_mem_mb: Mapped[int] = mapped_column(Integer, nullable=False)
     client_mem_mb: Mapped[int | None] = mapped_column(Integer)
     client_uss_mb: Mapped[int | None] = mapped_column(Integer)
     disk_mb: Mapped[int] = mapped_column(Integer, nullable=False)

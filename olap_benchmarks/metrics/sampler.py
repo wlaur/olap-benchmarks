@@ -18,7 +18,7 @@ from typing import Protocol, cast
 import psutil
 
 from ..settings import setup_stdout_logging
-from .measure import get_database_metrics
+from .measure import get_benchmark_metrics
 from .storage import Storage, WriterMessage
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,13 +93,13 @@ def sampling_loop(
     def sample_once(sample_time: datetime | None = None) -> None:
         now = sample_time or datetime.now(UTC).replace(tzinfo=None)
         if client_rss_peak is None or client_uss_peak is None:
-            metric = get_database_metrics(client_process_id, container_names, metric_directories)
+            metric = get_benchmark_metrics(client_process_id, container_names, metric_directories)
         else:
             client_mem_mb, client_uss_mb = consume_client_memory_peak(
                 client_rss_peak,
                 client_uss_peak,
             )
-            metric = get_database_metrics(
+            metric = get_benchmark_metrics(
                 client_process_id,
                 container_names,
                 metric_directories,
@@ -111,7 +111,7 @@ def sampling_loop(
             run_id=run_id,
             time=now,
             cpu_percent=metric.cpu_percent,
-            mem_mb=metric.mem_mb,
+            server_mem_mb=metric.server_mem_mb,
             client_mem_mb=metric.client_mem_mb,
             client_uss_mb=metric.client_uss_mb,
             disk_mb=metric.disk_mb,
