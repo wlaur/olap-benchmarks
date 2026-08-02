@@ -1,8 +1,13 @@
-with exploded_parts as (
-    select json.filter(json.filter(m.content, '$.parts'), g.value) as part
-    from chat_message m
+-- parts are materialised once per row, then exploded by index; attachments live both
+-- directly on a part and nested inside tool_result content, so both are unioned
+with docs as (
+    select json.filter(content, '$.parts') as parts from chat_message
+),
+exploded_parts as (
+    select json.filter(d.parts, g.value) as part
+    from docs d
     cross join (select value from generate_series(0, 8)) g
-    where g.value < json.length(json.filter(m.content, '$.parts'))
+    where g.value < json.length(d.parts)
 ),
 sources as (
     select

@@ -13,7 +13,7 @@ CREATE TABLE chat_thread
         archived Bool) CODEC(ZSTD(1))
 )
 ENGINE = ReplacingMergeTree(updated_at)
-ORDER BY (user_id, thread_id)
+ORDER BY (user_id, thread_id);
 
 CREATE TABLE chat_message
 (
@@ -33,4 +33,4 @@ CREATE TABLE chat_message
         usage.cache_read_tokens UInt32) CODEC(ZSTD(1))
 )
 ENGINE = MergeTree
-ORDER BY (user_id, thread_id, seq)
+ORDER BY (user_id, thread_id, seq);

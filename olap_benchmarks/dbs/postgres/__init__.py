@@ -13,6 +13,7 @@ from sqlalchemy.engine import make_url
 from ...run_metadata import StepResultStatus
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
 from ...suites.rtabench.config import RTABench
@@ -792,4 +793,5 @@ class Postgres(Database):
             "clickbench": PostgresClickbench,
             "jsonbench": PostgresJSONBench,
             "time_series": PostgresTimeSeries,
+            "chat_threads": ChatThreads,
         }

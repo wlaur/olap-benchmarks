@@ -7,7 +7,8 @@ CREATE TABLE chat_thread (
     updated_at    timestamp NOT NULL,
     title         text      NOT NULL,
     message_count integer   NOT NULL,
-    settings      jsonb     NOT NULL
+    settings      jsonb     NOT NULL,
+    PRIMARY KEY (thread_id)
 );
 
 CREATE TABLE chat_message (
@@ -21,4 +22,5 @@ CREATE TABLE chat_message (
 );
 
 CREATE INDEX idx_chat_message_user_thread ON chat_message (user_id, thread_id, seq);
+CREATE INDEX idx_chat_message_created ON chat_message (created_at);
 CREATE INDEX idx_chat_thread_user ON chat_thread (user_id, updated_at DESC);

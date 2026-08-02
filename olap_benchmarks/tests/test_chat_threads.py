@@ -24,7 +24,7 @@ from ..suites.chat_threads.generator import (
 
 # every engine that registers the suite needs a full set of query overrides, because none of
 # them share DuckDB's json function names
-OVERRIDE_DATABASES = ("clickhouse", "monetdb")
+OVERRIDE_DATABASES = ("clickhouse", "monetdb", "postgres", "timescaledb")
 
 SAMPLE_THREAD_INDEXES = range(400, 900)
 
@@ -101,6 +101,17 @@ def test_schema_exists_for_every_registered_database() -> None:
     schemas = REPO_ROOT / "olap_benchmarks/suites/chat_threads/schemas"
     for database in (*OVERRIDE_DATABASES, "duckdb"):
         assert (schemas / f"{database}.sql").is_file(), f"missing schema for {database}"
+
+
+def test_postgres_family_casts_aggregate_sums() -> None:
+    # postgres sum(bigint) returns numeric, which the answer-hash canonicaliser routes down
+    # the decimal branch instead of the integer branch, so identical values hash differently
+    for database in ("postgres", "timescaledb"):
+        for query_name in ("13_token_usage_by_model", "14_top_users_by_tokens", "20_branch_points"):
+            sql = (CHAT_THREADS_QUERIES_DIRECTORY / database / f"{query_name}.sql").read_text()
+            for line in sql.splitlines():
+                if "sum(" in line and " as " in line and not line.strip().startswith("--"):
+                    assert "::bigint as" in line, f"{database}/{query_name}: uncast sum: {line.strip()}"
 
 
 def test_mutate_step_names_are_unique() -> None:
