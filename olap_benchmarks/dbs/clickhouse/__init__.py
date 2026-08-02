@@ -17,6 +17,7 @@ from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.rtabench.config import RTABench
@@ -660,6 +661,7 @@ class Clickhouse(Database):
             "rtabench": ClickHouseRTABench,
             "clickbench": ClickhouseClickbench,
             "jsonbench": ClickhouseJSONBench,
+            "chat_threads": ChatThreads,
             "time_series": ClickhouseTimeseries,
             "tpc_ds": ClickhouseTpcDs,
         }

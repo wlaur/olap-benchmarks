@@ -239,6 +239,10 @@ def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None
             from .jsonbench.config import prepare_data as prepare_scaled_data
 
             return lambda: prepare_scaled_data(scale_factor)
+        case "chat_threads":
+            from .chat_threads.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
         case "time_series":
             from .time_series.config import prepare_data as prepare_scaled_data
 

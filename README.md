@@ -79,6 +79,7 @@ cd site && bun install && bun run dev
 | Suite                  | Data source                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `time_series`          | Generated locally                                                                        |
+| `chat_threads`         | Generated locally; AI chat history as rich JSON, SF1/SF10                                |
 | `rtabench`             | Downloaded automatically from rtadatasets.timescale.com                                  |
 | `tpc_h`                | Generated locally with `tpchgen-cli`; use `--scale-factor` for SF10/SF50/etc.         |
 | `tpc_ds`               | Generated locally with `tpcgen-cli`; use `--scale-factor` (decimals cast to spec precision and four columns renamed to spec names after generation) |
@@ -89,12 +90,12 @@ cd site && bun install && bun run dev
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N]`
 
 - `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, or `all`
-- `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
-- `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series`.
+- `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
+- `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series` and `chat_threads`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
 - `--omit`: skip databases when using `db=all`, e.g. `--omit questdb --omit starrocks`
-- `--scale-factor`: suite scale factor (`>= 1`). Time-series supports SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`.
+- `--scale-factor`: suite scale factor (`>= 1`). Time-series and chat-threads support SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`.
 
 The container is started and stopped automatically. Populate is skipped when
 existing tables already match the expected row counts, so `olap benchmark <db>
@@ -345,6 +346,7 @@ uv run pytest
 - **ClickBench** suite is based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse
 - **JSONBench** suite is based on [JSONBench](https://github.com/ClickHouse/JSONBench) by ClickHouse
 - **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale
+- **Chat Threads** suite (`chat_threads`) is original to this repository. Message documents follow the Anthropic Messages / MCP content-block shape, and visualization parts embed [Vega-Lite](https://vega.github.io/vega-lite/) specs. Data is generated locally, so results are not comparable to any published benchmark
 - **Kaggle Airbnb** suite is based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy
 - **TPC-H** suite (`tpc_h`) is derived from the [TPC-H benchmark](https://www.tpc.org/tpch/); results are not comparable to published TPC-H results. Data is generated with [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) (requires `cargo install tpchgen-cli`). Base queries come from the [DuckDB tpch extension](https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries), with per-database adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-h) and [StarRocks](https://docs.starrocks.io/docs/benchmarking/TPC-H_Benchmarking/)
 - **TPC-DS** suite (`tpc_ds`) is derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/); results are not comparable to published TPC-DS results. Data is generated with the `tpcgen-cli` from [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) at commit `09d609d1` (`--compat c`, conformance-tested against the reference dsdgen). Queries come from the [DuckDB tpcds extension](https://github.com/duckdb/duckdb/tree/main/extension/tpcds), with schema adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-ds) and [StarRocks](https://docs.starrocks.io/docs/3.4/benchmarking/TPC_DS_Benchmark/)

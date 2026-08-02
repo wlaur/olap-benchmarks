@@ -233,7 +233,9 @@ def test_database_benchmarks_resolves_all_suites() -> None:
 
     benchmarks = db.benchmarks
 
-    assert set(benchmarks) == set(get_args(SuiteName)) - {"jsonbench"}
+    # jsonbench and chat_threads are registered per database rather than in the base registry,
+    # because each engine needs its own json ingest path and query dialect
+    assert set(benchmarks) == set(get_args(SuiteName)) - {"jsonbench", "chat_threads"}
     assert benchmarks["time_series"].db is db
     assert benchmarks["time_series"].scale_factor == 1
     assert benchmarks["tpc_h"].scale_factor == 10
@@ -252,6 +254,19 @@ def test_jsonbench_registered_for_initial_engines() -> None:
 
         assert "jsonbench" in benchmarks
         assert benchmarks["jsonbench"].scale_factor == 10
+
+
+def test_chat_threads_registered_for_json_capable_engines() -> None:
+    from ..dbs.clickhouse import Clickhouse
+    from ..dbs.duckdb import DuckDB
+    from ..dbs.monetdb import MonetDB
+
+    for db in (Clickhouse(), DuckDB(), MonetDB()):
+        benchmarks = db.benchmarks
+
+        assert "chat_threads" in benchmarks
+        assert benchmarks["chat_threads"].scale_factor == 1
+        assert benchmarks["chat_threads"].supported_operations == ("populate", "select", "mutate", "concurrent")
 
 
 def test_time_series_scale_factor_10_matches_reference_size() -> None:

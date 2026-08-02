@@ -13,6 +13,7 @@ from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name, host_port
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.time_series.config import TimeSeries
 from .. import Database, ParquetEpochColumns
 from ..utils import tracked_commit
@@ -310,4 +311,5 @@ class MonetDB(Database):
         return {
             **super().suite_registry(),
             "time_series": MonetDBTimeSeries,
+            "chat_threads": ChatThreads,
         }

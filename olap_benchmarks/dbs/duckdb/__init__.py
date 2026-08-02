@@ -14,6 +14,7 @@ from sqlalchemy import Connection, create_engine
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from .. import Database
 from ..utils import normalize_columns, require_columns, tracked_commit
@@ -247,4 +248,5 @@ class DuckDB(Database):
         return {
             **super().suite_registry(),
             "jsonbench": DuckDBJSONBench,
+            "chat_threads": ChatThreads,
         }
