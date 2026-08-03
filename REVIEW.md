@@ -87,6 +87,67 @@ GitHub Pages database is an older, different artifact and does not contain Quest
       Include ingest throughput, compression/storage, recent-window queries, and concurrent read/write behavior; do not
       add a query-only comparison.
 
+## 5. Fix how memory is reported
+
+Measured 2026-08-02/03 while comparing MonetDB ADBC driver versions. Every item below was
+observed, not inferred, and each one has already produced a wrong conclusion at least once.
+
+- [ ] **Stop reporting cgroup charge as server memory.**
+      `metrics/measure.py` sets `server_mem_mb` from `memory_stats.usage`, the container's total
+      cgroup charge. That includes file-backed page cache, so it rises when the kernel caches the
+      data the engine just wrote and falls when the kernel reclaims it, neither of which is an
+      engine memory change. It is also higher than the figure `docker stats` prints, because the
+      CLI subtracts `inactive_file` first and the raw API field does not. Record the engine
+      process RSS separately, keep the cgroup charge under its own name, and never present the
+      cgroup number alone as "server memory".
+
+- [ ] **Record the cgroup anon/file split.**
+      Read `memory.stat` from the container and store `anon` and `file` as distinct fields. Without
+      them there is no way to tell an allocation regression from page cache, which is exactly the
+      ambiguity that made a measured 4x rise in MonetDB read-path server memory impossible to
+      interpret.
+
+- [ ] **Split disk into data and write-ahead log, and keep peak separately from final.**
+      `disk_mb` is the whole engine directory, so a 58 GB MonetDB WAL beside 46 GB of data reads as
+      one number, and the failure it causes is invisible. Peak also matters more than final: TPC-H
+      SF10 ends at a 9.7 GB dbfarm after peaking near 30 GB, so a final-size metric would miss the
+      transient cost entirely.
+
+- [ ] **Do not treat `client_mem_mb` as the driver's client memory.**
+      `dbs/monetdb/adbc.py::fetch_adbc` calls `fetch_arrow_table()` and then `pl.from_arrow()`,
+      holding both alive. Measured on a 218,880 x 786 result: the Arrow table alone peaks at 768 MB
+      and the pair at 1,458 MB, because `pl.from_arrow()` copies rather than adopting the buffers
+      (`rechunk=False` does not avoid it). The harness figure is therefore roughly 3x the driver's
+      own peak. This does not distort cross-engine comparison, since every engine converts to
+      Polars the same way, but the column must not be quoted as a driver measurement. The README
+      claim that Polars adopts these Arrow tables zero-copy is wrong and should be corrected.
+
+- [ ] **Never sum server and client memory.**
+      They fund different budgets and the client usually runs on another host. Summing separately
+      computed maxima also assumes the peaks coincide: on one measured ClickBench run
+      `max(server) + max(client)` overstated `max(server + client)` by 31 GB. If a combined figure
+      is ever wanted, sum per sample and then take the maximum.
+
+- [ ] **Keep per-operation process isolation, and document why.**
+      Peak RSS is a high-water mark that does not fall when memory is freed, so operations sharing
+      a process charge each later operation with the earlier one's peak. Before `operation_runner`
+      existed, a ClickBench select returning at most 25 rows was credited with 1,327 MB inherited
+      from its populate, which was reported as an 890% driver regression before being traced to the
+      harness. Anything that reintroduces shared-process operations reintroduces that error.
+
+- [ ] **Make in-process engines explicit wherever memory is presented.**
+      `duckdb` and `polars` have no container, so `server_mem_mb` is structurally 0 for them and
+      their whole footprint sits in `client_mem_mb`. `results/resource_usage.py` already resolves
+      this for reads, but any chart or export that touches memory needs the same treatment or those
+      two engines will appear to use none.
+
+- [ ] **Sample often enough to see transient peaks, and keep the last sample on failure.**
+      A `docker stats --no-stream` call takes about a second, so it cannot sample a sub-second
+      query at all; streaming `docker stats` emits ANSI control codes that break naive parsing and
+      silently yield zero. Disk can be sampled more slowly than memory because walking a large
+      directory perturbs the run. A failed run's final sample is often the interesting one and must
+      not be discarded.
+
 ## Execution order
 
 1. Define the profile, warm-up policy, timing boundaries, and score presentation.
@@ -94,3 +155,6 @@ GitHub Pages database is an older, different artifact and does not contain Quest
 3. Run and validate the controlled Linux campaign.
 4. Publish the clean replacement and verify that the deployed database matches it.
 5. Continue with JOB and the broader TSBS/InfluxDB work.
+
+Section 5 is independent of the campaign order and should land before the next public run, since it
+changes what the published resource numbers mean.
