@@ -128,6 +128,16 @@ observed, not inferred, and each one has already produced a wrong conclusion at 
       `max(server) + max(client)` overstated `max(server + client)` by 31 GB. If a combined figure
       is ever wanted, sum per sample and then take the maximum.
 
+- [x] **Close the readiness connection before operations run.** *(fixed)*
+      `_start_db` probes readiness with `wait_until_accessible()`, which opens a connection in the
+      orchestrating process, and `_stop_db` only closed it after every operation had finished. Once
+      operations moved into their own processes that connection stayed open as a second server
+      session for the whole run. For MonetDB this keeps pending changes alive and pushes a large
+      ingest off the large-transaction shortcut onto the ordinary write-ahead-log path: ClickBench
+      went from a 2.2 s restart to a 58 GB WAL and a 300 s restart timeout, TPC-H SF10 from 87 s to
+      192 s with nearly twice the peak disk, and MonetDB server memory appeared 11x higher. All of
+      it was this one open session, and all of it was briefly misattributed to driver regressions.
+
 - [ ] **Keep per-operation process isolation, and document why.**
       Peak RSS is a high-water mark that does not fall when memory is freed, so operations sharing
       a process charge each later operation with the earlier one's peak. Before `operation_runner`

@@ -285,6 +285,11 @@ def benchmark(
             db_instance._writer_process = getattr(writer, "process", None)
 
             _start_db(db_instance)
+            # readiness probing opens a connection here, but each operation runs in its own
+            # process and opens its own. Leaving this one open would hold a second server session
+            # for the whole run, which for MonetDB keeps pending changes alive and forces large
+            # ingests onto the ordinary write-ahead-log path.
+            db_instance.close_connection()
 
             try:
                 operations = (
