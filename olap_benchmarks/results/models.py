@@ -134,14 +134,18 @@ class RunMetric(Base):
     )
     run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Metric families are sampled on independent schedules, so every value column is
+    # nullable and a row carries only the family sampled at `time`. Null means "not
+    # measured at this instant", never zero. Rows are therefore irregularly spaced per
+    # column: aggregate with max(), or weight by the gap to the next non-null sample.
     # cpu_percent is the benchmark client process plus every database container combined.
     # server_mem_mb is database-container memory only and is 0 for in-process engines
     # (see settings.IN_PROCESS_DATABASES); their footprint is client_mem_mb instead.
-    cpu_percent: Mapped[float] = mapped_column(Float, nullable=False)
-    server_mem_mb: Mapped[int] = mapped_column(Integer, nullable=False)
+    cpu_percent: Mapped[float | None] = mapped_column(Float)
+    server_mem_mb: Mapped[int | None] = mapped_column(Integer)
     client_mem_mb: Mapped[int | None] = mapped_column(Integer)
     client_uss_mb: Mapped[int | None] = mapped_column(Integer)
-    disk_mb: Mapped[int] = mapped_column(Integer, nullable=False)
+    disk_mb: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (Index("idx_run_metric_run_time", "run_id", "time"),)
 

@@ -175,6 +175,34 @@ Each `run_metric` row separates the database server from the benchmark client:
 | `cpu_percent` | combined | Benchmark client process **plus** every database container, summed. It cannot be decomposed into a server and a client share. |
 | `disk_mb` | server | The database's own storage directories (`Database.metric_directories`, today just its data directory). Client staging files under the shared temporary directory and the benchmark client's own disk use are not measured. |
 
+##### Sampling lanes
+
+Metric families cost wildly different amounts to measure, so each is sampled on its
+own schedule by its own thread and written as its own row, leaving the columns it did
+not measure `null`. **A row is one lane's reading at one instant, never a blend of
+readings, and no column is evenly spaced.**
+
+| Lane | Columns | Nominal rate |
+| --- | --- | --- |
+| resource | `cpu_percent`, `server_mem_mb`, `client_mem_mb`, `client_uss_mb` | 5 Hz |
+| disk | `disk_mb` | 0.2 Hz, stretched further as needed |
+
+CPU and memory come from one `docker stats` call per container (~1 ms) plus a
+non-blocking `psutil` read, so 5 Hz costs well under a percent of one core. Container
+CPU is derived from `/proc/stat` jiffies, which quantise at 10 ms, so sampling much
+faster would add quantisation noise rather than detail.
+
+`du` over a large store is the only sampler that measurably competes with the database
+for CPU and page cache — 1.1 s per walk over a 197k-file ClickHouse store, warm. The
+disk lane therefore holds itself to at most a tenth of wall clock: when a walk is
+expensive its interval stretches automatically, so on that store it samples roughly
+every 13 s rather than every 5 s. Because it runs on its own thread, a slow walk never
+delays a CPU sample.
+
+Consequently, **never aggregate these series by sample count**. Use `max()` for peaks,
+or weight each reading by the gap to the next non-null one, as
+`mean_combined_cpu_percent` and `cpu_core_seconds` do in `olap results resources`.
+
 Server and client memory are two independent peak series and are never summed.
 They fund different budgets (the client normally runs on a different host), and
 adding two separately computed maxima overstates the true combined peak because
@@ -191,8 +219,9 @@ cannot interpret:
 uv run olap results resources --revision default --suite clickbench
 ```
 
-These are metric schema v5 semantics (v4 renamed to `server_mem_mb`) and must not
-be compared as identical measurements with v2/v3 client-memory data. The
+These are metric schema v6 semantics (v5 sampled every column on one shared ~0.3–0.5 Hz
+schedule; v4 renamed to `server_mem_mb`) and must not be compared as identical
+measurements with v2/v3 client-memory data. The
 definitions and the metric-schema version are stored with each run so results
 remain interpretable after methodology changes.
 

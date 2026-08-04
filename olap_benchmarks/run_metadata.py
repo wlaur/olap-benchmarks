@@ -182,6 +182,7 @@ def build_run_metadata(
     package_names: tuple[str, ...] = ("olap-benchmarks",),
     input_directory: Path | None = None,
     options: Mapping[str, object] | None = None,
+    sampling_interval_seconds: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     docker_platform = _run_optional_command(["docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])
     image_map = dict(container_images or {})
@@ -228,20 +229,30 @@ def build_run_metadata(
             "start_command": start_command,
         },
         "metrics": {
-            "version": 5,
+            "version": 6,
+            "sampling": (
+                "each metric family is sampled on its own schedule and stored as its own run_metric row, "
+                "leaving the columns it does not measure null. Sample spacing is neither constant nor equal "
+                "across columns, so aggregate with max() or weight each reading by the gap to the next "
+                "non-null one; never assume a fixed period per row"
+            ),
+            "sampling_interval_seconds": dict(sampling_interval_seconds or {}),
             "cpu_percent": (
                 "combined: benchmark client process plus all database containers; not decomposable into "
-                "a server and a client share"
+                "a server and a client share. Each reading is the average over the interval since the "
+                "previous reading, so it covers the whole run with no gaps"
             ),
             "server_mem_mb": (
                 "server side: all database containers, excluding the benchmark client. Always 0 when "
                 "execution.mode is in_process, because there is no server process"
             ),
-            "client_mem_mb": "client side: benchmark client process peak RSS sampled every 10 ms",
-            "client_uss_mb": "client side: benchmark client process peak USS sampled every 100 ms",
+            "client_mem_mb": "client side: benchmark client process peak RSS, on the client_rss interval",
+            "client_uss_mb": "client side: benchmark client process peak USS, on the client_uss interval",
             "disk_mb": (
                 "server side: the database's own storage directories (Database.metric_directories). "
-                "Client staging files and the benchmark client's own disk use are not measured"
+                "Client staging files and the benchmark client's own disk use are not measured. Sampled on "
+                "the slow disk lane, whose interval stretches beyond its nominal value when a du walk is "
+                "expensive, so disk readings are sparser and less regular than the other columns"
             ),
             "comparable_memory": (
                 "server_mem_mb for container engines and client_mem_mb for in_process engines; "

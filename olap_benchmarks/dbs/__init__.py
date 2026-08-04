@@ -17,7 +17,7 @@ from pydantic import BaseModel, PrivateAttr
 from sqlalchemy import Connection, text
 
 from ..container_platform import get_container_engine_platform
-from ..metrics.sampler import start_metric_sampler
+from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..results.hashing import build_answer_metadata
 from ..run_metadata import (
@@ -823,6 +823,7 @@ class Database(BaseModel, ABC):
             package_names=self.run_package_names,
             input_directory=self.input_directory,
             options=self.run_options,
+            sampling_interval_seconds=SAMPLING_INTERVAL_SECONDS,
         )
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(

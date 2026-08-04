@@ -17,13 +17,16 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
     metadata = run_metadata.build_run_metadata(
         execution_mode="container",
         start_command="docker run database",
+        sampling_interval_seconds={"resource": 0.2, "disk": 5.0},
     )
 
     metrics = cast(dict[str, object], metadata["metrics"])
 
-    assert metrics["version"] == 5
+    assert metrics["version"] == 6
     assert set(metrics) == {
         "version",
+        "sampling",
+        "sampling_interval_seconds",
         "cpu_percent",
         "server_mem_mb",
         "client_mem_mb",
@@ -31,6 +34,7 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
         "disk_mb",
         "comparable_memory",
     }
+    assert metrics["sampling_interval_seconds"] == {"resource": 0.2, "disk": 5.0}
     assert "mem_mb" not in metrics
     assert cast(str, metrics["server_mem_mb"]).startswith("server side:")
     assert cast(str, metrics["client_mem_mb"]).startswith("client side:")

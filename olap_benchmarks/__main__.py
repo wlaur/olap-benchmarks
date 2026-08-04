@@ -480,6 +480,9 @@ def resources(
     for containerised engines and client memory for in-process engines such as DuckDB
     and Polars, whose `server_mem_mb` is always 0 because they have no server. Server
     and client peaks are never summed; they occur at different times.
+
+    `mean_combined_cpu_percent` and `cpu_core_seconds` weight each sample by the gap to
+    the next one, so they stay comparable across runs whose sampling rates differ.
     """
     rows = load_run_resource_usage(
         revision=revision,

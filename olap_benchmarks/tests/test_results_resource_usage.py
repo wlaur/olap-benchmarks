@@ -87,6 +87,73 @@ def _seed(db_path: Path) -> None:
         engine.dispose()
 
 
+def _seed_lane_sampled_run(db_path: Path) -> None:
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        with Session(engine) as session:
+            run = Run(
+                suite="clickbench",
+                suite_scale_factor=1,
+                db="clickhouse",
+                db_version="test",
+                operation="populate",
+                system="test",
+                status="completed",
+                started_at=datetime(2026, 1, 1),
+                finished_at=datetime(2026, 1, 1, 1),
+            )
+            session.add(run)
+            session.commit()
+
+            # the resource lane samples at 0 s, 1 s and 5 s while the slow disk lane
+            # stretches its own interval, so no column is evenly spaced
+            session.add_all(
+                [
+                    RunMetric(
+                        run_id=run.id,
+                        time=datetime(2026, 1, 1, 0, 0, second),
+                        cpu_percent=cpu_percent,
+                        server_mem_mb=1_000,
+                        client_mem_mb=100,
+                        client_uss_mb=90,
+                    )
+                    for second, cpu_percent in ((0, 100.0), (1, 200.0), (5, 300.0))
+                ]
+                + [
+                    RunMetric(run_id=run.id, time=datetime(2026, 1, 1, 0, 0, second), disk_mb=disk_mb)
+                    for second, disk_mb in ((0, 1_000), (6, 5_000))
+                ]
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+def test_load_run_resource_usage_reads_columns_sampled_at_different_rates(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _seed_lane_sampled_run(db_path)
+
+    (usage,) = load_run_resource_usage(db_path=db_path)
+
+    # rows that leave a column null must not mask the peaks recorded in other rows
+    assert usage.peak_combined_cpu_percent == 300.0
+    assert usage.peak_server_disk_mb == 5_000
+    assert usage.peak_server_memory_mb == 1_000
+
+
+def test_mean_cpu_weights_samples_by_elapsed_time_not_sample_count(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _seed_lane_sampled_run(db_path)
+
+    (usage,) = load_run_resource_usage(db_path=db_path)
+
+    # 100% held for 1 s then 200% held for 4 s; counting samples equally would say 200%
+    assert usage.mean_combined_cpu_percent == pytest.approx(180.0)
+    assert usage.cpu_core_seconds == pytest.approx(9.0)
+
+
 def test_in_process_databases_match_database_execution_mode() -> None:
     execution_modes = {name: db.execution_mode for name, db in get_databases().items()}
 
