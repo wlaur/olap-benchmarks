@@ -17,7 +17,7 @@ from pydantic import BaseModel, PrivateAttr
 from sqlalchemy import Connection, text
 
 from ..container_platform import get_container_engine_platform
-from ..metrics.sampler import start_metric_sampler
+from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..results.hashing import build_answer_metadata
 from ..run_metadata import (
@@ -632,10 +632,14 @@ class Database(BaseModel, ABC):
         with fpath.open() as f:
             statements = f.read()
 
+        # Line comments are stripped before splitting on ';': a semicolon inside one would
+        # otherwise end the statement early and send a CREATE TABLE without its closing paren.
+        statements = "\n".join(line.split("--", 1)[0] for line in statements.splitlines())
+
         for stmt in statements.split(";"):
             stmt = stmt.strip()
 
-            if not stmt or all(line.strip().startswith("--") for line in stmt.splitlines()):
+            if not stmt:
                 continue
 
             # ensure the connection used when initializing the schema is not reused
@@ -676,6 +680,15 @@ class Database(BaseModel, ABC):
         if self._connection is None:
             return
         self._connection.rollback()
+
+    def reset_session(self) -> None:
+        """Discard any server-side session state left behind by a failed query.
+
+        A no-op for connectors whose session survives a query error. Overridden where it does not:
+        a poisoned session otherwise fails every following query in the operation, turning one
+        broken query into a whole failed suite.
+        """
+        return
 
     def wait_until_accessible(self, timeout_seconds: float = 300.0, interval_seconds: float = 1.0) -> None:
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
@@ -823,6 +836,7 @@ class Database(BaseModel, ABC):
             package_names=self.run_package_names,
             input_directory=self.input_directory,
             options=self.run_options,
+            sampling_interval_seconds=SAMPLING_INTERVAL_SECONDS,
         )
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(

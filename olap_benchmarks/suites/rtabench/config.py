@@ -146,6 +146,10 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
+    @property
+    def populate_table_order(self) -> list[TableName]:
+        return list(RTABENCH_SCHEMAS)
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -153,7 +157,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
 
         self.db.initialize_schema("rtabench")
 
-        for table_name in RTABENCH_SCHEMAS:
+        for table_name in self.populate_table_order:
             df = pl.scan_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
@@ -221,11 +225,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
             if not ok:
                 failed_queries += 1
 
-        if failed_queries:
-            _LOGGER.warning(
-                f"RTABench select completed on {self.db.name} with {failed_queries:_} failed "
-                f"{'queries' if failed_queries != 1 else 'query'}"
-            )
+        self.assert_no_failed_queries(failed_queries, len(RTABENCH_QUERY_NAMES))
 
         _LOGGER.info(
             f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"

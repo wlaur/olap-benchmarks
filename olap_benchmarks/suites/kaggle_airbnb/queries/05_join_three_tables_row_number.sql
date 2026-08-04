@@ -3,8 +3,9 @@ SELECT
     ROUND(
         MAX(
             CASE
+                -- explicit precision and scale: a bare DECIMAL differs across engines
                 WHEN cl.price != 'empty' THEN CAST(
-                    REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS DECIMAL
+                    REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS DECIMAL(18, 2)
                 )
                 ELSE NULL
             END
@@ -44,4 +45,8 @@ GROUP BY
     ld.availability_30,
     ld.availability_60,
     ld.availability_90,
-    ld.availability_365;
+    ld.availability_365
+-- listings.id and listings_detailed.id are unique, so one group per listing_id makes this a
+-- total order
+ORDER BY
+    cl.listing_id;

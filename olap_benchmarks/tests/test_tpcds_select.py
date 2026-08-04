@@ -9,6 +9,7 @@ from sqlalchemy import Connection
 
 from ..dbs import Database
 from ..settings import DatabaseName, TableName
+from ..suites import FailedQueriesError
 from ..suites.tpc_ds import config as tpcds_config
 from ..suites.tpc_ds.config import TpcDs
 
@@ -111,13 +112,16 @@ def test_tpcds_select_records_unsupported_query_steps(monkeypatch: pytest.Monkey
     ]
 
 
-def test_tpcds_select_continues_after_query_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tpcds_select_continues_after_query_failure_then_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
     db = FakeTpcDsDatabase(fail_query_names={"01"})
     suite = _suite(db)
     _patch_tpcds_queries(monkeypatch, ["01", "02"])
     monkeypatch.setattr(TpcDs, "UNSUPPORTED_QUERIES", {})
 
-    suite.select()
+    # the remaining queries are still measured, but the operation must not be recorded as
+    # completed when one of them never produced a result
+    with pytest.raises(FailedQueriesError, match="1 of 2 tpc_ds query failed"):
+        suite.select()
 
     assert db.executed_iterations == [("01", 1), ("02", 1), ("02", 2)]
     assert db.skipped_iterations == [("01", 2, "skipped", "query aborted after RuntimeError: 01 failed")]

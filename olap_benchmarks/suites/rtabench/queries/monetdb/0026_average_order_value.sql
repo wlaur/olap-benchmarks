@@ -1,5 +1,7 @@
 SELECT
-    sum(oi.amount * p.price) / count(DISTINCT order_id)
+    -- cast before dividing: MonetDB otherwise evaluates the quotient at the numerator's
+    -- decimal scale, where the other engines promote to double
+    cast(sum(oi.amount * p.price) as double) / count(DISTINCT order_id)
 FROM
     orders o
     INNER JOIN order_items oi USING (order_id)

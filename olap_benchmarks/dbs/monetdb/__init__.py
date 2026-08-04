@@ -11,8 +11,17 @@ import polars as pl
 from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name, host_port
+from ...settings import (
+    SETTINGS,
+    DatabaseName,
+    Operation,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+    host_port,
+)
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.time_series.config import TimeSeries
 from .. import Database, ParquetEpochColumns
 from ..utils import tracked_commit
@@ -63,7 +72,32 @@ def _monetdb_connection_string() -> str:
     return f"{MONETDB_CONNECTION_STRING}?{urlencode(parameters)}"
 
 
+_ROLLING_AVG_WINDOW_BUG = (
+    "MonetDB 11.55.7 returns wrong values from avg() over a ROWS frame wider than 16 rows, "
+    "from the 17th row onward; see MONETDB_ISSUE.md. A 60-row moving average cannot be expressed "
+    "correctly, so the query is not measured rather than publishing a runtime for a wrong answer."
+)
+
+
+class MonetDBChatThreads(ChatThreads["MonetDB"]):
+    # The concurrent workload terminates mserver5 mid-query: several readers plus an ADBC writer
+    # against the wide JSON column, three attempts out of three, on MonetDB 11.55.7 with
+    # adbc-driver-monetdb 0.12.0. Clients see "IO: unexpected end of file" and the container is
+    # gone afterwards. Nothing on our side fixes it, and retrying only costs the run 11 minutes.
+    # populate, select and mutate all complete, so the rest of the suite is still measured.
+    # See MONETDB_ISSUE.md.
+    supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select", "mutate")
+
+
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
+    UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, dict[str, str]]] = {
+        "monetdb": {
+            "large_13_rolling_avg": _ROLLING_AVG_WINDOW_BUG,
+            "tall_13_rolling_avg": _ROLLING_AVG_WINDOW_BUG,
+            "wide_13_rolling_avg": _ROLLING_AVG_WINDOW_BUG,
+        }
+    }
+
     def finish_parquet_table(self, table_name: TableName) -> None:
         self.db.analyze_table(table_name, ["time"])
 
@@ -310,4 +344,5 @@ class MonetDB(Database):
         return {
             **super().suite_registry(),
             "time_series": MonetDBTimeSeries,
+            "chat_threads": MonetDBChatThreads,
         }

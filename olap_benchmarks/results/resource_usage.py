@@ -61,6 +61,8 @@ class RunResourceUsage:
     peak_client_uss_memory_mb: int | None
     peak_combined_cpu_percent: float | None
     peak_server_disk_mb: int | None
+    mean_combined_cpu_percent: float | None
+    cpu_core_seconds: float | None
 
     @property
     def comparable_memory_source(self) -> MemorySource:
@@ -99,6 +101,8 @@ def describe_run_resource_usage(usage: RunResourceUsage) -> dict[str, object]:
         "peak_client_uss_memory_mb": usage.peak_client_uss_memory_mb,
         "peak_combined_cpu_percent": usage.peak_combined_cpu_percent,
         "peak_server_disk_mb": usage.peak_server_disk_mb,
+        "mean_combined_cpu_percent": usage.mean_combined_cpu_percent,
+        "cpu_core_seconds": usage.cpu_core_seconds,
     }
 
 
@@ -134,7 +138,28 @@ def load_run_resource_usage(
             params.append(value)
 
     where_sql = f"where {' and '.join(where_clauses)}" if where_clauses else ""
+    # Sampling lanes run at independent rates and each column is irregularly spaced, so
+    # avg(cpu_percent) would weight a dense burst of samples the same as a sparse stretch.
+    # Weighting each reading by the gap to the next one makes both figures depend only on
+    # elapsed time. The final reading holds no interval and drops out of the weighted sum.
     sql = f"""
+        with cpu_sample as (
+          select
+            run_id,
+            cpu_percent,
+            epoch(lead(time) over (partition by run_id order by time) - time) as weight_seconds
+          from run_metric
+          where cpu_percent is not null
+        ),
+        cpu_load as (
+          select
+            run_id,
+            sum(cpu_percent * weight_seconds) / nullif(sum(weight_seconds), 0) as mean_combined_cpu_percent,
+            sum(cpu_percent * weight_seconds) / 100.0 as cpu_core_seconds
+          from cpu_sample
+          where weight_seconds is not null
+          group by run_id
+        )
         select
           r.id,
           r.system,
@@ -148,11 +173,14 @@ def load_run_resource_usage(
           max(m.client_mem_mb) as peak_client_memory_mb,
           max(m.client_uss_mb) as peak_client_uss_memory_mb,
           max(m.cpu_percent) as peak_combined_cpu_percent,
-          max(m.disk_mb) as peak_server_disk_mb
+          max(m.disk_mb) as peak_server_disk_mb,
+          c.mean_combined_cpu_percent,
+          c.cpu_core_seconds
         from run r
         left join run_metric m on m.run_id = r.id
+        left join cpu_load c on c.run_id = r.id
         {where_sql}
-        group by 1, 2, 3, 4, 5, 6, 7, 8
+        group by all
         order by r.id
     """
 
@@ -177,6 +205,8 @@ def load_run_resource_usage(
             peak_client_uss_memory_mb=None if row[10] is None else int(row[10]),
             peak_combined_cpu_percent=None if row[11] is None else float(row[11]),
             peak_server_disk_mb=None if row[12] is None else int(row[12]),
+            mean_combined_cpu_percent=None if row[13] is None else float(row[13]),
+            cpu_core_seconds=None if row[14] is None else float(row[14]),
         )
         for row in rows
     ]

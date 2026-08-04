@@ -79,6 +79,7 @@ cd site && bun install && bun run dev
 | Suite                  | Data source                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `time_series`          | Generated locally                                                                        |
+| `chat_threads`         | Generated locally; AI chat history as rich JSON, SF1/SF10                                |
 | `rtabench`             | Downloaded automatically from rtadatasets.timescale.com                                  |
 | `tpc_h`                | Generated locally with `tpchgen-cli`; use `--scale-factor` for SF10/SF50/etc.         |
 | `tpc_ds`               | Generated locally with `tpcgen-cli`; use `--scale-factor` (decimals cast to spec precision and four columns renamed to spec names after generation) |
@@ -89,12 +90,12 @@ cd site && bun install && bun run dev
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N]`
 
 - `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, or `all`
-- `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
-- `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series`.
+- `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
+- `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series` and `chat_threads`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
 - `--omit`: skip databases when using `db=all`, e.g. `--omit questdb --omit starrocks`
-- `--scale-factor`: suite scale factor (`>= 1`). Time-series supports SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`.
+- `--scale-factor`: suite scale factor (`>= 1`). Time-series and chat-threads support SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`.
 
 The container is started and stopped automatically. Populate is skipped when
 existing tables already match the expected row counts, so `olap benchmark <db>
@@ -174,6 +175,34 @@ Each `run_metric` row separates the database server from the benchmark client:
 | `cpu_percent` | combined | Benchmark client process **plus** every database container, summed. It cannot be decomposed into a server and a client share. |
 | `disk_mb` | server | The database's own storage directories (`Database.metric_directories`, today just its data directory). Client staging files under the shared temporary directory and the benchmark client's own disk use are not measured. |
 
+##### Sampling lanes
+
+Metric families cost wildly different amounts to measure, so each is sampled on its
+own schedule by its own thread and written as its own row, leaving the columns it did
+not measure `null`. **A row is one lane's reading at one instant, never a blend of
+readings, and no column is evenly spaced.**
+
+| Lane | Columns | Nominal rate |
+| --- | --- | --- |
+| resource | `cpu_percent`, `server_mem_mb`, `client_mem_mb`, `client_uss_mb` | 5 Hz |
+| disk | `disk_mb` | 0.2 Hz, stretched further as needed |
+
+CPU and memory come from one `docker stats` call per container (~1 ms) plus a
+non-blocking `psutil` read, so 5 Hz costs well under a percent of one core. Container
+CPU is derived from `/proc/stat` jiffies, which quantise at 10 ms, so sampling much
+faster would add quantisation noise rather than detail.
+
+`du` over a large store is the only sampler that measurably competes with the database
+for CPU and page cache — 1.1 s per walk over a 197k-file ClickHouse store, warm. The
+disk lane therefore holds itself to at most a tenth of wall clock: when a walk is
+expensive its interval stretches automatically, so on that store it samples roughly
+every 13 s rather than every 5 s. Because it runs on its own thread, a slow walk never
+delays a CPU sample.
+
+Consequently, **never aggregate these series by sample count**. Use `max()` for peaks,
+or weight each reading by the gap to the next non-null one, as
+`mean_combined_cpu_percent` and `cpu_core_seconds` do in `olap results resources`.
+
 Server and client memory are two independent peak series and are never summed.
 They fund different budgets (the client normally runs on a different host), and
 adding two separately computed maxima overstates the true combined peak because
@@ -190,8 +219,9 @@ cannot interpret:
 uv run olap results resources --revision default --suite clickbench
 ```
 
-These are metric schema v5 semantics (v4 renamed to `server_mem_mb`) and must not
-be compared as identical measurements with v2/v3 client-memory data. The
+These are metric schema v6 semantics (v5 sampled every column on one shared ~0.3–0.5 Hz
+schedule; v4 renamed to `server_mem_mb`) and must not be compared as identical
+measurements with v2/v3 client-memory data. The
 definitions and the metric-schema version are stored with each run so results
 remain interpretable after methodology changes.
 
@@ -345,6 +375,7 @@ uv run pytest
 - **ClickBench** suite is based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse
 - **JSONBench** suite is based on [JSONBench](https://github.com/ClickHouse/JSONBench) by ClickHouse
 - **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale
+- **Chat Threads** suite (`chat_threads`) is original to this repository. Message documents follow the Anthropic Messages / MCP content-block shape, and visualization parts embed [Vega-Lite](https://vega.github.io/vega-lite/) specs. Data is generated locally, so results are not comparable to any published benchmark
 - **Kaggle Airbnb** suite is based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy
 - **TPC-H** suite (`tpc_h`) is derived from the [TPC-H benchmark](https://www.tpc.org/tpch/); results are not comparable to published TPC-H results. Data is generated with [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) (requires `cargo install tpchgen-cli`). Base queries come from the [DuckDB tpch extension](https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries), with per-database adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-h) and [StarRocks](https://docs.starrocks.io/docs/benchmarking/TPC-H_Benchmarking/)
 - **TPC-DS** suite (`tpc_ds`) is derived from the [TPC-DS benchmark](https://www.tpc.org/tpcds/); results are not comparable to published TPC-DS results. Data is generated with the `tpcgen-cli` from [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) at commit `09d609d1` (`--compat c`, conformance-tested against the reference dsdgen). Queries come from the [DuckDB tpcds extension](https://github.com/duckdb/duckdb/tree/main/extension/tpcds), with schema adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-ds) and [StarRocks](https://docs.starrocks.io/docs/3.4/benchmarking/TPC_DS_Benchmark/)

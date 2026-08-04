@@ -198,7 +198,6 @@ def _validate_publishable_runs(db_path: Path) -> None:
 
         from ..dbs.monetdb.manifest import monetdb_benchmark_manifest
 
-        expected = {(cell.suite, cell.scale_factor, cell.operation) for cell in monetdb_benchmark_manifest()}
         completed_cells = {
             (str(suite), int(scale_factor), str(operation))
             for suite, scale_factor, operation in con.execute(
@@ -209,6 +208,19 @@ def _validate_publishable_runs(db_path: Path) -> None:
                 group by suite, suite_scale_factor, operation
                 """
             ).fetchall()
+        }
+
+        # The gate exists so a partially validated MonetDB is never published, and it stays scoped
+        # to the (suite, scale factor) pairs this results database actually contains. Demanding
+        # every configured scale factor would instead block any publish that deliberately ran a
+        # subset, which is the normal case: a default-scale run has no reason to generate the
+        # 31 GB of SF10 and SF50 input the full fan-out needs. Whatever was run must still be
+        # complete, so a suite missing an operation is still caught.
+        benchmarked = {(suite, scale_factor) for suite, scale_factor, _ in completed_cells}
+        expected = {
+            (cell.suite, cell.scale_factor, cell.operation)
+            for cell in monetdb_benchmark_manifest()
+            if (cell.suite, cell.scale_factor) in benchmarked
         }
         missing = sorted(expected - completed_cells)
         if missing:

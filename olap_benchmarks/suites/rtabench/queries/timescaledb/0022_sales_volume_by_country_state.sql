@@ -13,5 +13,5 @@ GROUP BY
     GROUPING SETS ((country), (country, state), ())
 ORDER BY
     sum,
-    country,
-    state;
+    country NULLS LAST,
+    state NULLS LAST;

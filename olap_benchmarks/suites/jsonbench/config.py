@@ -63,7 +63,10 @@ def _validate_json_object_line(line: str, input_file: Path, line_number: int) ->
         raise RuntimeError(f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: {exc}") from exc
 
     if not isinstance(value, dict):
-        raise RuntimeError(f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: expected object")
+        # a non-object row is malformed input, the same failure class as the decode error
+        # above, not a caller passing the wrong type
+        message = f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: expected object"
+        raise RuntimeError(message)  # noqa: TRY004
 
     return _ensure_line_ending(line)
 
@@ -175,11 +178,7 @@ class JSONBench[DBT: Database](BenchmarkSuite[DBT]):
             if not ok:
                 failed_queries += 1
 
-        if failed_queries:
-            _LOGGER.warning(
-                f"JSONBench select completed on {self.db.name} with {failed_queries:_} failed "
-                f"{'queries' if failed_queries != 1 else 'query'}"
-            )
+        self.assert_no_failed_queries(failed_queries, len(JSONBENCH_QUERY_NAMES))
 
         _LOGGER.info(
             f"Executed {len(JSONBENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"

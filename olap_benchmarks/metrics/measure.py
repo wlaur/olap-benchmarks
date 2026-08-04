@@ -3,21 +3,32 @@ import os
 import platform
 import subprocess
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Executor
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
-from time import sleep
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import docker
 import psutil
+from docker.errors import DockerException
 from pydantic import BaseModel
 
 _LOGGER = logging.getLogger(__name__)
 DOCKER_API_TIMEOUT_SECONDS = 5
+DIRECTORY_SIZE_ATTEMPTS = 3
+
+
+class ContainerStatsSource(Protocol):
+    def stats(self, stream: bool = False, one_shot: bool = False) -> dict[str, Any]: ...
+
+
 _CONTAINER_CPU_SNAPSHOTS: dict[str, tuple[int, int]] = {}
 _CONTAINER_CPU_SNAPSHOTS_LOCK = Lock()
+_CONTAINERS: dict[str, ContainerStatsSource] = {}
+_CONTAINERS_LOCK = Lock()
+_CLIENT_PROCESSES: dict[int, psutil.Process] = {}
+_CLIENT_PROCESSES_LOCK = Lock()
 
 
 def get_docker_socket() -> str:
@@ -60,17 +71,15 @@ def get_docker_client() -> docker.DockerClient:
     )
 
 
-class BenchmarkMetric(BaseModel):
+class ResourceSample(BaseModel):
     # one source's share in the per-source samplers, the client-plus-containers
-    # total in the aggregate returned by get_benchmark_metrics
+    # total in the aggregate returned by get_resource_sample
     cpu_percent: float
     # database-container memory only; always 0 for in-process engines, which have no server
     server_mem_mb: int
     # benchmark client process memory; the real footprint of an in-process engine
     client_mem_mb: int
     client_uss_mb: int
-    # the database's own storage directories; never the benchmark client's disk use
-    disk_mb: int
 
 
 def calculate_cpu_percent(cpu_stats: dict[str, Any], precpu_stats: dict[str, Any]) -> float:
@@ -93,10 +102,23 @@ def calculate_cpu_percent_from_totals(
     cpu_delta = cpu_total - previous_cpu_total
     system_delta = system_total - previous_system_total
 
-    if cpu_delta > 0 and system_delta > 0 and online_cpus > 0:
-        return (cpu_delta / system_delta) * online_cpus * 100.0
+    if not (cpu_delta > 0 and system_delta > 0 and online_cpus > 0):
+        return 0.0
 
-    return 0.0
+    # system_cpu_usage covers every core, so a container's share of it cannot exceed 1. A larger
+    # ratio means the two totals were not read over the same interval, which happens around a
+    # container restart: the suite restarts the database after populate, and one such sample
+    # reported 8626% on a 14-core host. Discard the reading rather than record an impossible one,
+    # which would otherwise survive into peak_combined_cpu_percent.
+    if cpu_delta > system_delta:
+        _LOGGER.debug(
+            "Discarding inconsistent container CPU sample: cpu delta %d exceeds system delta %d",
+            cpu_delta,
+            system_delta,
+        )
+        return 0.0
+
+    return (cpu_delta / system_delta) * online_cpus * 100.0
 
 
 def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) -> float:
@@ -104,6 +126,12 @@ def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) 
     precpu_stats = cast(dict[str, Any], stats["precpu_stats"])
     if "system_cpu_usage" in precpu_stats:
         return calculate_cpu_percent(cpu_stats, precpu_stats)
+
+    # A container that is starting or stopping reports no CPU accounting at all. The suites restart
+    # the database between operations, so this is a normal transient rather than an error: report
+    # no usage instead of raising, which would drop the whole sample and log a traceback per tick.
+    if "system_cpu_usage" not in cpu_stats or "online_cpus" not in cpu_stats:
+        return 0.0
 
     cpu_total = cast(int, cpu_stats["cpu_usage"]["total_usage"])
     system_total = cast(int, cpu_stats["system_cpu_usage"])
@@ -123,103 +151,130 @@ def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) 
     )
 
 
+def get_client_process(process_id: int) -> psutil.Process:
+    with _CLIENT_PROCESSES_LOCK:
+        process = _CLIENT_PROCESSES.get(process_id)
+        if process is None:
+            process = psutil.Process(process_id)
+            # psutil measures CPU against the previous call on the same object, so the
+            # first call only primes the baseline. Reusing the object is what lets the
+            # sampler read CPU without blocking for a fixed measurement window.
+            process.cpu_percent(interval=None)
+            _CLIENT_PROCESSES[process_id] = process
+        return process
+
+
 def get_client_process_metrics(
     process_id: int,
     client_mem_mb: int | None = None,
     client_uss_mb: int | None = None,
-) -> BenchmarkMetric:
-    proc = psutil.Process(process_id)
+) -> ResourceSample:
+    process = get_client_process(process_id)
 
-    proc.cpu_percent(interval=None)  # snapshot baseline
-
-    cpu_percent = proc.cpu_percent(interval=1.0)
+    cpu_percent = process.cpu_percent(interval=None)
 
     if client_mem_mb is None or client_uss_mb is None:
-        full_mem_info = proc.memory_full_info()
+        full_mem_info = process.memory_full_info()
         if client_mem_mb is None:
             client_mem_mb = int(full_mem_info.rss / (1024 * 1024))
         if client_uss_mb is None:
             client_uss_mb = int(full_mem_info.uss / (1024 * 1024))
 
-    return BenchmarkMetric(
+    return ResourceSample(
         cpu_percent=cpu_percent,
         server_mem_mb=0,
         client_mem_mb=client_mem_mb,
         client_uss_mb=client_uss_mb,
-        disk_mb=0,
     )
 
 
-def get_container_metrics(container_name: str) -> BenchmarkMetric:
-    container = cast(Any, get_docker_client().containers).get(container_name)
+def get_container(container_name: str) -> ContainerStatsSource:
+    with _CONTAINERS_LOCK:
+        container = _CONTAINERS.get(container_name)
 
-    stats = cast(dict[str, Any], container.stats(stream=False, one_shot=True))
+    if container is None:
+        container = cast(ContainerStatsSource, cast(Any, get_docker_client().containers).get(container_name))
+        with _CONTAINERS_LOCK:
+            _CONTAINERS[container_name] = container
+
+    return container
+
+
+def forget_container(container_name: str) -> None:
+    with _CONTAINERS_LOCK:
+        _CONTAINERS.pop(container_name, None)
+
+
+def get_container_stats(container_name: str) -> dict[str, Any]:
+    try:
+        return get_container(container_name).stats(stream=False, one_shot=True)
+    except DockerException:
+        # a recreated container keeps its name but not its id, so drop the stale
+        # handle and look the container up again before giving up on this sample
+        forget_container(container_name)
+        return get_container(container_name).stats(stream=False, one_shot=True)
+
+
+def get_container_metrics(container_name: str) -> ResourceSample:
+    stats = get_container_stats(container_name)
 
     cpu_percent = calculate_container_cpu_percent(container_name, stats)
 
     mem_usage = stats["memory_stats"]["usage"]
     server_mem_mb = int(mem_usage / (1_024 * 1_024))
 
-    return BenchmarkMetric(
+    return ResourceSample(
         cpu_percent=cpu_percent,
         server_mem_mb=server_mem_mb,
         client_mem_mb=0,
         client_uss_mb=0,
-        disk_mb=0,
     )
 
 
-def get_benchmark_metrics(
+def get_resource_sample(
+    executor: Executor,
     client_process_id: int,
     container_names: Sequence[str],
-    metric_directories: Sequence[Path],
     client_mem_mb: int | None = None,
     client_uss_mb: int | None = None,
-) -> BenchmarkMetric:
+) -> ResourceSample:
     # The Python client can dominate ingestion memory even when the database
     # runs in a container, so server and client memory stay separate series.
-    with ThreadPoolExecutor(max_workers=len(container_names) + 1) as executor:
-        client_future = (
-            executor.submit(get_client_process_metrics, client_process_id)
-            if client_mem_mb is None and client_uss_mb is None
-            else executor.submit(
-                get_client_process_metrics,
-                client_process_id,
-                client_mem_mb,
-                client_uss_mb,
-            )
-        )
-        container_metrics = list(executor.map(get_container_metrics, container_names))
-        client_metrics = client_future.result()
+    client_future = executor.submit(get_client_process_metrics, client_process_id, client_mem_mb, client_uss_mb)
+    container_futures = [executor.submit(get_container_metrics, name) for name in container_names]
 
-    return BenchmarkMetric(
+    client_metrics = client_future.result()
+    container_metrics = [future.result() for future in container_futures]
+
+    return ResourceSample(
         cpu_percent=client_metrics.cpu_percent + sum(metric.cpu_percent for metric in container_metrics),
         server_mem_mb=sum(metric.server_mem_mb for metric in container_metrics),
         client_mem_mb=client_metrics.client_mem_mb,
         client_uss_mb=client_metrics.client_uss_mb,
-        disk_mb=sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories)),
     )
 
 
-def get_directory_size_mb(path: Path) -> int:
-    n_retries = 5
-    output: str | None = None
+def get_disk_sample(metric_directories: Sequence[Path]) -> int:
+    return sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories))
 
-    for _ in range(n_retries):
+
+def get_directory_size_mb(path: Path) -> int:
+    last_error: subprocess.CalledProcessError | None = None
+
+    for _ in range(DIRECTORY_SIZE_ATTEMPTS):
         try:
             output = subprocess.check_output(["du", "-sk", path.resolve().as_posix()], text=True)
-            break
 
         # can fail if the db is deleting a file a the exact same instant, e.g. with clickhouse
         # du: /Users/williamlauren/repos/olap-benchmarks/data/dbs_time_series\
         # /clickhouse/store/bb1/bb1e5c5b-913d-4009-85a8-c015e07669a3/tmp_insert_all_304_304_0: No such file or directory
-        except subprocess.CalledProcessError as e:
-            _LOGGER.warning(f"Call to du failed: {e}, retrying in 1 second...")
-            sleep(1)
+        # the retry restarts the walk, by which point the file is gone for good
+        except subprocess.CalledProcessError as error:
+            _LOGGER.warning(f"Call to du failed: {error}, retrying...")
+            last_error = error
             continue
 
-    if output is None:
-        raise RuntimeError(f"Call to du failed after {n_retries:_} retries")
+        kilobytes = int(output.split()[0])
+        return kilobytes // 1_024
 
-    kilobytes = int(output.split()[0])
-    return kilobytes // 1_024
+    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts") from last_error

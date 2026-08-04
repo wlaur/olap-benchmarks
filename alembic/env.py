@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from logging.config import fileConfig
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +15,8 @@ from alembic import context
 from olap_benchmarks.results import get_results_db_path
 from olap_benchmarks.results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from olap_benchmarks.results.models import Base
+
+_LOGGER = logging.getLogger(__name__)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -152,6 +155,7 @@ def _patch_duckdb_reflection_for_autogenerate() -> None:
                 try:
                     pragma_rows = connection.exec_driver_sql(pragma_sql).mappings().all()
                 except Exception:
+                    _LOGGER.debug(f"Skipping {table_name}: pragma table_info failed", exc_info=True)
                     continue
 
                 for row in pragma_rows:

@@ -21,6 +21,10 @@ from ..settings import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class FailedQueriesError(RuntimeError):
+    pass
+
+
 class ManualPreparationRequired(RuntimeError):
     pass
 
@@ -173,6 +177,22 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                 result_status=result_status,
             )
 
+    def assert_no_failed_queries(self, failed_queries: int, total_queries: int) -> None:
+        """Fail the run if any query failed.
+
+        execute_query_with_isolation deliberately keeps going after a failure so one broken query
+        still yields timings for the rest, but the operation as a whole has not measured what it
+        claims to and must not be recorded as completed.
+        """
+        if not failed_queries:
+            return
+
+        raise FailedQueriesError(
+            f"{failed_queries:_} of {total_queries:_} {self.name} "
+            f"{'queries' if failed_queries != 1 else 'query'} failed on {self.db.name}; "
+            f"see the logged traceback(s) above"
+        )
+
     def execute_query_with_isolation(
         self,
         *,
@@ -202,6 +222,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                     failed_iteration = None
         except Exception as exc:
             self.db.rollback()
+            self.db.reset_session()
             start_iteration = 1 if failed_iteration is None else failed_iteration + 1
             if start_iteration <= iterations:
                 self.record_skipped_query_steps(
@@ -212,7 +233,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                     start_iteration=start_iteration,
                 )
             _LOGGER.exception(
-                f"Failed {query_name} {progress_label} on {self.db.name}; continuing with remaining queries: {exc}"
+                f"Failed {query_name} {progress_label} on {self.db.name}; continuing with remaining queries"
             )
             return False
 
@@ -237,6 +258,10 @@ def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None
             return prepare_static_data
         case "jsonbench":
             from .jsonbench.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "chat_threads":
+            from .chat_threads.config import prepare_data as prepare_scaled_data
 
             return lambda: prepare_scaled_data(scale_factor)
         case "time_series":

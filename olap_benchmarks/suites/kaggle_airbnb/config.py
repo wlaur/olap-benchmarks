@@ -210,11 +210,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
             if not ok:
                 failed_queries += 1
 
-        if failed_queries:
-            _LOGGER.warning(
-                f"Kaggle Airbnb select completed on {self.db.name} with {failed_queries:_} failed "
-                f"{'queries' if failed_queries != 1 else 'query'}"
-            )
+        self.assert_no_failed_queries(failed_queries, len(KAGGLE_AIRBNB_QUERY_NAMES))
 
         _LOGGER.info(
             f"Executed {len(KAGGLE_AIRBNB_QUERY_NAMES):_} queries (with repetitions) "

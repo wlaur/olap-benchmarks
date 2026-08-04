@@ -206,6 +206,9 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
 
+        def close_connection(self) -> None:
+            return None
+
         def benchmark(self, _suite: str, _operation: str, scale_factor: int | None = None) -> None:
             assert scale_factor == 1
             raise KeyboardInterrupt
@@ -222,7 +225,6 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
 
     def fake_check_input_data(_suite_name: str, scale_factor: int) -> None:
         assert scale_factor == 1
-        return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
@@ -257,6 +259,87 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
     assert failed_revisions == ["candidate"]
 
 
+def test_benchmark_closes_the_parent_connection_before_running_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Readiness probing connects in this process, but operations run in their own.
+
+    Leaving that connection open holds a second server session for the whole run. For MonetDB
+    that keeps pending changes alive and pushes a large ingest onto the ordinary write-ahead-log
+    path: ClickBench went from a 2.2 s restart to a 58 GB log and a 300 s restart timeout.
+    """
+
+    class DummySuite:
+        supported_operations = ("populate",)
+
+    class DummyWriter:
+        def __init__(self) -> None:
+            self.queue = object()
+            self.result_queue = object()
+
+        def close(self) -> None:
+            return None
+
+    events: list[str] = []
+
+    class DummyDatabase:
+        name = "monetdb"
+
+        def __init__(self) -> None:
+            self._current_suite = None
+            self.benchmarks = {"clickbench": DummySuite()}
+
+        def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def close_connection(self) -> None:
+            events.append("close_connection")
+
+        def benchmark(self, _suite: str, _operation: str, scale_factor: int | None = None) -> None:
+            events.append("operation")
+
+    db_instance = DummyDatabase()
+
+    def fake_resolve_suites(_suite: SuiteArg) -> list[SuiteName]:
+        return ["clickbench"]
+
+    def fake_resolve_dbs(_db: DatabaseArg) -> list[DatabaseName]:
+        return ["monetdb"]
+
+    def fake_check_input_data(_suite_name: SuiteName, _scale_factor: int) -> None:
+        return None
+
+    def fake_get_databases() -> dict[str, DummyDatabase]:
+        return {"monetdb": db_instance}
+
+    def fake_start_writer_process(revision: str = "default") -> DummyWriter:
+        return DummyWriter()
+
+    def noop_db(_db: object) -> None:
+        return None
+
+    def noop_validation(**_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
+    monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
+    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
+    monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
+    monkeypatch.setattr(__main__, "_start_db", noop_db)
+    monkeypatch.setattr(__main__, "_stop_db", noop_db)
+    monkeypatch.setattr(__main__, "run_operation", _fake_run_operation)
+    monkeypatch.setattr(__main__, "assert_latest_query_answer_hashes", noop_validation)
+    monkeypatch.setattr(__main__, "assert_latest_query_row_counts", noop_validation)
+
+    __main__.benchmark(db="monetdb", suite="clickbench", operation="populate")
+
+    assert events, "the operation never ran"
+    assert events[0] == "close_connection", (
+        f"the parent connection must be closed before any operation runs, got {events}"
+    )
+
+
 def test_benchmark_all_uses_suite_supported_operations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -280,6 +363,9 @@ def test_benchmark_all_uses_suite_supported_operations(
         def set_queues(self, _queue: object, _result_queue: object) -> None:
             return None
 
+        def close_connection(self) -> None:
+            return None
+
         def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
             self.operations.append((suite, operation, scale_factor))
 
@@ -294,7 +380,6 @@ def test_benchmark_all_uses_suite_supported_operations(
 
     def fake_check_input_data(_suite_name: SuiteName, scale_factor: int) -> None:
         assert scale_factor == 1
-        return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
@@ -375,6 +460,9 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
             self.operations: list[tuple[str, str, int | None]] = []
 
         def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def close_connection(self) -> None:
             return None
 
         def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:
@@ -472,6 +560,9 @@ def test_benchmark_filters_unsupported_suites_before_input_checks_and_validation
             self.operations: list[tuple[str, str, int | None]] = []
 
         def set_queues(self, _queue: object, _result_queue: object) -> None:
+            return None
+
+        def close_connection(self) -> None:
             return None
 
         def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None:

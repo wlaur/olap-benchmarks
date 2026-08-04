@@ -3,8 +3,9 @@ SELECT
     ROUND(
         MAX(
             CASE
+                -- explicit precision and scale: a bare Decimal differs across engines
                 WHEN cl.price != 'empty' THEN CAST(
-                    REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS Nullable(DECIMAL)
+                    REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS Nullable(Decimal(18, 2))
                 )
                 ELSE NULL
             END
@@ -23,7 +24,8 @@ SELECT
     ld.availability_60,
     ld.availability_90,
     ld.availability_365,
-    max(length(rd.comments)) as max_comments,
+    -- length() counts bytes on ClickHouse but characters on the other engines
+    max(lengthUTF8(rd.comments)) as max_comments,
     row_number() over (
         PARTITION BY ls.host_id
         ORDER BY
@@ -44,4 +46,8 @@ GROUP BY
     ld.availability_30,
     ld.availability_60,
     ld.availability_90,
-    ld.availability_365;
+    ld.availability_365
+-- listings.id and listings_detailed.id are unique, so one group per listing_id makes this a
+-- total order
+ORDER BY
+    cl.listing_id;

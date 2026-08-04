@@ -24,4 +24,5 @@ group by
         and n_name = 'GERMANY'
     )
 order by
-  value desc;
+  value desc,
+  ps_partkey;

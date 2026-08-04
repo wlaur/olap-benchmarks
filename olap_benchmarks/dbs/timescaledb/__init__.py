@@ -11,6 +11,7 @@ from sqlalchemy import Connection, Engine, create_engine, text
 
 from ...settings import REPO_ROOT, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
@@ -73,6 +74,30 @@ class TimescaleClickbench(Clickbench["TimescaleDB"]):
 
         with self.db.phase_context("compress"):
             self.compress_table()
+
+        if restart:
+            self.db.restart_event()
+
+
+class TimescaleChatThreads(ChatThreads["TimescaleDB"]):
+    """chat_message is a hypertable; its chunks are converted to the columnstore after load.
+
+    chat_thread is left as a rowstore table because the mutate workload updates it in place.
+    """
+
+    def compress_tables(self) -> None:
+        self.db.execute(
+            "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('chat_message') i",
+            autocommit=True,
+        )
+        self.db.execute("vacuum freeze analyze chat_message", autocommit=True)
+        self.db.execute("vacuum freeze analyze chat_thread", autocommit=True)
+
+    def populate(self, restart: bool = True) -> None:
+        super().populate(restart=False)
+
+        with self.db.phase_context("compress"):
+            self.compress_tables()
 
         if restart:
             self.db.restart_event()
@@ -314,8 +339,10 @@ class TimescaleDB(Postgres):
             junk.unlink(missing_ok=True)
 
         parts = [
-            f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
-            f"--rm -d -p {TIMESCALEDB_HOST_PORT}:5432",
+            (
+                f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
+                f"--rm -d -p {TIMESCALEDB_HOST_PORT}:5432"
+            ),
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",
@@ -401,4 +428,5 @@ class TimescaleDB(Postgres):
             "rtabench": TimescaleRTABench,
             "clickbench": TimescaleClickbench,
             "time_series": TimescaleTimeSeries,
+            "chat_threads": TimescaleChatThreads,
         }

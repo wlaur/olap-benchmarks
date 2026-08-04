@@ -1,9 +1,11 @@
 SELECT
     o_year,
-    sum(CASE
+    -- toFloat64 before dividing: ClickHouse otherwise keeps the numerator's decimal scale through
+    -- the division, where the other engines promote to double
+    toFloat64(sum(CASE
         WHEN nation = 'BRAZIL' THEN volume
         ELSE 0
-    END) / sum(volume) AS mkt_share
+    END)) / sum(volume) AS mkt_share
 FROM (
     SELECT
         extract(year FROM o_orderdate) AS o_year,

@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Annotated, Literal, cast, get_args
+from typing import Annotated, ClassVar, Literal, cast, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
@@ -22,7 +22,9 @@ DatabaseName = Literal[
     "doris",
 ]
 
-SuiteName = Literal["rtabench", "time_series", "clickbench", "jsonbench", "kaggle_airbnb", "tpc_h", "tpc_ds"]
+SuiteName = Literal[
+    "rtabench", "time_series", "clickbench", "jsonbench", "chat_threads", "kaggle_airbnb", "tpc_h", "tpc_ds"
+]
 Operation = Literal["populate", "select", "mutate", "concurrent"]
 Revision = Annotated[str, "Results database revision"]
 ContainerPlatform = Literal["linux/amd64", "linux/arm64"]
@@ -38,6 +40,7 @@ SUITE_DISPLAY_ORDER: tuple[SuiteName, ...] = (
     "rtabench",
     "clickbench",
     "jsonbench",
+    "chat_threads",
     "kaggle_airbnb",
     "tpc_h",
     "tpc_ds",
@@ -48,6 +51,7 @@ DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
     "time_series": 1,
     "clickbench": 1,
     "jsonbench": 10,
+    "chat_threads": 1,
     "kaggle_airbnb": 1,
     "tpc_h": 10,
     "tpc_ds": 1,
@@ -55,6 +59,7 @@ DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
 
 TIME_SERIES_SCALE_FACTORS = (1, 10)
 JSONBENCH_SCALE_FACTORS = (10,)
+CHAT_THREADS_SCALE_FACTORS = (1, 10)
 TPCH_SCALE_FACTORS = (10, 50)
 
 ALL_SUITE_SCALE_FACTORS: dict[SuiteName, tuple[int, ...]] = {
@@ -62,15 +67,17 @@ ALL_SUITE_SCALE_FACTORS: dict[SuiteName, tuple[int, ...]] = {
 }
 ALL_SUITE_SCALE_FACTORS["time_series"] = TIME_SERIES_SCALE_FACTORS
 ALL_SUITE_SCALE_FACTORS["jsonbench"] = JSONBENCH_SCALE_FACTORS
+ALL_SUITE_SCALE_FACTORS["chat_threads"] = CHAT_THREADS_SCALE_FACTORS
 ALL_SUITE_SCALE_FACTORS["tpc_h"] = TPCH_SCALE_FACTORS
 
-SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "jsonbench", "tpc_h", "tpc_ds"})
+SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "jsonbench", "chat_threads", "tpc_h", "tpc_ds"})
 
 SUITE_LABELS: dict[SuiteName, str] = {
     "rtabench": "RTABench",
     "time_series": "Time Series",
     "clickbench": "ClickBench",
     "jsonbench": "JSONBench",
+    "chat_threads": "Chat Threads",
     "kaggle_airbnb": "Kaggle Airbnb",
     "tpc_h": "TPC-H",
     "tpc_ds": "TPC-DS",
@@ -80,6 +87,7 @@ SUITE_NAV_LABELS: dict[SuiteName, str] = SUITE_LABELS.copy()
 
 SUITE_OPERATIONS: dict[SuiteName, tuple[Operation, ...]] = dict.fromkeys(SUITE_NAMES, ("populate", "select"))
 SUITE_OPERATIONS["time_series"] = ("populate", "select", "mutate", "concurrent")
+SUITE_OPERATIONS["chat_threads"] = ("populate", "select", "mutate", "concurrent")
 
 SuiteQueryNameParser = Literal["generic", "time_series"]
 
@@ -127,6 +135,10 @@ def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None
     if suite == "jsonbench" and resolved_scale_factor not in JSONBENCH_SCALE_FACTORS:
         valid = ", ".join(str(value) for value in JSONBENCH_SCALE_FACTORS)
         raise ValueError(f"Suite jsonbench supports scale factors: {valid}")
+
+    if suite == "chat_threads" and resolved_scale_factor not in CHAT_THREADS_SCALE_FACTORS:
+        valid = ", ".join(str(value) for value in CHAT_THREADS_SCALE_FACTORS)
+        raise ValueError(f"Suite chat_threads supports scale factors: {valid}")
 
     return resolved_scale_factor
 
@@ -244,7 +256,7 @@ def setup_stdout_logging(level: int = logging.INFO) -> None:
     colorama_init()
 
     class ColoredFormatter(logging.Formatter):
-        LEVEL_COLORS = {
+        LEVEL_COLORS: ClassVar[dict[int, str]] = {
             logging.DEBUG: Fore.CYAN,
             logging.INFO: Fore.GREEN,
             logging.WARNING: Fore.YELLOW,

@@ -6,16 +6,15 @@ SELECT
     ) as count_with_backup,
     count(*) FILTER (
         WHERE
-            backup_processor = ''
+            backup_processor is null
     ) as count_without_backup,
-    -- does not read as null
     avg(satisfaction) FILTER (
         WHERE
             backup_processor <> ''
     ) as avg_satisfaction_with_backup,
     avg(satisfaction) FILTER (
         WHERE
-            backup_processor = ''
+            backup_processor is null
     ) as avg_satisfaction_without_backup
 FROM
     order_events

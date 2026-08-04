@@ -14,6 +14,7 @@ from sqlalchemy import Connection, create_engine
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from .. import Database
 from ..utils import normalize_columns, require_columns, tracked_commit
@@ -138,6 +139,10 @@ class DuckDB(Database):
         engine = create_engine(connection_string)
         self._connection = self.bind_query_recorder(engine.connect())
 
+        # the suites store naive timestamps and mean UTC by them; without this DuckDB would
+        # interpret and render them in the host's local zone, making answers machine-dependent
+        get_duckdb_connection(self._connection).execute("SET TimeZone='UTC'")
+
         return self._connection
 
     def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:
@@ -247,4 +252,5 @@ class DuckDB(Database):
         return {
             **super().suite_registry(),
             "jsonbench": DuckDBJSONBench,
+            "chat_threads": ChatThreads,
         }

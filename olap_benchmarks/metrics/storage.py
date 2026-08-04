@@ -136,14 +136,16 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     session.commit()
 
                 case "insert_metric":
+                    # a sampling lane only fills the columns it measures; the rest stay
+                    # null so no reader mistakes a carried-over value for a fresh reading
                     row = RunMetric(
                         run_id=cast(int, msg["args"][0]),
                         time=cast(datetime, msg["args"][1]),
-                        cpu_percent=cast(float, msg["args"][2]),
-                        server_mem_mb=cast(int, msg["args"][3]),
-                        client_mem_mb=cast(int, msg["args"][4]),
-                        client_uss_mb=cast(int, msg["args"][5]),
-                        disk_mb=cast(int, msg["args"][6]),
+                        cpu_percent=cast(float | None, msg["args"][2]),
+                        server_mem_mb=cast(int | None, msg["args"][3]),
+                        client_mem_mb=cast(int | None, msg["args"][4]),
+                        client_uss_mb=cast(int | None, msg["args"][5]),
+                        disk_mb=cast(int | None, msg["args"][6]),
                     )
                     session.add(row)
                     session.commit()
@@ -371,11 +373,11 @@ class Storage:
         self,
         run_id: int,
         time: datetime,
-        cpu_percent: float,
-        server_mem_mb: int,
-        client_mem_mb: int,
-        client_uss_mb: int,
-        disk_mb: int,
+        cpu_percent: float | None = None,
+        server_mem_mb: int | None = None,
+        client_mem_mb: int | None = None,
+        client_uss_mb: int | None = None,
+        disk_mb: int | None = None,
     ) -> None:
         self.put(
             "insert_metric",

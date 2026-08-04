@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from hashlib import blake2b
 from io import BytesIO
 from typing import Any
@@ -7,8 +8,47 @@ from typing import Any
 import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
-FLOAT_ROUND_DECIMALS = 10
-ANSWER_HASH_VERSION = "canonical-v5"
+# Significant digits rather than decimal places, because the precision a float carries scales with
+# its magnitude: rounding 38257.8106600811 to ten decimals demands fifteen significant digits, which
+# is at float64's limit, so two engines summing in different orders disagreed in the last digit
+# while 0.05 was quantised far more coarsely than it needed to be.
+#
+# Ten is bounded on both sides by cases this suite actually produces, and test_results_hashing pins
+# them. Below ten hides a real defect: MonetDB truncating 3295493.512857143 to 3295493.512 differs
+# only in the tenth digit. Above eleven flags summation noise as a disagreement: stddev over 183k
+# float32 values differs between DuckDB and ClickHouse in the twelfth. Ten rather than eleven
+# because that noise grows with row count and the largest suites run at ten times this scale.
+FLOAT_SIGNIFICANT_DIGITS = 10
+ANSWER_HASH_VERSION = "canonical-v10"
+
+
+def _normalize_json_text(value: str | None) -> str | None:
+    """Re-render a JSON document compactly with sorted keys, leaving anything else untouched.
+
+    Engines store and echo JSON differently: MonetDB's json type normalises the source
+    '{"a": 1}' to '{"a":1}', while a text column echoes it verbatim. Object key order is not
+    meaningful in JSON either. Both are spelling, not content, so neither should decide whether two
+    engines agree.
+    """
+    if value is None:
+        return None
+
+    stripped = value.lstrip()
+    if not stripped.startswith(("{", "[")):
+        return value
+
+    try:
+        parsed = json.loads(value)
+    except (ValueError, RecursionError):
+        return value
+
+    return json.dumps(parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _looks_like_json(series: pl.Series) -> bool:
+    for value in series.drop_nulls().head(1):
+        return str(value).lstrip().startswith(("{", "["))
+    return False
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
@@ -27,14 +67,39 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
             expression = expression.cast(pl.Int64).cast(pl.String)
         elif isinstance(dtype, pl.Decimal) and (dtype.scale or 0) == 0:
             expression = expression.cast(pl.String)
+        # NaN and null both mean "undefined" here and engines disagree on which they return for
+        # an undefined statistic, e.g. stddev_samp() over a single row.
         elif dtype.is_float() or isinstance(dtype, pl.Decimal):
-            expression = expression.cast(pl.Float64).round(FLOAT_ROUND_DECIMALS)
+            expression = expression.cast(pl.Float64).fill_nan(None).round_sig_figs(FLOAT_SIGNIFICANT_DIGITS)
         elif isinstance(dtype, pl.Datetime):
             if dtype.time_zone is not None:
                 expression = expression.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
             expression = expression.cast(pl.Datetime("ms"))
         elif isinstance(dtype, pl.Categorical | pl.Enum):
             expression = expression.cast(pl.String)
+        # A JSON document compares on its content rather than on how the engine chose to render it.
+        # Applied only to columns whose first value opens a JSON object or array, so ordinary text
+        # never pays for the round trip.
+        elif dtype == pl.String and _looks_like_json(df.get_column(name)):
+            expression = expression.map_elements(_normalize_json_text, return_dtype=pl.String)
+        # Fixed-width text arrives as bytes: ClickHouse reports FixedString(n) as binary padded
+        # to the declared width with NUL. That padding is storage rather than data, so decode to
+        # text and drop it to match a VARCHAR engine. Non-UTF-8 binary raises rather than
+        # hashing as null.
+        elif dtype == pl.Binary:
+            expression = expression.cast(pl.String).str.strip_chars_end("\x00")
+        # An aggregated array renders as its bracketed elements, because MonetDB has no array type
+        # and builds the same content as a string with group_concat. Element order is part of the
+        # comparison, so a differently ordered or differently populated array still mismatches;
+        # only the container's spelling is normalised. A list whose elements are all null, which is
+        # what array_agg() returns for an unmatched outer join, canonicalises to null like
+        # MonetDB's group_concat over no rows.
+        elif isinstance(dtype, pl.List):
+            expression = pl.concat_str(
+                pl.lit("["),
+                expression.cast(pl.List(pl.String)).list.join(",", ignore_nulls=False),
+                pl.lit("]"),
+            )
 
         expressions.append(expression.alias(name))
 

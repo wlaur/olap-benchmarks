@@ -24,4 +24,7 @@ HAVING
             AND s_nationkey = n_nationkey
             AND n_name = 'GERMANY')
 ORDER BY
-    value DESC;
+    value DESC,
+    -- ps_partkey breaks ties: value alone is not a total order, so the row order and
+    -- therefore the answer hash varied between iterations of a single run
+    ps_partkey;

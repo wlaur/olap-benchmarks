@@ -9,6 +9,27 @@ import duckdb
 
 from ..settings import SETTINGS, Revision, SuiteName
 
+# Queries whose answers are legitimately not comparable across engines, mapped to why. These still
+# run and are still timed; only the cross-engine answer comparison is skipped, because the engines
+# disagree by dialect rather than because one of them is wrong. Keep this list short: an entry here
+# is a claim that no engine is at fault, which is a much stronger claim than a failing query.
+ANSWER_COMPARISON_EXCLUSIONS: dict[SuiteName, dict[str, str]] = {
+    "clickbench": {
+        "Q28": (
+            "DuckDB and ClickHouse apply different regex semantics to the roughly 1031 Referer "
+            "values containing a newline: RE2's default leaves '.' not matching a newline and '$' "
+            "meaning end of text, which DuckDB follows and ClickHouse does not. Neither is wrong "
+            "and no rewrite reconciles them without changing what the query asks."
+        )
+    },
+}
+
+
+def _excluded_query_names(suite: SuiteName | None) -> dict[SuiteName, dict[str, str]]:
+    if suite is None:
+        return ANSWER_COMPARISON_EXCLUSIONS
+    return {suite: ANSWER_COMPARISON_EXCLUSIONS[suite]} if suite in ANSWER_COMPARISON_EXCLUSIONS else {}
+
 
 @dataclass(frozen=True)
 class RowCountObservation:
@@ -110,6 +131,14 @@ def _load_latest_query_row_count_mismatches(
         where_clauses.append("r.suite_scale_factor = ?")
         params.append(suite_scale_factor)
 
+    exclusion_clauses: list[str] = []
+    for excluded_suite, queries in _excluded_query_names(suite).items():
+        placeholders = ", ".join("?" for _ in queries)
+        exclusion_clauses.append(f"and not (lr.suite = ? and s.query_name in ({placeholders}))")
+        params.append(excluded_suite)
+        params.extend(queries)
+    exclusion_sql = "\n            ".join(exclusion_clauses)
+
     where_sql = "\n          and ".join(where_clauses)
     sql = f"""
         with scoped_runs as (
@@ -152,6 +181,7 @@ def _load_latest_query_row_count_mismatches(
             and s.step_type = 'query'
             and s.status = 'completed'
             and s.query_name is not null
+            {exclusion_sql}
             and s.iteration is not null
             and s.row_count is not null
         ),
@@ -354,6 +384,14 @@ def _load_latest_query_answer_hash_mismatches(
         where_clauses.append("r.suite_scale_factor = ?")
         params.append(suite_scale_factor)
 
+    exclusion_clauses: list[str] = []
+    for excluded_suite, queries in _excluded_query_names(suite).items():
+        placeholders = ", ".join("?" for _ in queries)
+        exclusion_clauses.append(f"and not (lr.suite = ? and s.query_name in ({placeholders}))")
+        params.append(excluded_suite)
+        params.extend(queries)
+    exclusion_sql = "\n            ".join(exclusion_clauses)
+
     where_sql = "\n          and ".join(where_clauses)
     sql = f"""
         with scoped_runs as (
@@ -398,6 +436,7 @@ def _load_latest_query_answer_hash_mismatches(
             and s.step_type = 'query'
             and s.status = 'completed'
             and s.query_name is not null
+            {exclusion_sql}
             and s.iteration is not null
             and s.row_count is not null
             and s."metadata" is not null

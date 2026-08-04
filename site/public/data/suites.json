@@ -6,17 +6,9 @@
       "nav_label": "Time Series",
       "queries_key": "time_series",
       "default_scale_factor": 1,
-      "supported_scale_factors": [
-        1,
-        10
-      ],
+      "supported_scale_factors": [1, 10],
       "scale_factor_supported": true,
-      "operations": [
-        "populate",
-        "select",
-        "mutate",
-        "concurrent"
-      ],
+      "operations": ["populate", "select", "mutate", "concurrent"],
       "query_name_parser": "time_series",
       "public_role": "benchmark"
     },
@@ -26,14 +18,9 @@
       "nav_label": "RTABench",
       "queries_key": "rtabench",
       "default_scale_factor": 1,
-      "supported_scale_factors": [
-        1
-      ],
+      "supported_scale_factors": [1],
       "scale_factor_supported": false,
-      "operations": [
-        "populate",
-        "select"
-      ],
+      "operations": ["populate", "select"],
       "query_name_parser": "generic",
       "public_role": "benchmark"
     },
@@ -43,14 +30,9 @@
       "nav_label": "ClickBench",
       "queries_key": "clickbench",
       "default_scale_factor": 1,
-      "supported_scale_factors": [
-        1
-      ],
+      "supported_scale_factors": [1],
       "scale_factor_supported": false,
-      "operations": [
-        "populate",
-        "select"
-      ],
+      "operations": ["populate", "select"],
       "query_name_parser": "generic",
       "public_role": "benchmark"
     },
@@ -60,14 +42,21 @@
       "nav_label": "JSONBench",
       "queries_key": "jsonbench",
       "default_scale_factor": 10,
-      "supported_scale_factors": [
-        10
-      ],
+      "supported_scale_factors": [10],
       "scale_factor_supported": true,
-      "operations": [
-        "populate",
-        "select"
-      ],
+      "operations": ["populate", "select"],
+      "query_name_parser": "generic",
+      "public_role": "benchmark"
+    },
+    {
+      "id": "chat_threads",
+      "title": "Chat Threads",
+      "nav_label": "Chat Threads",
+      "queries_key": "chat_threads",
+      "default_scale_factor": 1,
+      "supported_scale_factors": [1, 10],
+      "scale_factor_supported": true,
+      "operations": ["populate", "select", "mutate", "concurrent"],
       "query_name_parser": "generic",
       "public_role": "benchmark"
     },
@@ -77,14 +66,9 @@
       "nav_label": "Kaggle Airbnb",
       "queries_key": "kaggle_airbnb",
       "default_scale_factor": 1,
-      "supported_scale_factors": [
-        1
-      ],
+      "supported_scale_factors": [1],
       "scale_factor_supported": false,
-      "operations": [
-        "populate",
-        "select"
-      ],
+      "operations": ["populate", "select"],
       "query_name_parser": "generic",
       "public_role": "smoke"
     },
@@ -94,15 +78,9 @@
       "nav_label": "TPC-H",
       "queries_key": "tpc_h",
       "default_scale_factor": 10,
-      "supported_scale_factors": [
-        10,
-        50
-      ],
+      "supported_scale_factors": [10, 50],
       "scale_factor_supported": true,
-      "operations": [
-        "populate",
-        "select"
-      ],
+      "operations": ["populate", "select"],
       "query_name_parser": "generic",
       "public_role": "benchmark"
     },
@@ -112,14 +90,9 @@
       "nav_label": "TPC-DS",
       "queries_key": "tpc_ds",
       "default_scale_factor": 1,
-      "supported_scale_factors": [
-        1
-      ],
+      "supported_scale_factors": [1],
       "scale_factor_supported": true,
-      "operations": [
-        "populate",
-        "select"
-      ],
+      "operations": ["populate", "select"],
       "query_name_parser": "generic",
       "public_role": "benchmark"
     }

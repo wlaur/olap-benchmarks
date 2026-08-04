@@ -208,6 +208,62 @@ def test_publish_validation_accepts_the_complete_monetdb_release_matrix(
         engine.dispose()
 
 
+def test_publish_validation_accepts_a_run_that_skipped_some_scale_factors(tmp_path: Path) -> None:
+    """A default-scale publish must not be blocked by scale factors nobody benchmarked.
+
+    The gate exists to stop a partially validated MonetDB from being published, not to force every
+    configured scale factor: the full fan-out needs tens of gigabytes of SF10 and SF50 input that a
+    default-scale run has no reason to generate.
+    """
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            for cell in monetdb_benchmark_manifest():
+                if cell.scale_factor != min(
+                    other.scale_factor for other in monetdb_benchmark_manifest() if other.suite == cell.suite
+                ):
+                    continue
+                _add_run(
+                    session,
+                    driver="adbc",
+                    suite=cell.suite,
+                    scale_factor=cell.scale_factor,
+                    operation=cell.operation,
+                )
+            session.commit()
+        engine.dispose()
+
+        _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()
+
+
+def test_publish_validation_still_rejects_an_incomplete_scale_factor(tmp_path: Path) -> None:
+    # scoping to what was run must not stop a half-finished suite from being caught
+    db_path = migrate_results(db_path=tmp_path / "results.db")
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            for cell in monetdb_benchmark_manifest():
+                if cell.suite == "rtabench" and cell.scale_factor == 1 and cell.operation == "select":
+                    continue
+                _add_run(
+                    session,
+                    driver="adbc",
+                    suite=cell.suite,
+                    scale_factor=cell.scale_factor,
+                    operation=cell.operation,
+                )
+            session.commit()
+        engine.dispose()
+
+        with pytest.raises(RuntimeError, match="rtabench:sf1:select"):
+            _validate_publishable_runs(db_path)
+    finally:
+        engine.dispose()
+
+
 def test_publish_validation_rejects_missing_select_correctness(tmp_path: Path) -> None:
     db_path = migrate_results(db_path=tmp_path / "results.db")
     engine = get_results_engine(read_only=False, db_path=db_path)

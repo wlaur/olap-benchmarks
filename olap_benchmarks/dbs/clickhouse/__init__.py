@@ -17,17 +17,19 @@ from sqlalchemy import Connection, create_engine
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from ...suites.tpc_ds.config import TpcDs
+from ...suites.tpc_h.config import TpcH
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "26.6.1.1193"
+VERSION = "26.7.1.1315"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
@@ -90,12 +92,38 @@ def get_clickhouse_client() -> ClickhouseClient:
 
 
 class ClickHouseRTABench(RTABench["Clickhouse"]):
+    # A materialized view fires on inserts to the leftmost table of its FROM, and sees only what
+    # the other tables already hold. The join-based views are rooted at products and customers, so
+    # loading those first leaves their targets permanently empty: the queries reading them then
+    # return no rows in a few ms and read as a huge speedup over the raw-scan equivalents.
+    # Loading them last means every view is populated by the time its trigger table arrives.
+    # customers precedes products because the country/category view joins both.
+    @property
+    def populate_table_order(self) -> list[TableName]:
+        return ["orders", "order_items", "order_events", "customers", "products"]
+
+    # DateTime arrives over Arrow as uint32 epoch seconds, so every column holding one has to be
+    # named here: the bucketing aliases plus the raw columns the single-order lookups select.
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["hour", "day"]}
+        return {
+            "time_columns": ["hour", "day", "month", "event_created", "created_at"],
+            # standard-SQL NULL semantics for the GROUPING SETS rollup rows in 0022
+            "settings": {"group_by_use_nulls": 1},
+        }
 
 
 class ClickhouseClickbench(Clickbench["Clickhouse"]):
+    # DateTime crosses Arrow as uint32 epoch seconds and would hash as an integer against the
+    # other engines' timestamp. These are every TIMESTAMP column in the ClickBench schema, which
+    # a SELECT * query returns, plus Q42's bucketing alias M. Matching is case-sensitive and must
+    # stay that way: Q18 aliases extract(minute FROM EventTime) as lowercase m, which is a minute
+    # of the hour rather than an instant, and converting it yields a 1970 timestamp. ClickBench
+    # keeps one query per line, so the reason cannot live in the .sql file.
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["EventTime", "ClientEventTime", "LocalEventTime", "M"]}
+
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # same number of partitions as the official clickbench insert
@@ -113,6 +141,23 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
 
         if restart:
             self.db.restart_event()
+
+
+class ClickhouseTpcH(TpcH["Clickhouse"]):
+    # ClickHouse 26.6.1 and 26.7.1 abort these two with
+    #   Code: 131 ... Too large sizes of FixedString to deserialize: <bogus length>:
+    #   While executing DelayedJoinedBlocksTransform
+    # when the planner picks parallel_hash, which the default direct,parallel_hash,hash does.
+    # Both carry nation's FixedString(25) name through a multi-way join. The schema follows
+    # ClickHouse's own tests/benchmarks/tpc-h/init.sql, so it is not ours to change; hash is
+    # forced for just these two rather than for the suite, leaving the other 20 on default
+    # join planning. See CH_ISSUE.md.
+    PARALLEL_HASH_BUG_QUERIES: ClassVar[frozenset[str]] = frozenset({"05_local_supplier_volume", "07_volume_shipping"})
+
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name not in self.PARALLEL_HASH_BUG_QUERIES:
+            return self.fetch_kwargs
+        return {**self.fetch_kwargs, "settings": {"join_algorithm": "hash"}}
 
 
 class ClickhouseTpcDs(TpcDs["Clickhouse"]):
@@ -330,6 +375,21 @@ class Clickhouse(Database):
         self._clickhouse_client = get_clickhouse_client()
         return self._clickhouse_client
 
+    def reset_session(self) -> None:
+        # A query that errors server-side can leave the HTTP session wedged, after which every
+        # further query on it returns SESSION_IS_LOCKED even with no concurrent client. Dropping
+        # the client makes the next call open a fresh session.
+        if self._clickhouse_client is None:
+            return
+
+        try:
+            self._clickhouse_client.close()
+        except Exception:
+            # the session is already unusable; the point is to drop it, not to close it cleanly
+            _LOGGER.debug("Discarding an unresponsive ClickHouse client", exc_info=True)
+        finally:
+            self._clickhouse_client = None
+
     def get_runtime_version(self) -> str:
         df = self.fetch("select version() as version", schema={"version": pl.String})
         return str(df.item(0, 0))
@@ -370,7 +430,8 @@ class Clickhouse(Database):
         # ArrowStream returns:
         #   * DateTime64 / date_trunc()        -> timestamp[ms, tz=UTC] (typed)
         #   * DateTime / toStartOfHour() etc.  -> uint32 (epoch seconds)
-        # Normalise both shapes to the naive ms-precision Datetime that the
+        #   * Date / toStartOfMonth() etc.     -> date
+        # Normalise all three shapes to the naive ms-precision Datetime that the
         # rest of the benchmark assumes.
         for n in time_columns:
             if n not in df.columns:
@@ -378,6 +439,8 @@ class Clickhouse(Database):
             dtype = df.schema[n]
             if isinstance(dtype, pl.Datetime):
                 df = df.with_columns(pl.col(n).cast(pl.Datetime("ms")).dt.replace_time_zone(None))
+            elif dtype == pl.Date:
+                df = df.with_columns(pl.col(n).cast(pl.Datetime("ms")))
             elif dtype.is_integer():
                 df = df.with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")))
 
@@ -660,6 +723,8 @@ class Clickhouse(Database):
             "rtabench": ClickHouseRTABench,
             "clickbench": ClickhouseClickbench,
             "jsonbench": ClickhouseJSONBench,
+            "chat_threads": ChatThreads,
             "time_series": ClickhouseTimeseries,
+            "tpc_h": ClickhouseTpcH,
             "tpc_ds": ClickhouseTpcDs,
         }

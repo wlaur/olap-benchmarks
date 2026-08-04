@@ -285,6 +285,11 @@ def benchmark(
             db_instance._writer_process = getattr(writer, "process", None)
 
             _start_db(db_instance)
+            # readiness probing opens a connection here, but each operation runs in its own
+            # process and opens its own. Leaving this one open would hold a second server session
+            # for the whole run, which for MonetDB keeps pending changes alive and forces large
+            # ingests onto the ordinary write-ahead-log path.
+            db_instance.close_connection()
 
             try:
                 operations = (
@@ -475,6 +480,9 @@ def resources(
     for containerised engines and client memory for in-process engines such as DuckDB
     and Polars, whose `server_mem_mb` is always 0 because they have no server. Server
     and client peaks are never summed; they occur at different times.
+
+    `mean_combined_cpu_percent` and `cpu_core_seconds` weight each sample by the gap to
+    the next one, so they stay comparable across runs whose sampling rates differ.
     """
     rows = load_run_resource_usage(
         revision=revision,

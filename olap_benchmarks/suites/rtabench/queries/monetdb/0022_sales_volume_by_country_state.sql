@@ -13,5 +13,7 @@ GROUP BY
     GROUPING SETS ((country), (country, state), ())
 ORDER BY
     sum(amount * price),
-    country,
-    state;
+    -- the rollup rows carry NULL country/state and engines default their placement
+    -- differently, so the sort is only total once it is stated
+    country NULLS LAST,
+    state NULLS LAST;

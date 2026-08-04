@@ -156,6 +156,11 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        """Fetch kwargs for one query, so a connector can special-case individual queries."""
+        _ = query_name
+        return self.fetch_kwargs
+
     def load_tpch_query(self, query_name: str) -> str:
         db_specific = TPC_H_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
         common = TPC_H_QUERIES_DIRECTORY / f"{query_name}.sql"
@@ -207,18 +212,14 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
                 query_name=query_name,
                 iterations=iterations,
                 query_loader=lambda query_name=query_name: self.load_tpch_query(query_name),
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
+                fetch_kwargs_factory=lambda query_name=query_name: self.query_fetch_kwargs(query_name),
                 progress_label=progress_label,
                 log_success=log_success,
             )
             if not ok:
                 failed_queries += 1
 
-        if failed_queries:
-            _LOGGER.warning(
-                f"TPC-H select completed on {self.db.name} with {failed_queries:_} failed "
-                f"{'queries' if failed_queries != 1 else 'query'}"
-            )
+        self.assert_no_failed_queries(failed_queries, len(TPCH_QUERY_NAMES))
 
         _LOGGER.info(
             f"Executed {len(TPCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
