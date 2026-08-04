@@ -18,7 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v8"
+    assert left["answer_hash_version"] == "canonical-v9"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 

@@ -8,8 +8,13 @@ from typing import Any
 import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
-FLOAT_ROUND_DECIMALS = 10
-ANSWER_HASH_VERSION = "canonical-v8"
+# Significant digits rather than decimal places, because the precision a float carries scales with
+# its magnitude: rounding 38257.8106600811 to ten decimals demands fifteen significant digits, which
+# is at float64's limit, so two engines summing in different orders disagreed in the last digit
+# while 0.05 was quantised far more coarsely than it needed to be. Twelve sits above the noise from
+# summation order and well below any difference a real error would produce.
+FLOAT_SIGNIFICANT_DIGITS = 12
+ANSWER_HASH_VERSION = "canonical-v9"
 
 
 def _normalize_json_text(value: str | None) -> str | None:
@@ -60,7 +65,7 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
         # NaN and null both mean "undefined" here and engines disagree on which they return for
         # an undefined statistic, e.g. stddev_samp() over a single row.
         elif dtype.is_float() or isinstance(dtype, pl.Decimal):
-            expression = expression.cast(pl.Float64).fill_nan(None).round(FLOAT_ROUND_DECIMALS)
+            expression = expression.cast(pl.Float64).fill_nan(None).round_sig_figs(FLOAT_SIGNIFICANT_DIGITS)
         elif isinstance(dtype, pl.Datetime):
             if dtype.time_zone is not None:
                 expression = expression.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
