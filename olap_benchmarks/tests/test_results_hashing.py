@@ -18,7 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v7"
+    assert left["answer_hash_version"] == "canonical-v8"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -172,3 +172,28 @@ def test_answer_metadata_skips_large_results(monkeypatch: pytest.MonkeyPatch) ->
 
     assert "answer_hash" not in metadata
     assert metadata["answer_hash_skipped_reason"] == "result has 2 cells, above the 1-cell hash limit"
+
+
+def test_answer_metadata_canonicalizes_json_rendering() -> None:
+    # MonetDB's json column normalises the stored document, a text column echoes it verbatim, and
+    # object key order is not meaningful; none of that should decide whether two engines agree
+    spaced = pl.DataFrame({"payload": ['{"status": ["Pending"], "terminal": "Berlin"}']})
+    compact = pl.DataFrame({"payload": ['{"terminal":"Berlin","status":["Pending"]}']})
+
+    assert hashing.build_answer_metadata(spaced)["answer_hash"] == hashing.build_answer_metadata(compact)["answer_hash"]
+
+
+def test_answer_metadata_keeps_json_content_significant() -> None:
+    left = pl.DataFrame({"payload": ['{"terminal": "Berlin"}']})
+    right = pl.DataFrame({"payload": ['{"terminal": "Hamburg"}']})
+
+    assert hashing.build_answer_metadata(left)["answer_hash"] != hashing.build_answer_metadata(right)["answer_hash"]
+
+
+def test_answer_metadata_leaves_ordinary_text_untouched() -> None:
+    # only columns whose first value opens a JSON object or array take the normalisation path
+    text = pl.DataFrame({"name": ["Berlin", "Hamburg"]})
+    braced = pl.DataFrame({"name": ["{not json", "also not"]})
+
+    assert "answer_hash" in hashing.build_answer_metadata(text)
+    assert "answer_hash" in hashing.build_answer_metadata(braced)

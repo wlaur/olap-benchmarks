@@ -10,4 +10,4 @@ FROM
     INNER JOIN products USING (product_id)
 GROUP BY GROUPING SETS ((country), (country, state), ())
 ORDER BY
-    sum(amount * price), country, state;
+    sum(amount * price), country NULLS LAST, state NULLS LAST;

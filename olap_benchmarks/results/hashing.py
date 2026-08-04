@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from hashlib import blake2b
 from io import BytesIO
 from typing import Any
@@ -8,7 +9,36 @@ import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
 FLOAT_ROUND_DECIMALS = 10
-ANSWER_HASH_VERSION = "canonical-v7"
+ANSWER_HASH_VERSION = "canonical-v8"
+
+
+def _normalize_json_text(value: str | None) -> str | None:
+    """Re-render a JSON document compactly with sorted keys, leaving anything else untouched.
+
+    Engines store and echo JSON differently: MonetDB's json type normalises the source
+    '{"a": 1}' to '{"a":1}', while a text column echoes it verbatim. Object key order is not
+    meaningful in JSON either. Both are spelling, not content, so neither should decide whether two
+    engines agree.
+    """
+    if value is None:
+        return None
+
+    stripped = value.lstrip()
+    if not stripped.startswith(("{", "[")):
+        return value
+
+    try:
+        parsed = json.loads(value)
+    except (ValueError, RecursionError):
+        return value
+
+    return json.dumps(parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _looks_like_json(series: pl.Series) -> bool:
+    for value in series.drop_nulls().head(1):
+        return str(value).lstrip().startswith(("{", "["))
+    return False
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
@@ -37,6 +67,11 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
             expression = expression.cast(pl.Datetime("ms"))
         elif isinstance(dtype, pl.Categorical | pl.Enum):
             expression = expression.cast(pl.String)
+        # A JSON document compares on its content rather than on how the engine chose to render it.
+        # Applied only to columns whose first value opens a JSON object or array, so ordinary text
+        # never pays for the round trip.
+        elif dtype == pl.String and _looks_like_json(df.get_column(name)):
+            expression = expression.map_elements(_normalize_json_text, return_dtype=pl.String)
         # Fixed-width text arrives as bytes: ClickHouse reports FixedString(n) as binary padded
         # to the declared width with NUL. That padding is storage rather than data, so decode to
         # text and drop it to match a VARCHAR engine. Non-UTF-8 binary raises rather than
