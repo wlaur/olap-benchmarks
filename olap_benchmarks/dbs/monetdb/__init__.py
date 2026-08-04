@@ -11,7 +11,15 @@ import polars as pl
 from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, format_suite_data_directory_name, host_port
+from ...settings import (
+    SETTINGS,
+    DatabaseName,
+    Operation,
+    SuiteName,
+    TableName,
+    format_suite_data_directory_name,
+    host_port,
+)
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.time_series.config import TimeSeries
@@ -69,6 +77,16 @@ _ROLLING_AVG_WINDOW_BUG = (
     "from the 17th row onward; see MONETDB_ISSUE.md. A 60-row moving average cannot be expressed "
     "correctly, so the query is not measured rather than publishing a runtime for a wrong answer."
 )
+
+
+class MonetDBChatThreads(ChatThreads["MonetDB"]):
+    # The concurrent workload terminates mserver5 mid-query: several readers plus an ADBC writer
+    # against the wide JSON column, three attempts out of three, on MonetDB 11.55.7 with
+    # adbc-driver-monetdb 0.12.0. Clients see "IO: unexpected end of file" and the container is
+    # gone afterwards. Nothing on our side fixes it, and retrying only costs the run 11 minutes.
+    # populate, select and mutate all complete, so the rest of the suite is still measured.
+    # See MONETDB_ISSUE.md.
+    supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select", "mutate")
 
 
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
@@ -326,5 +344,5 @@ class MonetDB(Database):
         return {
             **super().suite_registry(),
             "time_series": MonetDBTimeSeries,
-            "chat_threads": ChatThreads,
+            "chat_threads": MonetDBChatThreads,
         }

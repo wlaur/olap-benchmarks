@@ -266,7 +266,13 @@ def test_chat_threads_registered_for_json_capable_engines() -> None:
 
         assert "chat_threads" in benchmarks
         assert benchmarks["chat_threads"].scale_factor == 1
-        assert benchmarks["chat_threads"].supported_operations == ("populate", "select", "mutate", "concurrent")
+
+    for db in (Clickhouse(), DuckDB()):
+        assert db.benchmarks["chat_threads"].supported_operations == ("populate", "select", "mutate", "concurrent")
+
+    # the concurrent workload terminates mserver5, so MonetDB measures the rest of the suite
+    # rather than failing the pair; see MonetDBChatThreads
+    assert MonetDB().benchmarks["chat_threads"].supported_operations == ("populate", "select", "mutate")
 
 
 def test_time_series_scale_factor_10_matches_reference_size() -> None:
