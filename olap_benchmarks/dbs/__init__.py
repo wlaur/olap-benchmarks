@@ -632,10 +632,14 @@ class Database(BaseModel, ABC):
         with fpath.open() as f:
             statements = f.read()
 
+        # Line comments are stripped before splitting on ';': a semicolon inside one would
+        # otherwise end the statement early and send a CREATE TABLE without its closing paren.
+        statements = "\n".join(line.split("--", 1)[0] for line in statements.splitlines())
+
         for stmt in statements.split(";"):
             stmt = stmt.strip()
 
-            if not stmt or all(line.strip().startswith("--") for line in stmt.splitlines()):
+            if not stmt:
                 continue
 
             # ensure the connection used when initializing the schema is not reused

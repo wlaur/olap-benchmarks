@@ -52,7 +52,7 @@ CREATE TABLE order_events (
     event_type text not null,
     satisfaction Float32 not null,
     processor text not null,
-    -- ClickHouse's text is not nullable; this is the only column in the suite holding NULLs
+    -- ClickHouse's text is not nullable, and this is the only column in the suite holding NULLs
     backup_processor Nullable(String),
     event_payload text,
     PRIMARY KEY (order_id, event_created)
