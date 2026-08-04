@@ -114,6 +114,16 @@ class ClickHouseRTABench(RTABench["Clickhouse"]):
 
 
 class ClickhouseClickbench(Clickbench["Clickhouse"]):
+    # DateTime crosses Arrow as uint32 epoch seconds and would hash as an integer against the
+    # other engines' timestamp. These are every TIMESTAMP column in the ClickBench schema, which
+    # a SELECT * query returns, plus Q42's bucketing alias M. Matching is case-sensitive and must
+    # stay that way: Q18 aliases extract(minute FROM EventTime) as lowercase m, which is a minute
+    # of the hour rather than an instant, and converting it yields a 1970 timestamp. ClickBench
+    # keeps one query per line, so the reason cannot live in the .sql file.
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"time_columns": ["EventTime", "ClientEventTime", "LocalEventTime", "M"]}
+
     @property
     def populate_kwargs(self) -> dict[str, Any]:
         # same number of partitions as the official clickbench insert
