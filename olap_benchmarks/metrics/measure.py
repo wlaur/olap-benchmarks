@@ -102,10 +102,23 @@ def calculate_cpu_percent_from_totals(
     cpu_delta = cpu_total - previous_cpu_total
     system_delta = system_total - previous_system_total
 
-    if cpu_delta > 0 and system_delta > 0 and online_cpus > 0:
-        return (cpu_delta / system_delta) * online_cpus * 100.0
+    if not (cpu_delta > 0 and system_delta > 0 and online_cpus > 0):
+        return 0.0
 
-    return 0.0
+    # system_cpu_usage covers every core, so a container's share of it cannot exceed 1. A larger
+    # ratio means the two totals were not read over the same interval, which happens around a
+    # container restart: the suite restarts the database after populate, and one such sample
+    # reported 8626% on a 14-core host. Discard the reading rather than record an impossible one,
+    # which would otherwise survive into peak_combined_cpu_percent.
+    if cpu_delta > system_delta:
+        _LOGGER.debug(
+            "Discarding inconsistent container CPU sample: cpu delta %d exceeds system delta %d",
+            cpu_delta,
+            system_delta,
+        )
+        return 0.0
+
+    return (cpu_delta / system_delta) * online_cpus * 100.0
 
 
 def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) -> float:

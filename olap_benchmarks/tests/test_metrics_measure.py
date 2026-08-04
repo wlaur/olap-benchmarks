@@ -227,3 +227,32 @@ def test_restarting_container_reports_no_cpu_instead_of_raising() -> None:
     stats["cpu_stats"].pop("system_cpu_usage")
 
     assert measure.calculate_container_cpu_percent("database", stats) == 0.0
+
+
+def test_container_cpu_rejects_a_sample_wider_than_the_system_interval() -> None:
+    # around a container restart the two totals stop covering the same interval, and a container
+    # cannot use more CPU than the host reports in total; one such sample recorded 8626% on a
+    # 14-core host, which then surfaced as that run's peak
+    assert (
+        measure.calculate_cpu_percent_from_totals(
+            cpu_total=5_000_000_000,
+            previous_cpu_total=0,
+            system_total=1_000_000_000,
+            previous_system_total=0,
+            online_cpus=14,
+        )
+        == 0.0
+    )
+
+
+def test_container_cpu_allows_full_utilisation_of_every_core() -> None:
+    assert (
+        measure.calculate_cpu_percent_from_totals(
+            cpu_total=1_000_000_000,
+            previous_cpu_total=0,
+            system_total=1_000_000_000,
+            previous_system_total=0,
+            online_cpus=14,
+        )
+        == 1400.0
+    )
