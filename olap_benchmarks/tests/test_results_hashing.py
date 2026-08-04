@@ -18,7 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v5"
+    assert left["answer_hash_version"] == "canonical-v6"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -40,6 +40,19 @@ def test_answer_metadata_canonicalizes_equivalent_numeric_dtypes() -> None:
     )
 
     assert hashing.build_answer_metadata(narrow)["answer_hash"] == hashing.build_answer_metadata(wide)["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_fixed_width_text_to_strings() -> None:
+    # ClickHouse declares TPC-H's CHAR(n) columns as FixedString(n), which arrives as binary
+    # padded to the declared width with NUL. Writing that to NDJSON panics polars-json, and the
+    # padded bytes would never match a VARCHAR engine's plain string.
+    fixed_width = pl.DataFrame({"name": pl.Series([b"BRAZIL\x00\x00\x00", b"A"], dtype=pl.Binary)})
+    varchar = pl.DataFrame({"name": pl.Series(["BRAZIL", "A"], dtype=pl.String)})
+
+    assert (
+        hashing.build_answer_metadata(fixed_width)["answer_hash"]
+        == hashing.build_answer_metadata(varchar)["answer_hash"]
+    )
 
 
 def test_answer_metadata_canonicalizes_scale_zero_decimals_to_integers() -> None:
