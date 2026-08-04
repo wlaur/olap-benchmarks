@@ -216,3 +216,14 @@ def test_one_shot_container_cpu_uses_consecutive_samples() -> None:
 
     assert measure.calculate_container_cpu_percent("database", first) == 0.0
     assert measure.calculate_container_cpu_percent("database", second) == 80.0
+
+
+def test_restarting_container_reports_no_cpu_instead_of_raising() -> None:
+    # the suites restart the database between operations, and docker reports no CPU accounting at
+    # all while a container is coming up; raising here loses the whole sample, not just this column
+    measure._CONTAINER_CPU_SNAPSHOTS.clear()
+    stats = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, mem_mb=256)
+    stats["precpu_stats"].pop("system_cpu_usage")
+    stats["cpu_stats"].pop("system_cpu_usage")
+
+    assert measure.calculate_container_cpu_percent("database", stats) == 0.0

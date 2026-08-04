@@ -114,6 +114,12 @@ def calculate_container_cpu_percent(container_name: str, stats: dict[str, Any]) 
     if "system_cpu_usage" in precpu_stats:
         return calculate_cpu_percent(cpu_stats, precpu_stats)
 
+    # A container that is starting or stopping reports no CPU accounting at all. The suites restart
+    # the database between operations, so this is a normal transient rather than an error: report
+    # no usage instead of raising, which would drop the whole sample and log a traceback per tick.
+    if "system_cpu_usage" not in cpu_stats or "online_cpus" not in cpu_stats:
+        return 0.0
+
     cpu_total = cast(int, cpu_stats["cpu_usage"]["total_usage"])
     system_total = cast(int, cpu_stats["system_cpu_usage"])
     online_cpus = cast(int, cpu_stats["online_cpus"])
