@@ -604,11 +604,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             if not ok:
                 failed_queries += 1
 
-        if failed_queries:
-            _LOGGER.warning(
-                f"Time-series select completed on {self.db.name} with {failed_queries:_} failed "
-                f"{'queries' if failed_queries != 1 else 'query'}"
-            )
+        self.assert_no_failed_queries(failed_queries, len(TIME_SERIES_QUERY_NAMES))
 
         _LOGGER.info(
             f"Executed {len(TIME_SERIES_QUERY_NAMES):_} queries "

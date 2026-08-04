@@ -21,6 +21,10 @@ from ..settings import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class FailedQueriesError(RuntimeError):
+    pass
+
+
 class ManualPreparationRequired(RuntimeError):
     pass
 
@@ -172,6 +176,22 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                 reason=reason,
                 result_status=result_status,
             )
+
+    def assert_no_failed_queries(self, failed_queries: int, total_queries: int) -> None:
+        """Fail the run if any query failed.
+
+        execute_query_with_isolation deliberately keeps going after a failure so one broken query
+        still yields timings for the rest, but the operation as a whole has not measured what it
+        claims to and must not be recorded as completed.
+        """
+        if not failed_queries:
+            return
+
+        raise FailedQueriesError(
+            f"{failed_queries:_} of {total_queries:_} {self.name} "
+            f"{'queries' if failed_queries != 1 else 'query'} failed on {self.db.name}; "
+            f"see the logged traceback(s) above"
+        )
 
     def execute_query_with_isolation(
         self,
