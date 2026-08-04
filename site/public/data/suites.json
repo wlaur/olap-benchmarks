@@ -72,6 +72,26 @@
       "public_role": "benchmark"
     },
     {
+      "id": "chat_threads",
+      "title": "Chat Threads",
+      "nav_label": "Chat Threads",
+      "queries_key": "chat_threads",
+      "default_scale_factor": 1,
+      "supported_scale_factors": [
+        1,
+        10
+      ],
+      "scale_factor_supported": true,
+      "operations": [
+        "populate",
+        "select",
+        "mutate",
+        "concurrent"
+      ],
+      "query_name_parser": "generic",
+      "public_role": "benchmark"
+    },
+    {
       "id": "kaggle_airbnb",
       "title": "Kaggle Airbnb",
       "nav_label": "Kaggle Airbnb",
