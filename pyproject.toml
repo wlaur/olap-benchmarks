@@ -52,15 +52,31 @@ dev = [
     "pyarrow-stubs>=20.0.0.20250627",
     "pytest>=9.0.0",
     "pyinstrument>=5.0.2",
-    "ruff>=0.12.0",
+    "ruff>=0.16.1",
     "types-colorama>=0.4.15.20240311",
     "types-docker>=7.1.0.20250705",
     "types-psutil>=7.0.0.20250601",
 ]
 
 [tool.ruff]
-lint.select = ["E", "F", "B", "I", "UP", "C4", "SIM", "ANN"]
 line-length = 120
+# extend-select rather than select, so ruff's defaults stay on and these are additive
+lint.extend-select = ["E", "F", "B", "I", "UP", "C4", "SIM", "ANN"]
+lint.ignore = [
+    # Timestamps are stored naive throughout (DuckDB TIMESTAMP, and run_metric.time is
+    # naive UTC by the datetime.now(UTC).replace(tzinfo=None) convention), so a naive
+    # datetime is the deliberate choice here rather than a forgotten timezone.
+    "DTZ",
+    # Container readiness polling, per-query suite error handling and the metric sampling
+    # lanes all have to survive arbitrary driver failures, so they catch broadly on purpose.
+    "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test doubles subclass the pydantic Database, where a mutable default is a field default
+# that pydantic copies per instance, not shared class state. Annotating these ClassVar
+# would remove them as fields and break the fakes.
+"olap_benchmarks/tests/*" = ["RUF012"]
 
 [tool.pyright]
 include = ["olap_benchmarks"]

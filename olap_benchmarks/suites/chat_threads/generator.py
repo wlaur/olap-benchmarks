@@ -445,7 +445,7 @@ def _thread_message_count(rng: Random, is_anchor: bool) -> int:
     if is_anchor:
         return rng.randrange(ANCHOR_MIN_MESSAGES, ANCHOR_MAX_MESSAGES + 1)
 
-    drawn = int(round(rng.lognormvariate(np.log(MEAN_THREAD_MESSAGES) - 0.5 * 0.8**2, 0.8)))
+    drawn = round(rng.lognormvariate(np.log(MEAN_THREAD_MESSAGES) - 0.5 * 0.8**2, 0.8))
     return max(MIN_THREAD_MESSAGES, min(MAX_THREAD_MESSAGES, drawn))
 
 

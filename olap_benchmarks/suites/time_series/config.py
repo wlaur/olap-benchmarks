@@ -864,7 +864,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                     )
                 _LOGGER.exception(
                     f"Failed {step.name} ({step_idx + 1:_}/{len(steps):_}) on {self.db.name}; "
-                    f"continuing with remaining mutation steps: {exc}"
+                    "continuing with remaining mutation steps"
                 )
 
         if failed_steps:

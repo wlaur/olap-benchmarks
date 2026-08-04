@@ -212,7 +212,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                     start_iteration=start_iteration,
                 )
             _LOGGER.exception(
-                f"Failed {query_name} {progress_label} on {self.db.name}; continuing with remaining queries: {exc}"
+                f"Failed {query_name} {progress_label} on {self.db.name}; continuing with remaining queries"
             )
             return False
 

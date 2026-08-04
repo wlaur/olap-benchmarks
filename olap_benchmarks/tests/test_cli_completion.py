@@ -225,7 +225,6 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
 
     def fake_check_input_data(_suite_name: str, scale_factor: int) -> None:
         assert scale_factor == 1
-        return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer
@@ -381,7 +380,6 @@ def test_benchmark_all_uses_suite_supported_operations(
 
     def fake_check_input_data(_suite_name: SuiteName, scale_factor: int) -> None:
         assert scale_factor == 1
-        return None
 
     def fake_start_writer_process(revision: str = "default") -> DummyWriter:
         return writer

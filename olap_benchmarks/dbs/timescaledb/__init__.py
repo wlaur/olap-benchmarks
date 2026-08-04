@@ -339,8 +339,10 @@ class TimescaleDB(Postgres):
             junk.unlink(missing_ok=True)
 
         parts = [
-            f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
-            f"--rm -d -p {TIMESCALEDB_HOST_PORT}:5432",
+            (
+                f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
+                f"--rm -d -p {TIMESCALEDB_HOST_PORT}:5432"
+            ),
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",
             "-e PGDATA=/var/lib/postgresql/data/",

@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Annotated, Literal, cast, get_args
+from typing import Annotated, ClassVar, Literal, cast, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
@@ -256,7 +256,7 @@ def setup_stdout_logging(level: int = logging.INFO) -> None:
     colorama_init()
 
     class ColoredFormatter(logging.Formatter):
-        LEVEL_COLORS = {
+        LEVEL_COLORS: ClassVar[dict[int, str]] = {
             logging.DEBUG: Fore.CYAN,
             logging.INFO: Fore.GREEN,
             logging.WARNING: Fore.YELLOW,

@@ -11,11 +11,9 @@ class FakeRecorderContext(AbstractContextManager[None]):
 
     def __enter__(self) -> None:
         self.events.append("enter")
-        return None
 
     def __exit__(self, exc_type: object, exc: object, exc_tb: object) -> None:
         self.events.append("exit")
-        return None
 
 
 class FakeRecorderConnection:

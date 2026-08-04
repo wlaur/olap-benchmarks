@@ -861,57 +861,65 @@ NOUNS: tuple[str, ...] = (
 CODE_TEMPLATES: tuple[tuple[str, str], ...] = (
     (
         "sql",
-        "select\n"
-        "    {ident}_id,\n"
-        "    count(*) as {ident}_count,\n"
-        "    sum({metric}) as total_{metric}\n"
-        "from {ident}_events\n"
-        "where occurred_at >= timestamp '{date}'\n"
-        "  and status = '{word}'\n"
-        "group by {ident}_id\n"
-        "having count(*) > {num}\n"
-        "order by total_{metric} desc\n"
-        "limit {limit};",
+        (
+            "select\n"
+            "    {ident}_id,\n"
+            "    count(*) as {ident}_count,\n"
+            "    sum({metric}) as total_{metric}\n"
+            "from {ident}_events\n"
+            "where occurred_at >= timestamp '{date}'\n"
+            "  and status = '{word}'\n"
+            "group by {ident}_id\n"
+            "having count(*) > {num}\n"
+            "order by total_{metric} desc\n"
+            "limit {limit};"
+        ),
     ),
     (
         "python",
-        "def {ident}_{word}(frame, threshold={num}):\n"
-        '    """Return rows where {metric} exceeds the threshold."""\n'
-        "    filtered = frame.filter(pl.col('{metric}') > threshold)\n"
-        "    grouped = filtered.group_by('{ident}_id').agg(\n"
-        "        pl.col('{metric}').sum().alias('total'),\n"
-        "        pl.len().alias('rows'),\n"
-        "    )\n"
-        "    return grouped.sort('total', descending=True).head({limit})",
+        (
+            "def {ident}_{word}(frame, threshold={num}):\n"
+            '    """Return rows where {metric} exceeds the threshold."""\n'
+            "    filtered = frame.filter(pl.col('{metric}') > threshold)\n"
+            "    grouped = filtered.group_by('{ident}_id').agg(\n"
+            "        pl.col('{metric}').sum().alias('total'),\n"
+            "        pl.len().alias('rows'),\n"
+            "    )\n"
+            "    return grouped.sort('total', descending=True).head({limit})"
+        ),
     ),
     (
         "yaml",
-        "apiVersion: apps/v1\n"
-        "kind: Deployment\n"
-        "metadata:\n"
-        "  name: {ident}-{word}\n"
-        "spec:\n"
-        "  replicas: {limit}\n"
-        "  template:\n"
-        "    spec:\n"
-        "      containers:\n"
-        "        - name: {ident}\n"
-        "          resources:\n"
-        "            limits:\n"
-        "              memory: {num}Mi",
+        (
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: {ident}-{word}\n"
+            "spec:\n"
+            "  replicas: {limit}\n"
+            "  template:\n"
+            "    spec:\n"
+            "      containers:\n"
+            "        - name: {ident}\n"
+            "          resources:\n"
+            "            limits:\n"
+            "              memory: {num}Mi"
+        ),
     ),
     (
         "bash",
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        "\n"
-        'THRESHOLD="${{1:-{num}}}"\n'
-        "for {ident} in $(ls {word}/); do\n"
-        '  count=$(wc -l < "{word}/${{{ident}}}")\n'
-        '  if [ "$count" -gt "$THRESHOLD" ]; then\n'
-        '    echo "${{{ident}}}: $count"\n'
-        "  fi\n"
-        "done",
+        (
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "\n"
+            'THRESHOLD="${{1:-{num}}}"\n'
+            "for {ident} in $(ls {word}/); do\n"
+            '  count=$(wc -l < "{word}/${{{ident}}}")\n'
+            '  if [ "$count" -gt "$THRESHOLD" ]; then\n'
+            '    echo "${{{ident}}}: $count"\n'
+            "  fi\n"
+            "done"
+        ),
     ),
 )
 

@@ -175,7 +175,7 @@ class StarRocksTimeSeries(TimeSeries["StarRocks"]):
     # Use PRIMARY KEY tables so the mutate phase (UPDATE/DELETE/UPSERT) works.
     # DUPLICATE KEY tables (the default for read-only suites) reject DELETE
     # with subqueries, which the mutate path relies on.
-    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:  # noqa: ARG002
+    def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         return "time"
 
 
@@ -524,7 +524,7 @@ class StarRocks(Database):
             self.create_table(schema, table, primary_key, not_null)
         insert_source_parquet_via_files(self, path, table)
 
-    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:  # noqa: ARG002
+    def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         # PRIMARY KEY tables (used by the time_series suite) auto-upsert on
         # INSERT: matching keys overwrite, new ones append. So we just go
         # through the regular insert path. DUPLICATE KEY tables cannot

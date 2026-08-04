@@ -63,7 +63,10 @@ def _validate_json_object_line(line: str, input_file: Path, line_number: int) ->
         raise RuntimeError(f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: {exc}") from exc
 
     if not isinstance(value, dict):
-        raise RuntimeError(f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: expected object")
+        # a non-object row is malformed input, the same failure class as the decode error
+        # above, not a caller passing the wrong type
+        message = f"Invalid JSONBench row in {input_file.name} near line {line_number:_}: expected object"
+        raise RuntimeError(message)  # noqa: TRY004
 
     return _ensure_line_ending(line)
 

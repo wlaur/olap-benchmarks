@@ -57,8 +57,8 @@ def test_answer_metadata_canonicalizes_scale_zero_decimals_to_integers() -> None
 def test_answer_metadata_preserves_integers_beyond_float64_precision() -> None:
     # sum(bigint) can exceed int64, arriving as DECIMAL(38, 0); canonicalizing through Float64
     # would collapse neighbouring values onto the same hash
-    low = pl.DataFrame({"total": pl.Series([Decimal("18000000000000000000")], dtype=pl.Decimal(38, 0))})
-    high = pl.DataFrame({"total": pl.Series([Decimal("18000000000000000001")], dtype=pl.Decimal(38, 0))})
+    low = pl.DataFrame({"total": pl.Series([Decimal(18000000000000000000)], dtype=pl.Decimal(38, 0))})
+    high = pl.DataFrame({"total": pl.Series([Decimal(18000000000000000001)], dtype=pl.Decimal(38, 0))})
 
     assert hashing.build_answer_metadata(low)["answer_hash"] != hashing.build_answer_metadata(high)["answer_hash"]
 
