@@ -64,7 +64,22 @@ def _monetdb_connection_string() -> str:
     return f"{MONETDB_CONNECTION_STRING}?{urlencode(parameters)}"
 
 
+_ROLLING_AVG_WINDOW_BUG = (
+    "MonetDB 11.55.7 returns wrong values from avg() over a ROWS frame wider than 16 rows, "
+    "from the 17th row onward; see MONETDB_ISSUE.md. A 60-row moving average cannot be expressed "
+    "correctly, so the query is not measured rather than publishing a runtime for a wrong answer."
+)
+
+
 class MonetDBTimeSeries(TimeSeries["MonetDB"]):
+    UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, dict[str, str]]] = {
+        "monetdb": {
+            "large_13_rolling_avg": _ROLLING_AVG_WINDOW_BUG,
+            "tall_13_rolling_avg": _ROLLING_AVG_WINDOW_BUG,
+            "wide_13_rolling_avg": _ROLLING_AVG_WINDOW_BUG,
+        }
+    }
+
     def finish_parquet_table(self, table_name: TableName) -> None:
         self.db.analyze_table(table_name, ["time"])
 

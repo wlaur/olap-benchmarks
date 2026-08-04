@@ -8,7 +8,7 @@ from math import sqrt
 from pathlib import Path
 from threading import Barrier
 from time import perf_counter
-from typing import Any, Literal, cast, get_args
+from typing import Any, ClassVar, Literal, cast, get_args
 
 import numpy as np
 import polars as pl
@@ -18,6 +18,7 @@ from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
     SETTINGS,
+    DatabaseName,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
@@ -553,12 +554,20 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
+    # Queries a connector cannot answer correctly, mapped to why. Recording these as unsupported
+    # keeps a known-wrong result out of the published set without failing the run or, worse,
+    # publishing a runtime for an answer we know to be incorrect.
+    UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, dict[str, str]]] = {}
+
     def include_query(self, query_name: str) -> bool:
-        return True
+        return query_name not in self.UNSUPPORTED_QUERIES.get(self.db.name, {})
 
     def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
         if self.include_query(query_name):
             return None
+        reason = self.UNSUPPORTED_QUERIES.get(self.db.name, {}).get(query_name)
+        if reason is not None:
+            return ("unsupported", reason)
         return ("skipped", "query excluded by suite/database")
 
     def select(self) -> None:
