@@ -35,12 +35,10 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
             expression = expression.cast(pl.Datetime("ms"))
         elif isinstance(dtype, pl.Categorical | pl.Enum):
             expression = expression.cast(pl.String)
-        # Fixed-width text arrives as bytes, not a string: ClickHouse declares TPC-H's CHAR(n)
-        # columns as FixedString(n), which Arrow reports as binary and pads to the declared
-        # width with NUL. Writing that to NDJSON panics polars-json outright, and even without
-        # the panic b"BRAZIL\x00..." would never match a VARCHAR engine's "BRAZIL". The padding
-        # is storage, not data, so decode to text and drop it. A trailing NUL cannot occur in a
-        # legitimate text value, and genuinely non-UTF-8 binary raises rather than hashing as null.
+        # Fixed-width text arrives as bytes: ClickHouse reports FixedString(n) as binary padded
+        # to the declared width with NUL. That padding is storage rather than data, so decode to
+        # text and drop it to match a VARCHAR engine. Non-UTF-8 binary raises rather than
+        # hashing as null.
         elif dtype == pl.Binary:
             expression = expression.cast(pl.String).str.strip_chars_end("\x00")
 

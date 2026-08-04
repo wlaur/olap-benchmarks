@@ -3,8 +3,7 @@ SELECT
     ROUND(
         MAX(
             CASE
-                -- explicit precision and scale: a bare Decimal means Decimal(10, 0) here but
-                -- DECIMAL(18, 3) on the other engines, so the same price hashed as 2231 or 2231.0
+                -- explicit precision and scale: a bare Decimal differs across engines
                 WHEN cl.price != 'empty' THEN CAST(
                     REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS Nullable(Decimal(18, 2))
                 )
@@ -25,8 +24,7 @@ SELECT
     ld.availability_60,
     ld.availability_90,
     ld.availability_365,
-    -- length() counts bytes on ClickHouse but characters on the other engines, so a comment with
-    -- non-ASCII text measured 190 here against 188 elsewhere
+    -- length() counts bytes on ClickHouse but characters on the other engines
     max(lengthUTF8(rd.comments)) as max_comments,
     row_number() over (
         PARTITION BY ls.host_id
@@ -50,6 +48,6 @@ GROUP BY
     ld.availability_90,
     ld.availability_365
 -- listings.id and listings_detailed.id are unique, so one group per listing_id makes this a
--- total order. Without it the row order, and therefore the answer hash, was unspecified.
+-- total order
 ORDER BY
     cl.listing_id;

@@ -14,8 +14,8 @@ SELECT
     -- ClickHouse has no array_agg(DISTINCT ... ORDER BY ...); groupUniqArray() deduplicates but
     -- returns elements in an engine-defined order, so arraySort() supplies the deterministic
     -- element order the other engines get from the ORDER BY inside the aggregate.
-    -- groupUniqArray() also drops NULLs, so a listing with no reviews yields [] where array_agg()
-    -- yields [NULL] from the unmatched LEFT JOIN row; emit [NULL] to keep the two comparable.
+    -- groupUniqArray() also drops NULLs; emit [NULL] to match array_agg() over an unmatched
+    -- LEFT JOIN row
     if(
         empty(groupUniqArray(rd.reviewer_id)),
         CAST([NULL], 'Array(Nullable(Int64))'),

@@ -139,6 +139,10 @@ class DuckDB(Database):
         engine = create_engine(connection_string)
         self._connection = self.bind_query_recorder(engine.connect())
 
+        # the suites store naive timestamps and mean UTC by them; without this DuckDB would
+        # interpret and render them in the host's local zone, making answers machine-dependent
+        get_duckdb_connection(self._connection).execute("SET TimeZone='UTC'")
+
         return self._connection
 
     def fetch(self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None) -> pl.DataFrame:

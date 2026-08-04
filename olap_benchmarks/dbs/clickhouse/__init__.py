@@ -91,9 +91,15 @@ def get_clickhouse_client() -> ClickhouseClient:
 
 
 class ClickHouseRTABench(RTABench["Clickhouse"]):
+    # DateTime arrives over Arrow as uint32 epoch seconds, so every column holding one has to be
+    # named here: the bucketing aliases plus the raw columns the single-order lookups select.
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        return {"time_columns": ["hour", "day"]}
+        return {
+            "time_columns": ["hour", "day", "month", "event_created", "created_at"],
+            # standard-SQL NULL semantics for the GROUPING SETS rollup rows in 0022
+            "settings": {"group_by_use_nulls": 1},
+        }
 
 
 class ClickhouseClickbench(Clickbench["Clickhouse"]):
@@ -371,7 +377,8 @@ class Clickhouse(Database):
         # ArrowStream returns:
         #   * DateTime64 / date_trunc()        -> timestamp[ms, tz=UTC] (typed)
         #   * DateTime / toStartOfHour() etc.  -> uint32 (epoch seconds)
-        # Normalise both shapes to the naive ms-precision Datetime that the
+        #   * Date / toStartOfMonth() etc.     -> date
+        # Normalise all three shapes to the naive ms-precision Datetime that the
         # rest of the benchmark assumes.
         for n in time_columns:
             if n not in df.columns:
@@ -379,6 +386,8 @@ class Clickhouse(Database):
             dtype = df.schema[n]
             if isinstance(dtype, pl.Datetime):
                 df = df.with_columns(pl.col(n).cast(pl.Datetime("ms")).dt.replace_time_zone(None))
+            elif dtype == pl.Date:
+                df = df.with_columns(pl.col(n).cast(pl.Datetime("ms")))
             elif dtype.is_integer():
                 df = df.with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")))
 

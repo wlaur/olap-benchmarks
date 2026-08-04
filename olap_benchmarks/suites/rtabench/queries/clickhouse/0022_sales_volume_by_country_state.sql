@@ -14,5 +14,4 @@ GROUP BY
 ORDER BY
     sum(amount * price),
     country,
-    (state = '') ASC,
     state;

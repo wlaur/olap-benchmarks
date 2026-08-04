@@ -28,7 +28,7 @@ CREATE TABLE products (
 CREATE TABLE orders (
     order_id serial not null,
     customer_id integer not null,
-    created_at timestamptz not null,
+    created_at timestamp not null,
     PRIMARY KEY (order_id)
 );
 
@@ -42,7 +42,7 @@ CREATE TABLE order_items (
 CREATE TABLE order_events (
     order_id integer not null,
     counter integer,
-    event_created timestamptz not null,
+    event_created timestamp not null,
     event_type text not null,
     satisfaction real not null,
     processor text not null,

@@ -1,30 +1,51 @@
 WITH customer_ages AS (
     SELECT
         c.customer_id,
-        -- this age calculation might be incorrect, query output matches DuckDB at least
+        -- complete years elapsed, as in upstream RTABench's age(now(), birthday) >= '18 year'.
+        -- MonetDB has no age(), so subtract calendar years and take one back when this year's
+        -- birthday has not arrived yet.
         (
-            (
-                EXTRACT(
-                    YEAR
-                    FROM
-                        now()
-                ) * 12 + EXTRACT(
+            EXTRACT(
+                YEAR
+                FROM
+                    now()
+            ) - EXTRACT(
+                YEAR
+                FROM
+                    c.birthday
+            ) - CASE
+                WHEN EXTRACT(
                     MONTH
                     FROM
                         now()
-                )
-            ) - (
-                EXTRACT(
-                    YEAR
-                    FROM
-                        c.birthday
-                ) * 12 + EXTRACT(
+                ) < EXTRACT(
                     MONTH
                     FROM
                         c.birthday
                 )
-            )
-        ) / 12.0 AS customer_age_years
+                OR (
+                    EXTRACT(
+                        MONTH
+                        FROM
+                            now()
+                    ) = EXTRACT(
+                        MONTH
+                        FROM
+                            c.birthday
+                    )
+                    AND EXTRACT(
+                        DAY
+                        FROM
+                            now()
+                    ) < EXTRACT(
+                        DAY
+                        FROM
+                            c.birthday
+                    )
+                ) THEN 1
+                ELSE 0
+            END
+        ) AS customer_age_years
     FROM
         customers c
 )

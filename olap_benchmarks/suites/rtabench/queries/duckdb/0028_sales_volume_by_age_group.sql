@@ -1,27 +1,12 @@
 WITH customer_ages AS (
     SELECT
         c.customer_id,
-        (
-            EXTRACT(
-                YEAR
-                FROM
-                    now()
-            ) - EXTRACT(
-                YEAR
-                FROM
-                    c.birthday
-            )
-        ) + (
-            EXTRACT(
-                MONTH
-                FROM
-                    now()
-            ) - EXTRACT(
-                MONTH
-                FROM
-                    c.birthday
-            )
-        ) / 12.0 AS customer_age_years
+        -- complete years elapsed, as in upstream RTABench's age(now(), birthday) >= '18 year'
+        EXTRACT(
+            YEAR
+            FROM
+                age(now(), c.birthday)
+        ) AS customer_age_years
     FROM
         customers c
 )

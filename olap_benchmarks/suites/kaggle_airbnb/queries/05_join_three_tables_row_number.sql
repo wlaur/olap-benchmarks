@@ -3,8 +3,7 @@ SELECT
     ROUND(
         MAX(
             CASE
-                -- explicit precision and scale: a bare DECIMAL means DECIMAL(18, 3) here but
-                -- Decimal(10, 0) on ClickHouse, so the same price hashed as 2231.0 or 2231
+                -- explicit precision and scale: a bare DECIMAL differs across engines
                 WHEN cl.price != 'empty' THEN CAST(
                     REPLACE(REPLACE(cl.price, '$', ''), ',', '') AS DECIMAL(18, 2)
                 )
@@ -48,7 +47,6 @@ GROUP BY
     ld.availability_90,
     ld.availability_365
 -- listings.id and listings_detailed.id are unique, so one group per listing_id makes this a
--- total order. Without it the row order, and therefore the answer hash, was unspecified: the
--- same DuckDB build hashed three different results across three iterations of one run.
+-- total order
 ORDER BY
     cl.listing_id;
