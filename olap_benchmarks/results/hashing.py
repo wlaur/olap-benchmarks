@@ -8,7 +8,7 @@ import polars as pl
 
 MAX_ANSWER_HASH_CELLS = 5_000_000
 FLOAT_ROUND_DECIMALS = 10
-ANSWER_HASH_VERSION = "canonical-v6"
+ANSWER_HASH_VERSION = "canonical-v7"
 
 
 def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
@@ -43,6 +43,18 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
         # hashing as null.
         elif dtype == pl.Binary:
             expression = expression.cast(pl.String).str.strip_chars_end("\x00")
+        # An aggregated array renders as its bracketed elements, because MonetDB has no array type
+        # and builds the same content as a string with group_concat. Element order is part of the
+        # comparison, so a differently ordered or differently populated array still mismatches;
+        # only the container's spelling is normalised. A list whose elements are all null, which is
+        # what array_agg() returns for an unmatched outer join, canonicalises to null like
+        # MonetDB's group_concat over no rows.
+        elif isinstance(dtype, pl.List):
+            expression = pl.concat_str(
+                pl.lit("["),
+                expression.cast(pl.List(pl.String)).list.join(",", ignore_nulls=False),
+                pl.lit("]"),
+            )
 
         expressions.append(expression.alias(name))
 

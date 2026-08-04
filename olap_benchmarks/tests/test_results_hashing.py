@@ -18,7 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v6"
+    assert left["answer_hash_version"] == "canonical-v7"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -52,6 +52,34 @@ def test_answer_metadata_canonicalizes_fixed_width_text_to_strings() -> None:
     assert (
         hashing.build_answer_metadata(fixed_width)["answer_hash"]
         == hashing.build_answer_metadata(varchar)["answer_hash"]
+    )
+
+
+def test_answer_metadata_canonicalizes_arrays_to_their_bracketed_elements() -> None:
+    # MonetDB has no array type and builds the same content as a string with group_concat, so an
+    # aggregated array has to compare on its elements rather than on its container type
+    arrays = pl.DataFrame({"ids": pl.Series([[3, 1, 2], [7]], dtype=pl.List(pl.Int64))})
+    strings = pl.DataFrame({"ids": pl.Series(["[3,1,2]", "[7]"], dtype=pl.String)})
+
+    assert hashing.build_answer_metadata(arrays)["answer_hash"] == hashing.build_answer_metadata(strings)["answer_hash"]
+
+
+def test_answer_metadata_keeps_array_element_order_significant() -> None:
+    left = pl.DataFrame({"ids": pl.Series([[3, 1, 2]], dtype=pl.List(pl.Int64))})
+    right = pl.DataFrame({"ids": pl.Series([[1, 2, 3]], dtype=pl.List(pl.Int64))})
+
+    assert hashing.build_answer_metadata(left)["answer_hash"] != hashing.build_answer_metadata(right)["answer_hash"]
+
+
+def test_answer_metadata_canonicalizes_an_all_null_array_to_null() -> None:
+    # array_agg() over an unmatched outer join yields [NULL]; MonetDB's group_concat over no rows
+    # yields NULL, and concatenating that into brackets stays NULL
+    null_element = pl.DataFrame({"ids": pl.Series([[None]], dtype=pl.List(pl.Int64))})
+    null_value = pl.DataFrame({"ids": pl.Series([None], dtype=pl.String)})
+
+    assert (
+        hashing.build_answer_metadata(null_element)["answer_hash"]
+        == hashing.build_answer_metadata(null_value)["answer_hash"]
     )
 
 
