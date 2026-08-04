@@ -23,12 +23,13 @@ from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, wri
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from ...suites.tpc_ds.config import TpcDs
+from ...suites.tpc_h.config import TpcH
 from .. import Database
 from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "26.6.1.1193"
+VERSION = "26.7.1.1315"
 
 DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
 
@@ -120,6 +121,23 @@ class ClickhouseClickbench(Clickbench["Clickhouse"]):
 
         if restart:
             self.db.restart_event()
+
+
+class ClickhouseTpcH(TpcH["Clickhouse"]):
+    # ClickHouse 26.6.1 and 26.7.1 abort these two with
+    #   Code: 131 ... Too large sizes of FixedString to deserialize: <bogus length>:
+    #   While executing DelayedJoinedBlocksTransform
+    # when the planner picks parallel_hash, which the default direct,parallel_hash,hash does.
+    # Both carry nation's FixedString(25) name through a multi-way join. The schema follows
+    # ClickHouse's own tests/benchmarks/tpc-h/init.sql, so it is not ours to change; hash is
+    # forced for just these two rather than for the suite, leaving the other 20 on default
+    # join planning. See CH_ISSUE.md.
+    PARALLEL_HASH_BUG_QUERIES: ClassVar[frozenset[str]] = frozenset({"05_local_supplier_volume", "07_volume_shipping"})
+
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name not in self.PARALLEL_HASH_BUG_QUERIES:
+            return self.fetch_kwargs
+        return {**self.fetch_kwargs, "settings": {"join_algorithm": "hash"}}
 
 
 class ClickhouseTpcDs(TpcDs["Clickhouse"]):
@@ -336,6 +354,21 @@ class Clickhouse(Database):
 
         self._clickhouse_client = get_clickhouse_client()
         return self._clickhouse_client
+
+    def reset_session(self) -> None:
+        # A query that errors server-side can leave the HTTP session wedged, after which every
+        # further query on it returns SESSION_IS_LOCKED even with no concurrent client. Dropping
+        # the client makes the next call open a fresh session.
+        if self._clickhouse_client is None:
+            return
+
+        try:
+            self._clickhouse_client.close()
+        except Exception:
+            # the session is already unusable; the point is to drop it, not to close it cleanly
+            _LOGGER.debug("Discarding an unresponsive ClickHouse client", exc_info=True)
+        finally:
+            self._clickhouse_client = None
 
     def get_runtime_version(self) -> str:
         df = self.fetch("select version() as version", schema={"version": pl.String})
@@ -672,5 +705,6 @@ class Clickhouse(Database):
             "jsonbench": ClickhouseJSONBench,
             "chat_threads": ChatThreads,
             "time_series": ClickhouseTimeseries,
+            "tpc_h": ClickhouseTpcH,
             "tpc_ds": ClickhouseTpcDs,
         }

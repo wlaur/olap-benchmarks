@@ -681,6 +681,15 @@ class Database(BaseModel, ABC):
             return
         self._connection.rollback()
 
+    def reset_session(self) -> None:
+        """Discard any server-side session state left behind by a failed query.
+
+        A no-op for connectors whose session survives a query error. Overridden where it does not:
+        a poisoned session otherwise fails every following query in the operation, turning one
+        broken query into a whole failed suite.
+        """
+        return
+
     def wait_until_accessible(self, timeout_seconds: float = 300.0, interval_seconds: float = 1.0) -> None:
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
 

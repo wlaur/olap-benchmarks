@@ -222,6 +222,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                     failed_iteration = None
         except Exception as exc:
             self.db.rollback()
+            self.db.reset_session()
             start_iteration = 1 if failed_iteration is None else failed_iteration + 1
             if start_iteration <= iterations:
                 self.record_skipped_query_steps(
