@@ -146,6 +146,10 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
+    @property
+    def populate_table_order(self) -> list[TableName]:
+        return list(RTABENCH_SCHEMAS)
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -153,7 +157,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
 
         self.db.initialize_schema("rtabench")
 
-        for table_name in RTABENCH_SCHEMAS:
+        for table_name in self.populate_table_order:
             df = pl.scan_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):

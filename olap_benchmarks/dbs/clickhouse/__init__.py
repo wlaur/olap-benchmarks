@@ -92,6 +92,16 @@ def get_clickhouse_client() -> ClickhouseClient:
 
 
 class ClickHouseRTABench(RTABench["Clickhouse"]):
+    # A materialized view fires on inserts to the leftmost table of its FROM, and sees only what
+    # the other tables already hold. The join-based views are rooted at products and customers, so
+    # loading those first leaves their targets permanently empty: the queries reading them then
+    # return no rows in a few ms and read as a huge speedup over the raw-scan equivalents.
+    # Loading them last means every view is populated by the time its trigger table arrives.
+    # customers precedes products because the country/category view joins both.
+    @property
+    def populate_table_order(self) -> list[TableName]:
+        return ["orders", "order_items", "order_events", "customers", "products"]
+
     # DateTime arrives over Arrow as uint32 epoch seconds, so every column holding one has to be
     # named here: the bucketing aliases plus the raw columns the single-order lookups select.
     @property

@@ -13,4 +13,4 @@ HAVING sum(ps_supplycost * ps_availqty) > (
         AND (s_nationkey = n_nationkey)
         AND (n_name = 'GERMANY')
 )
-ORDER BY value DESC;
+ORDER BY value DESC, ps_partkey;
