@@ -19,8 +19,8 @@ FROM
                                       ORDER BY currency_ratio) AS currency_rank
       FROM
         (SELECT ws.ws_item_sk AS item,
-                (cast(sum(coalesce(wr.wr_return_quantity,0)) AS decimal(15,4))/ cast(sum(coalesce(ws.ws_quantity,0)) AS decimal(15,4))) AS return_ratio,
-                (cast(sum(coalesce(wr.wr_return_amt,0)) AS decimal(15,4))/ cast(sum(coalesce(ws.ws_net_paid,0)) AS decimal(15,4))) AS currency_ratio
+                (toFloat64(sum(coalesce(wr.wr_return_quantity,0)))/ toFloat64(sum(coalesce(ws.ws_quantity,0)))) AS return_ratio,
+                (toFloat64(sum(coalesce(wr.wr_return_amt,0)))/ toFloat64(sum(coalesce(ws.ws_net_paid,0)))) AS currency_ratio
          FROM web_sales ws
          LEFT OUTER JOIN web_returns wr ON (ws.ws_order_number = wr.wr_order_number
                                             AND ws.ws_item_sk = wr.wr_item_sk) ,date_dim
@@ -49,8 +49,8 @@ FROM
                                       ORDER BY currency_ratio) AS currency_rank
       FROM
         (SELECT cs.cs_item_sk AS item,
-                (cast(sum(coalesce(cr.cr_return_quantity,0)) AS decimal(15,4))/ cast(sum(coalesce(cs.cs_quantity,0)) AS decimal(15,4))) AS return_ratio,
-                (cast(sum(coalesce(cr.cr_return_amount,0)) AS decimal(15,4))/ cast(sum(coalesce(cs.cs_net_paid,0)) AS decimal(15,4))) AS currency_ratio
+                (toFloat64(sum(coalesce(cr.cr_return_quantity,0)))/ toFloat64(sum(coalesce(cs.cs_quantity,0)))) AS return_ratio,
+                (toFloat64(sum(coalesce(cr.cr_return_amount,0)))/ toFloat64(sum(coalesce(cs.cs_net_paid,0)))) AS currency_ratio
          FROM catalog_sales cs
          LEFT OUTER JOIN catalog_returns cr ON (cs.cs_order_number = cr.cr_order_number
                                                 AND cs.cs_item_sk = cr.cr_item_sk) ,date_dim
@@ -79,8 +79,8 @@ FROM
                                       ORDER BY currency_ratio) AS currency_rank
       FROM
         (SELECT sts.ss_item_sk AS item,
-                (cast(sum(coalesce(sr.sr_return_quantity,0)) AS decimal(15,4))/cast(sum(coalesce(sts.ss_quantity,0)) AS decimal(15,4))) AS return_ratio,
-                (cast(sum(coalesce(sr.sr_return_amt,0)) AS decimal(15,4))/cast(sum(coalesce(sts.ss_net_paid,0)) AS decimal(15,4))) AS currency_ratio
+                (toFloat64(sum(coalesce(sr.sr_return_quantity,0)))/toFloat64(sum(coalesce(sts.ss_quantity,0)))) AS return_ratio,
+                (toFloat64(sum(coalesce(sr.sr_return_amt,0)))/toFloat64(sum(coalesce(sts.ss_net_paid,0)))) AS currency_ratio
          FROM store_sales sts
          LEFT OUTER JOIN store_returns sr ON (sts.ss_ticket_number = sr.sr_ticket_number
                                               AND sts.ss_item_sk = sr.sr_item_sk) ,date_dim

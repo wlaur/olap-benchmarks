@@ -27,8 +27,10 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
             expression = expression.cast(pl.Int64).cast(pl.String)
         elif isinstance(dtype, pl.Decimal) and (dtype.scale or 0) == 0:
             expression = expression.cast(pl.String)
+        # NaN and null both mean "undefined" here and engines disagree on which they return for
+        # an undefined statistic, e.g. stddev_samp() over a single row.
         elif dtype.is_float() or isinstance(dtype, pl.Decimal):
-            expression = expression.cast(pl.Float64).round(FLOAT_ROUND_DECIMALS)
+            expression = expression.cast(pl.Float64).fill_nan(None).round(FLOAT_ROUND_DECIMALS)
         elif isinstance(dtype, pl.Datetime):
             if dtype.time_zone is not None:
                 expression = expression.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
