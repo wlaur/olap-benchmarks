@@ -18,7 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v9"
+    assert left["answer_hash_version"] == "canonical-v10"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -197,3 +197,38 @@ def test_answer_metadata_leaves_ordinary_text_untouched() -> None:
 
     assert "answer_hash" in hashing.build_answer_metadata(text)
     assert "answer_hash" in hashing.build_answer_metadata(braced)
+
+
+def test_float_rounding_separates_real_divergence_from_summation_noise() -> None:
+    """Pins FLOAT_SIGNIFICANT_DIGITS between the cases this suite actually produces.
+
+    Every pair here was observed while making the engines agree. Loosening the constant hides the
+    defects; tightening it reports float summation order as a disagreement.
+    """
+    real_divergences = [
+        # MonetDB's avg() over a ROWS window frame wider than 16 rows
+        (156.5231018066, 156.5604739189),
+        # engines evaluating a decimal division at the numerator's scale
+        (0.6559139785, 0.6559),
+        (3295493.512857143, 3295493.512),
+        (552580.1678651213, 552580.167),
+    ]
+    summation_noise = [
+        # the same value summed in a different order
+        (38257.8106600811, 38257.8106600812),
+        (156.5656321738, 156.5656321737),
+        # stddev over 183k float32 values, DuckDB against ClickHouse
+        (0.5407961018807453, 0.540796101881521),
+    ]
+
+    for left, right in real_divergences:
+        assert (
+            hashing.build_answer_metadata(pl.DataFrame({"v": [left]}))["answer_hash"]
+            != hashing.build_answer_metadata(pl.DataFrame({"v": [right]}))["answer_hash"]
+        ), f"{left} and {right} are a real divergence and must not collapse"
+
+    for left, right in summation_noise:
+        assert (
+            hashing.build_answer_metadata(pl.DataFrame({"v": [left]}))["answer_hash"]
+            == hashing.build_answer_metadata(pl.DataFrame({"v": [right]}))["answer_hash"]
+        ), f"{left} and {right} are summation noise and must not be reported"

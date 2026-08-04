@@ -11,10 +11,15 @@ MAX_ANSWER_HASH_CELLS = 5_000_000
 # Significant digits rather than decimal places, because the precision a float carries scales with
 # its magnitude: rounding 38257.8106600811 to ten decimals demands fifteen significant digits, which
 # is at float64's limit, so two engines summing in different orders disagreed in the last digit
-# while 0.05 was quantised far more coarsely than it needed to be. Twelve sits above the noise from
-# summation order and well below any difference a real error would produce.
-FLOAT_SIGNIFICANT_DIGITS = 12
-ANSWER_HASH_VERSION = "canonical-v9"
+# while 0.05 was quantised far more coarsely than it needed to be.
+#
+# Ten is bounded on both sides by cases this suite actually produces, and test_results_hashing pins
+# them. Below ten hides a real defect: MonetDB truncating 3295493.512857143 to 3295493.512 differs
+# only in the tenth digit. Above eleven flags summation noise as a disagreement: stddev over 183k
+# float32 values differs between DuckDB and ClickHouse in the twelfth. Ten rather than eleven
+# because that noise grows with row count and the largest suites run at ten times this scale.
+FLOAT_SIGNIFICANT_DIGITS = 10
+ANSWER_HASH_VERSION = "canonical-v10"
 
 
 def _normalize_json_text(value: str | None) -> str | None:
