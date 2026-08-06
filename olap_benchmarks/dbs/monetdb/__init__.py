@@ -74,8 +74,8 @@ def _monetdb_connection_string() -> str:
 
 _ROLLING_AVG_WINDOW_BUG = (
     "MonetDB 11.55.7 returns wrong values from avg() over a ROWS frame wider than 16 rows, "
-    "from the 17th row onward; see MONETDB_ISSUE.md. A 60-row moving average cannot be expressed "
-    "correctly, so the query is not measured rather than publishing a runtime for a wrong answer."
+    "from the 17th row onward. A 60-row moving average cannot be expressed correctly, so the query "
+    "is not measured rather than publishing a runtime for a wrong answer."
 )
 
 
@@ -85,7 +85,6 @@ class MonetDBChatThreads(ChatThreads["MonetDB"]):
     # adbc-driver-monetdb 0.12.0. Clients see "IO: unexpected end of file" and the container is
     # gone afterwards. Nothing on our side fixes it, and retrying only costs the run 11 minutes.
     # populate, select and mutate all complete, so the rest of the suite is still measured.
-    # See MONETDB_ISSUE.md.
     supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select", "mutate")
 
 
