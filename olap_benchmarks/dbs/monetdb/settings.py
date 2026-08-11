@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     write_window_bytes: int | None = None
     wire_compression: Literal["none", "auto", "lz4"] = "auto"
     constrained_append: Literal["auto", "direct"] = "auto"
+    gdk_debug: int | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

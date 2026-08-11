@@ -52,7 +52,7 @@ class MonetDBRelease:
         return f"wlaur/monetdb-container:{self.runtime_version}-{self.arm64_image_revision}"
 
 
-MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
+MONETDB_RELEASE = MonetDBRelease(label="master-bbc2d72", runtime_version="56.0.0", arm64_image_revision=1)
 MONETDB_APPLICATION = "olap-benchmarks"
 MONETDB_CONTAINER_PORT = "50000"
 MONETDB_HOST_PORT = host_port("monetdb")
@@ -125,6 +125,7 @@ class MonetDB(Database):
             "write_window_bytes": MONETDB_SETTINGS.write_window_bytes,
             "wire_compression": MONETDB_SETTINGS.wire_compression,
             "constrained_append": MONETDB_SETTINGS.constrained_append,
+            "gdk_debug": MONETDB_SETTINGS.gdk_debug,
         }
 
     connection_string: str = Field(default_factory=_monetdb_connection_string)
@@ -145,11 +146,15 @@ class MonetDB(Database):
         if image is None:
             raise RuntimeError("MonetDB container image is not configured")
 
+        env = {"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"}
+        if MONETDB_SETTINGS.gdk_debug is not None:
+            env["MSERVER5_EXTRA_ARGS"] = f"-d{MONETDB_SETTINGS.gdk_debug}"
+
         return self.docker_run_command(
             image,
             ports={str(MONETDB_HOST_PORT): MONETDB_CONTAINER_PORT},
             mounts={self.database_directory.as_posix(): "/var/monetdb5/dbfarm"},
-            env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},
+            env=env,
         )
 
     def connect(self, reconnect: bool = False) -> Connection:
