@@ -52,7 +52,7 @@ class MonetDBRelease:
         return f"wlaur/monetdb-container:{self.runtime_version}-{self.arm64_image_revision}"
 
 
-MONETDB_RELEASE = MonetDBRelease(label="master-bbc2d72", runtime_version="56.0.0", arm64_image_revision=1)
+MONETDB_RELEASE = MonetDBRelease(label="master-76da78f", runtime_version="56.0.0", arm64_image_revision=2)
 MONETDB_APPLICATION = "olap-benchmarks"
 MONETDB_CONTAINER_PORT = "50000"
 MONETDB_HOST_PORT = host_port("monetdb")
