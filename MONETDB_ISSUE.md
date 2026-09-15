@@ -56,3 +56,13 @@ Remove the disposable container and its volumes afterwards:
 ```sh
 docker rm -fv monetdb-savepoint-repro
 ```
+
+## Source hint
+
+In `Dec2025_SP3_release`, inspect
+[`OLD_VALID_4_READ` and `SEG_IS_VALID` in `sql/storage/bat/bat_storage.c`](https://github.com/MonetDB/MonetDB/blob/d7afdba1728b74fda8fc62ed583d5c559c7a70dc/sql/storage/bat/bat_storage.c#L45-L63).
+`SAVEPOINT` creates a child transaction with a new transaction ID.
+`OLD_VALID_4_READ` excludes the current ID but, unlike `VALID_4_READ`, does not
+check parent transaction IDs. This appears to let `SEG_IS_VALID` classify a row
+deleted by the parent as visible when building the SELECT candidate rows.
+This is a likely cause from source inspection; a server patch has not been tested.
