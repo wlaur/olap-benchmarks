@@ -1,72 +1,58 @@
-# Server aborts when a client disconnects during binary result export
+# SAVEPOINT makes a deleted row visible again
 
-## Environment
-
-- MonetDB 11.55.7 (Dec2025-SP3)
-- Official `monetdb/monetdb:Dec2025-SP3` container
-- Fresh database
-- Reproduced with 4 GiB available to the container and no memory pressure
+MonetDB 11.55.7 (Dec2025-SP3) returns a previously deleted row after creating a
+savepoint in the same transaction. No rollback to the savepoint is involved.
 
 ## Reproduction
 
-Start MonetDB in one terminal. The example uses a disposable local database and deliberately omits authentication details; substitute the credentials from your local test setup.
+Verified on 2026-09-15 with the official `monetdb/monetdb:Dec2025-SP3` image.
+This starts a disposable database with no external network access or host ports:
 
 ```sh
-docker run --rm --name monetdb-export-repro \
-  -p 50000:50000 \
-  --memory 4g \
+docker run -d --name monetdb-savepoint-repro --network none \
+  -e MDB_CREATE_DBS=scratch -e MDB_DB_ADMIN_PASS=monetdb \
   monetdb/monetdb:Dec2025-SP3
 ```
 
-In another terminal, create a result large enough that it is still being transferred when the client is stopped:
+Once the container is ready, run the following. `mclient` uses its default
+autocommit mode, so the seed row is committed before `START TRANSACTION`.
 
 ```sh
-mclient -h localhost -p 50000 -d demo -u monetdb \
-  -s "SELECT value, value * 2, value * 3 FROM generate_series(1, 20000001) AS g(value)" \
-  >/dev/null &
-
-client_pid=$!
-sleep 1
-kill -KILL "$client_pid"
-wait "$client_pid" || true
+docker exec -i monetdb-savepoint-repro sh -c '
+  umask 077
+  printf "user=monetdb\npassword=%s\n" "$MDB_DB_ADMIN_PASS" > /tmp/mclient.conf
+  export DOTMONETDBFILE=/tmp/mclient.conf
+  exec mclient -h 127.0.0.1 -p 50000 -d scratch -f csv
+' <<'SQL'
+CREATE TABLE savepoint_probe(id INTEGER);
+INSERT INTO savepoint_probe VALUES (1);
+START TRANSACTION;
+DELETE FROM savepoint_probe WHERE id = 1;
+SAVEPOINT sp;
+SELECT id FROM savepoint_probe;
+ROLLBACK;
+DROP TABLE savepoint_probe;
+SQL
 ```
 
-Repeat the query and interruption a few times if necessary. The timing depends on the machine:
+**Expected:** the `SELECT` returns zero rows because the only row was deleted.
 
-```sh
-for attempt in $(seq 1 20); do
-  mclient -h localhost -p 50000 -d demo -u monetdb \
-    -s "SELECT value, value * 2, value * 3 FROM generate_series(1, 20000001) AS g(value)" \
-    >/dev/null &
-  client_pid=$!
-  sleep 0.2
-  kill -KILL "$client_pid" 2>/dev/null || true
-  wait "$client_pid" 2>/dev/null || true
-done
-```
-
-The important condition is that the connection is closed while MonetDB is writing a binary result chunk. A client using binary result transfer negotiates that mode on the connection; no table or pre-existing data is required.
-
-## Observed result
-
-The database process aborts. Its log contains:
+**Actual:** it returns the deleted row:
 
 ```text
-MALException:sql.export_bin_column:42000!no error
-mvc_export_bin_chunk: ERROR: MALException:sql.export_bin_column:42000!no error
-free(): invalid pointer
-database 'demo' has crashed with signal SIGABRT (dumped core)
+1
 ```
 
-Other connections to the same database are dropped while it restarts.
+The result reproduced in three consecutive runs. Removing `SAVEPOINT sp` makes
+the `SELECT` return zero rows. A separate check confirmed that selecting before
+the savepoint and after `RELEASE SAVEPOINT sp` also returns zero rows.
 
-## Expected result
+The committed seed row and the `DELETE` predicate matter: creating and inserting
+inside the tested transaction, or using `DELETE FROM savepoint_probe` without a
+`WHERE` clause, did not reproduce the defect. No primary key is needed.
 
-Closing a client connection during result transfer should cancel that transfer and clean up the result. It should not abort the database process or affect other clients.
+Remove the disposable container and its volumes afterwards:
 
-## Notes
-
-This does not appear to require memory pressure. In the fresh-container reproduction, the process was using roughly 120--140 MiB, the container limit was 4 GiB, and the cgroup OOM counters remained zero.
-
-The abort follows a write failure in the binary export path. `mvc_export_bin_chunk()` receives an error from `dump_binary_column()` and frees the returned message with `GDKfree()`. The message is created through the query context's error allocator, so freeing it directly appears to be the invalid free. The unhelpful `42000!no error` text also suggests that the outer byte-counting stream is not retaining the error from the wrapped stream when the write fails.
-
+```sh
+docker rm -fv monetdb-savepoint-repro
+```
