@@ -8,7 +8,7 @@ itself belong in [`../REVIEW.md`](../REVIEW.md).
 | Engine | Contents |
 | --- | --- |
 | [`clickhouse/`](clickhouse/) | [`FixedString` deserialization failure under `parallel_hash`](clickhouse/fixedstring-too-large-under-parallel-hash.md) |
-| [`monetdb/`](monetdb/) | [Pipeline-engine evaluation](monetdb/master-pipeline-evaluation.md); the server bug reports live in `adbc-driver-monetdb` — see [`monetdb/README.md`](monetdb/README.md) |
+| [`monetdb/`](monetdb/) | [Pipeline-engine evaluation](monetdb/master-pipeline-evaluation.md) — build, benchmark and findings for the `pp_hashjoin` engine |
 
 ## Conventions
 
@@ -21,3 +21,5 @@ itself belong in [`../REVIEW.md`](../REVIEW.md).
 - Keep a file after the defect is fixed, and record which version fixed it. Knowing when
   something was fixed is what version pins get written against.
 - Nothing engine-specific goes at the repository root.
+- Defects in a database *driver* are tracked with that driver. This directory is for the
+  engines themselves, and for investigations that only mean something next to this harness.

@@ -16,8 +16,9 @@
   benchmarks — one subdirectory per engine, one file per issue, named for the defect rather
   than the engine. See `issues/README.md` for the conventions. Do not add engine-specific
   markdown at the repository root.
-* MonetDB **server** bug reports are the exception: they live in `adbc-driver-monetdb` under
-  `docs/monetdb-issues/`, next to the driver and its reproduction tooling.
+* Bug reports for a database *driver* belong with that driver, not here. This directory is for
+  defects in the engines themselves, and for investigations that only mean something next to
+  this harness.
 
 ## Web app architecture (`site/`)
 

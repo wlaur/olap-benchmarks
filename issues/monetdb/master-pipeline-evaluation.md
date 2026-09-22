@@ -105,16 +105,17 @@ mitosis parallelism. This is the single biggest source of regressions (§4).
 
 ## 2. Building an ARM64 image
 
-The image build now lives in `adbc-driver-monetdb` as `docs/monetdb-issues/repro/build-image.sh`,
-which builds from a `git archive` of a local MonetDB checkout rather than a release tarball and
-leaves that checkout untouched:
+Built from a `git archive` of a local MonetDB checkout rather than a release tarball, so an
+arbitrary commit can be built without disturbing the checkout:
 
 ```sh
-docs/monetdb-issues/repro/build-image.sh ~/src/MonetDB monetdb-tip:local bbc2d72f02
+git -C ~/src/MonetDB archive --format=tar --prefix=source/ bbc2d72f02 \
+    | gzip -1 > MonetDB-src.tar.gz
+docker buildx build --platform linux/arm64 --load --tag monetdb-master:local .
 ```
 
-The original local build context is `monetdb-master-build/` (git-excluded; it holds a 97 MB
-source tarball and the raw campaign logs, so it stays out of the repository).
+The build context is `monetdb-master-build/`, git-excluded because it holds a 97 MB source
+tarball and the raw campaign logs.
 
 New requirements vs the SP3 image:
 
@@ -145,13 +146,11 @@ finds none, and re-issues a grant that `16_tracelog.sql` already made during boo
 Standalone `mserver5 --dbpath=...` bootstrap + restart is **not** affected, which is likely why
 CI misses it.
 
-**Workaround used here** (`docs/monetdb-issues/repro/apply-patch.py` in `adbc-driver-monetdb`, applied by
-passing `1` as the fourth argument to `build-image.sh`): make that one grant tolerant of `01007`.
-Touches only startup upgrade code — no planner, executor or ingest code.
+**Workaround used here** (`monetdb-master-build/apply-patch.py`): make that one grant tolerant
+of `01007`. Touches only startup upgrade code — no planner, executor or ingest code.
 
-This is no longer needed at current master — see
-`docs/monetdb-issues/monetdbd-fresh-database-second-boot.md`, which records six clean
-create-and-restart cycles at `ee305e491c`.
+No longer needed at current master: six create-and-restart cycles against a build of
+`ee305e491c` were clean, with no `FATAL` and no `SIGSEGV` in `merovingian.log`.
 
 ⚠️ **Caveat:** the workaround clears the error but the failed statement has already aborted the
 upgrade transaction, and `SQLupgrades` continues against it. On roughly 1 in 3 fresh containers the
@@ -178,7 +177,7 @@ plus a `gdk_debug` setting in `dbs/monetdb/settings.py` forwarded via `MSERVER5_
 **The release pin must not be merged** — it points at a local-only image. The `gdk_debug` setting is
 reusable.
 
-Four unrelated MonetDB dev containers (from `adbc-driver-monetdb`, holding port 50000) were stopped
+Four unrelated MonetDB development containers holding port 50000 were stopped
 for the duration and left stopped, per the owner's instruction.
 
 Query numbers below are `min()` over warm iterations, common queries only.
@@ -304,9 +303,9 @@ Other WIP markers: `printf("#using large fallback\n")` and `printf("#est == 0, %
 
 ## 6. New defects found (filable)
 
-Rough severity order. These have since been written up as individual reports in
-`adbc-driver-monetdb/docs/monetdb-issues/`, which carries the authoritative status —
-several were re-verified against master `ee305e491c` on 2026-09-22 and two are now fixed.
+Rough severity order. Each has since been written up as an individual report alongside the
+driver, which carries the authoritative status: several were re-verified against master
+`ee305e491c` on 2026-09-22, and two are now fixed.
 
 1. **Fresh databases created via monetdbd crash on second boot** (§2.1). Deterministic. Blocks all
    container use of master.
@@ -325,9 +324,9 @@ several were re-verified against master `ee305e491c` on 2026-09-22 and two are n
 
 ### 6.1 Regression check against the issue reports
 
-The reports themselves now live in `adbc-driver-monetdb/docs/monetdb-issues/`, with
-`repro/check-issues.sh` as the re-verification tool. That directory's `README.md` holds the
-authoritative status table, re-verified 2026-09-22 against `master` @ `ee305e491c`.
+The reports themselves are tracked alongside the driver, which also carries the script that
+re-runs every check and the authoritative status table. The snapshot below was re-verified
+2026-09-22 against `master` @ `ee305e491c`.
 
 | issue | SP3 | master 56.0.0 |
 |---|---|---|
@@ -371,7 +370,7 @@ reply-parser dispatch, hard `UnexpectedHeader` from `set_autocommit()`, and sile
 **Fixed** in `monetdb-rust` `400e28b` (PR #27, merged): one `parse_autocommit_line()` helper anchored
 on the `&4` header at line start, reading only field 1 and ignoring trailing fields. Verified with
 the full CI integration suite against both server builds — 58/58 on SP3, 58/58 on master.
-`adbc-driver-monetdb` picks it up via a submodule bump (PR #73).
+The ADBC driver picks it up via a submodule bump.
 
 Why the benchmark never hit it: `&4` is only emitted when autocommit *changes* during a statement.
 The harness holds one mode per connection. Normal ADBC/SQLAlchemy usage that toggles autocommit or
