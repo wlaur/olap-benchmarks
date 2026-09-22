@@ -95,6 +95,13 @@ Suite-level warm totals, per-query deltas, and ingest/peak-memory, all against t
 baseline in `results/default.db`. Drop the second argument for a two-way comparison against the
 pipeline-off pass alone.
 
+The three-way tables also carry **ClickHouse** and **DuckDB** columns, read from the same
+baseline database, which has both engines at matching scale factors and identical warm query
+counts on all seven suites. They are the point of the exercise: `off_vs_sp3` and `on_vs_sp3`
+say whether MonetDB improved on itself, while `best_vs_ch` and `best_vs_duck` say whether the
+gap to the engines it is competing with actually closed. A build can do the first without
+doing the second.
+
 ### When the pipeline engine ships enabled by default
 
 Most of this collapses. The second pass exists only because the engine is behind `GDKdebug`
