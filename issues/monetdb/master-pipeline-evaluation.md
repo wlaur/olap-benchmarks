@@ -1,7 +1,7 @@
 # MonetDB master (`pp_hashjoin`) — build, benchmark and findings
 
-**Investigated:** 2026-08-11
-**Upstream:** `MonetDB` master @ `bbc2d72f02` (2026-08-11 13:39 +0200)
+**Investigated:** 2026-08-11, re-run 2026-09-22 (see §10)
+**Upstream:** `MonetDB` master @ `bbc2d72f02` (2026-08-11 13:39 +0200), re-run at `ee305e491c`
 **Baseline:** `Dec2025-SP3` / 11.55.7, ARM64, `macbook-m4-pro`
 **Raw data:** `results/master.db` (pipeline off), `results/master-pp.db` (pipeline on),
 `results/default.db` (SP3 baseline). All git-ignored.
@@ -427,3 +427,77 @@ Per-query-shape engine selection is the blocking work before a feature release. 
 - MonetDB roadmap 2024 — https://www.monetdb.org/about-us/roadmap-2024/
 
 No publication describes this engine itself; it appears to be engineering rather than a paper artifact.
+
+---
+
+## 10. Re-run against `ee305e491c` (2026-09-22)
+
+Same machine, same suite/scale matrix, same Dec2025-SP3 baseline. Revisions `tip` (pipeline
+off) and `tip-pp` (pipeline on). 2,400+ commits of engine work separate this from SP3 and
+roughly 400 from the August build.
+
+### 10.1 Pipeline off — MonetDB's shipped default
+
+Warm totals, common queries, versus SP3:
+
+| suite | SP3 | `tip` off | vs SP3 | `76da78f` off, for reference |
+|---|---:|---:|---:|---:|
+| rtabench | 35.79 s | 12.88 s | **2.78×** | 2.80× |
+| chat_threads | 33.60 s | 28.35 s | 1.19× | 1.20× |
+| clickbench | 109.05 s | 95.21 s | 1.15× | 1.12× |
+| time_series | 0.93 s | 1.01 s | 0.93× | 0.94× |
+| tpc_ds | 2.96 s | 3.61 s | 0.82× | 0.80× |
+| tpc_h sf10 | 2.87 s | 4.51 s | 0.64× | 0.63× |
+| kaggle_airbnb | 145.07 s | 363.12 s | **0.40×** | 0.49× |
+
+Essentially unchanged since August. In the configuration MonetDB actually ships, this is still
+a net regression against SP3 on four of seven suites, and nothing in the intervening commits
+has moved it. kaggle drifted slightly worse. The one real win, rtabench's 2.78×, coexists with
+19 of its 41 queries being more than 20% *slower* — one or two large queries carry the total.
+
+### 10.2 Pipeline on, with ClickHouse and DuckDB
+
+Only four suites have a comparable query set, because the other three hit corrupt results with
+the engine enabled (§10.3):
+
+| suite | n | SP3 | off | on | ClickHouse | DuckDB | on vs SP3 | best vs DuckDB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| kaggle_airbnb | 5 | 145.07 s | 363.12 s | 39.95 s | 8.08 s | **4.27 s** | 3.63× | 0.11 |
+| clickbench | 43 | 109.05 s | 95.21 s | 69.47 s | 13.87 s | **9.83 s** | 1.57× | 0.14 |
+| chat_threads | 23 | 33.60 s | 28.35 s | 41.04 s | 9.55 s | **1.99 s** | 0.82× | 0.07 |
+| time_series | 59 | 0.93 s | 1.00 s | 1.07 s | 1.59 s | **0.88 s** | 0.86× | 0.88 |
+
+ClickHouse 26.7.1.1315, DuckDB 1.5.5, same machine and scale factors, identical query sets.
+
+Both headline wins shrank against the August build: ClickBench 3.05× → 1.57×, kaggle
+4.47× → 3.63×. The gap the engine exists to close is still wide — MonetDB's *best* configuration
+is 7× to 14× slower than DuckDB on three of these four suites.
+
+### 10.3 The engine returns corrupt results
+
+Three queries, three suites, all with `-d524288`, all passing on the same build without it:
+
+| suite / query | error |
+|---|---|
+| tpc_ds `98` | `ArrowInvalid: column has 10064 bytes; expected 5032` |
+| tpc_h `07_volume_shipping` | `DataError: INVALID_DATA: invalid utf-8 encoding in result set` |
+| rtabench `0017_top_selling_month_product` | `OperationalError: IO: unexpected end of file` |
+
+The server does not crash: no `SIGSEGV` and no `SIGABRT` anywhere in `merovingian.log`, and
+queries continue normally after a reconnect. The third error is downstream of a malformed
+result rather than a separate fault.
+
+Q98 is deterministic and reproduces on an idle machine in under a minute, byte-identical to the
+August build. The other two appeared only after about an hour of sustained load and did not
+reproduce in isolation.
+
+Every one was caught only because the corruption was *structurally* invalid. Corruption that
+still parses would have been recorded here as a passing query with wrong numbers. Value-level
+validation of pipeline-on results against pipeline-off results is the check this campaign could
+not make and the next one should.
+
+### 10.4 Bottom line
+
+The August conclusion stands, with the ceiling lower than it looked. Per-query-shape engine
+selection is still the blocking work, and correctness now ranks ahead of it: an engine that
+silently corrupts results is not one a `GDKdebug` bit should be able to turn on.

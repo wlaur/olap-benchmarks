@@ -127,8 +127,8 @@ Every campaign writes `results/<revision>.db`. These names are taken:
 | `master-pp` | 56.0.0 @ `bbc2d72f02` | on | |
 | `master2` | 56.0.0 @ `76da78fba2` | off | |
 | `master2_pipeline` | 56.0.0 @ `76da78fba2` | on | Partial |
-| `tip` | 56.0.0 @ `ee305e491c` | off | |
-| `tip-pp` | 56.0.0 @ `ee305e491c` | on | |
+| `tip` | 56.0.0 @ `ee305e491c` | off | 2026-09-22 campaign, §10 of the evaluation |
+| `tip-pp` | 56.0.0 @ `ee305e491c` | on | Same campaign; 3 of 7 suites hit corrupt results |
 
 Name a new campaign after the build's short commit. `results/*.db` are not committed.
 
