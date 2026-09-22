@@ -15,6 +15,11 @@ and tracked separately, with the driver that exercises the server.
 The whole campaign is two commands once an image exists. Budget about an hour per pass on an
 M4 Pro; `kaggle_airbnb` and `clickbench` are the long poles.
 
+A working checkout is assumed: `uv sync`, and a `.env` supplying the five directory and system
+settings from the table in the [repository README](../../README.md). `.env` is not committed, so
+a fresh clone has to create one before any of this runs — the failure is a pydantic
+`ValidationError` naming the missing fields, not a benchmark error.
+
 ### 1. Get an image
 
 A released version needs no build — use the published image and skip to step 2:
