@@ -1,5 +1,5 @@
 attach 'results/default.db' as base (read_only);
-attach 'results/master2-pp.db' as pp (read_only);
+attach 'results/{{PP}}.db' as pp (read_only);
 
 with warm as (
     select 'sp3' as cfg, r.suite, r.suite_scale_factor as sf, s.query_name,
