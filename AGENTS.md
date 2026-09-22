@@ -10,6 +10,15 @@
 * Remove unused code and styles after refactoring and removing parts of the web app
 * For ad-hoc results DB inspection, use the read-only CLI entrypoint `./.venv/bin/olap results query --revision <revision> "<sql>"` instead of opening `results/*.db` directly
 
+## Repository layout
+
+* `issues/<engine>/` holds bug reports and investigations for the database engines this suite
+  benchmarks — one subdirectory per engine, one file per issue, named for the defect rather
+  than the engine. See `issues/README.md` for the conventions. Do not add engine-specific
+  markdown at the repository root.
+* MonetDB **server** bug reports are the exception: they live in `adbc-driver-monetdb` under
+  `docs/monetdb-issues/`, next to the driver and its reproduction tooling.
+
 ## Web app architecture (`site/`)
 
 ### Core structure
