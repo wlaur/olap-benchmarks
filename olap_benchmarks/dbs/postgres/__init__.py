@@ -29,7 +29,7 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "18.3"
+VERSION = "18.6"
 
 DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_HOST_PORT = host_port("postgres")

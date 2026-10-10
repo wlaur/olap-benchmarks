@@ -23,7 +23,7 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2.28.2"
+VERSION = "2.30.2"
 
 DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg18"
 TIMESCALEDB_HOST_PORT = host_port("timescaledb")

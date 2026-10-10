@@ -5,7 +5,7 @@ from time import sleep
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
-from questdb.ingress import Protocol, Sender
+from questdb import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
@@ -19,7 +19,7 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "9.4.3"
+VERSION = "10.0.1"
 
 DOCKER_IMAGE = f"questdb/questdb:{VERSION}"
 

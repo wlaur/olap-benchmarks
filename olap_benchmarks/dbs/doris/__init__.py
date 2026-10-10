@@ -21,7 +21,7 @@ from ..utils import normalize_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "4.1.3"
+VERSION = "4.1.4.1"
 
 DORIS_FE_IMAGE = f"apache/doris:fe-{VERSION}"
 DORIS_BE_IMAGE = f"apache/doris:be-{VERSION}"

@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 # Apple Silicon -- fe-ubuntu/be-ubuntu split images crash the same way.
 # 4.0.9 is the latest 4.0.x patch (2026-04-20) and is one week older than
 # 4.1.0; the LTS-style 4.0 line is fine for benchmarking.
-VERSION = "4.0.9"
+VERSION = "4.1.6"
 
 DOCKER_IMAGE = f"starrocks/allin1-ubuntu:{VERSION}"
 

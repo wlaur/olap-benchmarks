@@ -266,11 +266,15 @@ def execute_tpc_h_query(tables: TpcHTables, query_name: str, scale_factor: int) 
                 .select("ps_partkey", (pl.col("ps_supplycost") * pl.col("ps_availqty")).alias("stock_value"))
             )
             threshold = german_stock.select((pl.col("stock_value").sum() * fraction).alias("threshold"))
+            # Polars plans the cross join + inequality as a range join, which needs both sides
+            # at one decimal scale; the threshold carries the fraction's extra digits.
+            threshold_dtype = threshold.collect_schema()["threshold"]
             return (
                 german_stock.group_by("ps_partkey")
                 .agg(pl.col("stock_value").sum().alias("value"))
+                .with_columns(pl.col("value").cast(threshold_dtype).alias("value_at_threshold_scale"))
                 .join(threshold, how="cross")
-                .filter(pl.col("value") > pl.col("threshold"))
+                .filter(pl.col("value_at_threshold_scale") > pl.col("threshold"))
                 .select("ps_partkey", "value")
                 .sort("value", descending=True)
             )
