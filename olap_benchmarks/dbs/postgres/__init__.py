@@ -513,6 +513,7 @@ class PostgresJSONBench(JSONBench["Postgres"]):
 class Postgres(Database):
     name: DatabaseName = "postgres"
     supports_arm64_containers: ClassVar[bool] = True
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ("pgdata/pg_wal",)
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 

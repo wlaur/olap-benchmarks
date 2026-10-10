@@ -87,6 +87,7 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
 class MonetDB(Database):
     name: DatabaseName = "monetdb"
     supports_arm64_containers: ClassVar[bool] = True
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ("benchmark/sql_logs",)
 
     @property
     def db_driver(self) -> str:

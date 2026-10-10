@@ -27,7 +27,10 @@ def fetch_adbc(
     with record_query_execution_context(query, connection):
         arrow_table = fetch_arrow_table(connection, query)
 
+    # Polars adopts fixed-width columns zero-copy but copies the driver's utf8 columns into its
+    # own string layout, so drop the Arrow table before the cast can add a third copy
     frame = cast(pl.DataFrame, cast(Any, pl).from_arrow(arrow_table))
+    del arrow_table
     if schema is not None:
         frame = frame.cast(cast(pl.Schema, schema))
     return frame

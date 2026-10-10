@@ -316,6 +316,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
 class TimescaleDB(Postgres):
     name: DatabaseName = "timescaledb"
     supports_arm64_containers: ClassVar[bool] = True
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ("pg_wal",)
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
 

@@ -101,7 +101,7 @@ ROW_STORE_DATABASES: frozenset[DatabaseName] = frozenset({"postgres", "timescale
 ROW_STORE_OPTIONAL_SUITE_NAMES: frozenset[SuiteName] = frozenset({"tpc_h", "tpc_ds"})
 
 # These engines have no server: they execute inside the benchmark client process, so their whole
-# footprint is recorded as client memory and `run_metric.server_mem_mb` is always 0 for them.
+# footprint is recorded as client memory and the `run_metric.server_*` columns are always 0 for them.
 # Kept in sync with `Database.execution_mode` by
 # test_results_resource_usage.test_in_process_databases_match_database_execution_mode.
 IN_PROCESS_DATABASES: frozenset[DatabaseName] = frozenset({"duckdb", "polars"})

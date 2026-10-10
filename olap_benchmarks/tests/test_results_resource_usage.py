@@ -57,28 +57,43 @@ def _seed(db_path: Path) -> None:
                         run_id=containerised.id,
                         time=datetime(2026, 1, 1, 0, 1),
                         cpu_percent=210.0,
-                        server_mem_mb=8_000,
+                        server_charge_mb=30_000,
+                        server_anon_mb=7_000,
+                        server_file_mb=22_900,
+                        server_shmem_mb=1_000,
                         client_mem_mb=1_500,
                         client_uss_mb=1_400,
                         disk_mb=40_000,
+                        disk_data_mb=39_000,
+                        disk_wal_mb=1_000,
                     ),
                     RunMetric(
                         run_id=containerised.id,
                         time=datetime(2026, 1, 1, 0, 2),
                         cpu_percent=180.0,
-                        server_mem_mb=6_000,
+                        server_charge_mb=31_000,
+                        server_anon_mb=5_500,
+                        server_file_mb=25_400,
+                        server_shmem_mb=500,
                         client_mem_mb=2_500,
                         client_uss_mb=2_400,
                         disk_mb=52_000,
+                        disk_data_mb=51_800,
+                        disk_wal_mb=200,
                     ),
                     RunMetric(
                         run_id=in_process.id,
                         time=datetime(2026, 1, 2, 0, 1),
                         cpu_percent=350.0,
-                        server_mem_mb=0,
+                        server_charge_mb=0,
+                        server_anon_mb=0,
+                        server_file_mb=0,
+                        server_shmem_mb=0,
                         client_mem_mb=9_000,
                         client_uss_mb=8_800,
                         disk_mb=30_000,
+                        disk_data_mb=29_000,
+                        disk_wal_mb=1_000,
                     ),
                 ]
             )
@@ -115,15 +130,20 @@ def _seed_lane_sampled_run(db_path: Path) -> None:
                         run_id=run.id,
                         time=datetime(2026, 1, 1, 0, 0, second),
                         cpu_percent=cpu_percent,
-                        server_mem_mb=1_000,
+                        server_charge_mb=3_000,
+                        server_anon_mb=1_000,
+                        server_file_mb=2_000,
+                        server_shmem_mb=0,
                         client_mem_mb=100,
                         client_uss_mb=90,
                     )
                     for second, cpu_percent in ((0, 100.0), (1, 200.0), (5, 300.0))
                 ]
                 + [
-                    RunMetric(run_id=run.id, time=datetime(2026, 1, 1, 0, 0, second), disk_mb=disk_mb)
-                    for second, disk_mb in ((0, 1_000), (6, 5_000))
+                    RunMetric(
+                        run_id=run.id, time=datetime(2026, 1, 1, 0, 0, second), disk_mb=disk_mb, disk_data_mb=disk_mb
+                    )
+                    for second, disk_mb in ((0, 1_000), (6, 5_000), (9, 4_000))
                 ]
             )
             session.commit()
@@ -139,8 +159,11 @@ def test_load_run_resource_usage_reads_columns_sampled_at_different_rates(tmp_pa
 
     # rows that leave a column null must not mask the peaks recorded in other rows
     assert usage.peak_combined_cpu_percent == 300.0
-    assert usage.peak_server_disk_mb == 5_000
+    assert usage.peak_disk_mb == 5_000
+    assert usage.final_disk_mb == 4_000
     assert usage.peak_server_memory_mb == 1_000
+    assert usage.peak_disk_wal_mb is None
+    assert usage.final_disk_wal_mb is None
 
 
 def test_mean_cpu_weights_samples_by_elapsed_time_not_sample_count(tmp_path: Path) -> None:
@@ -167,24 +190,44 @@ def test_comparable_memory_source_follows_execution_mode() -> None:
 
 
 def test_comparable_peak_memory_uses_client_memory_for_in_process_engines() -> None:
-    assert resolve_comparable_peak_memory_mb(db="duckdb", peak_server_memory_mb=0, peak_client_memory_mb=9_000) == 9_000
     assert (
-        resolve_comparable_peak_memory_mb(db="monetdb", peak_server_memory_mb=8_000, peak_client_memory_mb=2_500)
+        resolve_comparable_peak_memory_mb(
+            db="duckdb", peak_server_memory_mb=0, peak_server_charge_mb=0, peak_client_memory_mb=9_000
+        )
+        == 9_000
+    )
+    assert (
+        resolve_comparable_peak_memory_mb(
+            db="monetdb", peak_server_memory_mb=8_000, peak_server_charge_mb=30_000, peak_client_memory_mb=2_500
+        )
         == 8_000
     )
 
 
 def test_comparable_peak_memory_never_reports_zero_for_in_process_engines() -> None:
     with pytest.raises(ComparableMemoryUnavailableError, match="did not record"):
-        resolve_comparable_peak_memory_mb(db="duckdb", peak_server_memory_mb=0, peak_client_memory_mb=None)
+        resolve_comparable_peak_memory_mb(
+            db="duckdb", peak_server_memory_mb=0, peak_server_charge_mb=0, peak_client_memory_mb=None
+        )
 
     with pytest.raises(ComparableMemoryUnavailableError, match="pre-split combined figure"):
-        resolve_comparable_peak_memory_mb(db="polars", peak_server_memory_mb=29_190, peak_client_memory_mb=None)
+        resolve_comparable_peak_memory_mb(
+            db="polars", peak_server_memory_mb=None, peak_server_charge_mb=29_190, peak_client_memory_mb=None
+        )
 
 
 def test_comparable_peak_memory_rejects_missing_server_memory_for_containers() -> None:
     with pytest.raises(ComparableMemoryUnavailableError, match="no server memory"):
-        resolve_comparable_peak_memory_mb(db="monetdb", peak_server_memory_mb=0, peak_client_memory_mb=2_500)
+        resolve_comparable_peak_memory_mb(
+            db="monetdb", peak_server_memory_mb=0, peak_server_charge_mb=0, peak_client_memory_mb=2_500
+        )
+
+
+def test_comparable_peak_memory_refuses_a_bare_cgroup_charge() -> None:
+    with pytest.raises(ComparableMemoryUnavailableError, match="includes page cache"):
+        resolve_comparable_peak_memory_mb(
+            db="clickhouse", peak_server_memory_mb=None, peak_server_charge_mb=12_000, peak_client_memory_mb=500
+        )
 
 
 def test_load_run_resource_usage_keeps_server_and_client_peaks_apart(tmp_path: Path) -> None:
@@ -194,11 +237,13 @@ def test_load_run_resource_usage_keeps_server_and_client_peaks_apart(tmp_path: P
     usage = {row.db: row for row in load_run_resource_usage(db_path=db_path)}
 
     server_run = usage["monetdb"]
+    # anon + shmem per sample: 7_000 + 1_000 beats 5_500 + 500, and page cache is excluded
     assert server_run.peak_server_memory_mb == 8_000
+    assert server_run.peak_server_file_mb == 25_400
+    assert server_run.peak_server_charge_mb == 31_000
     assert server_run.peak_client_memory_mb == 2_500
     assert server_run.peak_client_uss_memory_mb == 2_400
     assert server_run.peak_combined_cpu_percent == 210.0
-    assert server_run.peak_server_disk_mb == 52_000
     assert server_run.comparable_memory_source == "server"
     assert server_run.comparable_peak_memory_mb() == 8_000
 
@@ -240,7 +285,7 @@ def test_describe_run_resource_usage_reports_unavailable_reason(tmp_path: Path) 
                     run_id=legacy.id,
                     time=datetime(2026, 1, 3, 0, 1),
                     cpu_percent=120.0,
-                    server_mem_mb=4_096,
+                    server_charge_mb=4_096,
                     client_mem_mb=None,
                     client_uss_mb=None,
                     disk_mb=1_000,
@@ -259,3 +304,32 @@ def test_describe_run_resource_usage_reports_unavailable_reason(tmp_path: Path) 
     assert described["duckdb"]["comparable_peak_memory_mb"] == 9_000
     assert described["duckdb"]["comparable_memory_unavailable"] is None
     assert described["monetdb"]["comparable_peak_memory_mb"] == 8_000
+
+
+def test_disk_reports_peak_and_final_for_data_and_wal_separately(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _seed(db_path)
+
+    server_run = {row.db: row for row in load_run_resource_usage(db_path=db_path)}["monetdb"]
+
+    assert (server_run.peak_disk_mb, server_run.final_disk_mb) == (52_000, 52_000)
+    assert (server_run.peak_disk_data_mb, server_run.final_disk_data_mb) == (51_800, 51_800)
+    # the WAL peaked early and was checkpointed away by the end of the run
+    assert (server_run.peak_disk_wal_mb, server_run.final_disk_wal_mb) == (1_000, 200)
+
+
+def test_in_process_engines_are_described_as_client_only(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _seed(db_path)
+
+    described = {
+        str(row["db"]): row for row in map(describe_run_resource_usage, load_run_resource_usage(db_path=db_path))
+    }
+
+    assert described["duckdb"]["resource_scope"] == "client_only"
+    assert described["duckdb"]["comparable_memory_source"] == "client"
+    assert described["duckdb"]["peak_server_memory_mb"] is None
+    assert described["duckdb"]["peak_server_charge_mb"] is None
+    assert described["duckdb"]["peak_disk_mb"] == 30_000
+    assert described["monetdb"]["resource_scope"] == "client_and_server"
+    assert described["monetdb"]["peak_server_memory_mb"] == 8_000

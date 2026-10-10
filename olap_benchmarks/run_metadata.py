@@ -247,7 +247,7 @@ def build_run_metadata(
             "start_command": start_command,
         },
         "metrics": {
-            "version": 6,
+            "version": 7,
             "sampling": (
                 "each metric family is sampled on its own schedule and stored as its own run_metric row, "
                 "leaving the columns it does not measure null. Sample spacing is neither constant nor equal "
@@ -260,21 +260,50 @@ def build_run_metadata(
                 "a server and a client share. Each reading is the average over the interval since the "
                 "previous reading, so it covers the whole run with no gaps"
             ),
-            "server_mem_mb": (
-                "server side: all database containers, excluding the benchmark client. Always 0 when "
+            "server_charge_mb": (
+                "server side: cgroup v2 memory.current (docker memory_stats.usage) summed over all database "
+                "containers: everything charged to them, page cache and kernel memory included. Not the "
+                "engine's memory use; a scan of a large store fills it with reclaimable cache. 0 when "
                 "execution.mode is in_process, because there is no server process"
+            ),
+            "server_anon_mb": (
+                "server side: cgroup v2 memory.stat anon summed over all database containers: private "
+                "anonymous memory of the engine processes (heap, stacks, private mappings)"
+            ),
+            "server_file_mb": (
+                "server side: cgroup v2 memory.stat file summed over all database containers: page cache and "
+                "file-backed mappings, shmem included; mostly reclaimable"
+            ),
+            "server_shmem_mb": (
+                "server side: cgroup v2 memory.stat shmem summed over all database containers: shared memory "
+                "such as PostgreSQL shared_buffers; a subset of server_file_mb that cannot be dropped like cache"
+            ),
+            "server_memory": (
+                "server side: reports derive server memory as server_anon_mb + server_shmem_mb per sample, "
+                "the memory the engine holds and the kernel cannot reclaim by dropping clean page cache. "
+                "File-backed mappings an engine uses as its working set (e.g. MonetDB's mmapped BAT heaps) "
+                "are excluded and show up in server_file_mb"
             ),
             "client_mem_mb": "client side: benchmark client process peak RSS, on the client_rss interval",
             "client_uss_mb": "client side: benchmark client process peak USS, on the client_uss interval",
             "disk_mb": (
-                "server side: the database's own storage directories (Database.metric_directories). "
-                "Client staging files and the benchmark client's own disk use are not measured. Sampled on "
-                "the slow disk lane, whose interval stretches beyond its nominal value when a du walk is "
-                "expensive, so disk readings are sparser and less regular than the other columns"
+                "storage: du over the database's own storage directories (Database.metric_directories), "
+                "WAL included. Client staging files and the benchmark client's own disk use are not "
+                "measured. Sampled on the slow disk lane, whose interval stretches beyond its nominal value "
+                "when a du walk is expensive, so disk readings are sparser and less regular than the other "
+                "columns"
+            ),
+            "disk_wal_mb": (
+                "storage: du over the engine's declared write-ahead log paths (Database.wal_path_patterns), "
+                "walked straight after disk_mb. Null on disk rows of engines that declare no WAL location"
+            ),
+            "disk_data_mb": (
+                "storage: disk_mb - disk_wal_mb, clamped at 0, or disk_mb when the engine declares no WAL location"
             ),
             "comparable_memory": (
-                "server_mem_mb for container engines and client_mem_mb for in_process engines; "
-                "server and client peaks are never summed because they do not coincide in time"
+                "server_anon_mb + server_shmem_mb for container engines and client_mem_mb for in_process "
+                "engines, which are client-only; server and client peaks are never summed because they do "
+                "not coincide in time"
             ),
         },
         "repository": build_repository_provenance(),

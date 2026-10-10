@@ -23,24 +23,33 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
 
     metrics = cast(dict[str, object], metadata["metrics"])
 
-    assert metrics["version"] == 6
+    assert metrics["version"] == 7
     assert set(metrics) == {
         "version",
         "sampling",
         "sampling_interval_seconds",
         "cpu_percent",
-        "server_mem_mb",
+        "server_charge_mb",
+        "server_anon_mb",
+        "server_file_mb",
+        "server_shmem_mb",
+        "server_memory",
         "client_mem_mb",
         "client_uss_mb",
         "disk_mb",
+        "disk_data_mb",
+        "disk_wal_mb",
         "comparable_memory",
     }
     assert metrics["sampling_interval_seconds"] == {"resource": 0.2, "disk": 5.0}
     assert "mem_mb" not in metrics
-    assert cast(str, metrics["server_mem_mb"]).startswith("server side:")
+    assert "server_mem_mb" not in metrics
+    for column in ("server_charge_mb", "server_anon_mb", "server_file_mb", "server_shmem_mb", "server_memory"):
+        assert cast(str, metrics[column]).startswith("server side:")
     assert cast(str, metrics["client_mem_mb"]).startswith("client side:")
     assert cast(str, metrics["client_uss_mb"]).startswith("client side:")
-    assert cast(str, metrics["disk_mb"]).startswith("server side:")
+    for column in ("disk_mb", "disk_data_mb", "disk_wal_mb"):
+        assert cast(str, metrics[column]).startswith("storage:")
     assert cast(str, metrics["cpu_percent"]).startswith("combined:")
 
 

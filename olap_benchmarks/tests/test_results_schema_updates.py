@@ -69,7 +69,7 @@ def test_run_update_succeeds_with_related_rows_after_migration(tmp_path: Path) -
                     run_id=run.id,
                     time=datetime.now(),
                     cpu_percent=0.0,
-                    server_mem_mb=0,
+                    server_charge_mb=0,
                     disk_mb=0,
                 )
             )
@@ -440,8 +440,47 @@ def test_client_memory_migration_preserves_historical_memory_semantics(tmp_path:
     con = cast(Any, duckdb).connect(str(db_path), read_only=True)
     try:
         assert con.execute(
-            "select server_mem_mb, client_mem_mb, client_uss_mb, disk_mb from run_metric"
-        ).fetchall() == [(123, None, None, 456)]
+            "select server_charge_mb, server_anon_mb, client_mem_mb, client_uss_mb, disk_mb, disk_wal_mb "
+            "from run_metric"
+        ).fetchall() == [(123, None, None, None, 456, None)]
+    finally:
+        con.close()
+
+
+def test_memory_and_disk_split_migration_keeps_the_charge_and_the_indexes(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path, target_revision="b2d6f90c4a13")
+
+    con = cast(Any, duckdb).connect(str(db_path))
+    try:
+        con.execute(
+            """
+            insert into run (
+                suite, suite_scale_factor, db, db_version, operation, system, status, started_at
+            ) values ('time_series', 1, 'postgres', 'test', 'populate', 'test', 'completed', now())
+            """
+        )
+        run_id = con.execute("select id from run").fetchone()[0]
+        con.execute(
+            "insert into run_metric (run_id, time, cpu_percent, server_mem_mb) values (?, now(), 10.0, 2048)",
+            [run_id],
+        )
+        con.execute("insert into run_metric (run_id, time, disk_mb) values (?, now(), 777)", [run_id])
+    finally:
+        con.close()
+
+    migrate_results(db_path=db_path)
+
+    con = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        assert con.execute(
+            """
+            select server_charge_mb, server_anon_mb, server_file_mb, server_shmem_mb, disk_mb, disk_data_mb, disk_wal_mb
+            from run_metric order by id
+            """
+        ).fetchall() == [(2048, None, None, None, None, None, None), (None, None, None, None, 777, None, None)]
+        indexes = con.execute("select index_name from duckdb_indexes() where table_name = 'run_metric'").fetchall()
+        assert {row[0] for row in indexes} == {"idx_run_metric_run_time", "ix_run_metric_run_id"}
     finally:
         con.close()
 
@@ -658,10 +697,14 @@ def test_delete_runs_by_status_failed_deletes_failed_and_running_runs(tmp_path: 
                         finished_at=datetime.now(),
                         status="completed",
                     ),
-                    RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
-                    RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
                     RunMetric(
-                        run_id=completed_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0
+                        run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, server_charge_mb=0, disk_mb=0
+                    ),
+                    RunMetric(
+                        run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, server_charge_mb=0, disk_mb=0
+                    ),
+                    RunMetric(
+                        run_id=completed_run.id, time=datetime.now(), cpu_percent=0.0, server_charge_mb=0, disk_mb=0
                     ),
                     QueryExecution(
                         run_id=failed_run_id,
@@ -744,8 +787,12 @@ def test_delete_runs_by_status_orphaned_deletes_running_runs_only(tmp_path: Path
                         finished_at=datetime.now(),
                         status="failed",
                     ),
-                    RunMetric(run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
-                    RunMetric(run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, server_mem_mb=0, disk_mb=0),
+                    RunMetric(
+                        run_id=running_run.id, time=datetime.now(), cpu_percent=0.0, server_charge_mb=0, disk_mb=0
+                    ),
+                    RunMetric(
+                        run_id=failed_run.id, time=datetime.now(), cpu_percent=0.0, server_charge_mb=0, disk_mb=0
+                    ),
                     QueryExecution(
                         run_id=running_run_id,
                         run_step_id=None,

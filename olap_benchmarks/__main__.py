@@ -594,9 +594,12 @@ def resources(
     """Report per-run peak resource usage with server and client memory kept apart.
 
     `comparable_peak_memory_mb` is the figure to compare across engines: server memory
-    for containerised engines and client memory for in-process engines such as DuckDB
-    and Polars, whose `server_mem_mb` is always 0 because they have no server. Server
-    and client peaks are never summed; they occur at different times.
+    (cgroup anon + shmem, page cache excluded) for containerised engines and client
+    memory for in-process engines such as DuckDB and Polars, which are reported as
+    `resource_scope: client_only` with null server figures. Server and client peaks
+    are never summed; they occur at different times.
+
+    Disk is reported as peak and final for the whole store, its data and its WAL.
 
     `mean_combined_cpu_percent` and `cpu_core_seconds` weight each sample by the gap to
     the next one, so they stay comparable across runs whose sampling rates differ.

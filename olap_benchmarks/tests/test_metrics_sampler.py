@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime
 from multiprocessing import Value
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
+from pathlib import Path
 from threading import Event as ThreadEvent
 from threading import Lock
 from types import SimpleNamespace
@@ -12,8 +14,9 @@ from typing import Any, ClassVar, cast
 import pytest
 
 from ..metrics import sampler
-from ..metrics.sampler import Lane, LaneSchedule, MetricValues
-from ..metrics.storage import WriterMessage
+from ..metrics.measure import DiskSample, ResourceSample, ServerMemory
+from ..metrics.sampler import Lane, LaneSchedule
+from ..metrics.storage import MetricValues, WriterMessage
 
 
 class FakeStopEvent:
@@ -39,27 +42,8 @@ class FakeStorage:
         # class itself; each construction starts a fresh list
         type(self).inserted = []
 
-    def insert_metric(
-        self,
-        run_id: int,
-        time: datetime,
-        cpu_percent: float | None = None,
-        server_mem_mb: int | None = None,
-        client_mem_mb: int | None = None,
-        client_uss_mb: int | None = None,
-        disk_mb: int | None = None,
-    ) -> None:
-        self.inserted.append(
-            {
-                "run_id": run_id,
-                "time": time,
-                "cpu_percent": cpu_percent,
-                "server_mem_mb": server_mem_mb,
-                "client_mem_mb": client_mem_mb,
-                "client_uss_mb": client_uss_mb,
-                "disk_mb": disk_mb,
-            }
-        )
+    def insert_metric(self, run_id: int, time: datetime, values: MetricValues) -> None:
+        self.inserted.append({"run_id": run_id, "time": time, **asdict(values)})
 
 
 class FakeFinalSampleTimeQueue:
@@ -152,7 +136,7 @@ def test_run_lane_writes_only_the_columns_it_measures() -> None:
     resource = Lane(
         name="resource",
         interval_seconds=0.0,
-        sample=lambda: MetricValues(cpu_percent=10.0, server_mem_mb=20, client_mem_mb=5, client_uss_mb=4),
+        sample=lambda: MetricValues(cpu_percent=10.0, server_anon_mb=20, client_mem_mb=5, client_uss_mb=4),
     )
     disk = Lane(name="disk", interval_seconds=0.0, sample=lambda: MetricValues(disk_mb=30))
 
@@ -160,7 +144,7 @@ def test_run_lane_writes_only_the_columns_it_measures() -> None:
     sampler.run_lane(cast(Any, storage), 7, disk, cast(Event, FakeStopEvent(checks_before_stop=1)))
 
     assert [row["cpu_percent"] for row in storage.inserted] == [10.0, None]
-    assert [row["server_mem_mb"] for row in storage.inserted] == [20, None]
+    assert [row["server_anon_mb"] for row in storage.inserted] == [20, None]
     assert [row["disk_mb"] for row in storage.inserted] == [None, 30]
     assert all(row["run_id"] == 7 for row in storage.inserted)
 
@@ -257,6 +241,7 @@ def test_sampling_loop_ends_with_a_final_sample_from_every_lane(
         client_process_id=42,
         container_names=("database",),
         metric_directories=(),
+        wal_globs=(),
         run_id=7,
         stop_event=cast(Event, FakeStopEvent(checks_before_stop=0)),
         queue=cast(Queue[WriterMessage], object()),
@@ -268,3 +253,53 @@ def test_sampling_loop_ends_with_a_final_sample_from_every_lane(
         (final_sample_time, 10.0, None),
         (final_sample_time, None, 30),
     ]
+
+
+def test_resource_lane_records_the_cgroup_memory_split(monkeypatch: pytest.MonkeyPatch) -> None:
+    def resource_sample(*_args: object) -> ResourceSample:
+        return ResourceSample(
+            cpu_percent=50.0,
+            server_memory=ServerMemory(charge_mb=900, anon_mb=300, file_mb=550, shmem_mb=120),
+            client_mem_mb=64,
+            client_uss_mb=48,
+        )
+
+    monkeypatch.setattr(sampler, "get_resource_sample", resource_sample)
+    resource, _ = sampler.build_lanes(cast(Any, None), 42, ("database",), ())
+
+    assert resource.sample() == MetricValues(
+        cpu_percent=50.0,
+        server_charge_mb=900,
+        server_anon_mb=300,
+        server_file_mb=550,
+        server_shmem_mb=120,
+        client_mem_mb=64,
+        client_uss_mb=48,
+    )
+
+
+def test_resource_lane_leaves_server_memory_null_while_a_container_restarts(monkeypatch: pytest.MonkeyPatch) -> None:
+    def resource_sample(*_args: object) -> ResourceSample:
+        return ResourceSample(cpu_percent=5.0, server_memory=None, client_mem_mb=64, client_uss_mb=48)
+
+    monkeypatch.setattr(sampler, "get_resource_sample", resource_sample)
+    resource, _ = sampler.build_lanes(cast(Any, None), 42, ("database",), ())
+
+    values = resource.sample()
+    assert (values.server_charge_mb, values.server_anon_mb, values.server_file_mb) == (None, None, None)
+    assert values.client_mem_mb == 64
+
+
+def test_disk_lane_records_total_data_and_wal(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, ...]] = []
+
+    def disk_sample(*args: object) -> DiskSample:
+        calls.append(args)
+        return DiskSample(total_mb=1_000, data_mb=900, wal_mb=100)
+
+    monkeypatch.setattr(sampler, "get_disk_sample", disk_sample)
+    _, disk = sampler.build_lanes(cast(Any, None), 42, (), (Path("/store"),), ("/store/pg_wal",))
+
+    assert disk.sample() == MetricValues(disk_mb=1_000, disk_data_mb=900, disk_wal_mb=100)
+    assert calls == [((Path("/store"),), ("/store/pg_wal",))]
+    assert disk.max_duty_cycle == sampler.DISK_MAX_DUTY_CYCLE

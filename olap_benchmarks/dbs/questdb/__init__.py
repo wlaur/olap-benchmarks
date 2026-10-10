@@ -100,6 +100,7 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 class QuestDB(Database):
     name: DatabaseName = "questdb"
     supports_arm64_containers: ClassVar[bool] = True
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ("db/*/wal*", "db/*/txn_seq")
 
     connection_string: str = QUESTDB_CONNECTION_STRING
 

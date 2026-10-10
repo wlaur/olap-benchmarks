@@ -139,13 +139,21 @@ class RunMetric(Base):
     # measured at this instant", never zero. Rows are therefore irregularly spaced per
     # column: aggregate with max(), or weight by the gap to the next non-null sample.
     # cpu_percent is the benchmark client process plus every database container combined.
-    # server_mem_mb is database-container memory only and is 0 for in-process engines
-    # (see settings.IN_PROCESS_DATABASES); their footprint is client_mem_mb instead.
+    # server_* columns are the database containers' cgroup v2 counters (charge = memory.current,
+    # anon/file/shmem from memory.stat, shmem a subset of file) and are 0 for in-process engines
+    # (see settings.IN_PROCESS_DATABASES), whose footprint is client_mem_mb instead.
+    # disk_mb is the whole store; disk_data_mb + disk_wal_mb split it, and disk_wal_mb is null
+    # on disk rows of engines that declare no WAL location.
     cpu_percent: Mapped[float | None] = mapped_column(Float)
-    server_mem_mb: Mapped[int | None] = mapped_column(Integer)
+    server_charge_mb: Mapped[int | None] = mapped_column(Integer)
     client_mem_mb: Mapped[int | None] = mapped_column(Integer)
     client_uss_mb: Mapped[int | None] = mapped_column(Integer)
     disk_mb: Mapped[int | None] = mapped_column(Integer)
+    server_anon_mb: Mapped[int | None] = mapped_column(Integer)
+    server_file_mb: Mapped[int | None] = mapped_column(Integer)
+    server_shmem_mb: Mapped[int | None] = mapped_column(Integer)
+    disk_data_mb: Mapped[int | None] = mapped_column(Integer)
+    disk_wal_mb: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (Index("idx_run_metric_run_time", "run_id", "time"),)
 
