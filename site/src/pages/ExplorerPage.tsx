@@ -681,8 +681,10 @@ export function ExplorerPage({
                     Normalized suite score across {scoredQueryCount} suite queries
                   </p>
                   <p className="mt-1 max-w-3xl font-sans text-xs leading-5 text-slate-500">
-                    Geometric mean versus the fastest result per query, with 10ms smoothing and
-                    missing-query penalties.
+                    Geometric mean versus the fastest of the selected{" "}
+                    {getModePluralLabel(mode).toLowerCase()} per query, with 10ms smoothing and
+                    missing-query penalties. Scores are relative to this selection and change when
+                    it changes.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-400">

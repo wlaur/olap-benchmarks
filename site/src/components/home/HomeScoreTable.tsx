@@ -43,8 +43,9 @@ export function HomeScoreTable() {
       <div className="border-b border-border-default px-5 py-4">
         <SectionTitle as="h2">Database ranking</SectionTitle>
         <BodyText className="mt-1">
-          Overall score across benchmark suites. Lower is better; 1.0× means fastest on every query.
-          Missing results are penalized.{" "}
+          Overall score across benchmark suites, relative to the fastest of the databases shown, so
+          scores shift when databases are added or removed. Lower is better; 1.0× means fastest on
+          every query. Missing results are penalized.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -57,9 +58,9 @@ export function HomeScoreTable() {
           </summary>
           <p className="mt-2 max-w-4xl leading-5">
             Each suite score is the geometric mean of per-query latency ratios versus the fastest
-            database, with missing queries penalized. Overall ordering is the geometric mean across
-            benchmark suites; smoke suites are shown but excluded. A missing suite counts as that
-            suite&apos;s worst recorded score.
+            database shown, with 10ms smoothing and missing queries penalized. Overall ordering is
+            the geometric mean across benchmark suites; smoke suites are shown but excluded. A
+            missing suite counts as that suite&apos;s worst recorded score.
           </p>
         </details>
       </div>

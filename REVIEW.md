@@ -33,13 +33,10 @@ one-command path from "bump a version" to "published".
 - [ ] **Fix non-deterministic queries.** RTABench `1008_most_week_delayed_order` returns a different answer hash on
       each ClickHouse iteration (`ORDER BY delayed_orders DESC LIMIT 1` with ties). Add tie-breakers, and add a check
       that flags any query whose hash differs between iterations of one run.
-- [ ] **Make the site's methodology text true.** `site/src/content/home.md` still names `macbook-pro-m4`, says
-      QuestDB is published, says results are "checked into git", describes a MonetDB "binary fetch path", and says
-      DuckDB is not reopened between operations (it is, since per-operation process isolation).
 - [ ] **Redeploy Pages when the data asset changes.** `publish --upload` replaces the release asset, but Pages only
-      rebuilds on a push to `main`, so the site can serve a database that does not match the committed manifest.
-      Trigger the workflow from `publish --upload` (`gh workflow run`) and put the asset's SHA-256 in `manifest.json`;
-      have the build verify it instead of only the `DUCK` magic bytes.
+      rebuilds on a push to `main`. Trigger the workflow from `publish --upload` (`gh workflow run`). The build
+      already verifies the asset against `results_db_sha256`/`results_db_bytes` in `manifest.json`
+      (`bun run verify-data`), so a mismatched asset now fails the build instead of deploying.
 - [ ] **Record image digests for every engine.** The locally built MonetDB image has no RepoDigest, so
       `container_image_digest` is null for all MonetDB runs. Pull from the registry before a campaign (now that the
       image is published) or record the registry digest explicitly; refuse to publish runs without one.
@@ -54,9 +51,8 @@ one-command path from "bump a version" to "published".
 - [ ] **Name the timed boundary.** The timer covers `fetch()` through materialisation into Polars. Label it
       end-to-end latency on the site, stop showing `first_run_duration_s` as if it were cold, and add engine-internal
       timing only as a separate, clearly labelled metric.
-- [ ] **State that scores are relative to the selected engines.** The 10 ms-smoothed score is recomputed against
-      the fastest selected engine, so a run's score changes when another engine is added. Say so wherever a score
-      appears, and keep absolute latency next to it.
+- [ ] **Show absolute latency next to the home score.** The ranking now says scores are relative to the engines
+      shown; the home table still has no absolute latency beside each score.
 - [ ] **Finish the reproducibility identity.** Already recorded: repo commit (editable installs only), image IDs,
       input manifest hashes, query text. Missing: query/schema hashes, profile revision, iteration policy, and a repo
       commit for non-editable installs. Scope site comparisons by system snapshot, not just `system`.
