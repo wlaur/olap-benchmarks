@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -7,6 +8,7 @@ from typing import cast
 import pytest
 
 from .. import run_metadata
+from ..inputs import fingerprint_input_directory
 
 
 def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,22 +56,44 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_input_fingerprint_is_complete_and_changes_with_content(tmp_path: Path) -> None:
-    nested = tmp_path / "nested"
-    nested.mkdir()
-    (tmp_path / "a.parquet").write_bytes(b"first")
+    inputs = tmp_path / "inputs"
+    nested = inputs / "nested"
+    nested.mkdir(parents=True)
+    (inputs / "a.parquet").write_bytes(b"first")
     (nested / "b.parquet").write_bytes(b"second")
+    cache_path = tmp_path / "cache.json"
 
-    first = run_metadata.fingerprint_input_directory(tmp_path)
-    second = run_metadata.fingerprint_input_directory(tmp_path)
+    first = fingerprint_input_directory(inputs, cache_path)
+    second = fingerprint_input_directory(inputs, cache_path)
 
-    assert first is second
+    assert first == second
     files = cast(list[dict[str, object]], first["files"])
     assert [file["path"] for file in files] == ["a.parquet", "nested/b.parquet"]
 
-    (tmp_path / "a.parquet").write_bytes(b"changed")
-    changed = run_metadata.fingerprint_input_directory(tmp_path)
+    (inputs / "a.parquet").write_bytes(b"changed")
+    changed = fingerprint_input_directory(inputs, cache_path)
 
     assert changed["manifest_sha256"] != first["manifest_sha256"]
+
+
+def test_input_fingerprint_reuses_cached_hashes_keyed_by_size_and_mtime(tmp_path: Path) -> None:
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    source = inputs / "a.parquet"
+    source.write_bytes(b"aaaa")
+    cache_path = tmp_path / "cache.json"
+
+    first = fingerprint_input_directory(inputs, cache_path)
+    assert cache_path.is_file()
+
+    stat = source.stat()
+    source.write_bytes(b"bbbb")
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+    assert fingerprint_input_directory(inputs, cache_path) == first
+
+    source.touch()
+    assert fingerprint_input_directory(inputs, cache_path)["manifest_sha256"] != first["manifest_sha256"]
 
 
 def _git(repository: Path, *args: str) -> None:
@@ -130,3 +154,26 @@ def test_run_metadata_records_the_repository_of_this_checkout() -> None:
     assert set(repository) == {"commit", "dirty", "diff_sha256"}
     assert isinstance(repository["commit"], str)
     assert (repository["diff_sha256"] is None) is (repository["dirty"] is False)
+
+
+def test_schema_hashes_cover_the_suite_schema_file_and_directory() -> None:
+    duckdb_schema = run_metadata.hash_schema_files("tpc_h", "duckdb")
+    assert list(cast(dict[str, str], duckdb_schema["files"])) == ["tpc_h/schemas/duckdb.sql"]
+
+    timescaledb_schema = run_metadata.hash_schema_files("time_series", "timescaledb")
+    assert sorted(cast(dict[str, str], timescaledb_schema["files"])) == [
+        "time_series/schemas/timescaledb/large_pre_insert.sql",
+        "time_series/schemas/timescaledb/tall_pre_insert.sql",
+        "time_series/schemas/timescaledb/wide_pre_insert.sql",
+    ]
+
+    assert run_metadata.hash_schema_files("jsonbench", "duckdb")["files"] == {}
+    assert duckdb_schema["digest"] != timescaledb_schema["digest"]
+
+
+def test_run_metadata_records_the_benchmark_profile() -> None:
+    metadata = run_metadata.build_run_metadata(execution_mode="in_process", start_command=None)
+
+    profile = cast(dict[str, object], metadata["benchmark_profile"])
+    assert profile["id"] == "resident-hot-v1"
+    assert (profile["warmup_iterations"], profile["measured_iterations"]) == (1, 3)

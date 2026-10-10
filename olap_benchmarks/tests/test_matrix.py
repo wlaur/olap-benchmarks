@@ -52,6 +52,7 @@ def _run(
     status: str = "completed",
     day: int = 1,
     commit: str | None = "c1",
+    profile: str = "resident-hot-v1",
 ) -> StoredRun:
     return StoredRun(
         id=run_id,
@@ -66,6 +67,7 @@ def _run(
         started_at=datetime(2026, 10, day),
         commit=commit,
         dirty=False,
+        benchmark_profile=profile,
     )
 
 
@@ -74,6 +76,7 @@ SELECT = MatrixCell("duckdb", "tpc_h", 10, "select")
 CLICKBENCH = MatrixCell("duckdb", "clickbench", 1, "select")
 RTABENCH = MatrixCell("duckdb", "rtabench", 1, "select")
 JSONBENCH = MatrixCell("duckdb", "jsonbench", 10, "select")
+KAGGLE = MatrixCell("duckdb", "kaggle_airbnb", 1, "select")
 
 
 def test_matrix_status_classifies_cells() -> None:
@@ -85,8 +88,9 @@ def test_matrix_status_classifies_cells() -> None:
         _run(5, RTABENCH, day=1, version="0.9", commit="c2"),
         _run(6, JSONBENCH, day=1, commit="c2"),
         _run(7, JSONBENCH, day=3, status="failed", commit="c2"),
+        _run(8, KAGGLE, day=1, commit="c2", profile="legacy-per-suite"),
     ]
-    cells = [POPULATE, SELECT, CLICKBENCH, RTABENCH, JSONBENCH, MatrixCell("duckdb", "tpc_ds", 1, "select")]
+    cells = [POPULATE, SELECT, CLICKBENCH, RTABENCH, JSONBENCH, MatrixCell("duckdb", "tpc_ds", 1, "select"), KAGGLE]
 
     statuses = matrix_status(runs, cells, system="test", pins={"duckdb": "1.0"}, drivers={"duckdb": None})
 
@@ -97,9 +101,11 @@ def test_matrix_status_classifies_cells() -> None:
         ("rtabench", "select", "stale"),
         ("jsonbench", "select", "failed"),
         ("tpc_ds", "select", "missing"),
+        ("kaggle_airbnb", "select", "stale"),
     ]
     assert statuses[2].detail.startswith("commit c1")
     assert statuses[3].detail == "version 0.9, pinned 1.0"
+    assert statuses[6].detail == "profile legacy-per-suite, current resident-hot-v1"
 
 
 def test_superseded_runs_keep_the_latest_completed_run_and_later_attempts() -> None:

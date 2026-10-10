@@ -33,6 +33,7 @@ def _status(cell: MatrixCell, state: str) -> CellStatus:
         started_at=datetime(2026, 10, 1),
         commit="c1",
         dirty=False,
+        benchmark_profile="resident-hot-v1",
     )
     return CellStatus(cell, "ok" if state == "ok" else "missing", run if state == "ok" else None, "")
 
@@ -52,7 +53,7 @@ def _patch(
         return [_status(cell, states[cell]) for cell in cells]
 
     def fake_run_groups(
-        groups: list[BenchmarkGroup], *, revision: str, cleanup: bool, keep_going: bool
+        groups: list[BenchmarkGroup], *, revision: str, cleanup: bool, keep_going: bool, drop_caches: bool
     ) -> list[GroupOutcome]:
         assert cleanup
         runs.append(groups)

@@ -12,6 +12,7 @@ export interface DatabaseScore {
   failed: number
   neverCompleted: number
   latestSelectFailed: boolean
+  latenciesS: number[]
 }
 
 export interface RelativeScoreSeries {
@@ -73,6 +74,15 @@ export function computeDatabaseScores(
     })
   }
 
+  const latenciesByDb = new Map<string, number[]>()
+  for (const group of queryGroups.values()) {
+    for (const [dbKey, duration] of group) {
+      const latencies = latenciesByDb.get(dbKey) ?? []
+      latencies.push(duration)
+      latenciesByDb.set(dbKey, latencies)
+    }
+  }
+
   const dbStats = calculateRelativeScores(
     [...databases.keys()],
     [...scoredQueryNames],
@@ -99,6 +109,7 @@ export function computeDatabaseScores(
         failed: coverage.failed_query_count,
         neverCompleted: Math.max(0, stats.missing - coverage.failed_query_count),
         latestSelectFailed: coverage.latest_status === "failed",
+        latenciesS: latenciesByDb.get(dbKey) ?? [],
       }
     })
     .sort((a, b) => {
@@ -203,6 +214,11 @@ function calculateRelativeScores(
 
 function durationsAreEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= DURATION_EQUALITY_TOLERANCE
+}
+
+export function geometricMean(values: readonly number[]): number | null {
+  if (values.length === 0) return null
+  return Math.exp(values.reduce((sum, value) => sum + Math.log(value), 0) / values.length)
 }
 
 export function formatScore(score: number): string {

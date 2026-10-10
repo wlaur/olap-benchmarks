@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -8,6 +9,7 @@ from typing import Any, cast
 import duckdb
 
 from ..matrix import MatrixCell
+from ..profile import BENCHMARK_PROFILE
 from .cells import StoredRun, latest_run_per_cell, load_runs
 from .validation import validate_results
 
@@ -260,6 +262,13 @@ def validate_publishable_runs(
                 f"{commit}: {sum(1 for run in runs if (run.commit or 'none') == commit)} run(s)" for commit in commits
             ]
             problems.append(_listing("A published set must come from exactly one repository commit", by_commit))
+
+        profiles = sorted({run.benchmark_profile for run in runs})
+        if profiles != [BENCHMARK_PROFILE.id]:
+            counts = Counter(run.benchmark_profile for run in runs)
+            listed = [f"{profile}: {counts[profile]} run(s)" for profile in profiles]
+            title = f"A published set must follow exactly one benchmark profile, {BENCHMARK_PROFILE.id}"
+            problems.append(_listing(title, listed))
 
         dirty = [run.label for run in runs if run.dirty is not False]
         if dirty:

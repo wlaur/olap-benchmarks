@@ -55,6 +55,7 @@ class Run(Base):
     operation: Mapped[str] = mapped_column(String, nullable=False)
     system: Mapped[str] = mapped_column(String, nullable=False)
     system_snapshot_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    benchmark_profile: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)

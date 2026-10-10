@@ -68,6 +68,7 @@ export type Run = {
   metadata: Json | null
   system_snapshot_id: number | null
   db_driver: string | null
+  benchmark_profile: string
 }
 
 export type RunInsertable = Insertable<Run>

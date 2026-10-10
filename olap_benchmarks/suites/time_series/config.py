@@ -31,9 +31,9 @@ _LOGGER = logging.getLogger(__name__)
 TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series/queries"
 
 
-TIME_SERIES_QUERY_NAMES = {
-    n.stem: 5 for n in sorted((REPO_ROOT / "olap_benchmarks/suites/time_series/queries").glob("*.sql"))
-}
+TIME_SERIES_QUERY_NAMES = tuple(
+    n.stem for n in sorted((REPO_ROOT / "olap_benchmarks/suites/time_series/queries").glob("*.sql"))
+)
 
 
 DatasetSize = Literal[
@@ -570,55 +570,11 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             return ("unsupported", reason)
         return ("skipped", "query excluded by suite/database")
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        failed_queries = 0
-        for idx, (query_name, iterations) in enumerate(TIME_SERIES_QUERY_NAMES.items()):
-            progress_label = f"({idx + 1:_}/{len(TIME_SERIES_QUERY_NAMES):_})"
-            skip = self.query_skip(query_name)
-            if skip is not None:
-                result_status, reason = skip
-                self.record_skipped_query_steps(
-                    query_name,
-                    iterations,
-                    result_status=result_status,
-                    reason=reason,
-                )
-                continue
+    def planned_query_names(self) -> tuple[str, ...]:
+        return TIME_SERIES_QUERY_NAMES
 
-            def log_success(
-                it: int,
-                df: pl.DataFrame,
-                t: float,
-                *,
-                query_name: str = query_name,
-                progress_label: str = progress_label,
-                iterations: int = iterations,
-            ) -> None:
-                _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})\n"
-                    f"df (head 100)={df.head(100)}"
-                )
-
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=iterations,
-                query_loader=lambda query_name=query_name: self.load_time_series_query(query_name),
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
-                progress_label=progress_label,
-                log_success=log_success,
-            )
-            if not ok:
-                failed_queries += 1
-
-        self.assert_no_failed_queries(failed_queries, len(TIME_SERIES_QUERY_NAMES))
-
-        _LOGGER.info(
-            f"Executed {len(TIME_SERIES_QUERY_NAMES):_} queries "
-            f"(with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+    def load_query(self, query_name: str) -> str:
+        return self.load_time_series_query(query_name)
 
     def _get_mutate_primary_key(self, table_name: TableName) -> str | list[str]:
         _ = table_name
@@ -763,10 +719,10 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                         result_status, reason = skip
                         suite.record_skipped_query_steps(
                             query_name,
-                            iteration,
                             result_status=result_status,
                             reason=reason,
                             start_iteration=iteration,
+                            iterations=iteration,
                         )
                         continue
 

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from olap_benchmarks import results as results_module
 from olap_benchmarks.matrix import MatrixCell
+from olap_benchmarks.profile import BENCHMARK_PROFILE
 from olap_benchmarks.results import (
     _build_queries_manifest,
     _build_suites_manifest,
@@ -105,6 +106,7 @@ def _add_run(
     snapshot_id: int = 1,
     answer_hash: str = "blake2b128:test",
     image_digest: str | None = "monetdb/monetdb@sha256:" + "a" * 64,
+    profile: str = BENCHMARK_PROFILE.id,
 ) -> int:
     execution: dict[str, object] = (
         {
@@ -116,6 +118,7 @@ def _add_run(
         else {"mode": "in_process", "container_images": None, "container_image_digests": None}
     )
     run = Run(
+        benchmark_profile=profile,
         suite=cell.suite,
         suite_scale_factor=cell.scale_factor,
         db=cell.db,
@@ -224,6 +227,21 @@ def test_publish_gate_rejects_mixed_commits_dirty_trees_and_snapshots(tmp_path: 
     assert "exactly one repository commit" in message
     assert "dirty" in message
     assert "exactly one system snapshot" in message
+
+
+def test_publish_gate_rejects_runs_of_another_benchmark_profile(tmp_path: Path) -> None:
+    def add(session: Session) -> None:
+        _add_run(session, CELLS[0])
+        _add_run(session, CELLS[1], profile="legacy-per-suite")
+        _add_run(session, CELLS[2])
+        _add_run(session, CELLS[3])
+
+    with pytest.raises(PublishValidationError) as excinfo:
+        _validate(_results_db(tmp_path, add))
+
+    message = str(excinfo.value)
+    assert f"exactly one benchmark profile, {BENCHMARK_PROFILE.id}" in message
+    assert "legacy-per-suite: 1 run(s)" in message
 
 
 def test_publish_gate_rejects_stale_versions_and_superseded_runs(tmp_path: Path) -> None:

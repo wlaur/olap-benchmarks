@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any, Literal, cast
 
 import polars as pl
 import pytest
 from sqlalchemy import Connection
 
+from .. import dbs
 from ..dbs import Database
+from ..profile import BENCHMARK_PROFILE
 from ..settings import DatabaseName, TableName
 from ..suites import FailedQueriesError
 from ..suites.tpc_ds import config as tpcds_config
@@ -60,7 +63,9 @@ class FakeTpcDsDatabase(Database):
         iteration: int,
         reason: str,
         result_status: Literal["skipped", "unsupported"] = "skipped",
+        error_message: str | None = None,
     ) -> None:
+        _ = error_message
         self.skipped_iterations.append((query_name, iteration, result_status, reason))
 
     def rollback(self) -> None:
@@ -91,9 +96,11 @@ def _fake_load_tpcds_query(self: TpcDs[FakeTpcDsDatabase], query_name: str) -> s
     return f"select '{query_name}'"
 
 
-def _patch_tpcds_queries(monkeypatch: pytest.MonkeyPatch, query_names: list[str], iterations: int = 2) -> None:
-    monkeypatch.setattr(tpcds_config, "TPCDS_QUERY_NAMES", query_names)
-    monkeypatch.setattr(tpcds_config, "TPCDS_ITERATIONS", iterations)
+def _patch_tpcds_queries(monkeypatch: pytest.MonkeyPatch, query_names: list[str]) -> None:
+    monkeypatch.setattr(tpcds_config, "TPCDS_QUERY_NAMES", tuple(query_names))
+    monkeypatch.setattr(
+        dbs, "BENCHMARK_PROFILE", replace(BENCHMARK_PROFILE, warmup_iterations=1, measured_iterations=1)
+    )
     monkeypatch.setattr(TpcDs, "load_tpcds_query", _fake_load_tpcds_query)
 
 

@@ -7,6 +7,7 @@ import cyclopts
 from setproctitle import setproctitle
 
 from .dbs import get_databases
+from .inputs import drop_page_cache, fingerprint_input_directory
 from .matrix import MatrixCell, current_drivers, current_pins, expand_matrix
 from .metrics.storage import WriterProcessHandle, start_writer_process
 from .operation_runner import run_operation
@@ -145,7 +146,7 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor
         _LOGGER.warning(f"Cleanup for {db_name}:{suite_name} exited with code {rc}")
 
 
-def _check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
+def _check_and_hash_input_data(suite_name: SuiteName, scale_factor: int) -> None:
     input_dir = SETTINGS.input_data_directory / format_suite_data_directory_name(suite_name, scale_factor)
 
     if not input_dir.is_dir() or not any(input_dir.iterdir()):
@@ -153,6 +154,10 @@ def _check_input_data(suite_name: SuiteName, scale_factor: int) -> None:
             f"No input data found for suite '{suite_name}' scale factor {scale_factor} at {input_dir}\n"
             f"Run 'olap prepare {suite_name} --scale-factor {scale_factor}' first."
         )
+
+    # hashed before any container starts; each operation's run metadata reads the cached hashes
+    _LOGGER.info(f"Fingerprinting inputs of {suite_name} scale factor {scale_factor}")
+    fingerprint_input_directory(input_dir)
 
 
 def _resolve_suite_scale_factor_pairs(suite: SuiteArg, scale_factor: int | None) -> list[tuple[SuiteName, int]]:
@@ -243,8 +248,11 @@ class GroupOutcome:
     error: str | None
 
 
-def _run_benchmark_group(group: BenchmarkGroup, writer: WriterProcessHandle, cleanup: bool) -> None:
+def _run_benchmark_group(
+    group: BenchmarkGroup, writer: WriterProcessHandle, cleanup: bool, drop_caches: bool = False
+) -> None:
     db_instance = get_databases()[group.db]
+    db_instance._page_cache_dropped = drop_page_cache() if drop_caches else False
 
     _LOGGER.info(f"Benchmarking {group.label}")
     db_instance._current_suite = group.suite
@@ -283,10 +291,11 @@ def run_benchmark_groups(
     revision: Revision,
     cleanup: bool,
     keep_going: bool,
+    drop_caches: bool = False,
 ) -> list[GroupOutcome]:
     inputs: dict[tuple[SuiteName, int], None] = {(group.suite, group.scale_factor): None for group in groups}
     for suite_name, scale_factor in inputs:
-        _check_input_data(suite_name, scale_factor)
+        _check_and_hash_input_data(suite_name, scale_factor)
     # fails before any container starts when the harness is not running from a git checkout
     build_repository_provenance()
 
@@ -297,7 +306,7 @@ def run_benchmark_groups(
     try:
         for group in groups:
             try:
-                _run_benchmark_group(group, writer, cleanup)
+                _run_benchmark_group(group, writer, cleanup, drop_caches)
             except Exception as exc:
                 _LOGGER.exception(f"{group.label} failed")
                 outcomes.append(GroupOutcome(group, f"{type(exc).__name__}: {exc}"))
@@ -340,6 +349,7 @@ def benchmark(
     cleanup: bool = False,
     omit: list[DatabaseName] | None = None,
     scale_factor: int | None = None,
+    drop_caches: bool = False,
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically.
 
@@ -359,6 +369,10 @@ def benchmark(
     factor; without `--scale-factor`, suites with configured fan-out run every
     configured factor. With `suite=all`, row-store databases skip optional
     TPC-H/TPC-DS runs by default; select those suites explicitly to include them.
+
+    Inputs are hashed before any container starts. `--drop-caches` then drops the operating-system
+    page cache before each container starts (Linux only, needs root; logged and skipped otherwise),
+    so populate reads its inputs cold.
     """
     plan = _filter_supported_benchmark_plan(_resolve_benchmark_plan(db, suite, scale_factor, omit))
 
@@ -375,7 +389,9 @@ def benchmark(
         )
         for db_name, suite_name, resolved_scale_factor in plan
     ]
-    outcomes = run_benchmark_groups(groups, revision=revision, cleanup=cleanup, keep_going=False)
+    outcomes = run_benchmark_groups(
+        groups, revision=revision, cleanup=cleanup, keep_going=False, drop_caches=drop_caches
+    )
     failed = [outcome for outcome in outcomes if outcome.error is not None]
     if failed:
         raise SystemExit(f"{failed[0].group.label} failed: {failed[0].error}")
@@ -794,6 +810,7 @@ def matrix_run(
     missing_only: bool = False,
     keep_going: bool = False,
     published_only: bool = False,
+    drop_caches: bool = False,
 ) -> None:
     """Run the declared matrix through the benchmark machinery, then validate once.
 
@@ -803,7 +820,8 @@ def matrix_run(
     share the populated data. Without `--keep-going` the run stops at the first failed group.
 
     Wrong-result marking runs once at the end (as `olap results validate --mark`). Prints a summary
-    and exits non-zero when any group failed.
+    and exits non-zero when any group failed. `--drop-caches` drops the page cache before each
+    container starts, as for `olap benchmark`.
     """
     cells = expand_matrix(dbs=db, published_only=published_only)
     selected = cells
@@ -824,7 +842,9 @@ def matrix_run(
         print("Every selected cell is ok; nothing to run.")
         return
 
-    outcomes = run_benchmark_groups(groups, revision=revision, cleanup=True, keep_going=keep_going)
+    outcomes = run_benchmark_groups(
+        groups, revision=revision, cleanup=True, keep_going=keep_going, drop_caches=drop_caches
+    )
 
     report = validate_results(revision=revision, pins=current_pins(), system=SETTINGS.system, mark=True)
     print(report.format())

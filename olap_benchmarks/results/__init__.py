@@ -461,6 +461,8 @@ def list_runs(
                     "db": run.db,
                     "db_driver": run.db_driver,
                     "operation": run.operation,
+                    "benchmark_profile": run.benchmark_profile,
+                    "system_snapshot_id": run.system_snapshot_id,
                     "status": run.status,
                     "started_at": run.started_at.isoformat(),
                     "finished_at": run.finished_at.isoformat() if run.finished_at else None,
@@ -564,6 +566,52 @@ def rename_database(
         engine.dispose()
 
 
+def _record_unstarted_planned_steps(session: Session, run_id: int, finished_at: datetime, reason: str) -> int:
+    metadata = session.scalar(select(Run.metadata_json).where(Run.id == run_id)) or {}
+    plan = cast(dict[str, Any] | None, metadata.get("plan"))
+    profile = cast(dict[str, Any] | None, metadata.get("benchmark_profile"))
+    if not plan or not profile:
+        return 0
+
+    query_names = cast(list[str], plan["query_names"])
+    iterations = int(plan["iterations"])
+    warmup_iterations = int(profile["warmup_iterations"])
+    started = {
+        (str(query_name), int(iteration))
+        for query_name, iteration in session.execute(
+            select(RunStep.query_name, RunStep.iteration)
+            .where(RunStep.run_id == run_id)
+            .where(RunStep.step_type == "query")
+            .where(RunStep.query_name.is_not(None))
+            .where(RunStep.iteration.is_not(None))
+        ).all()
+    }
+
+    recorded = 0
+    for query_name in query_names:
+        for iteration in range(1, iterations + 1):
+            if (query_name, iteration) in started:
+                continue
+            session.add(
+                RunStep(
+                    run_id=run_id,
+                    step_type="query",
+                    step_name="query",
+                    query_name=query_name,
+                    iteration=iteration,
+                    started_at=finished_at,
+                    finished_at=finished_at,
+                    status="completed",
+                    result_status="skipped",
+                    iteration_role="warmup" if iteration <= warmup_iterations else "measured",
+                    error_message=reason,
+                    metadata_json={"skip_reason": reason, "duration_ms": 0.0},
+                )
+            )
+            recorded += 1
+    return recorded
+
+
 def mark_running_runs_failed(
     revision: Revision = "default",
     db_path: Path | None = None,
@@ -581,6 +629,10 @@ def mark_running_runs_failed(
                 return 0
 
             finished_at = datetime.now(UTC).replace(tzinfo=None)
+            for run_id in run_ids:
+                _record_unstarted_planned_steps(
+                    session, run_id, finished_at, f"never started: the run was interrupted ({error_message})"
+                )
             session.execute(
                 update(RunStep)
                 .where(RunStep.run_id.in_(run_ids))

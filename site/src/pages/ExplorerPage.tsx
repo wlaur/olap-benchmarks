@@ -21,6 +21,10 @@ import { ControlChip, QuietButton, SegmentedButton } from "../components/control
 import { ControlSelect } from "../components/controls/ControlSelect"
 import { VirtualizedSelect } from "../components/controls/VirtualizedSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
+import {
+  ProfileScopeNotice,
+  SnapshotSpanWarning,
+} from "../components/methodology/ComparisonScopeNotices"
 import { Skeleton } from "../components/Skeleton"
 import { SqlCodeView } from "../components/SqlCodeView"
 import { MetaLabel, SectionTitle } from "../components/Typography"
@@ -28,6 +32,7 @@ import { useExplorerData } from "../hooks/useExplorerData"
 import type { BenchmarkDefinition, BenchmarkSuiteId } from "../lib/benchmarks"
 import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
+import { formatLatencyMs } from "../lib/format"
 import { computeRelativeSeriesScores, formatScore } from "../lib/score"
 import type { ExplorerQueryMetric, QuerySqlEntry } from "../lib/types"
 
@@ -96,6 +101,7 @@ interface RunVariant {
   scale: number
   database: string
   version: string
+  systemSnapshotId: number | null
   finishedAt: string
 }
 
@@ -106,6 +112,7 @@ interface ComparisonRow {
   color: string
   valueMs: number
   database: string
+  systemSnapshotId: number | null
   queryValues: Map<string, number>
 }
 
@@ -651,6 +658,13 @@ export function ExplorerPage({
           </div>
         </PanelHeader>
 
+        <ProfileScopeNotice />
+        {mode !== "system" ? (
+          <SnapshotSpanWarning
+            snapshotCount={new Set(rankedRows.map((row) => row.systemSnapshotId)).size}
+          />
+        ) : null}
+
         {showLoading ? (
           <ResultsSkeleton />
         ) : error ? (
@@ -666,7 +680,7 @@ export function ExplorerPage({
             <p className="text-sm font-semibold text-slate-200">No comparison available</p>
             <p className="mt-1 max-w-3xl font-sans text-sm leading-6 text-slate-400">
               Only one recorded value matches this setup. Choose another database, dimension, or
-              environment to compare suite scores. Query SQL and runtime remain available below.
+              environment to compare suite scores. Query SQL and latency remain available below.
             </p>
           </div>
         ) : (
@@ -707,7 +721,10 @@ export function ExplorerPage({
                 Query performance and SQL
               </SectionTitle>
               <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-slate-400">
-                Choose a query to compare its runtime and inspect the SQL used by each database.
+                Choose a query to compare its end-to-end latency and inspect the SQL used by each
+                database. Each latency is the median of the measured iterations, from sending the
+                query until the result is materialized as a Polars DataFrame; the warm-up iteration
+                is not scored.
               </p>
             </div>
             <VirtualizedSelect
@@ -728,7 +745,7 @@ export function ExplorerPage({
               style={{ height: queryDetailHeight }}
             >
               <div className="mb-4 shrink-0">
-                <MetaLabel>Runtime for this query</MetaLabel>
+                <MetaLabel>End-to-end latency for this query</MetaLabel>
                 <p
                   className="mt-1 truncate text-sm font-medium text-slate-200"
                   title={selectedQuery}
@@ -1082,16 +1099,16 @@ function RuntimeRankingBars({ rows }: { rows: readonly ComparisonRow[] }) {
                 <span className="truncate text-sm font-medium text-slate-100">{row.label}</span>
               </div>
               <span className="shrink-0 text-sm font-semibold text-slate-100">
-                {formatRuntime(row.valueMs)}
+                {formatLatencyMs(row.valueMs)}
               </span>
             </div>
             <div
               role="meter"
-              aria-label={`${row.label} runtime`}
+              aria-label={`${row.label} end-to-end latency`}
               aria-valuemin={0}
               aria-valuemax={slowestRuntime}
               aria-valuenow={row.valueMs}
-              aria-valuetext={formatRuntime(row.valueMs)}
+              aria-valuetext={formatLatencyMs(row.valueMs)}
               className="h-2 overflow-hidden rounded-full bg-surface-primary"
             >
               <div
@@ -1319,7 +1336,7 @@ function QueryHeatmapRowsBlock({
               return (
                 <div
                   key={`${queryRow.query}-${row.id}`}
-                  aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "not run" : formatRuntime(value)}`}
+                  aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "not run" : formatLatencyMs(value)}`}
                   data-query={queryRow.query}
                   data-series={row.id}
                   className={cn(
@@ -1329,7 +1346,7 @@ function QueryHeatmapRowsBlock({
                   )}
                   style={heatStyle}
                 >
-                  {value === null ? "-" : formatRuntime(value)}
+                  {value === null ? "-" : formatLatencyMs(value)}
                 </div>
               )
             })}
@@ -1692,6 +1709,7 @@ function buildComparisonRows({
       color,
       valueMs: median([...queryValues.values()]),
       database: variant.database,
+      systemSnapshotId: variant.systemSnapshotId,
       queryValues,
     }
   })
@@ -1709,6 +1727,7 @@ function makeRunVariants(metrics: readonly ExplorerQueryMetric[]): RunVariant[] 
         metric.db_driver === null
           ? metric.db_version
           : `${metric.db_version} · ${metric.db_driver}`,
+      systemSnapshotId: metric.system_snapshot_id,
       finishedAt: metric.finished_at,
     })
   }
@@ -1906,13 +1925,6 @@ function getComparisonDescription(
     return `${suiteTitle} · ${selection.system} · SF ${selection.scale} · ${seriesCount} recorded ${seriesCount === 1 ? "version" : "versions"}`
   }
   return `${suiteTitle} · ${selection.version} · SF ${selection.scale} · ${seriesCount} recorded ${seriesCount === 1 ? "system" : "systems"}`
-}
-
-function formatRuntime(valueMs: number) {
-  if (valueMs >= 1000) return `${(valueMs / 1000).toFixed(2)}s`
-  if (valueMs >= 100) return `${Math.round(valueMs)}ms`
-  if (valueMs >= 10) return `${valueMs.toFixed(1)}ms`
-  return `${valueMs.toFixed(2)}ms`
 }
 
 function getSeriesColor(index: number) {

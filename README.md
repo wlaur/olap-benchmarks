@@ -97,7 +97,7 @@ cd site && bun install && bun run dev
 | `clickbench`           | Manual: download [hits.parquet](https://datasets.clickhouse.com/hits_compatible/hits.parquet) to `data/input/clickbench/` |
 | `kaggle_airbnb`        | Manual: download the Austin CSVs from [Kaggle](https://www.kaggle.com/datasets/konradb/inside-airbnb-usa) to `data/input/kaggle_airbnb/`, then run `prepare` to convert to Parquet |
 
-### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N]`
+### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N] [--drop-caches]`
 
 - `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`
 - `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
@@ -106,6 +106,7 @@ cd site && bun install && bun run dev
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
 - `--omit`: skip databases when using `db=all`, e.g. `--omit questdb --omit starrocks`
 - `--scale-factor`: suite scale factor (`>= 1`). Time-series and chat-threads support SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`.
+- `--drop-caches`: drop the operating-system page cache before each container starts (see [Input hashing and the page cache](#input-hashing-and-the-page-cache))
 
 The container is started and stopped automatically. Populate is skipped when
 existing tables already match the expected row counts, so `olap benchmark <db>
@@ -144,8 +145,9 @@ uv run olap matrix run [--db X ...] [--revision R] [--published-only] [--missing
 ```
 
 `status` compares each cell with its latest run: `ok`, `missing`, `failed` (the
-latest run did not complete) or `stale` (another `db_version` than the current
-pin, or another repository commit than the newest in the revision). `--check`
+latest run did not complete) or `stale` (another benchmark profile than the
+current one, another `db_version` than the current pin, or another repository
+commit than the newest in the revision). `--check`
 exits non-zero unless every cell is ok.
 
 `run` groups cells by (db, suite, scale factor) and runs each group's operations
@@ -199,10 +201,70 @@ and scoped to the benchmark process ID. The post-operation phase disposes the
 SQLAlchemy engine and requires zero matching server sessions and zero residual
 ADBC staging tables.
 
-Input fingerprints, package provenance, and container-image metadata are collected before the
-recorded run start, so populate wall time excludes harness hashing and metadata probes. Reading
-the inputs for SHA-256 may warm the operating-system page cache; populate results are therefore
-warm-input end-to-end measurements, not cold-cache storage benchmarks.
+### Benchmark profile
+
+Every run follows one versioned benchmark profile, defined in `olap_benchmarks/profile.py`. The
+current profile is **`resident-hot-v1`**:
+
+- **Select loop.** Every select query of every suite runs **1 unscored warm-up iteration followed
+  by 3 measured iterations**. Query steps record `iteration_role` `warmup` (iteration 1) or
+  `measured` (iterations 2-4); the reported latency of a query is the median of its measured
+  iterations. Suites no longer carry their own iteration counts.
+- **Engine state before select.** Server engines are restarted at the start of every select
+  operation (a `restart` phase step in the select run, after populate and its own post-load
+  restart); embedded engines (DuckDB, Polars) are reopened because every operation runs in a fresh
+  process. The operating-system page cache is not dropped between operations or iterations, so the
+  measured iterations read resident data: the profile measures hot latency, not cold storage reads.
+- **Timed boundary.** End-to-end client latency: `perf_counter` around the connector's `fetch()`,
+  from sending the query until the full result is materialised as a Polars DataFrame, stored as
+  `run_step.metadata.duration_ms`. Driver, transfer and conversion time are included; answer
+  hashing and result recording are not. Engine-internal execution time is not recorded.
+- **Scope.** Populate, mutate and concurrent operations keep their own workload definitions (for
+  example 3 mutate iterations, 5 concurrent reader iterations) and only record the profile id;
+  their steps carry no iteration role.
+
+Changing any of these is a new profile id. Runs of different profiles are never compared: the
+site only compares runs of one profile, `olap matrix status` reports cells of another profile as
+stale, and `olap publish` refuses a set that does not consist of the current profile only. Runs
+recorded before profiles existed carry the profile id `legacy-per-suite` (per-suite iteration
+counts, iteration 1 unscored).
+
+#### Run identity
+
+Besides the system snapshot, image digests and `metadata.repository`, every run records:
+
+| Field | Content |
+| --- | --- |
+| `run.benchmark_profile` | the profile id |
+| `metadata.benchmark_profile` | the profile's full parameters: iteration counts and policy, restart policy, timed boundary, cache policy, scope |
+| `metadata.queries` | written when the run finishes: SHA-256 of the query text each query name executed (after scale-factor substitution, e.g. TPC-H Q11), plus a digest over the sorted map |
+| `metadata.schema` | SHA-256 of the suite's static schema files for the engine (`suites/<suite>/schemas/<db>.sql` and `schemas/<db>/`), plus a digest; DDL a connector builds in code is covered by the commit |
+| `metadata.input` | SHA-256 of every input file and a manifest digest |
+| `metadata.plan` | select runs only: the planned query names and iterations per query |
+| `metadata.page_cache` | whether the page cache was dropped before the container started |
+
+#### Planned steps that never started
+
+A select run records its plan (query names x profile iterations) when it starts. When the run
+aborts, every planned step that never started is inserted as a query step with `status`
+`completed`, `result_status` `skipped` and an `error_message`/`skip_reason` beginning with
+`never started`, the same shape as other skipped steps. This happens in the benchmark process when
+it can still write, and otherwise when an interrupted run is marked failed
+(`mark_running_runs_failed`), so coverage denominators always include the whole plan. Iterations
+left over by a single failing query are recorded the same way, with `query aborted after ...`.
+
+#### Input hashing and the page cache
+
+Hashing an input reads every byte of it, which leaves it in the operating-system page cache and
+would favour engines that read the input files directly if it happened right before populate.
+Inputs are therefore hashed in a separate step before any container starts, and each file's hash
+is cached in `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY/input-sha256-cache.json`, keyed by (path, size,
+mtime_ns), so later runs only stat the files and the run metadata reads the cached hashes. The
+first run after `prepare` still reads the inputs once; on Linux, pass `--drop-caches` to
+`olap benchmark` or `olap matrix run` to run `sync` and write `3` to `/proc/sys/vm/drop_caches`
+before each container starts, so populate reads its inputs cold. Writing it needs root; elsewhere
+(macOS, or without permission) the harness logs that dropping is unavailable and continues, and
+`metadata.page_cache.dropped_before_container_start` records the outcome.
 
 Populate timings cover each connector's supported end-to-end loading path, which is not always
 the same client pipeline. Current MonetDB and StarRocks paths can load source Parquet directly,
@@ -336,9 +398,10 @@ uv run olap results compact                          # reclaim space after delet
 ```
 
 `validate` compares the latest completed select run per cell of the current
-version pins: row counts and answer hashes across engines, and answer hashes
-across the iterations of each run (a query whose answer changes between
-iterations is non-deterministic). `--mark` first clears every earlier
+version pins: row counts and answer hashes across engines, iteration by
+iteration, and answer hashes across all iterations of each run, warm-up
+included (a query whose answer changes between iterations is
+non-deterministic). `--mark` first clears every earlier
 `wrong_result` mark in scope, restoring `ok`, and then marks the consensus
 outliers of the current comparison, so it is idempotent and a corrected rerun
 heals its old marks. `--clear` only removes the marks. Queries listed in
@@ -359,8 +422,8 @@ undeclared cells and superseded runs are left out. Before anything is written,
 publish marks wrong results on the staged copy and refuses the set unless every
 declared cell completed, every select query has an answer hash (or a recorded
 reason why not), no query is marked `wrong_result` or changes answer between
-iterations, all runs use the current version pins, one repository commit with a
-clean tree and one system snapshot, and every container run recorded one registry
+iterations, all runs use the current version pins, the current benchmark
+profile, one repository commit with a clean tree and one system snapshot, and every container run recorded one registry
 digest per image (the same one for all runs of an engine). MonetDB runs must additionally use the ADBC
 driver and have clean session baselines. The error lists every offending cell.
 

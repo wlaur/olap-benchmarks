@@ -30,6 +30,7 @@ def _insert_run(
     system_snapshot_id: int | None = None,
 ) -> Run:
     run = Run(
+        benchmark_profile="resident-hot-v1",
         suite=suite,
         db=db,
         db_version="test",
@@ -116,6 +117,7 @@ def test_run_natural_key_is_unique_but_includes_scale_factor(tmp_path: Path) -> 
         with Session(engine) as session:
             session.add(
                 Run(
+                    benchmark_profile="resident-hot-v1",
                     suite="time_series",
                     suite_scale_factor=1,
                     db="duckdb",
@@ -131,6 +133,7 @@ def test_run_natural_key_is_unique_but_includes_scale_factor(tmp_path: Path) -> 
 
             session.add(
                 Run(
+                    benchmark_profile="resident-hot-v1",
                     suite="time_series",
                     suite_scale_factor=1,
                     db="duckdb",
@@ -148,6 +151,7 @@ def test_run_natural_key_is_unique_but_includes_scale_factor(tmp_path: Path) -> 
             session.rollback()
             session.add(
                 Run(
+                    benchmark_profile="resident-hot-v1",
                     suite="time_series",
                     suite_scale_factor=2,
                     db="duckdb",
@@ -328,8 +332,8 @@ def test_methodology_metadata_migration_backfills_step_fields(tmp_path: Path) ->
         assert "metadata" in run_columns
         assert {"result_status", "iteration_role"}.issubset(step_columns)
         assert rows == [
-            ("q1", "ok", "first_run"),
-            ("q2", "error", "warm"),
+            ("q1", "ok", "warmup"),
+            ("q2", "error", "measured"),
             (None, None, None),
         ]
     finally:
@@ -627,6 +631,60 @@ def test_mark_running_runs_failed_marks_runs_and_steps_failed(tmp_path: Path) ->
             ).all()
             assert step_statuses[0] == (running_run_id, "failed", "KeyboardInterrupt")
             assert step_statuses[1] == (completed_run_id, "completed", None)
+    finally:
+        engine.dispose()
+
+
+def test_mark_running_runs_failed_records_planned_steps_that_never_started(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    migrate_results(db_path=db_path)
+    engine = get_results_engine(read_only=False, db_path=db_path)
+
+    try:
+        with Session(engine) as session:
+            run = _insert_run(session, suite="tpc_h", db="duckdb")
+            run_id = run.id
+            run.operation = "select"
+            run.metadata_json = {
+                "plan": {"query_names": ["q1", "q2"], "iterations": 3},
+                "benchmark_profile": {"id": "test", "warmup_iterations": 1},
+            }
+            for iteration, status in ((1, "completed"), (2, "running")):
+                session.add(
+                    RunStep(
+                        run_id=run_id,
+                        step_type="query",
+                        step_name="query",
+                        query_name="q1",
+                        iteration=iteration,
+                        started_at=datetime.now(),
+                        status=status,
+                    )
+                )
+            session.commit()
+
+        assert mark_running_runs_failed(db_path=db_path) == 1
+
+        with Session(engine) as session:
+            steps = session.execute(
+                select(
+                    RunStep.query_name, RunStep.iteration, RunStep.status, RunStep.result_status, RunStep.iteration_role
+                )
+                .where(RunStep.run_id == run_id)
+                .order_by(RunStep.query_name, RunStep.iteration)
+            ).all()
+            assert [tuple(step) for step in steps] == [
+                ("q1", 1, "completed", None, None),
+                ("q1", 2, "failed", None, None),
+                ("q1", 3, "completed", "skipped", "measured"),
+                ("q2", 1, "completed", "skipped", "warmup"),
+                ("q2", 2, "completed", "skipped", "measured"),
+                ("q2", 3, "completed", "skipped", "measured"),
+            ]
+            reasons = session.scalars(
+                select(RunStep.error_message).where(RunStep.run_id == run_id).where(RunStep.result_status == "skipped")
+            ).all()
+            assert all(reason is not None and reason.startswith("never started") for reason in reasons)
     finally:
         engine.dispose()
 

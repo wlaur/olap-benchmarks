@@ -1,8 +1,9 @@
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any, ClassVar
 
 import polars as pl
@@ -154,22 +155,46 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     @abstractmethod
     def populate(self) -> None: ...
 
-    @abstractmethod
-    def select(self) -> None: ...
+    def select(self) -> None:
+        self.run_select_queries()
+
+    def planned_query_names(self) -> Sequence[str]:
+        return ()
+
+    def include_query(self, query_name: str) -> bool:
+        _ = query_name
+        return True
+
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        if self.include_query(query_name):
+            return None
+        return ("skipped", "query excluded by suite/database")
+
+    def load_query(self, query_name: str) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not load queries by name")
+
+    @property
+    def fetch_kwargs(self) -> Mapping[str, Any]:
+        return {}
+
+    def query_fetch_kwargs(self, query_name: str) -> Mapping[str, Any]:
+        _ = query_name
+        return self.fetch_kwargs
 
     def record_skipped_query_steps(
         self,
         query_name: str,
-        iterations: int,
         *,
         result_status: StepResultStatus,
         reason: str,
         start_iteration: int = 1,
+        iterations: int | None = None,
     ) -> None:
         if result_status not in ("skipped", "unsupported"):
             raise ValueError(f"Skipped query steps cannot use result_status={result_status!r}")
 
-        for iteration in range(start_iteration, iterations + 1):
+        last_iteration = self.db.profile.total_iterations if iterations is None else iterations
+        for iteration in range(start_iteration, last_iteration + 1):
             self.db.record_skipped_query_step(
                 query_name=query_name,
                 iteration=iteration,
@@ -193,16 +218,44 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
             f"see the logged traceback(s) above"
         )
 
+    def run_select_queries(self) -> None:
+        t0 = perf_counter()
+        query_names = self.planned_query_names()
+        failed_queries = 0
+
+        for idx, query_name in enumerate(query_names):
+            skip = self.query_skip(query_name)
+            if skip is not None:
+                result_status, reason = skip
+                _LOGGER.info(f"Skipping {query_name} on {self.db.name} ({result_status}): {reason}")
+                self.record_skipped_query_steps(query_name, result_status=result_status, reason=reason)
+                continue
+
+            ok = self.execute_query_with_isolation(
+                query_name=query_name,
+                query_loader=lambda query_name=query_name: self.load_query(query_name),
+                fetch_kwargs_factory=lambda query_name=query_name: self.query_fetch_kwargs(query_name),
+                progress_label=f"({idx + 1:_}/{len(query_names):_})",
+            )
+            if not ok:
+                failed_queries += 1
+
+        self.assert_no_failed_queries(failed_queries, len(query_names))
+
+        _LOGGER.info(
+            f"Executed {len(query_names):_} {self.name} queries ({self.db.profile.id}) "
+            f"in {perf_counter() - t0:_.2f} seconds"
+        )
+
     def execute_query_with_isolation(
         self,
         *,
         query_name: str,
-        iterations: int,
         query_loader: Callable[[], str],
         fetch_kwargs_factory: Callable[[], Mapping[str, Any]],
         progress_label: str,
-        log_success: Callable[[int, pl.DataFrame, float], None],
     ) -> bool:
+        profile = self.db.profile
         failed_iteration: int | None = None
 
         try:
@@ -210,7 +263,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                 query = query_loader()
                 fetch_kwargs = fetch_kwargs_factory()
 
-                for iteration in range(1, iterations + 1):
+                for iteration in range(1, profile.total_iterations + 1):
                     failed_iteration = iteration
                     df, duration_seconds = self.db.execute_query_iteration(
                         query_name=query_name,
@@ -218,16 +271,20 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
                         query=query,
                         fetch_kwargs=fetch_kwargs,
                     )
-                    log_success(iteration, df, duration_seconds)
+                    _LOGGER.info(
+                        f"Executed {query_name} {progress_label} {profile.iteration_role(iteration)} "
+                        f"iteration {iteration:_}/{profile.total_iterations:_} "
+                        f"in {1_000 * duration_seconds:_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})\n"
+                        f"df={df}"
+                    )
                     failed_iteration = None
         except Exception as exc:
             self.db.rollback()
             self.db.reset_session()
             start_iteration = 1 if failed_iteration is None else failed_iteration + 1
-            if start_iteration <= iterations:
+            if start_iteration <= profile.total_iterations:
                 self.record_skipped_query_steps(
                     query_name,
-                    iterations,
                     result_status="skipped",
                     reason=f"query aborted after {type(exc).__name__}: {exc}",
                     start_iteration=start_iteration,

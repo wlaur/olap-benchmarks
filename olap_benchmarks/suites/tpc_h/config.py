@@ -24,8 +24,6 @@ from decimal import Decimal
 from time import perf_counter
 from typing import Any
 
-import polars as pl
-
 from ...dbs import Database
 from ...settings import REPO_ROOT, SETTINGS, TableName, format_suite_data_directory_name, resolve_suite_scale_factor
 from .. import BenchmarkSuite
@@ -45,30 +43,30 @@ TPCH_TABLES = (
     "lineitem",
 )
 
-TPCH_QUERY_NAMES = {
-    "01_pricing_summary": 3,
-    "02_minimum_cost_supplier": 3,
-    "03_shipping_priority": 3,
-    "04_order_priority": 3,
-    "05_local_supplier_volume": 3,
-    "06_revenue_forecast": 3,
-    "07_volume_shipping": 3,
-    "08_market_share": 3,
-    "09_product_profit": 3,
-    "10_returned_items": 3,
-    "11_important_stock": 3,
-    "12_shipping_modes": 3,
-    "13_customer_distribution": 3,
-    "14_promotion_effect": 3,
-    "15_top_supplier": 3,
-    "16_parts_supplier": 3,
-    "17_small_quantity_revenue": 3,
-    "18_large_volume_customer": 3,
-    "19_discounted_revenue": 3,
-    "20_potential_promotion": 3,
-    "21_suppliers_waiting": 3,
-    "22_global_sales_opportunity": 3,
-}
+TPCH_QUERY_NAMES = (
+    "01_pricing_summary",
+    "02_minimum_cost_supplier",
+    "03_shipping_priority",
+    "04_order_priority",
+    "05_local_supplier_volume",
+    "06_revenue_forecast",
+    "07_volume_shipping",
+    "08_market_share",
+    "09_product_profit",
+    "10_returned_items",
+    "11_important_stock",
+    "12_shipping_modes",
+    "13_customer_distribution",
+    "14_promotion_effect",
+    "15_top_supplier",
+    "16_parts_supplier",
+    "17_small_quantity_revenue",
+    "18_large_volume_customer",
+    "19_discounted_revenue",
+    "20_potential_promotion",
+    "21_suppliers_waiting",
+    "22_global_sales_opportunity",
+)
 
 # The Q11 HAVING threshold is defined as 0.0001 / SF (spec section 2.4.11.3);
 # the committed query files carry the SF = 1 value.
@@ -176,51 +174,8 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
 
         return query
 
-    def include_query(self, query_name: str) -> bool:
-        return True
+    def planned_query_names(self) -> tuple[str, ...]:
+        return TPCH_QUERY_NAMES
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        failed_queries = 0
-        for idx, (query_name, iterations) in enumerate(TPCH_QUERY_NAMES.items()):
-            progress_label = f"({idx + 1:_}/{len(TPCH_QUERY_NAMES):_})"
-            if not self.include_query(query_name):
-                self.record_skipped_query_steps(
-                    query_name,
-                    iterations,
-                    result_status="skipped",
-                    reason="query excluded by suite/database",
-                )
-                continue
-
-            def log_success(
-                it: int,
-                df: pl.DataFrame,
-                t: float,
-                *,
-                query_name: str = query_name,
-                progress_label: str = progress_label,
-                iterations: int = iterations,
-            ) -> None:
-                _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                )
-
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=iterations,
-                query_loader=lambda query_name=query_name: self.load_tpch_query(query_name),
-                fetch_kwargs_factory=lambda query_name=query_name: self.query_fetch_kwargs(query_name),
-                progress_label=progress_label,
-                log_success=log_success,
-            )
-            if not ok:
-                failed_queries += 1
-
-        self.assert_no_failed_queries(failed_queries, len(TPCH_QUERY_NAMES))
-
-        _LOGGER.info(
-            f"Executed {len(TPCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+    def load_query(self, query_name: str) -> str:
+        return self.load_tpch_query(query_name)

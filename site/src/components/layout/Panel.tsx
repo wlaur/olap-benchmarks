@@ -44,3 +44,32 @@ export function ChartFrame({
     </div>
   )
 }
+
+export function NoticeStrip({
+  children,
+  tone = "info",
+  className,
+}: {
+  children: ReactNode
+  tone?: "info" | "warning"
+  className?: string
+}) {
+  return (
+    <div
+      role={tone === "warning" ? "alert" : "note"}
+      className={cn(
+        "flex min-w-0 items-start gap-2.5 rounded-md border border-border-subtle bg-surface-inset px-3 py-2 font-sans text-xs leading-5 text-slate-300",
+        className,
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "mt-1.5 size-1.5 shrink-0 rounded-full",
+          tone === "warning" ? "bg-amber-300" : "bg-accent-300",
+        )}
+      />
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}

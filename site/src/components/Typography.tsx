@@ -85,3 +85,38 @@ export function BodyText({
     </Text>
   )
 }
+
+export function NumericText({
+  as,
+  children,
+  className,
+}: {
+  as?: ElementType
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <Text
+      as={as ?? "span"}
+      className={cn("font-mono text-sm text-slate-100 tabular-nums", className)}
+    >
+      {children}
+    </Text>
+  )
+}
+
+export function CaptionText({
+  as,
+  children,
+  className,
+}: {
+  as?: ElementType
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <Text as={as} className={cn("text-[10px] leading-tight text-slate-400", className)}>
+      {children}
+    </Text>
+  )
+}

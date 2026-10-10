@@ -222,9 +222,10 @@ def _merge_attached(con: duckdb.DuckDBPyConnection, runs_replaced: int) -> Merge
     con.execute(
         """
         insert into run (id, suite, suite_scale_factor, db, db_version, db_driver, operation, system,
-                         system_snapshot_id, status, started_at, finished_at, error_type, error_message, "metadata")
+                         system_snapshot_id, benchmark_profile, status, started_at, finished_at, error_type,
+                         error_message, "metadata")
         select m.new_id, s.suite, s.suite_scale_factor, s.db, s.db_version, s.db_driver, s.operation, s.system,
-               sm.new_id, s.status,
+               sm.new_id, s.benchmark_profile, s.status,
                s.started_at, s.finished_at, s.error_type, s.error_message, s."metadata"
         from src.run s
         join run_map m on s.id = m.src_id

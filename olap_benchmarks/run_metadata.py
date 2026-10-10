@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
-from functools import cache
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
@@ -15,19 +14,12 @@ from typing import Any, Literal, cast
 import psutil
 
 from .images import ResolvedImage
+from .inputs import fingerprint_input_directory
+from .profile import BENCHMARK_PROFILE, BenchmarkProfile
 from .settings import ContainerPlatform
 
 ExecutionMode = Literal["container", "in_process"]
-IterationRole = Literal["first_run", "warm", "steady_state"]
 StepResultStatus = Literal["ok", "timeout", "unsupported", "wrong_result", "error", "skipped"]
-
-
-def classify_iteration_role(iteration: int | None) -> IterationRole | None:
-    if iteration is None:
-        return None
-    if iteration == 1:
-        return "first_run"
-    return "warm"
 
 
 def classify_step_result_status(
@@ -153,39 +145,35 @@ def build_package_provenance(package_names: tuple[str, ...]) -> dict[str, dict[s
     return packages
 
 
-@cache
-def _fingerprint_input_directory(
-    path: Path,
-    signature: tuple[tuple[str, int, int], ...],
-) -> dict[str, object]:
-    files: list[dict[str, object]] = []
-    manifest_hash = sha256()
-    for relative_path, size, modified_ns in signature:
-        file_path = path / relative_path
-        file_hash = sha256()
-        with file_path.open("rb") as source:
-            while chunk := source.read(8 * 1024 * 1024):
-                file_hash.update(chunk)
-        current_stat = file_path.stat()
-        if (current_stat.st_size, current_stat.st_mtime_ns) != (size, modified_ns):
-            raise RuntimeError(f"Benchmark input changed while it was being fingerprinted: {file_path}")
-        digest = file_hash.hexdigest()
-        manifest_hash.update(f"{relative_path}\0{size}\0{digest}\n".encode())
-        files.append({"path": relative_path, "bytes": size, "sha256": digest})
+def sha256_text(text: str) -> str:
+    return sha256(text.encode()).hexdigest()
 
-    return {
-        "algorithm": "sha256",
-        "manifest_sha256": manifest_hash.hexdigest(),
-        "files": files,
+
+def digest_hashes(hashes: Mapping[str, str]) -> dict[str, object]:
+    digest = sha256()
+    for name in sorted(hashes):
+        digest.update(f"{name}\0{hashes[name]}\n".encode())
+    return {"algorithm": "sha256", "digest": digest.hexdigest(), "files": dict(sorted(hashes.items()))}
+
+
+def hash_schema_files(suite: str, db: str, suites_directory: Path = PACKAGE_DIRECTORY / "suites") -> dict[str, object]:
+    schemas_directory = suites_directory / suite / "schemas"
+    candidates = [schemas_directory / f"{db}.sql"]
+    db_directory = schemas_directory / db
+    if db_directory.is_dir():
+        candidates.extend(sorted(path for path in db_directory.rglob("*") if path.is_file()))
+    hashes = {
+        path.relative_to(suites_directory).as_posix(): sha256(path.read_bytes()).hexdigest()
+        for path in candidates
+        if path.is_file()
     }
-
-
-def fingerprint_input_directory(path: Path) -> dict[str, object]:
-    entries: list[tuple[str, int, int]] = []
-    for file_path in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
-        stat = file_path.stat()
-        entries.append((file_path.relative_to(path).as_posix(), stat.st_size, stat.st_mtime_ns))
-    return _fingerprint_input_directory(path, tuple(entries))
+    return {
+        **digest_hashes(hashes),
+        "scope": (
+            "static schema files of this suite and database; DDL that a connector builds in code is covered by "
+            "repository.commit"
+        ),
+    }
 
 
 def build_system_metadata() -> dict[str, Any]:
@@ -210,11 +198,6 @@ def build_system_metadata() -> dict[str, Any]:
             "context": docker_context,
             "server_platform": docker_platform,
         },
-        "methodology": {
-            "timed_unit": "perf_counter around fetch() into Polars",
-            "iteration_roles": "iteration 1 is first_run; later iterations are warm unless a suite records otherwise",
-            "cache_policy": "database restart only where suite code calls restart_event; OS caches are not cleared",
-        },
     }
 
 
@@ -229,6 +212,10 @@ def build_run_metadata(
     input_directory: Path | None = None,
     options: Mapping[str, object] | None = None,
     sampling_interval_seconds: Mapping[str, float] | None = None,
+    profile: BenchmarkProfile = BENCHMARK_PROFILE,
+    schema: Mapping[str, object] | None = None,
+    plan: Mapping[str, object] | None = None,
+    page_cache_dropped: bool = False,
 ) -> dict[str, Any]:
     images = dict(container_images or {})
     if execution_mode == "container" and not images:
@@ -310,4 +297,14 @@ def build_run_metadata(
         "packages": build_package_provenance(package_names),
         "input": fingerprint_input_directory(input_directory) if input_directory is not None else None,
         "options": dict(options or {}),
+        "benchmark_profile": profile.metadata(),
+        "schema": dict(schema) if schema is not None else None,
+        "plan": dict(plan) if plan is not None else None,
+        "page_cache": {
+            "dropped_before_container_start": page_cache_dropped,
+            "policy": (
+                "inputs are hashed before the container starts (hashes cached by path, size and mtime_ns); "
+                "with --drop-caches on Linux the page cache is then dropped, otherwise it is left as is"
+            ),
+        },
     }
