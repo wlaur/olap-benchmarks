@@ -70,6 +70,52 @@ def _git_provenance(path: Path) -> dict[str, object] | None:
     return {"commit": commit, "dirty": bool(status)}
 
 
+class RepositoryNotFoundError(RuntimeError):
+    pass
+
+
+def _git(repository: Path, *args: str) -> bytes:
+    return subprocess.run(["git", "-C", str(repository), *args], check=True, capture_output=True).stdout
+
+
+PACKAGE_DIRECTORY = Path(__file__).resolve().parent
+
+
+def find_repository_root(module_directory: Path = PACKAGE_DIRECTORY) -> Path:
+    try:
+        root = subprocess.run(
+            ["git", "-C", str(module_directory), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RepositoryNotFoundError(
+            f"olap_benchmarks at {module_directory} is not inside a git repository; benchmark runs must be "
+            "traceable to a commit, so run them from a git checkout"
+        ) from exc
+    return Path(root)
+
+
+def build_repository_provenance(repository: Path | None = None) -> dict[str, object]:
+    root = repository or find_repository_root()
+    commit = _git(root, "rev-parse", "HEAD").decode().strip()
+    diff = _git(root, "diff", "HEAD", "--binary")
+    untracked = sorted(
+        path for path in _git(root, "ls-files", "--others", "--exclude-standard", "-z").decode().split("\0") if path
+    )
+
+    if not diff and not untracked:
+        return {"commit": commit, "dirty": False, "diff_sha256": None}
+
+    digest = sha256(diff)
+    for relative_path in untracked:
+        file_path = root / relative_path
+        content_hash = sha256(file_path.read_bytes()).hexdigest() if file_path.is_file() else "-"
+        digest.update(f"\0untracked\0{relative_path}\0{content_hash}\n".encode())
+    return {"commit": commit, "dirty": True, "diff_sha256": digest.hexdigest()}
+
+
 def build_package_provenance(package_names: tuple[str, ...]) -> dict[str, dict[str, object]]:
     packages: dict[str, dict[str, object]] = {}
     for package_name in package_names:
@@ -259,6 +305,7 @@ def build_run_metadata(
                 "server and client peaks are never summed because they do not coincide in time"
             ),
         },
+        "repository": build_repository_provenance(),
         "packages": build_package_provenance(package_names),
         "input": fingerprint_input_directory(input_directory) if input_directory is not None else None,
         "options": dict(options or {}),
