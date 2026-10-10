@@ -9,9 +9,10 @@ import pytest
 from sqlalchemy import Connection
 
 from .. import dbs as dbs_module
-from ..dbs import Database, apply_parquet_epoch_columns
-from ..dbs.monetdb import MONETDB_RELEASE, MonetDB, MonetDBTimeSeries
+from ..dbs import Database, apply_parquet_epoch_columns, get_databases
+from ..dbs.monetdb import MonetDB, MonetDBTimeSeries
 from ..dbs.monetdb.settings import SETTINGS as MONETDB_SETTINGS
+from ..images import ImageDigestError, ResolvedImage
 from ..settings import (
     DatabaseName,
     SuiteName,
@@ -29,6 +30,7 @@ from ..suites.time_series.config import (
     get_time_series_dataset_sizes,
     get_time_series_row_group_rows,
 )
+from ..versions import EnginePin, ImagePin, engine_pin
 
 
 class DummyDatabase(Database):
@@ -343,18 +345,31 @@ def test_docker_run_command_allows_explicit_platform_override() -> None:
 
 
 def test_monetdb_selects_image_for_engine_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    pin = engine_pin("monetdb")
+
     monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/amd64")
-    assert MonetDB().resolved_container_image == MONETDB_RELEASE.amd64_container_image
+    assert MonetDB().container_images == {"server": pin.images["server"].reference}
 
     monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/arm64")
-    assert MonetDB().resolved_container_image == MONETDB_RELEASE.arm64_container_image
+    assert MonetDB().container_images == {"server": pin.arm64_images["server"].reference}
 
 
 def test_monetdb_accepts_numeric_runtime_version_for_release_pin() -> None:
     db = MonetDB()
+    pin = engine_pin("monetdb")
 
-    assert db.version == MONETDB_RELEASE.label
-    assert db.is_runtime_version_expected(MONETDB_RELEASE.runtime_version)
+    assert db.version == pin.version
+    assert pin.expected_runtime_version is not None
+    assert db.is_runtime_version_expected(pin.expected_runtime_version)
+
+
+def test_connectors_read_versions_and_images_from_the_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/amd64")
+    for name, database in get_databases().items():
+        pin = engine_pin(name)
+        assert database.version == pin.resolved_version
+        assert database.container_images == {role: image.reference for role, image in pin.images.items()}
+        assert database.execution_mode == ("container" if pin.images else "in_process")
 
 
 def test_monetdb_adbc_uri_exposes_ingest_tuning(
@@ -393,9 +408,16 @@ def test_monetdb_time_series_analyzes_time_after_adbc_ingest(
     assert analyzed == [("data_tall", ["time"])]
 
 
+CONTAINER_PIN = EnginePin(version="1.0", images={"server": ImagePin(reference="example:1.0")})
+
+
+def _container_pin(_self: Database) -> EnginePin:
+    return CONTAINER_PIN
+
+
 def test_arm_host_falls_back_to_amd64_with_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/arm64")
-    monkeypatch.setattr(DummyDatabase, "container_image", "example:latest")
+    monkeypatch.setattr(DummyDatabase, "pin", property(_container_pin))
     db = DummyDatabase()
 
     assert db.container_platform == "linux/amd64"
@@ -459,6 +481,25 @@ def test_runtime_version_verification_rejects_mismatched_version_before_recordin
     with pytest.raises(RuntimeError, match="runtime version does not match pinned version"):
         db.benchmark("clickbench", "select")
 
+    assert db._run_id is None
+
+
+def test_container_run_without_a_registry_digest_fails_before_recording(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dbs_module, "get_container_engine_platform", lambda: "linux/amd64")
+    monkeypatch.setattr(DummyDatabase, "pin", property(_container_pin))
+    requested: list[tuple[dict[str, ImagePin], str | None]] = []
+
+    def no_digest(pins: Mapping[str, ImagePin], platform: str | None) -> dict[str, ResolvedImage]:
+        requested.append((dict(pins), platform))
+        raise ImageDigestError("example:1.0 has no registry digest")
+
+    monkeypatch.setattr(dbs_module, "resolve_images", no_digest)
+    db = DummyDatabase()
+
+    with pytest.raises(ImageDigestError):
+        db.benchmark("clickbench", "select")
+
+    assert requested == [(dict(CONTAINER_PIN.images), "linux/amd64")]
     assert db._run_id is None
 
 

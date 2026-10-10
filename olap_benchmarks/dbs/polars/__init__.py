@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from importlib.metadata import version as package_version
 from pathlib import Path
 from shutil import rmtree
 from typing import Any, cast
@@ -22,8 +21,6 @@ from ...suites.tpc_h.config import TPCH_TABLES, TpcH
 from .. import Database
 from .clickbench import execute_clickbench_query
 from .tpc_h import execute_tpc_h_query
-
-VERSION = package_version("polars")
 
 
 class PolarsJSONBench(JSONBench["Polars"]):
@@ -104,7 +101,6 @@ class PolarsTpcH(TpcH["Polars"]):
 
 class Polars(Database):
     name: DatabaseName = "polars"
-    version: str = VERSION
     connection_string: str = ""
 
     @property
@@ -120,7 +116,7 @@ class Polars(Database):
         return None
 
     def get_runtime_version(self) -> str:
-        return VERSION
+        return pl.__version__
 
     def table_path(self, table: TableName) -> Path:
         return self.database_directory / f"{table}.parquet"

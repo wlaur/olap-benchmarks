@@ -1,7 +1,6 @@
 import logging
 import uuid
 from collections.abc import Mapping
-from importlib.metadata import version as package_version
 from pathlib import Path
 from shutil import rmtree
 from typing import Any, cast
@@ -20,10 +19,6 @@ from .. import Database
 from ..utils import normalize_columns, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
-
-VERSION = package_version("duckdb")
-
-assert duckdb_version_runtime == VERSION
 
 (SETTINGS.temporary_directory / "duckdb/data").mkdir(exist_ok=True, parents=True)
 
@@ -110,7 +105,6 @@ class DuckDBJSONBench(JSONBench["DuckDB"]):
 
 class DuckDB(Database):
     name: DatabaseName = "duckdb"
-    version: str = VERSION
 
     connection_string: str = ""
 
@@ -126,6 +120,9 @@ class DuckDB(Database):
     @property
     def restart(self) -> None:
         return None
+
+    def get_runtime_version(self) -> str:
+        return duckdb_version_runtime
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:

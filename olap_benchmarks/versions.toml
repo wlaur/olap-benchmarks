@@ -1,0 +1,49 @@
+# Engine version pins: the single source for every benchmarked engine.
+#
+# Container engines: `version` is the recorded db_version. `images` maps a container role to an image
+# reference; `arm64_images` replaces a role's image on linux/arm64 hosts. An image may be written as
+# { reference = "...", digest = "sha256:..." } to pin its registry digest; runs then fail on mismatch.
+# `upstream_tag` (optional) is the regex with a `version` group that `olap versions --outdated` matches
+# against the first image's Docker Hub tags; by default the pinned version in that tag is replaced by
+# a dotted number.
+#
+# In-process engines: `package` names the Python distribution. pyproject.toml pins it (`==`) and uv.lock
+# installs it; the recorded db_version is the installed package version.
+
+[clickhouse]
+version = "26.9.8.3"
+images.server = "clickhouse:26.9.8.3-jammy"
+
+[doris]
+version = "4.1.4.1"
+images.fe = "apache/doris:fe-4.1.4.1"
+images.be = "apache/doris:be-4.1.4.1"
+
+[duckdb]
+package = "duckdb"
+
+[monetdb]
+version = "Dec2025-SP4"
+expected_runtime_version = "11.55.9"
+images.server = "monetdb/monetdb:Dec2025-SP4"
+arm64_images.server = "wlaur/monetdb-container:11.55.9-1"
+upstream_tag = '^(?P<version>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{4}(?:-SP\d+)?)$'
+
+[polars]
+package = "polars"
+
+[postgres]
+version = "18.6"
+images.server = "postgres:18.6"
+
+[questdb]
+version = "10.0.1"
+images.server = "questdb/questdb:10.0.1"
+
+[starrocks]
+version = "4.1.6"
+images.server = "starrocks/allin1-ubuntu:4.1.6"
+
+[timescaledb]
+version = "2.30.2"
+images.server = "timescale/timescaledb:2.30.2-pg18"

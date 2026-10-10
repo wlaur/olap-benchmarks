@@ -30,10 +30,6 @@ _LOGGER = logging.getLogger(__name__)
 # Apple Silicon -- fe-ubuntu/be-ubuntu split images crash the same way.
 # 4.0.9 is the latest 4.0.x patch (2026-04-20) and is one week older than
 # 4.1.0; the LTS-style 4.0 line is fine for benchmarking.
-VERSION = "4.1.6"
-
-DOCKER_IMAGE = f"starrocks/allin1-ubuntu:{VERSION}"
-
 STARROCKS_HOST = "localhost"
 STARROCKS_QUERY_PORT = host_port("starrocks_fe_mysql")
 STARROCKS_HTTP_PORT = host_port("starrocks_fe_http")
@@ -261,8 +257,6 @@ class StarRocksJSONBench(JSONBench["StarRocks"]):
 
 class StarRocks(Database):
     name: DatabaseName = "starrocks"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = STARROCKS_CONNECTION_STRING
@@ -280,7 +274,7 @@ class StarRocks(Database):
             d.mkdir(parents=True, exist_ok=True)
 
         return self.docker_run_command(
-            DOCKER_IMAGE,
+            self.container_images["server"],
             ports={
                 str(STARROCKS_QUERY_PORT): "9030",
                 str(STARROCKS_HTTP_PORT): "8030",

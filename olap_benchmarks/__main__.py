@@ -48,6 +48,7 @@ from .settings import (
     ROW_STORE_DATABASES,
     ROW_STORE_OPTIONAL_SUITE_NAMES,
     SETTINGS,
+    ContainerPlatform,
     DatabaseArg,
     DatabaseName,
     Operation,
@@ -92,6 +93,8 @@ def _start_db(db_instance: "Database") -> None:
     if platform_warning is not None:
         _LOGGER.warning(platform_warning)
 
+    # pulls any image without a registry digest before a container starts on a locally built one
+    db_instance.resolve_container_images()
     _stop_db(db_instance)
     for command in commands:
         _LOGGER.info(f"Starting {db_instance.name}: {command}")
@@ -460,6 +463,55 @@ def publish(revision: Revision = "default", merge: bool = False, upload: bool = 
         print(f"Uploaded results.db to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
         trigger_pages_deploy()
         print("Triggered the Pages deployment")
+
+
+@app.command
+def versions(check: bool = False, outdated: bool = False) -> None:
+    """Show the engine version pins from versions.toml with their images.
+
+    Without flags, lists each engine's pinned version and images, whether the image is used on this
+    host's platform, whether it is present locally and its local registry digest. `--check` pulls
+    every image used on this host (so it has a registry digest), verifies the other platforms' images
+    exist in the registry, and exits non-zero if any is missing or does not match a pinned digest.
+    `--outdated` compares each pin with the newest upstream release (Docker Hub tags, PyPI).
+    """
+    import httpx
+
+    from .images import DockerImageStore
+    from .version_report import (
+        CHECK_HEADER,
+        INVENTORY_HEADER,
+        OUTDATED_HEADER,
+        check_rows,
+        inventory_rows,
+        outdated_rows,
+    )
+    from .versions import load_versions
+
+    pins = load_versions()
+    failed = False
+
+    if outdated:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            print(format_table(OUTDATED_HEADER, outdated_rows(pins, client)))
+
+    if check or not outdated:
+        platforms: dict[DatabaseName, ContainerPlatform | None] = {
+            database.name: database.container_platform for database in get_databases().values()
+        }
+        store = DockerImageStore()
+        if outdated:
+            print()
+        if check:
+            rows, ok = check_rows(pins, platforms, store)
+            print(format_table(CHECK_HEADER, rows))
+            failed = not ok
+        else:
+            print(format_table(INVENTORY_HEADER, inventory_rows(pins, platforms, store)))
+
+    if failed:
+        raise SystemExit(1)
 
 
 @app.command

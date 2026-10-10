@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
 from os import getpid
 from pathlib import Path
 from time import monotonic, sleep
@@ -37,22 +36,6 @@ from .settings import SETTINGS as MONETDB_SETTINGS
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class MonetDBRelease:
-    label: str
-    runtime_version: str
-    arm64_image_revision: int
-
-    @property
-    def amd64_container_image(self) -> str:
-        return f"monetdb/monetdb:{self.label}"
-
-    @property
-    def arm64_container_image(self) -> str:
-        return f"wlaur/monetdb-container:{self.runtime_version}-{self.arm64_image_revision}"
-
-
-MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP4", runtime_version="11.55.9", arm64_image_revision=1)
 MONETDB_APPLICATION = "olap-benchmarks"
 MONETDB_CONTAINER_PORT = "50000"
 MONETDB_HOST_PORT = host_port("monetdb")
@@ -103,11 +86,7 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
 
 class MonetDB(Database):
     name: DatabaseName = "monetdb"
-    version: str = MONETDB_RELEASE.label
-    container_image: ClassVar[str | None] = MONETDB_RELEASE.amd64_container_image
-    arm64_container_image: ClassVar[str | None] = MONETDB_RELEASE.arm64_container_image
     supports_arm64_containers: ClassVar[bool] = True
-    expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
 
     @property
     def db_driver(self) -> str:
@@ -141,12 +120,8 @@ class MonetDB(Database):
 
     @property
     def start(self) -> str:
-        image = self.resolved_container_image
-        if image is None:
-            raise RuntimeError("MonetDB container image is not configured")
-
         return self.docker_run_command(
-            image,
+            self.container_images["server"],
             ports={str(MONETDB_HOST_PORT): MONETDB_CONTAINER_PORT},
             mounts={self.database_directory.as_posix(): "/var/monetdb5/dbfarm"},
             env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},

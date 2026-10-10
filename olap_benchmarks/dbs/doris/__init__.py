@@ -21,10 +21,6 @@ from ..utils import normalize_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "4.1.4.1"
-
-DORIS_FE_IMAGE = f"apache/doris:fe-{VERSION}"
-DORIS_BE_IMAGE = f"apache/doris:be-{VERSION}"
 DORIS_NETWORK = "doris-benchmark"
 DORIS_NETWORK_SUBNET = "172.28.40.0/24"
 DORIS_FE_IP = "172.28.40.2"
@@ -154,15 +150,9 @@ class DorisRTABench(RTABench["Doris"]):
 
 class Doris(Database):
     name: DatabaseName = "doris"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = None
     supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = DORIS_CONNECTION_STRING
-
-    @property
-    def container_images(self) -> Mapping[str, str]:
-        return {"fe": DORIS_FE_IMAGE, "be": DORIS_BE_IMAGE}
 
     @property
     def metric_container_names(self) -> tuple[str, ...]:
@@ -179,6 +169,7 @@ class Doris(Database):
         storage_dir = self.database_directory / "be-storage"
         be_log_dir = self.database_directory / "be-log"
         self.staging_directory.mkdir(parents=True, exist_ok=True)
+        images = self.container_images
 
         for directory in (meta_dir, fe_log_dir, storage_dir, be_log_dir):
             directory.mkdir(parents=True, exist_ok=True)
@@ -186,7 +177,7 @@ class Doris(Database):
         return (
             f"docker network create --subnet {DORIS_NETWORK_SUBNET} {DORIS_NETWORK}",
             self.docker_run_command(
-                DORIS_FE_IMAGE,
+                images["fe"],
                 name=DORIS_FE_CONTAINER,
                 network=DORIS_NETWORK,
                 ip=DORIS_FE_IP,
@@ -198,7 +189,7 @@ class Doris(Database):
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "FE_ID": "1"},
             ),
             self.docker_run_command(
-                DORIS_BE_IMAGE,
+                images["be"],
                 name=DORIS_BE_CONTAINER,
                 network=DORIS_NETWORK,
                 ip=DORIS_BE_IP,

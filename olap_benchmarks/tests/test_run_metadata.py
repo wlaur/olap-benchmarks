@@ -16,8 +16,8 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(run_metadata, "_run_optional_command", no_command)
 
     metadata = run_metadata.build_run_metadata(
-        execution_mode="container",
-        start_command="docker run database",
+        execution_mode="in_process",
+        start_command=None,
         sampling_interval_seconds={"resource": 0.2, "disk": 5.0},
     )
 

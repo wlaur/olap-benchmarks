@@ -23,9 +23,6 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2.30.2"
-
-DOCKER_IMAGE = f"timescale/timescaledb:{VERSION}-pg18"
 TIMESCALEDB_HOST_PORT = host_port("timescaledb")
 
 TIMESCALEDB_CONNECTION_STRING = f"postgresql://postgres:password@localhost:{TIMESCALEDB_HOST_PORT}/postgres"
@@ -318,8 +315,6 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
 
 class TimescaleDB(Postgres):
     name: DatabaseName = "timescaledb"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = TIMESCALEDB_CONNECTION_STRING
@@ -350,7 +345,7 @@ class TimescaleDB(Postgres):
             # naive Polars datetimes round-trip without offset surprises.
             "-e TZ=UTC",
             "-e PGTZ=UTC",
-            DOCKER_IMAGE,
+            self.container_images["server"],
             # Postgres settings tuned for the EAV bulk-load + columnstore
             # compression workload. shared_buffers / parallelism are already
             # auto-tuned by the Timescale image (timescaledb-tune); the rest

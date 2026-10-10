@@ -318,7 +318,8 @@ publish marks wrong results on the staged copy and refuses the set unless every
 declared cell completed, every select query has an answer hash (or a recorded
 reason why not), no query is marked `wrong_result` or changes answer between
 iterations, all runs use the current version pins, one repository commit with a
-clean tree and one system snapshot. MonetDB runs must additionally use the ADBC
+clean tree and one system snapshot, and every container run recorded one registry
+digest per image (the same one for all runs of an engine). MonetDB runs must additionally use the ADBC
 driver and have clean session baselines. The error lists every offending cell.
 
 The published file is compacted, and `manifest.json` records its
@@ -382,24 +383,60 @@ so independent benchmark branches do not overwrite each other's result files.
 ## Database versions
 
 `db_version` is recorded on every run and is part of the run identity, so runs
-against different versions of the same database coexist in the results. The
-version pins live in each connector:
+against different versions of the same database coexist in the results. Every
+pin lives in one file, `olap_benchmarks/versions.toml`, with one entry per
+engine:
 
-| Database    | Pinned in                                          |
-| ----------- | -------------------------------------------------- |
-| clickhouse  | `olap_benchmarks/dbs/clickhouse/__init__.py` (`VERSION`, Docker image tag) |
-| doris       | `olap_benchmarks/dbs/doris/__init__.py` (`VERSION`, split FE/BE Docker image tags) |
-| monetdb     | `olap_benchmarks/dbs/monetdb/__init__.py`          |
-| polars      | `pyproject.toml` (runs in-process; version follows the installed `polars` package) |
-| postgres    | `olap_benchmarks/dbs/postgres/__init__.py`         |
-| timescaledb | `olap_benchmarks/dbs/timescaledb/__init__.py`      |
-| questdb     | `olap_benchmarks/dbs/questdb/__init__.py`          |
-| starrocks   | `olap_benchmarks/dbs/starrocks/__init__.py`        |
-| duckdb      | `pyproject.toml` (runs in-process; version follows the installed `duckdb` package) |
+```toml
+[clickhouse]
+version = "26.9.8.3"
+images.server = "clickhouse:26.9.8.3-jammy"
 
-To benchmark a new version: bump the pin, rerun the affected cells
-(`olap matrix status` lists them as stale), and publish. Old-version runs remain
-in the results database until `olap results prune --stale-versions`.
+[doris]                                   # one image per container role
+version = "4.1.4.1"
+images.fe = "apache/doris:fe-4.1.4.1"
+images.be = "apache/doris:be-4.1.4.1"
+
+[monetdb]                                 # ARM64 hosts use a separate image
+version = "Dec2025-SP4"
+expected_runtime_version = "11.55.9"
+images.server = "monetdb/monetdb:Dec2025-SP4"
+arm64_images.server = "wlaur/monetdb-container:11.55.9-1"
+upstream_tag = '^(?P<version>(?:Jan|...|Dec)\d{4}(?:-SP\d+)?)$'
+
+[duckdb]                                  # in-process: pinned in pyproject.toml
+package = "duckdb"
+```
+
+- Image tags must contain the pinned version (or `expected_runtime_version`),
+  so a half-done bump fails when the manifest loads.
+- An image can pin its registry digest with
+  `images.server = { reference = "...", digest = "sha256:..." }`; runs then fail
+  unless the local image has exactly that digest.
+- DuckDB and Polars run in-process. Their pin is the exact `==` requirement in
+  `pyproject.toml` (installed through `uv.lock`), and the recorded version is
+  the installed package version, so there is no second copy to keep in step.
+- `upstream_tag` is optional: by default `--outdated` matches the first image's
+  tag with the pinned version replaced by any dotted number.
+
+Every container run records `execution.container_images` and the registry
+digest of each image (`execution.container_image_digests`, as
+`repository@sha256:...`). Before a container starts, an image without a registry
+digest for its repository (for example a locally built one) is pulled from the
+registry; if a digest still cannot be determined, the run fails before it
+starts. `olap publish` refuses container runs without a digest for every image,
+and engines whose published runs used different images.
+
+```bash
+uv run olap versions             # pins, images, local presence and local registry digests
+uv run olap versions --check     # pull this host's images, verify the others exist upstream
+uv run olap versions --outdated  # newest Docker Hub tag / PyPI release per engine
+```
+
+To benchmark a new version: edit its entry in `versions.toml` (or `pyproject.toml`
+and `uv lock` for DuckDB and Polars), run `olap versions --check`, rerun the
+affected cells (`olap matrix status` lists them as stale), and publish. Old-version
+runs remain in the results database until `olap results prune --stale-versions`.
 
 ## Results schema migrations
 

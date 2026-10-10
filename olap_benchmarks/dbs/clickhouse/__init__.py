@@ -29,10 +29,6 @@ from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "26.9.8.3"
-
-DOCKER_IMAGE = f"clickhouse:{VERSION}-jammy"
-
 CLICKHOUSE_HTTP_PORT = host_port("clickhouse_http")
 CLICKHOUSE_NATIVE_PORT = host_port("clickhouse_native")
 
@@ -328,8 +324,6 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
 
 class Clickhouse(Database):
     name: DatabaseName = "clickhouse"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = CLICKHOUSE_CONNECTION_STRING
@@ -341,7 +335,7 @@ class Clickhouse(Database):
         (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
         return self.docker_run_command(
-            DOCKER_IMAGE,
+            self.container_images["server"],
             ports={str(CLICKHOUSE_HTTP_PORT): "8123", str(CLICKHOUSE_NATIVE_PORT): "9000"},
             mounts={
                 self.database_directory.as_posix(): "/var/lib/clickhouse",

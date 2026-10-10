@@ -19,10 +19,6 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "10.0.1"
-
-DOCKER_IMAGE = f"questdb/questdb:{VERSION}"
-
 QUESTDB_HTTP_PORT = host_port("questdb_http")
 QUESTDB_PG_PORT = host_port("questdb_pg")
 
@@ -103,8 +99,6 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 
 class QuestDB(Database):
     name: DatabaseName = "questdb"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = QUESTDB_CONNECTION_STRING
@@ -134,7 +128,7 @@ class QuestDB(Database):
         (SETTINGS.temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
 
         return self.docker_run_command(
-            DOCKER_IMAGE,
+            self.container_images["server"],
             ports={str(QUESTDB_HTTP_PORT): "9000", str(QUESTDB_PG_PORT): "8812"},
             mounts={
                 self.database_directory.as_posix(): "/var/lib/questdb",

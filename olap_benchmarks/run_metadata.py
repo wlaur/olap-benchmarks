@@ -14,6 +14,7 @@ from typing import Any, Literal, cast
 
 import psutil
 
+from .images import ResolvedImage
 from .settings import ContainerPlatform
 
 ExecutionMode = Literal["container", "in_process"]
@@ -220,8 +221,7 @@ def build_system_metadata() -> dict[str, Any]:
 def build_run_metadata(
     *,
     execution_mode: ExecutionMode,
-    container_image: str | None = None,
-    container_images: Mapping[str, str] | None = None,
+    container_images: Mapping[str, ResolvedImage] | None = None,
     container_platform: ContainerPlatform | None = None,
     container_platform_emulated: bool = False,
     start_command: str | None,
@@ -230,45 +230,17 @@ def build_run_metadata(
     options: Mapping[str, object] | None = None,
     sampling_interval_seconds: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
+    images = dict(container_images or {})
+    if execution_mode == "container" and not images:
+        raise ValueError("A container run must record the registry digest of every image it uses")
     docker_platform = _run_optional_command(["docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])
-    image_map = dict(container_images or {})
-    if container_image is not None and not image_map:
-        image_map = {"default": container_image}
-
-    primary_container_image = container_image
-    if primary_container_image is None and len(image_map) == 1:
-        primary_container_image = next(iter(image_map.values()))
-
-    image_digests = {
-        name: _run_optional_command(["docker", "image", "inspect", image, "--format", "{{index .RepoDigests 0}}"])
-        for name, image in image_map.items()
-    }
-    image_digest = (
-        _run_optional_command(
-            ["docker", "image", "inspect", primary_container_image, "--format", "{{index .RepoDigests 0}}"]
-        )
-        if primary_container_image is not None
-        else None
-    )
-    image_ids = {
-        name: _run_optional_command(["docker", "image", "inspect", image, "--format", "{{.Id}}"])
-        for name, image in image_map.items()
-    }
-    image_id = (
-        _run_optional_command(["docker", "image", "inspect", primary_container_image, "--format", "{{.Id}}"])
-        if primary_container_image is not None
-        else None
-    )
 
     return {
         "execution": {
             "mode": execution_mode,
-            "container_image": primary_container_image,
-            "container_image_digest": image_digest,
-            "container_image_id": image_id,
-            "container_images": image_map or None,
-            "container_image_digests": image_digests or None,
-            "container_image_ids": image_ids or None,
+            "container_images": {role: image.reference for role, image in images.items()} or None,
+            "container_image_digests": {role: image.repo_digest for role, image in images.items()} or None,
+            "container_image_ids": {role: image.image_id for role, image in images.items()} or None,
             "container_platform": container_platform,
             "container_engine_platform": docker_platform if execution_mode == "container" else None,
             "container_platform_emulated": container_platform_emulated if execution_mode == "container" else False,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -180,6 +181,41 @@ def _monetdb_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
     return problems
 
 
+def _image_digest_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
+    rows = con.execute(
+        """
+        select id, db, suite, suite_scale_factor, operation, json_extract("metadata", '$.execution')
+        from run
+        where json_extract_string("metadata", '$.execution.mode') is distinct from 'in_process'
+        order by id
+        """
+    ).fetchall()
+    missing: list[str] = []
+    digests_by_image: dict[tuple[str, str], set[str]] = {}
+    for run_id, db, suite, scale_factor, operation, execution_json in rows:
+        execution = cast(dict[str, Any], json.loads(execution_json)) if execution_json is not None else {}
+        images = cast(dict[str, str] | None, execution.get("container_images")) or {}
+        digests = cast(dict[str, str | None] | None, execution.get("container_image_digests")) or {}
+        label = f"run {run_id} {db} {suite}:sf{scale_factor}:{operation}"
+        if not images or any(not digests.get(role) for role in images):
+            missing.append(label)
+            continue
+        for role in images:
+            digests_by_image.setdefault((str(db), role), set()).add(str(digests[role]))
+
+    problems: list[str] = []
+    if missing:
+        problems.append(_listing("Container runs without a registry digest for every image", missing))
+    mixed = [
+        f"{db} {role}: {', '.join(sorted(digests))}"
+        for (db, role), digests in sorted(digests_by_image.items())
+        if len(digests) > 1
+    ]
+    if mixed:
+        problems.append(_listing("Engines whose runs used different images", mixed))
+    return problems
+
+
 def validate_publishable_runs(
     db_path: Path,
     cells: Sequence[MatrixCell],
@@ -238,6 +274,7 @@ def validate_publishable_runs(
         if len(snapshots) != 1 or snapshots == ["none"]:
             problems.append(f"A published set must share exactly one system snapshot, found: {snapshots}")
 
+        problems.extend(_image_digest_problems(con))
         problems.extend(_query_step_problems(con))
         problems.extend(_monetdb_problems(con))
     finally:

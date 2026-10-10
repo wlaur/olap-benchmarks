@@ -29,9 +29,6 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "18.6"
-
-DOCKER_IMAGE = f"postgres:{VERSION}"
 POSTGRES_HOST_PORT = host_port("postgres")
 
 POSTGRES_CONNECTION_STRING = f"postgresql://postgres:password@localhost:{POSTGRES_HOST_PORT}/postgres"
@@ -515,8 +512,6 @@ class PostgresJSONBench(JSONBench["Postgres"]):
 
 class Postgres(Database):
     name: DatabaseName = "postgres"
-    version: str = VERSION
-    container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
 
     connection_string: str = POSTGRES_CONNECTION_STRING
@@ -549,7 +544,7 @@ class Postgres(Database):
             # naive Polars datetimes round-trip without offset surprises.
             "-e TZ=UTC",
             "-e PGTZ=UTC",
-            DOCKER_IMAGE,  # e.g. postgres:18
+            self.container_images["server"],
             # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
             # with shared_buffers=128MB and max_wal_size=1GB, which forces a
             # checkpoint storm during multi-hundred-million-row inserts.

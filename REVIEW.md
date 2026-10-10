@@ -27,9 +27,10 @@ one-command path from "bump a version" to "published".
       three dates, and predates `metadata.repository`, so `olap publish` now refuses it. Run
       `olap matrix run --published-only` into a fresh revision from one clean commit (this adds Polars) and publish
       it through the gate.
-- [ ] **Record image digests for every engine.** The locally built MonetDB image has no RepoDigest, so
-      `container_image_digest` is null for all MonetDB runs. Pull from the registry before a campaign (now that the
-      image is published) or record the registry digest explicitly; refuse to publish runs without one.
+- [ ] **No amd64 image for the MonetDB pin.** `monetdb/monetdb:Dec2025-SP4` does not exist on Docker Hub (newest
+      tag: Dec2025-SP3), and `wlaur/monetdb-container` is arm64-only, so `olap versions --check` fails for the amd64
+      variant and an amd64 host (the cloud campaign) cannot start MonetDB. Push an amd64 build of the wlaur image and
+      point `images.server` at it, or wait for the upstream tag.
 
 ## 2. Methodology
 
@@ -56,9 +57,6 @@ one-command path from "bump a version" to "published".
 
 Ordered by how much they reduce the cost of rerunning and publishing.
 
-- [ ] **3.3 One version manifest.** Pins are `VERSION` constants in six connector modules, a dataclass for MonetDB,
-      and `pyproject.toml` for DuckDB/Polars. Move them to one `versions.toml` (version, image tags, expected digest)
-      and add `olap versions [--check] [--outdated]` that pulls/verifies images and lists newer upstream releases.
 - [ ] **3.4 One way to declare unsupported queries.** There are four: reasoned dicts (`UNSUPPORTED_QUERIES`), a bare
       frozenset (`tpc_ds/config.py:263`), a Postgres-only set, and "the SQL file is missing" (generic reason). Answer
       comparison exclusions live in yet another list (`validation.py:17`). Use one registry
@@ -127,7 +125,6 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 ## Suggested order
 
-1. Section 3.3 (versions), so a version bump is one edit and `olap matrix status` shows what it invalidates.
-2. Section 1, then a fresh campaign published through the new gate.
-3. Section 4 (site), independent of the harness work.
-4. Section 2 profile, then the cloud campaign; sections 5-6 fit around these.
+1. Section 1: a fresh campaign published through the new gate.
+2. Section 4 (site), independent of the harness work.
+3. Section 2 profile, then the cloud campaign; sections 5-6 fit around these.

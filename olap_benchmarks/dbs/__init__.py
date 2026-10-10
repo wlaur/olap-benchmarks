@@ -10,13 +10,14 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from threading import get_ident
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args
 
 import polars as pl
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr
 from sqlalchemy import Connection, text
 
 from ..container_platform import get_container_engine_platform
+from ..images import ResolvedImage, resolve_images
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..results.hashing import build_answer_metadata
@@ -41,6 +42,7 @@ from ..settings import (
     resolve_suite_scale_factor,
 )
 from ..utils import run_shell
+from ..versions import EnginePin, engine_pin
 from .utils import tracked_commit
 
 if TYPE_CHECKING:
@@ -78,16 +80,17 @@ def _new_active_step_stacks() -> dict[int, list[int]]:
     return {}
 
 
+def _pinned_version(data: dict[str, Any]) -> str:
+    return engine_pin(cast(DatabaseName, data["name"])).resolved_version
+
+
 class Database(BaseModel, ABC):
     name: DatabaseName
-    version: str
+    version: str = Field(default_factory=_pinned_version)
 
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
-    container_image: ClassVar[str | None] = None
-    arm64_container_image: ClassVar[str | None] = None
     supports_arm64_containers: ClassVar[bool] = False
-    expected_runtime_version: ClassVar[str | None] = None
 
     current_query_name: str | None = None
     _current_suite: SuiteName | None = None
@@ -204,16 +207,12 @@ class Database(BaseModel, ABC):
         pass
 
     @property
-    def resolved_container_image(self) -> str | None:
-        if self.container_image is None:
-            return None
-        if self.container_platform == "linux/arm64" and self.arm64_container_image is not None:
-            return self.arm64_container_image
-        return self.container_image
+    def pin(self) -> EnginePin:
+        return engine_pin(self.name)
 
     @property
     def container_platform(self) -> ContainerPlatform | None:
-        if self.container_image is None and not self.container_images:
+        if not self.pin.is_container:
             return None
 
         engine_platform = get_container_engine_platform()
@@ -243,10 +242,16 @@ class Database(BaseModel, ABC):
 
     @property
     def container_images(self) -> Mapping[str, str]:
-        image = self.resolved_container_image
-        if image is None:
+        platform = self.container_platform
+        if platform is None:
             return {}
-        return {self.name: image}
+        return {role: pin.reference for role, pin in self.pin.images_for(platform).items()}
+
+    def resolve_container_images(self) -> dict[str, ResolvedImage]:
+        platform = self.container_platform
+        if platform is None:
+            return {}
+        return resolve_images(self.pin.images_for(platform), platform)
 
     @property
     def metric_container_names(self) -> tuple[str, ...]:
@@ -483,7 +488,7 @@ class Database(BaseModel, ABC):
         return None
 
     def is_runtime_version_expected(self, runtime_version: str) -> bool:
-        return (self.expected_runtime_version or self.version) in runtime_version
+        return (self.pin.expected_runtime_version or self.version) in runtime_version
 
     def verify_runtime_version(self) -> None:
         runtime_version = self.get_runtime_version()
@@ -491,7 +496,7 @@ class Database(BaseModel, ABC):
             return
 
         if not self.is_runtime_version_expected(runtime_version):
-            expected_version = self.expected_runtime_version or self.version
+            expected_version = self.pin.expected_runtime_version or self.version
             raise RuntimeError(
                 f"{self.name} runtime version does not match pinned version: "
                 f"expected {expected_version!r}, got {runtime_version!r}"
@@ -822,14 +827,14 @@ class Database(BaseModel, ABC):
             return
 
         self.verify_runtime_version()
+        container_images = self.resolve_container_images()
 
         self._result_storage = self.create_result_storage()
 
         system_metadata = build_system_metadata()
         run_metadata = build_run_metadata(
             execution_mode=self.execution_mode,
-            container_image=self.resolved_container_image,
-            container_images=self.container_images,
+            container_images=container_images,
             container_platform=self.container_platform,
             container_platform_emulated=self.uses_container_emulation,
             start_command=self._last_start_command,

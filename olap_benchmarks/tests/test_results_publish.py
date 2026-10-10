@@ -104,7 +104,17 @@ def _add_run(
     dirty: bool = False,
     snapshot_id: int = 1,
     answer_hash: str = "blake2b128:test",
+    image_digest: str | None = "monetdb/monetdb@sha256:" + "a" * 64,
 ) -> int:
+    execution: dict[str, object] = (
+        {
+            "mode": "container",
+            "container_images": {"server": "monetdb/monetdb:SP4"},
+            "container_image_digests": {"server": image_digest},
+        }
+        if cell.db == "monetdb"
+        else {"mode": "in_process", "container_images": None, "container_image_digests": None}
+    )
     run = Run(
         suite=cell.suite,
         suite_scale_factor=cell.scale_factor,
@@ -117,7 +127,10 @@ def _add_run(
         status=status,
         started_at=started_at,
         finished_at=started_at,
-        metadata_json={"repository": {"commit": commit, "dirty": dirty, "diff_sha256": "x" if dirty else None}},
+        metadata_json={
+            "repository": {"commit": commit, "dirty": dirty, "diff_sha256": "x" if dirty else None},
+            "execution": execution,
+        },
     )
     session.add(run)
     session.flush()
@@ -256,6 +269,28 @@ def test_publish_gate_rejects_missing_select_correctness(tmp_path: Path) -> None
 
     with pytest.raises(PublishValidationError, match="without a correctness result"):
         _validate(_results_db(tmp_path, add))
+
+
+def test_publish_gate_requires_one_registry_digest_per_container_image(tmp_path: Path) -> None:
+    def add(session: Session) -> None:
+        _add_run(session, CELLS[0])
+        _add_run(session, CELLS[1])
+        _add_run(session, CELLS[2], image_digest=None)
+        _add_run(session, CELLS[3])
+
+    with pytest.raises(PublishValidationError) as excinfo:
+        _validate(_results_db(tmp_path, add))
+    assert "without a registry digest" in str(excinfo.value)
+    assert "monetdb rtabench:sf1:populate" in str(excinfo.value)
+
+    def add_mixed(session: Session) -> None:
+        _add_run(session, CELLS[0])
+        _add_run(session, CELLS[1])
+        _add_run(session, CELLS[2], image_digest="monetdb/monetdb@sha256:" + "b" * 64)
+        _add_run(session, CELLS[3])
+
+    with pytest.raises(PublishValidationError, match="used different images"):
+        _validate(_results_db(tmp_path / "mixed", add_mixed))
 
 
 def test_publish_gate_keeps_monetdb_session_baselines(tmp_path: Path) -> None:
