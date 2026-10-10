@@ -27,11 +27,6 @@ one-command path from "bump a version" to "published".
       three dates, and predates `metadata.repository`, so `olap publish` now refuses it. Run
       `olap matrix run --published-only` into a fresh revision from one clean commit (this adds Polars) and publish
       it through the gate.
-- [ ] **Make the site's methodology text true.** `site/src/content/home.md` still names `macbook-pro-m4`, says
-      QuestDB is published, says results are "checked into git", describes a MonetDB "binary fetch path", and says
-      DuckDB is not reopened between operations (it is, since per-operation process isolation).
-- [ ] **Verify the data asset in the Pages build.** `publish --upload` now triggers `pages.yml` and `manifest.json`
-      carries `results_db_sha256` and `results_db_bytes`; the build still only checks the `DUCK` magic bytes.
 - [ ] **Record image digests for every engine.** The locally built MonetDB image has no RepoDigest, so
       `container_image_digest` is null for all MonetDB runs. Pull from the registry before a campaign (now that the
       image is published) or record the registry digest explicitly; refuse to publish runs without one.
@@ -46,9 +41,8 @@ one-command path from "bump a version" to "published".
 - [ ] **Name the timed boundary.** The timer covers `fetch()` through materialisation into Polars. Label it
       end-to-end latency on the site, stop showing `first_run_duration_s` as if it were cold, and add engine-internal
       timing only as a separate, clearly labelled metric.
-- [ ] **State that scores are relative to the selected engines.** The 10 ms-smoothed score is recomputed against
-      the fastest selected engine, so a run's score changes when another engine is added. Say so wherever a score
-      appears, and keep absolute latency next to it.
+- [ ] **Show absolute latency next to the home score.** The ranking now says scores are relative to the engines
+      shown; the home table still has no absolute latency beside each score.
 - [ ] **Finish the reproducibility identity.** Already recorded: `metadata.repository` (commit, dirty flag, diff
       hash) for every run, image IDs, input manifest hashes, query text. Missing: query/schema hashes, profile
       revision, iteration policy. Scope site comparisons by system snapshot, not just `system`.

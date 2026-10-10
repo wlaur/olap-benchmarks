@@ -332,7 +332,8 @@ git would keep every version forever. It ships as the `results.db` asset on the
 `data` release: `--upload` replaces that asset via the GitHub CLI and triggers
 the Pages workflow (`gh workflow run pages.yml --ref main`), and the site
 build fetches it with `bun run fetch-data` (the Pages workflow runs this before
-`bun run build` and fails the build if the asset is missing or truncated). The
+`bun run build`, then `bun run verify-data`, which fails the build unless the asset's size and SHA-256 match
+`results_db_bytes` and `results_db_sha256` in `manifest.json`). The
 small `manifest.json`, `queries.json` and `suites.json` stay in git.
 
 A fresh clone therefore needs the database before the site will run:
