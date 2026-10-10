@@ -518,6 +518,7 @@ class Postgres(Database):
     version: str = VERSION
     container_image: ClassVar[str | None] = DOCKER_IMAGE
     supports_arm64_containers: ClassVar[bool] = True
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ("pgdata/pg_wal",)
 
     connection_string: str = POSTGRES_CONNECTION_STRING
 

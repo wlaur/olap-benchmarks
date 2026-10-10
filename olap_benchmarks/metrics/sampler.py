@@ -20,7 +20,7 @@ import psutil
 
 from ..settings import setup_stdout_logging
 from .measure import get_disk_sample, get_resource_sample
-from .storage import Storage, WriterMessage
+from .storage import MetricValues, Storage, WriterMessage
 
 _LOGGER = logging.getLogger(__name__)
 CLIENT_RSS_SAMPLE_SECONDS = 0.01
@@ -56,15 +56,6 @@ class _SharedInteger(Protocol):
     value: int
 
     def get_lock(self) -> _Lock: ...
-
-
-@dataclass(frozen=True, slots=True)
-class MetricValues:
-    cpu_percent: float | None = None
-    server_mem_mb: int | None = None
-    client_mem_mb: int | None = None
-    client_uss_mb: int | None = None
-    disk_mb: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +123,7 @@ def build_lanes(
     client_process_id: int,
     container_names: Sequence[str],
     metric_directories: Sequence[Path],
+    wal_globs: Sequence[str] = (),
     resource_interval_seconds: float = RESOURCE_SAMPLE_SECONDS,
     disk_interval_seconds: float = DISK_SAMPLE_SECONDS,
     client_rss_peak: _SharedInteger | None = None,
@@ -150,15 +142,20 @@ def build_lanes(
             client_mem_mb,
             client_uss_mb,
         )
+        server = sample.server_memory
         return MetricValues(
             cpu_percent=sample.cpu_percent,
-            server_mem_mb=sample.server_mem_mb,
+            server_charge_mb=None if server is None else server.charge_mb,
+            server_anon_mb=None if server is None else server.anon_mb,
+            server_file_mb=None if server is None else server.file_mb,
+            server_shmem_mb=None if server is None else server.shmem_mb,
             client_mem_mb=sample.client_mem_mb,
             client_uss_mb=sample.client_uss_mb,
         )
 
     def sample_disk() -> MetricValues:
-        return MetricValues(disk_mb=get_disk_sample(metric_directories))
+        disk = get_disk_sample(metric_directories, wal_globs)
+        return MetricValues(disk_mb=disk.total_mb, disk_data_mb=disk.data_mb, disk_wal_mb=disk.wal_mb)
 
     return (
         Lane(name="resource", interval_seconds=resource_interval_seconds, sample=sample_resources),
@@ -174,16 +171,7 @@ def build_lanes(
 def record_lane_sample(storage: Storage, run_id: int, lane: Lane, sample_time: datetime) -> None:
     # every lane writes its own row and leaves the columns it does not measure null,
     # so a sample is never a blend of readings taken at different instants
-    values = lane.sample()
-    storage.insert_metric(
-        run_id=run_id,
-        time=sample_time,
-        cpu_percent=values.cpu_percent,
-        server_mem_mb=values.server_mem_mb,
-        client_mem_mb=values.client_mem_mb,
-        client_uss_mb=values.client_uss_mb,
-        disk_mb=values.disk_mb,
-    )
+    storage.insert_metric(run_id=run_id, time=sample_time, values=lane.sample())
 
 
 def run_lane(
@@ -234,6 +222,7 @@ def sampling_loop(
     client_process_id: int,
     container_names: Sequence[str],
     metric_directories: Sequence[Path],
+    wal_globs: Sequence[str],
     run_id: int,
     stop_event: Event,
     queue: Queue[WriterMessage],
@@ -256,6 +245,7 @@ def sampling_loop(
             client_process_id,
             container_names,
             metric_directories,
+            wal_globs,
             resource_interval_seconds,
             disk_interval_seconds,
             client_rss_peak,
@@ -293,6 +283,7 @@ class MetricSampler:
 def start_metric_sampler(
     container_names: Sequence[str],
     metric_directories: Sequence[Path],
+    wal_globs: Sequence[str],
     run_id: int,
     storage: Storage,
     resource_interval_seconds: float = RESOURCE_SAMPLE_SECONDS,
@@ -316,6 +307,7 @@ def start_metric_sampler(
             os.getpid(),
             tuple(container_names),
             tuple(metric_directories),
+            tuple(wal_globs),
             run_id,
             stop_event,
             storage.queue,

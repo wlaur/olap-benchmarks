@@ -108,6 +108,7 @@ class MonetDB(Database):
     arm64_container_image: ClassVar[str | None] = MONETDB_RELEASE.arm64_container_image
     supports_arm64_containers: ClassVar[bool] = True
     expected_runtime_version: ClassVar[str | None] = MONETDB_RELEASE.runtime_version
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ("benchmark/sql_logs",)
 
     @property
     def db_driver(self) -> str:

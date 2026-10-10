@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+import glob
 import logging
 import os
 import platform
 import subprocess
 from collections.abc import Sequence
 from concurrent.futures import Executor
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
@@ -12,7 +16,6 @@ from typing import Any, Protocol, cast
 import docker
 import psutil
 from docker.errors import DockerException
-from pydantic import BaseModel
 
 _LOGGER = logging.getLogger(__name__)
 DOCKER_API_TIMEOUT_SECONDS = 5
@@ -71,15 +74,51 @@ def get_docker_client() -> docker.DockerClient:
     )
 
 
-class ResourceSample(BaseModel):
+MEBIBYTE = 1_024 * 1_024
+
+
+@dataclass(frozen=True, slots=True)
+class ServerMemory:
+    # cgroup v2 memory.current: everything charged to the container, page cache included
+    charge_mb: int
+    # cgroup v2 memory.stat anon: private process memory, the engine's own working set
+    anon_mb: int
+    # cgroup v2 memory.stat file: page cache and file-backed mappings, shmem included
+    file_mb: int
+    # cgroup v2 memory.stat shmem: shared memory (e.g. PostgreSQL shared_buffers), a subset of file
+    shmem_mb: int
+
+    def __add__(self, other: ServerMemory) -> ServerMemory:
+        return ServerMemory(
+            charge_mb=self.charge_mb + other.charge_mb,
+            anon_mb=self.anon_mb + other.anon_mb,
+            file_mb=self.file_mb + other.file_mb,
+            shmem_mb=self.shmem_mb + other.shmem_mb,
+        )
+
+
+NO_SERVER_MEMORY = ServerMemory(charge_mb=0, anon_mb=0, file_mb=0, shmem_mb=0)
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSample:
     # one source's share in the per-source samplers, the client-plus-containers
     # total in the aggregate returned by get_resource_sample
     cpu_percent: float
-    # database-container memory only; always 0 for in-process engines, which have no server
-    server_mem_mb: int
+    # database containers only; all zero for in-process engines, which have no server, and
+    # None when a container reported no memory accounting because it was starting or stopping
+    server_memory: ServerMemory | None
     # benchmark client process memory; the real footprint of an in-process engine
     client_mem_mb: int
     client_uss_mb: int
+
+
+@dataclass(frozen=True, slots=True)
+class DiskSample:
+    total_mb: int
+    data_mb: int
+    # None when the engine declares no WAL location
+    wal_mb: int | None
 
 
 def calculate_cpu_percent(cpu_stats: dict[str, Any], precpu_stats: dict[str, Any]) -> float:
@@ -182,7 +221,7 @@ def get_client_process_metrics(
 
     return ResourceSample(
         cpu_percent=cpu_percent,
-        server_mem_mb=0,
+        server_memory=NO_SERVER_MEMORY,
         client_mem_mb=client_mem_mb,
         client_uss_mb=client_uss_mb,
     )
@@ -215,20 +254,44 @@ def get_container_stats(container_name: str) -> dict[str, Any]:
         return get_container(container_name).stats(stream=False, one_shot=True)
 
 
+def parse_container_memory(memory_stats: dict[str, Any]) -> ServerMemory | None:
+    # like CPU, a starting or stopping container reports no memory accounting at all
+    if "usage" not in memory_stats:
+        return None
+
+    stats = cast(dict[str, int], memory_stats.get("stats", {}))
+    if "anon" not in stats:
+        raise RuntimeError(
+            "Docker reported container memory without the cgroup v2 'anon' counter; "
+            "only cgroup v2 hosts can separate engine memory from page cache"
+        )
+
+    return ServerMemory(
+        charge_mb=int(memory_stats["usage"]) // MEBIBYTE,
+        anon_mb=stats["anon"] // MEBIBYTE,
+        file_mb=stats["file"] // MEBIBYTE,
+        shmem_mb=stats["shmem"] // MEBIBYTE,
+    )
+
+
 def get_container_metrics(container_name: str) -> ResourceSample:
     stats = get_container_stats(container_name)
 
-    cpu_percent = calculate_container_cpu_percent(container_name, stats)
-
-    mem_usage = stats["memory_stats"]["usage"]
-    server_mem_mb = int(mem_usage / (1_024 * 1_024))
-
     return ResourceSample(
-        cpu_percent=cpu_percent,
-        server_mem_mb=server_mem_mb,
+        cpu_percent=calculate_container_cpu_percent(container_name, stats),
+        server_memory=parse_container_memory(cast(dict[str, Any], stats.get("memory_stats", {}))),
         client_mem_mb=0,
         client_uss_mb=0,
     )
+
+
+def sum_server_memory(memories: Sequence[ServerMemory | None]) -> ServerMemory | None:
+    total = NO_SERVER_MEMORY
+    for memory in memories:
+        if memory is None:
+            return None
+        total += memory
+    return total
 
 
 def get_resource_sample(
@@ -248,14 +311,42 @@ def get_resource_sample(
 
     return ResourceSample(
         cpu_percent=client_metrics.cpu_percent + sum(metric.cpu_percent for metric in container_metrics),
-        server_mem_mb=sum(metric.server_mem_mb for metric in container_metrics),
+        server_memory=sum_server_memory([metric.server_memory for metric in container_metrics]),
         client_mem_mb=client_metrics.client_mem_mb,
         client_uss_mb=client_metrics.client_uss_mb,
     )
 
 
-def get_disk_sample(metric_directories: Sequence[Path]) -> int:
-    return sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories))
+def get_disk_sample(metric_directories: Sequence[Path], wal_globs: Sequence[str] = ()) -> DiskSample:
+    total_mb = sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories))
+    if not wal_globs:
+        return DiskSample(total_mb=total_mb, data_mb=total_mb, wal_mb=None)
+
+    # a separate walk taken straight after the full one, so data is total minus WAL
+    # up to whatever the WAL grew by in between; clamp rather than report negative data
+    wal_mb = get_glob_size_mb(wal_globs)
+    return DiskSample(total_mb=total_mb, data_mb=max(total_mb - wal_mb, 0), wal_mb=wal_mb)
+
+
+def get_glob_size_mb(patterns: Sequence[str]) -> int:
+    last_error: subprocess.CalledProcessError | None = None
+
+    for _ in range(DIRECTORY_SIZE_ATTEMPTS):
+        # re-expand on every attempt: WAL segments and DuckDB's .wal file come and go
+        paths = sorted({match for pattern in patterns for match in glob.glob(pattern)})
+        if not paths:
+            return 0
+        try:
+            output = subprocess.check_output(["du", "-sk", *paths], text=True)
+        except subprocess.CalledProcessError as error:
+            _LOGGER.warning(f"Call to du failed: {error}, retrying...")
+            last_error = error
+            continue
+
+        kilobytes = sum(int(line.split()[0]) for line in output.splitlines() if line.strip())
+        return kilobytes // 1_024
+
+    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts") from last_error
 
 
 def get_directory_size_mb(path: Path) -> int:

@@ -110,13 +110,13 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 ## 6. Resource reporting
 
-- [ ] **Stop calling cgroup charge server memory.** `measure.py:223` uses `memory_stats.usage`, which includes page
-      cache. Record anon and file separately (cgroup `memory.stat`) and report anon (or engine RSS) as server memory.
-- [ ] **Split disk into data and WAL**, and report peak and final separately (currently one `du` over the store).
-- [ ] **Fix the client-memory claim for MonetDB.** `monetdb/adbc.py:28-30` keeps the Arrow table and the Polars
-      frame alive together, and README:116 still says Polars adopts them zero-copy.
-- [ ] **Show memory on the site** only once the above is fixed, with in-process engines (DuckDB, Polars) labelled as
-      client-only.
+- [ ] **Show memory on the site.** Metric schema v7 now records the cgroup anon/file/shmem split and a data/WAL disk
+      split, and `olap results resources` labels DuckDB and Polars `client_only`. Publish runs recorded at v7 first
+      (older runs only carry the page-cache-inclusive charge), then show server memory (anon + shmem) for container
+      engines and client memory for in-process engines, labelled as such.
+- [ ] **Validate the v7 sampling on a live run.** The cgroup v2 parsing is unit-tested against Docker payloads but no
+      benchmark has run with it yet; check that one ClickHouse and one PostgreSQL run record plausible anon, shmem
+      and WAL figures.
 
 ## 7. Deferred
 

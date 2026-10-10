@@ -7,6 +7,8 @@ from typing import Any, cast
 
 import duckdb
 
+from .models import RunMetric
+
 _LOGGER = logging.getLogger(__name__)
 
 # Run rows have no stable id across database files (each file starts its sequences at 1), so runs
@@ -21,6 +23,9 @@ RUN_CELL_KEY = (
     "operation",
 )
 
+METRIC_VALUE_COLUMNS = tuple(
+    column.name for column in RunMetric.__table__.columns if column.name not in {"id", "run_id", "time"}
+)
 MERGE_TABLES = ("system_snapshot", "run", "run_step", "run_metric", "query_execution")
 
 
@@ -245,9 +250,9 @@ def _merge_attached(con: duckdb.DuckDBPyConnection, runs_replaced: int) -> Merge
 
     con.execute(
         f"""
-        insert into run_metric (id, run_id, time, cpu_percent, server_mem_mb, client_mem_mb, client_uss_mb, disk_mb)
+        insert into run_metric (id, run_id, time, {", ".join(METRIC_VALUE_COLUMNS)})
         select {metric_offset} + row_number() over (order by s.id),
-               rm.new_id, s.time, s.cpu_percent, s.server_mem_mb, s.client_mem_mb, s.client_uss_mb, s.disk_mb
+               rm.new_id, s.time, {", ".join(f"s.{column}" for column in METRIC_VALUE_COLUMNS)}
         from src.run_metric s join run_map rm on s.run_id = rm.src_id
         """
     )

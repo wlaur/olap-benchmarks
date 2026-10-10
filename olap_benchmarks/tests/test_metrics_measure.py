@@ -35,7 +35,33 @@ class FakeDockerClient:
         self.containers = FakeContainers(stats_by_name)
 
 
-def docker_stats(cpu_delta: int, system_delta: int, online_cpus: int, mem_mb: int) -> dict[str, Any]:
+MIB = 1_024 * 1_024
+
+
+def cgroup_v2_memory_stats(anon_mb: int, file_mb: int, shmem_mb: int, kernel_mb: int = 0) -> dict[str, Any]:
+    # the shape Docker returns on a cgroup v2 host: usage is memory.current, stats is memory.stat
+    return {
+        "usage": (anon_mb + file_mb + kernel_mb) * MIB,
+        "limit": 16_384 * MIB,
+        "stats": {
+            "anon": anon_mb * MIB,
+            "file": file_mb * MIB,
+            "shmem": shmem_mb * MIB,
+            "kernel": kernel_mb * MIB,
+            "active_file": file_mb * MIB // 2,
+            "inactive_file": file_mb * MIB // 2,
+        },
+    }
+
+
+def docker_stats(
+    cpu_delta: int,
+    system_delta: int,
+    online_cpus: int,
+    anon_mb: int,
+    file_mb: int = 0,
+    shmem_mb: int = 0,
+) -> dict[str, Any]:
     return {
         "cpu_stats": {
             "cpu_usage": {"total_usage": 1_000 + cpu_delta},
@@ -46,7 +72,7 @@ def docker_stats(cpu_delta: int, system_delta: int, online_cpus: int, mem_mb: in
             "cpu_usage": {"total_usage": 1_000},
             "system_cpu_usage": 10_000,
         },
-        "memory_stats": {"usage": mem_mb * 1_024 * 1_024},
+        "memory_stats": cgroup_v2_memory_stats(anon_mb, file_mb, shmem_mb),
     }
 
 
@@ -57,7 +83,7 @@ def client_sample(
 ) -> measure.ResourceSample:
     return measure.ResourceSample(
         cpu_percent=25,
-        server_mem_mb=0,
+        server_memory=measure.NO_SERVER_MEMORY,
         client_mem_mb=128 if client_mem_mb is None else client_mem_mb,
         client_uss_mb=96 if client_uss_mb is None else client_uss_mb,
     )
@@ -68,8 +94,10 @@ def test_resource_sample_sums_client_and_containers(monkeypatch: pytest.MonkeyPa
     measure._CONTAINER_CPU_SNAPSHOTS.clear()
     client = FakeDockerClient(
         {
-            "doris-fe-benchmark": docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, mem_mb=256),
-            "doris-be-benchmark": docker_stats(cpu_delta=10, system_delta=100, online_cpus=4, mem_mb=512),
+            "doris-fe-benchmark": docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, anon_mb=256, file_mb=64),
+            "doris-be-benchmark": docker_stats(
+                cpu_delta=10, system_delta=100, online_cpus=4, anon_mb=512, file_mb=2_048, shmem_mb=32
+            ),
         }
     )
 
@@ -80,7 +108,7 @@ def test_resource_sample_sums_client_and_containers(monkeypatch: pytest.MonkeyPa
         sample = measure.get_resource_sample(executor, 42, ("doris-fe-benchmark", "doris-be-benchmark"))
 
     assert sample.cpu_percent == 145.0
-    assert sample.server_mem_mb == 768
+    assert sample.server_memory == measure.ServerMemory(charge_mb=2_880, anon_mb=768, file_mb=2_112, shmem_mb=32)
     assert sample.client_mem_mb == 128
     assert sample.client_uss_mb == 96
 
@@ -91,7 +119,9 @@ def test_resource_sample_includes_client_without_containers(monkeypatch: pytest.
     with ThreadPoolExecutor(max_workers=1) as executor:
         sample = measure.get_resource_sample(executor, 42, ())
 
-    assert sample == measure.ResourceSample(cpu_percent=25, server_mem_mb=0, client_mem_mb=128, client_uss_mb=96)
+    assert sample == measure.ResourceSample(
+        cpu_percent=25, server_memory=measure.NO_SERVER_MEMORY, client_mem_mb=128, client_uss_mb=96
+    )
 
 
 def test_resource_sample_uses_high_frequency_client_memory_peaks(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,7 +185,7 @@ def test_client_process_object_is_reused_so_cpu_deltas_accumulate(monkeypatch: p
 
 def test_container_stats_refreshes_a_stale_container_handle(monkeypatch: pytest.MonkeyPatch) -> None:
     measure._CONTAINERS.clear()
-    stats = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, mem_mb=256)
+    stats = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, anon_mb=256)
     lookups = 0
 
     class StaleContainer:
@@ -178,7 +208,81 @@ def test_disk_sample_sums_deduplicated_directories(monkeypatch: pytest.MonkeyPat
     sizes = {Path("/database"): 123, Path("/temporary"): 45}
     monkeypatch.setattr(measure, "get_directory_size_mb", sizes.__getitem__)
 
-    assert measure.get_disk_sample((Path("/database"), Path("/temporary"), Path("/database"))) == 168
+    assert measure.get_disk_sample((Path("/database"), Path("/temporary"), Path("/database"))) == measure.DiskSample(
+        total_mb=168, data_mb=168, wal_mb=None
+    )
+
+
+def test_container_memory_separates_engine_memory_from_page_cache() -> None:
+    memory = measure.parse_container_memory(
+        cgroup_v2_memory_stats(anon_mb=700, file_mb=5_000, shmem_mb=200, kernel_mb=40)
+    )
+
+    assert memory == measure.ServerMemory(charge_mb=5_740, anon_mb=700, file_mb=5_000, shmem_mb=200)
+
+
+def test_starting_container_reports_no_memory_instead_of_raising() -> None:
+    assert measure.parse_container_memory({}) is None
+
+
+def test_container_memory_refuses_cgroup_v1_counters() -> None:
+    with pytest.raises(RuntimeError, match="cgroup v2"):
+        measure.parse_container_memory({"usage": 100 * MIB, "stats": {"rss": 10 * MIB, "cache": 90 * MIB}})
+
+
+def test_server_memory_is_unknown_when_any_container_has_no_reading() -> None:
+    known = measure.ServerMemory(charge_mb=10, anon_mb=5, file_mb=5, shmem_mb=0)
+
+    assert measure.sum_server_memory([known, known]) == measure.ServerMemory(
+        charge_mb=20, anon_mb=10, file_mb=10, shmem_mb=0
+    )
+    assert measure.sum_server_memory([known, None]) is None
+    assert measure.sum_server_memory([]) == measure.NO_SERVER_MEMORY
+
+
+def test_disk_sample_splits_the_wal_out_of_the_store(tmp_path: Path) -> None:
+    (tmp_path / "base").mkdir()
+    (tmp_path / "base" / "table").write_bytes(b"x" * 3 * MIB)
+    (tmp_path / "pg_wal").mkdir()
+    (tmp_path / "pg_wal" / "000000010000000000000001").write_bytes(b"x" * 2 * MIB)
+
+    sample = measure.get_disk_sample((tmp_path,), (f"{tmp_path}/pg_wal",))
+
+    assert sample.wal_mb == 2
+    assert sample.total_mb >= 5
+    assert sample.data_mb == sample.total_mb - 2
+
+
+def test_disk_sample_expands_wal_globs_and_tolerates_a_missing_wal(tmp_path: Path) -> None:
+    for table in ("trips", "hits"):
+        (tmp_path / "db" / table / "wal1").mkdir(parents=True)
+        (tmp_path / "db" / table / "wal1" / "0").write_bytes(b"x" * MIB)
+
+    assert measure.get_glob_size_mb((f"{tmp_path}/db/*/wal*",)) == 2
+    assert measure.get_glob_size_mb((f"{tmp_path}/duck.db.wal",)) == 0
+
+
+def test_wal_size_reglobs_after_a_segment_vanishes(monkeypatch: pytest.MonkeyPatch) -> None:
+    globbed: list[str] = []
+    calls = 0
+
+    def fake_glob(pattern: str) -> list[str]:
+        globbed.append(pattern)
+        return ["/wal/a", "/wal/b"] if len(globbed) == 1 else ["/wal/b"]
+
+    def check_output(args: list[str], text: bool) -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise subprocess.CalledProcessError(1, args)
+        assert args == ["du", "-sk", "/wal/b"]
+        return "3072\t/wal/b\n"
+
+    monkeypatch.setattr(measure.glob, "glob", fake_glob)
+    monkeypatch.setattr(measure.subprocess, "check_output", check_output)
+
+    assert measure.get_glob_size_mb(("/wal/*",)) == 3
+    assert len(globbed) == 2
 
 
 def test_directory_size_retries_after_a_transient_du_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -209,8 +313,8 @@ def test_directory_size_raises_once_the_retries_are_exhausted(monkeypatch: pytes
 
 def test_one_shot_container_cpu_uses_consecutive_samples() -> None:
     measure._CONTAINER_CPU_SNAPSHOTS.clear()
-    first = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, mem_mb=256)
-    second = docker_stats(cpu_delta=40, system_delta=200, online_cpus=4, mem_mb=256)
+    first = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, anon_mb=256)
+    second = docker_stats(cpu_delta=40, system_delta=200, online_cpus=4, anon_mb=256)
     first["precpu_stats"].pop("system_cpu_usage")
     second["precpu_stats"].pop("system_cpu_usage")
 
@@ -222,7 +326,7 @@ def test_restarting_container_reports_no_cpu_instead_of_raising() -> None:
     # the suites restart the database between operations, and docker reports no CPU accounting at
     # all while a container is coming up; raising here loses the whole sample, not just this column
     measure._CONTAINER_CPU_SNAPSHOTS.clear()
-    stats = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, mem_mb=256)
+    stats = docker_stats(cpu_delta=20, system_delta=100, online_cpus=4, anon_mb=256)
     stats["precpu_stats"].pop("system_cpu_usage")
     stats["cpu_stats"].pop("system_cpu_usage")
 

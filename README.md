@@ -158,7 +158,10 @@ non-zero if any group failed.
 MonetDB connects exclusively through ADBC (`adbc-driver-monetdb` +
 `sqlalchemy-monetdb-adbc`). Ingest streams Arrow data over the wire — eager
 Polars frames, lazy frames, and Parquet files all take the same path — and
-reads return Arrow tables that Polars adopts zero-copy:
+reads return Arrow tables. Polars adopts their fixed-width columns zero-copy but
+copies string columns, because the driver returns Arrow `utf8` and Polars stores
+strings as `Utf8View`; a string-heavy result is therefore briefly held twice, and
+the harness drops the Arrow table as soon as the Polars frame exists:
 
 ```python
 from pathlib import Path
@@ -214,11 +217,40 @@ Each `run_metric` row separates the database server from the benchmark client:
 
 | Column | Side | Meaning |
 | --- | --- | --- |
-| `server_mem_mb` | server | Sum of database-container memory. **Always 0 for in-process engines** (`duckdb`, `polars`), which have no server. |
+| `server_anon_mb` | server | cgroup v2 `memory.stat` `anon`, summed over the database containers: the engine processes' private anonymous memory (heap, stacks, private mappings). |
+| `server_shmem_mb` | server | cgroup v2 `memory.stat` `shmem`: shared memory such as PostgreSQL `shared_buffers`. A subset of `server_file_mb`, but not reclaimable like page cache. |
+| `server_file_mb` | server | cgroup v2 `memory.stat` `file`: page cache and file-backed mappings, `shmem` included. Mostly reclaimable. |
+| `server_charge_mb` | server | cgroup v2 `memory.current` (Docker's `memory_stats.usage`): everything charged to the containers, page cache and kernel memory included. **Not the engine's memory**: a scan over a large store fills it with cache the kernel would drop under pressure. |
 | `client_mem_mb` | client | Peak RSS of the benchmark Python process, sampled every 10 ms. |
 | `client_uss_mb` | client | Peak unique set size of the same process, sampled every 100 ms, so shared and reclaimable file-backed pages can be separated from private memory. The USS scan is the expensive one, hence the lower rate; it would otherwise materially perturb client CPU on Linux. |
 | `cpu_percent` | combined | Benchmark client process **plus** every database container, summed. It cannot be decomposed into a server and a client share. |
-| `disk_mb` | server | The database's own storage directories (`Database.metric_directories`, today just its data directory). Client staging files under the shared temporary directory and the benchmark client's own disk use are not measured. |
+| `disk_mb` | storage | `du` over the database's own storage directories (`Database.metric_directories`, today just its data directory), WAL included. Client staging files under the shared temporary directory and the benchmark client's own disk use are not measured. |
+| `disk_wal_mb` | storage | `du` over the engine's write-ahead log (`Database.wal_path_patterns`), walked straight after `disk_mb`. Null on disk rows of engines that declare no WAL location. |
+| `disk_data_mb` | storage | `disk_mb - disk_wal_mb`, clamped at 0 because the two walks are a moment apart; `disk_mb` when the engine declares no WAL location. |
+
+All `server_*` columns are 0 for in-process engines (`duckdb`, `polars`), which have no
+server, and null on a resource row taken while a container was starting or stopping and
+reported no memory accounting. Only cgroup v2 hosts are supported; on a cgroup v1 host
+the resource lane fails loudly rather than record page cache as engine memory.
+
+**Server memory** in reports is `server_anon_mb + server_shmem_mb`, summed per sample:
+the memory the engine holds and the kernel cannot reclaim by dropping clean page cache.
+File-backed mappings an engine uses as its working set — MonetDB's memory-mapped BAT
+heaps, files ClickHouse reads through `mmap` — are excluded and appear in
+`server_file_mb` alongside ordinary cache, so for MonetDB in particular server memory is
+a lower bound on its working set.
+
+WAL locations declared per connector:
+
+| Engine | `wal_path_patterns` |
+| --- | --- |
+| PostgreSQL | `pgdata/pg_wal` |
+| TimescaleDB | `pg_wal` |
+| MonetDB | `benchmark/sql_logs` |
+| DuckDB | `duck.db.wal` |
+| QuestDB | `db/*/wal*`, `db/*/txn_seq` |
+| ClickHouse | none: MergeTree writes parts directly and keeps no WAL |
+| Doris, StarRocks | none: no table-data WAL is separable; FE metadata journals and the Doris `fe-log`/`be-log` text logs count as data |
 
 ##### Sampling lanes
 
@@ -229,8 +261,8 @@ readings, and no column is evenly spaced.**
 
 | Lane | Columns | Nominal rate |
 | --- | --- | --- |
-| resource | `cpu_percent`, `server_mem_mb`, `client_mem_mb`, `client_uss_mb` | 5 Hz |
-| disk | `disk_mb` | 0.2 Hz, stretched further as needed |
+| resource | `cpu_percent`, `server_*`, `client_mem_mb`, `client_uss_mb` | 5 Hz |
+| disk | `disk_mb`, `disk_data_mb`, `disk_wal_mb` | 0.2 Hz, stretched further as needed |
 
 CPU and memory come from one `docker stats` call per container (~1 ms) plus a
 non-blocking `psutil` read, so 5 Hz costs well under a percent of one core. Container
@@ -241,8 +273,9 @@ faster would add quantisation noise rather than detail.
 for CPU and page cache — 1.1 s per walk over a 197k-file ClickHouse store, warm. The
 disk lane therefore holds itself to at most a tenth of wall clock: when a walk is
 expensive its interval stretches automatically, so on that store it samples roughly
-every 13 s rather than every 5 s. Because it runs on its own thread, a slow walk never
-delays a CPU sample.
+every 13 s rather than every 5 s. The WAL walk is part of the same sample and counts
+against the same budget. Because it runs on its own thread, a slow walk never delays a
+CPU sample.
 
 Consequently, **never aggregate these series by sample count**. Use `max()` for peaks,
 or weight each reading by the gap to the next non-null one, as
@@ -254,21 +287,30 @@ adding two separately computed maxima overstates the true combined peak because
 the peaks do not coincide in time — on one recorded run `max(server) + max(client)`
 exceeded `max(server + client)` by 31 GB.
 
-For cross-engine comparison use the *comparable* peak memory: `server_mem_mb` for
-containerised engines and `client_mem_mb` for in-process engines. Reading
-`server_mem_mb` alone would rank DuckDB and Polars as using no memory at all.
-`olap results resources` resolves this per run and refuses to report a number it
-cannot interpret:
+For cross-engine comparison use the *comparable* peak memory: server memory
+(`server_anon_mb + server_shmem_mb`) for containerised engines and `client_mem_mb`
+for in-process engines. DuckDB and Polars are **client-only**: `olap results
+resources` reports them with `resource_scope: client_only` and null server figures
+rather than zeros, so they cannot be ranked as using no memory. It resolves the
+comparable figure per run and refuses to report a number it cannot interpret,
+including the bare cgroup charge recorded by runs before metric schema v7:
 
 ```bash
 uv run olap results resources --revision default --suite clickbench
 ```
 
-These are metric schema v6 semantics (v5 sampled every column on one shared ~0.3–0.5 Hz
-schedule; v4 renamed to `server_mem_mb`) and must not be compared as identical
-measurements with v2/v3 client-memory data. The
-definitions and the metric-schema version are stored with each run so results
-remain interpretable after methodology changes.
+Disk is reported as `peak_*` and `final_*` for the whole store (`disk_mb`), its data and
+its WAL. Final is the last disk reading of the run, which the sampler always takes at the
+finish time; a WAL that peaked mid-run and was checkpointed away shows a high peak and a
+small final.
+
+These are metric schema v7 semantics (v6 stored the cgroup charge as `server_mem_mb` and
+had no WAL split; v5 sampled every column on one shared ~0.3–0.5 Hz schedule; v4 renamed
+to `server_mem_mb`) and must not be compared as identical measurements with v2/v3
+client-memory data. Runs recorded before v7 keep their charge in `server_charge_mb` and
+their store total in `disk_mb`, with the new columns null. The definitions and the
+metric-schema version are stored with each run so results remain interpretable after
+methodology changes.
 
 To start a database manually (e.g. to poke at loaded data):
 
@@ -283,7 +325,7 @@ uv run olap docker clickhouse tpc_h stop --scale-factor 10
 uv run olap results revisions                        # list results/*.db
 uv run olap results runs --status failed             # filters: --status/--suite/--db/--db-driver
 uv run olap results query "<sql>"                    # read-only SQL against a revision
-uv run olap results resources --db duckdb            # peak server/client memory, disk and CPU per run
+uv run olap results resources --db duckdb            # peak memory, peak/final disk and CPU per run
 uv run olap results delete --status failed           # delete failed + orphaned runs
 uv run olap results delete --run-id 12 --run-id 13   # delete specific runs
 uv run olap results rename-db old_name new_name      # rename a db in stored runs

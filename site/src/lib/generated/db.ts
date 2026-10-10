@@ -81,10 +81,15 @@ export type RunMetric = {
   run_id: number
   time: ColumnType<Date, Date | string, Date | string>
   cpu_percent: number | null
-  server_mem_mb: number | null
+  server_charge_mb: number | null
   client_mem_mb: number | null
   client_uss_mb: number | null
   disk_mb: number | null
+  server_anon_mb: number | null
+  server_file_mb: number | null
+  server_shmem_mb: number | null
+  disk_data_mb: number | null
+  disk_wal_mb: number | null
 }
 
 export type RunMetricInsertable = Insertable<RunMetric>

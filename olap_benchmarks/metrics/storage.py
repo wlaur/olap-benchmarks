@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from multiprocessing import Process, Queue
 from queue import Empty
@@ -35,6 +35,20 @@ MessageType = Literal[
     "debug",
     "shutdown",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class MetricValues:
+    cpu_percent: float | None = None
+    server_charge_mb: int | None = None
+    server_anon_mb: int | None = None
+    server_file_mb: int | None = None
+    server_shmem_mb: int | None = None
+    client_mem_mb: int | None = None
+    client_uss_mb: int | None = None
+    disk_mb: int | None = None
+    disk_data_mb: int | None = None
+    disk_wal_mb: int | None = None
 
 
 class WriterMessage(TypedDict):
@@ -141,11 +155,7 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                     row = RunMetric(
                         run_id=cast(int, msg["args"][0]),
                         time=cast(datetime, msg["args"][1]),
-                        cpu_percent=cast(float | None, msg["args"][2]),
-                        server_mem_mb=cast(int | None, msg["args"][3]),
-                        client_mem_mb=cast(int | None, msg["args"][4]),
-                        client_uss_mb=cast(int | None, msg["args"][5]),
-                        disk_mb=cast(int | None, msg["args"][6]),
+                        **asdict(cast(MetricValues, msg["args"][2])),
                     )
                     session.add(row)
                     session.commit()
@@ -369,20 +379,8 @@ class Storage:
             [finished_at, status, result_status, row_count, error_type, error_message, metadata, step_id],
         )
 
-    def insert_metric(
-        self,
-        run_id: int,
-        time: datetime,
-        cpu_percent: float | None = None,
-        server_mem_mb: int | None = None,
-        client_mem_mb: int | None = None,
-        client_uss_mb: int | None = None,
-        disk_mb: int | None = None,
-    ) -> None:
-        self.put(
-            "insert_metric",
-            [run_id, time, cpu_percent, server_mem_mb, client_mem_mb, client_uss_mb, disk_mb],
-        )
+    def insert_metric(self, run_id: int, time: datetime, values: MetricValues) -> None:
+        self.put("insert_metric", [run_id, time, values])
 
     def insert_query_execution(
         self,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Generator, Mapping, Sequence
@@ -88,6 +89,8 @@ class Database(BaseModel, ABC):
     arm64_container_image: ClassVar[str | None] = None
     supports_arm64_containers: ClassVar[bool] = False
     expected_runtime_version: ClassVar[str | None] = None
+    # glob patterns, relative to database_directory, for the engine's write-ahead log
+    wal_path_patterns: ClassVar[tuple[str, ...]] = ()
 
     current_query_name: str | None = None
     _current_suite: SuiteName | None = None
@@ -130,6 +133,11 @@ class Database(BaseModel, ABC):
     @property
     def metric_directories(self) -> tuple[Path, ...]:
         return (self.database_directory,)
+
+    @property
+    def metric_wal_globs(self) -> tuple[str, ...]:
+        base = glob.escape(self.database_directory.as_posix())
+        return tuple(f"{base}/{pattern}" for pattern in self.wal_path_patterns)
 
     def set_queues(
         self,
@@ -855,6 +863,7 @@ class Database(BaseModel, ABC):
         metric_sampler = start_metric_sampler(
             container_names=self.metric_container_names,
             metric_directories=self.metric_directories,
+            wal_globs=self.metric_wal_globs,
             run_id=self.run_id,
             storage=self.result_storage,
         )

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from importlib.metadata import version as package_version
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import polars as pl
 from duckdb import DuckDBPyConnection
@@ -65,6 +65,9 @@ def duckdb_string_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+DATABASE_FILE_NAME = "duck.db"
+
+
 class DuckDBJSONBench(JSONBench["DuckDB"]):
     def _stage_input_files(self) -> Path:
         temp_dir = SETTINGS.temporary_directory / "duckdb/data"
@@ -111,6 +114,7 @@ class DuckDBJSONBench(JSONBench["DuckDB"]):
 class DuckDB(Database):
     name: DatabaseName = "duckdb"
     version: str = VERSION
+    wal_path_patterns: ClassVar[tuple[str, ...]] = (f"{DATABASE_FILE_NAME}.wal",)
 
     connection_string: str = ""
 
@@ -135,7 +139,7 @@ class DuckDB(Database):
             return self._connection
 
         patch_duckdb_sqlalchemy_compat()
-        connection_string = f"duckdb:///{self.database_directory.as_posix()}/duck.db"
+        connection_string = f"duckdb:///{self.database_directory.as_posix()}/{DATABASE_FILE_NAME}"
         engine = create_engine(connection_string)
         self._connection = self.bind_query_recorder(engine.connect())
 
