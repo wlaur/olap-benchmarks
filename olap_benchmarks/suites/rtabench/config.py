@@ -4,12 +4,12 @@
 import logging
 import shutil
 from gzip import open as gzip_open
-from time import perf_counter
 from typing import Any
 
 import polars as pl
 
 from ...dbs import Database
+from ...run_metadata import StepResultStatus
 from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
 from .. import BenchmarkSuite
 from ..download import download_file
@@ -18,49 +18,49 @@ RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/querie
 
 _LOGGER = logging.getLogger(__name__)
 
-RTABENCH_QUERY_NAMES = {
-    "0000_terminal_hourly_stats": 3,
-    "0001_count_orders_from_terminal": 5,
-    "0002_global_agg": 5,
-    "0003_exists_order_delivered_from_terminal": 5,
-    "0004_count_delayed_orders_per_day": 5,
-    "0005_search_events_for_processor": 5,
-    "0006_order_events_without_backups": 5,
-    "0007_last_order_event_for_order": 5,
-    "0008_most_week_delayed_order": 5,
-    "0009_departed_orders_count": 5,
-    "0010_last_event_for_an_order": 5,
-    "0011_events_for_an_order": 5,
-    "0012_max_satisfaction_for_order_per_day": 5,
-    "0013_satisfaction_with_without_backup": 5,
-    "0014_sum_prod_stock_price_per_category": 5,
-    "0015_exists_order_delivered_for_customer": 5,
-    "0016_customers_with_most_orders": 5,
-    "0017_top_selling_month_product": 5,
-    "0018_customer_month_value": 5,
-    "0019_out_of_stock_products": 5,
-    "0020_customers_outstanding": 5,
-    "0021_sales_volume_by_country": 5,
-    "0022_sales_volume_by_country_state": 5,
-    "0023_top_sales_volume_product_from_terminal": 2,
-    "0024_top_customer_by_revenue": 5,
-    "0025_product_category_performance": 5,
-    "0026_average_order_value": 5,
-    "0027_country_category_performance": 5,
-    "0028_sales_volume_by_age_group": 5,
-    "0029_top_product_in_age_group": 5,
-    "0030_customers_with_most_orders_delivered": 5,
-    "1000_terminal_hourly_stats": 3,
-    "1004_count_delayed_orders_per_day": 5,
-    "1008_most_week_delayed_order": 5,
-    "1012_max_satisfaction_for_order_per_week": 5,
-    "1013_satisfaction_with_without_backup": 5,
-    "1017_top_selling_month_product": 5,
-    "1023_top_sales_volume_product_from_terminal": 2,
-    "1025_product_category_performance": 5,
-    "1027_country_category_performance": 5,
-    "1030_customers_with_most_orders_delivered": 5,
-}
+RTABENCH_QUERY_NAMES = (
+    "0000_terminal_hourly_stats",
+    "0001_count_orders_from_terminal",
+    "0002_global_agg",
+    "0003_exists_order_delivered_from_terminal",
+    "0004_count_delayed_orders_per_day",
+    "0005_search_events_for_processor",
+    "0006_order_events_without_backups",
+    "0007_last_order_event_for_order",
+    "0008_most_week_delayed_order",
+    "0009_departed_orders_count",
+    "0010_last_event_for_an_order",
+    "0011_events_for_an_order",
+    "0012_max_satisfaction_for_order_per_day",
+    "0013_satisfaction_with_without_backup",
+    "0014_sum_prod_stock_price_per_category",
+    "0015_exists_order_delivered_for_customer",
+    "0016_customers_with_most_orders",
+    "0017_top_selling_month_product",
+    "0018_customer_month_value",
+    "0019_out_of_stock_products",
+    "0020_customers_outstanding",
+    "0021_sales_volume_by_country",
+    "0022_sales_volume_by_country_state",
+    "0023_top_sales_volume_product_from_terminal",
+    "0024_top_customer_by_revenue",
+    "0025_product_category_performance",
+    "0026_average_order_value",
+    "0027_country_category_performance",
+    "0028_sales_volume_by_age_group",
+    "0029_top_product_in_age_group",
+    "0030_customers_with_most_orders_delivered",
+    "1000_terminal_hourly_stats",
+    "1004_count_delayed_orders_per_day",
+    "1008_most_week_delayed_order",
+    "1012_max_satisfaction_for_order_per_week",
+    "1013_satisfaction_with_without_backup",
+    "1017_top_selling_month_product",
+    "1023_top_sales_volume_product_from_terminal",
+    "1025_product_category_performance",
+    "1027_country_category_performance",
+    "1030_customers_with_most_orders_delivered",
+)
 
 RTABENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
     "customers": {
@@ -185,48 +185,13 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return (RTABENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql").is_file()
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        failed_queries = 0
-        for idx, (query_name, iterations) in enumerate(RTABENCH_QUERY_NAMES.items()):
-            progress_label = f"({idx + 1:_}/{len(RTABENCH_QUERY_NAMES):_})"
-            if not self.include_query(query_name):
-                self.record_skipped_query_steps(
-                    query_name,
-                    iterations,
-                    result_status="unsupported",
-                    reason="query file is not defined for suite/database",
-                )
-                continue
+    def planned_query_names(self) -> tuple[str, ...]:
+        return RTABENCH_QUERY_NAMES
 
-            def log_success(
-                it: int,
-                df: pl.DataFrame,
-                t: float,
-                *,
-                query_name: str = query_name,
-                progress_label: str = progress_label,
-                iterations: int = iterations,
-            ) -> None:
-                _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                )
+    def load_query(self, query_name: str) -> str:
+        return self.load_rtabench_query(query_name)
 
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=iterations,
-                query_loader=lambda query_name=query_name: self.load_rtabench_query(query_name),
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
-                progress_label=progress_label,
-                log_success=log_success,
-            )
-            if not ok:
-                failed_queries += 1
-
-        self.assert_no_failed_queries(failed_queries, len(RTABENCH_QUERY_NAMES))
-
-        _LOGGER.info(
-            f"Executed {len(RTABENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        if self.include_query(query_name):
+            return None
+        return ("unsupported", "query file is not defined for suite/database")

@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 import duckdb
 
 from ..matrix import MatrixCell
+from ..profile import BENCHMARK_PROFILE
 
 CellState = Literal["ok", "missing", "failed", "stale"]
 
@@ -27,6 +28,7 @@ class StoredRun:
     started_at: datetime
     commit: str | None
     dirty: bool | None
+    benchmark_profile: str
 
     @property
     def label(self) -> str:
@@ -54,7 +56,8 @@ def load_runs(path: Path, con: duckdb.DuckDBPyConnection | None = None) -> list[
             select
               id, system, db, db_version, db_driver, suite, suite_scale_factor, operation, status, started_at,
               json_extract_string("metadata", '$.repository.commit'),
-              cast(json_extract("metadata", '$.repository.dirty') as boolean)
+              cast(json_extract("metadata", '$.repository.dirty') as boolean),
+              benchmark_profile
             from run
             order by started_at, id
             """
@@ -77,6 +80,7 @@ def load_runs(path: Path, con: duckdb.DuckDBPyConnection | None = None) -> list[
             started_at=cast(datetime, row[9]),
             commit=cast(str | None, row[10]),
             dirty=cast(bool | None, row[11]),
+            benchmark_profile=str(row[12]),
         )
         for row in rows
     ]
@@ -125,6 +129,10 @@ def matrix_status(
             statuses.append(CellStatus(cell, "missing", None, "no run"))
         elif run.status != "completed":
             statuses.append(CellStatus(cell, "failed", run, f"latest run is {run.status}"))
+        elif run.benchmark_profile != BENCHMARK_PROFILE.id:
+            statuses.append(
+                CellStatus(cell, "stale", run, f"profile {run.benchmark_profile}, current {BENCHMARK_PROFILE.id}")
+            )
         elif run.db_version != pins[cell.db]:
             statuses.append(CellStatus(cell, "stale", run, f"version {run.db_version}, pinned {pins[cell.db]}"))
         elif run.commit != commit:

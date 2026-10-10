@@ -246,7 +246,7 @@ def test_benchmark_marks_interrupted_runs_failed_after_writer_shutdown(
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
-    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "_check_and_hash_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
@@ -323,7 +323,7 @@ def test_benchmark_closes_the_parent_connection_before_running_operations(
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
-    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "_check_and_hash_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
     monkeypatch.setattr(__main__, "_start_db", noop_db)
@@ -408,7 +408,7 @@ def test_benchmark_all_uses_suite_supported_operations(
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
-    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "_check_and_hash_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
@@ -493,7 +493,7 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
-    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "_check_and_hash_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)
@@ -579,7 +579,7 @@ def test_benchmark_filters_unsupported_suites_before_input_checks_and_validation
 
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
-    monkeypatch.setattr(__main__, "_check_input_data", fake_check_input_data)
+    monkeypatch.setattr(__main__, "_check_and_hash_input_data", fake_check_input_data)
     monkeypatch.setattr(__main__, "start_writer_process", fake_start_writer_process)
     monkeypatch.setattr(__main__, "get_databases", fake_get_databases)
     monkeypatch.setattr(__main__, "_start_db", fake_start_db)

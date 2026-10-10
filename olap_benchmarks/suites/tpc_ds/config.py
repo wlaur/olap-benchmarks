@@ -29,6 +29,7 @@ from typing import Any, ClassVar
 import polars as pl
 
 from ...dbs import Database
+from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
     SETTINGS,
@@ -69,8 +70,6 @@ TPCDS_TABLES = (
     "web_sales",
     "web_site",
 )
-
-TPCDS_ITERATIONS = 3
 
 TPCDS_QUERY_NAMES = tuple(f"{nr:02d}" for nr in range(1, 100))
 
@@ -308,38 +307,13 @@ class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
     def include_query(self, query_name: str) -> bool:
         return query_name not in self.UNSUPPORTED_QUERIES.get(self.db.name, frozenset())
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        failed_queries = 0
-        for idx, query_name in enumerate(TPCDS_QUERY_NAMES):
-            progress_label = f"({idx + 1:_}/{len(TPCDS_QUERY_NAMES):_})"
-            if not self.include_query(query_name):
-                _LOGGER.info(f"Skipping unsupported query {query_name} on {self.db.name}")
-                self.record_skipped_query_steps(
-                    query_name,
-                    TPCDS_ITERATIONS,
-                    result_status="unsupported",
-                    reason=f"query is unsupported by {self.db.name}",
-                )
-                continue
+    def planned_query_names(self) -> tuple[str, ...]:
+        return TPCDS_QUERY_NAMES
 
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=TPCDS_ITERATIONS,
-                query_loader=lambda query_name=query_name: self.load_tpcds_query(query_name),
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
-                progress_label=progress_label,
-                log_success=lambda it, df, t, query_name=query_name, progress_label=progress_label: _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{TPCDS_ITERATIONS:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                ),
-            )
-            if not ok:
-                failed_queries += 1
+    def load_query(self, query_name: str) -> str:
+        return self.load_tpcds_query(query_name)
 
-        self.assert_no_failed_queries(failed_queries, len(TPCDS_QUERY_NAMES))
-
-        _LOGGER.info(
-            f"Executed {len(TPCDS_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        if self.include_query(query_name):
+            return None
+        return ("unsupported", f"query is unsupported by {self.db.name}")

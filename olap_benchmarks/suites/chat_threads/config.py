@@ -46,7 +46,7 @@ CHAT_THREADS_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/chat_thread
 THREAD_TABLE: TableName = "chat_thread"
 MESSAGE_TABLE: TableName = "chat_message"
 
-CHAT_THREADS_QUERY_NAMES = {n.stem: 5 for n in sorted(CHAT_THREADS_QUERIES_DIRECTORY.glob("*.sql"))}
+CHAT_THREADS_QUERY_NAMES = tuple(n.stem for n in sorted(CHAT_THREADS_QUERIES_DIRECTORY.glob("*.sql")))
 
 GENERATION_BATCH_MESSAGES = 25_000
 MESSAGE_ROW_GROUP_ROWS = 8_000
@@ -281,50 +281,11 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
             return None
         return ("unsupported", "query file is not defined for suite/database")
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        failed_queries = 0
+    def planned_query_names(self) -> tuple[str, ...]:
+        return CHAT_THREADS_QUERY_NAMES
 
-        for idx, (query_name, iterations) in enumerate(CHAT_THREADS_QUERY_NAMES.items()):
-            progress_label = f"({idx + 1:_}/{len(CHAT_THREADS_QUERY_NAMES):_})"
-            skip = self.query_skip(query_name)
-            if skip is not None:
-                result_status, reason = skip
-                self.record_skipped_query_steps(query_name, iterations, result_status=result_status, reason=reason)
-                continue
-
-            def log_success(
-                it: int,
-                df: pl.DataFrame,
-                t: float,
-                *,
-                query_name: str = query_name,
-                progress_label: str = progress_label,
-                iterations: int = iterations,
-            ) -> None:
-                _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * t:_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})"
-                )
-
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=iterations,
-                query_loader=lambda query_name=query_name: self.load_chat_threads_query(query_name),
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
-                progress_label=progress_label,
-                log_success=log_success,
-            )
-            if not ok:
-                failed_queries += 1
-
-        self.assert_no_failed_queries(failed_queries, len(CHAT_THREADS_QUERY_NAMES))
-
-        _LOGGER.info(
-            f"Executed {len(CHAT_THREADS_QUERY_NAMES):_} queries "
-            f"(with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+    def load_query(self, query_name: str) -> str:
+        return self.load_chat_threads_query(query_name)
 
     def get_mutate_steps(self) -> tuple[list[ChatMutateStep], list[ChatMutateStep]]:
         enabled: list[ChatMutateStep] = []
@@ -557,10 +518,10 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
                         result_status, reason = skip
                         suite.record_skipped_query_steps(
                             query_name,
-                            iteration,
                             result_status=result_status,
                             reason=reason,
                             start_iteration=iteration,
+                            iterations=iteration,
                         )
                         continue
 

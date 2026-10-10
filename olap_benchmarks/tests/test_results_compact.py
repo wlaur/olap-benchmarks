@@ -13,6 +13,7 @@ from ..results.models import QueryExecution, Run, RunMetric, RunStep
 
 def _insert_run_tree(session: Session, db: str, started_at: datetime) -> int:
     run = Run(
+        benchmark_profile="resident-hot-v1",
         suite="rtabench",
         suite_scale_factor=1,
         db=db,

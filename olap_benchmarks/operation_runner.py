@@ -30,11 +30,13 @@ def _operation_entrypoint(
     queue: "Queue[WriterMessage]",
     result_queue: "Queue[object]",
     start_command: str | None,
+    page_cache_dropped: bool,
 ) -> None:
     db_instance = get_databases()[db_name]
     db_instance._current_suite = suite
     db_instance._current_suite_scale_factor = scale_factor
     db_instance._last_start_command = start_command
+    db_instance._page_cache_dropped = page_cache_dropped
     db_instance.set_queues(queue, result_queue)
     db_instance.benchmark(suite, operation, scale_factor=scale_factor)
 
@@ -57,6 +59,7 @@ def run_operation(
             queue,
             result_queue,
             db_instance._last_start_command,
+            db_instance._page_cache_dropped,
         ),
         name=f"olap-{db_instance.name}-{suite}-{operation}",
         daemon=False,

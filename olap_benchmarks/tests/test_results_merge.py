@@ -44,6 +44,7 @@ def _insert_run_tree(
         snapshot_id = snapshot.id
 
     run = Run(
+        benchmark_profile="resident-hot-v1",
         suite=suite,
         suite_scale_factor=suite_scale_factor,
         db=db,

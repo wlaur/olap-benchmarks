@@ -166,6 +166,7 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
         operation="select",
         system="test",
         started_at=datetime(2026, 1, 1, 12, 0, 0),
+        benchmark_profile="resident-hot-v1",
         system_metadata={
             "host": {
                 "os": "TestOS",
@@ -188,6 +189,7 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
         operation="select",
         system="test",
         started_at=datetime(2026, 1, 1, 12, 0, 3),
+        benchmark_profile="resident-hot-v1",
         system_metadata={
             "python": {"version": "3.14"},
             "host": {
@@ -209,7 +211,7 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
         iteration=1,
         started_at=datetime(2026, 1, 1, 12, 0, 1),
         result_status=None,
-        iteration_role="first_run",
+        iteration_role="warmup",
     )
     storage.finish_step(
         step_id=step_id,
@@ -217,6 +219,12 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
         status="completed",
         result_status="ok",
         row_count=1,
+    )
+    storage.finish_run(
+        run_id=run_id,
+        finished_at=datetime(2026, 1, 1, 12, 0, 2),
+        status="completed",
+        metadata_update={"queries": {"files": {"q1": "abc"}}},
     )
     writer.close()
 
@@ -231,7 +239,9 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
             assert second_run.system_snapshot_id == run.system_snapshot_id
             snapshot = session.get_one(SystemSnapshot, run.system_snapshot_id)
 
-            assert run.metadata_json == {"execution": {"mode": "in_process"}}
+            assert run.metadata_json == {"execution": {"mode": "in_process"}, "queries": {"files": {"q1": "abc"}}}
+            assert run.benchmark_profile == "resident-hot-v1"
+            assert run.status == "completed"
             assert snapshot.system == "test"
             assert snapshot.os == "TestOS"
             assert snapshot.machine == "test-machine"
@@ -249,7 +259,7 @@ def test_writer_persists_system_snapshot_run_metadata_and_step_status_fields(
                 "python": {"version": "3.14"},
             }
             assert step.result_status == "ok"
-            assert step.iteration_role == "first_run"
+            assert step.iteration_role == "warmup"
             assert step.row_count == 1
     finally:
         engine.dispose()

@@ -21,14 +21,17 @@ from ..container_platform import get_container_engine_platform
 from ..images import ResolvedImage, resolve_images
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
+from ..profile import BENCHMARK_PROFILE, BenchmarkProfile
 from ..results.hashing import build_answer_metadata
 from ..run_metadata import (
     ExecutionMode,
     StepResultStatus,
     build_run_metadata,
     build_system_metadata,
-    classify_iteration_role,
     classify_step_result_status,
+    digest_hashes,
+    hash_schema_files,
+    sha256_text,
 )
 from ..settings import (
     REPO_ROOT,
@@ -81,6 +84,14 @@ def _new_active_step_stacks() -> dict[int, list[int]]:
     return {}
 
 
+def _new_query_hashes() -> dict[str, str]:
+    return {}
+
+
+def _new_started_query_steps() -> set[tuple[str, int]]:
+    return set()
+
+
 def _pinned_version(data: dict[str, Any]) -> str:
     return engine_pin(cast(DatabaseName, data["name"])).resolved_version
 
@@ -98,6 +109,8 @@ class Database(BaseModel, ABC):
     current_query_name: str | None = None
     _current_suite: SuiteName | None = None
     _current_suite_scale_factor: int | None = None
+    _current_operation: Operation | None = None
+    _page_cache_dropped: bool = False
 
     _connection: Connection | None = None
     _result_storage: Storage | None = None
@@ -108,6 +121,12 @@ class Database(BaseModel, ABC):
     _result_queue: Queue[object] | None = None
     _writer_process: Process | None = None
     _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
+    _query_hashes: dict[str, str] = PrivateAttr(default_factory=_new_query_hashes)
+    _started_query_steps: set[tuple[str, int]] = PrivateAttr(default_factory=_new_started_query_steps)
+
+    @property
+    def profile(self) -> BenchmarkProfile:
+        return BENCHMARK_PROFILE
 
     @property
     def current_suite(self) -> SuiteName:
@@ -326,6 +345,12 @@ class Database(BaseModel, ABC):
         result_status: StepResultStatus | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
+        iteration_role = None
+        if step_type == "query" and query_name is not None and iteration is not None:
+            self._started_query_steps.add((query_name, iteration))
+            if self._current_operation == "select":
+                iteration_role = self.profile.iteration_role(iteration)
+
         return self.result_storage.start_step(
             run_id=self.run_id,
             step_type=step_type,
@@ -335,7 +360,7 @@ class Database(BaseModel, ABC):
             table_name=table_name,
             started_at=datetime.now(UTC).replace(tzinfo=None),
             result_status=result_status,
-            iteration_role=classify_iteration_role(iteration) if step_type in ("query", "mutation") else None,
+            iteration_role=iteration_role,
             metadata=metadata,
         )
 
@@ -569,6 +594,7 @@ class Database(BaseModel, ABC):
         iteration: int,
         reason: str,
         result_status: Literal["skipped", "unsupported"] = "skipped",
+        error_message: str | None = None,
     ) -> None:
         metadata = {"skip_reason": reason, "duration_ms": 0.0}
         step_id = self._start_step(
@@ -584,8 +610,19 @@ class Database(BaseModel, ABC):
             status="completed",
             step_type="query",
             result_status=result_status,
+            error_message=error_message,
             metadata=metadata,
         )
+
+    def record_unstarted_planned_steps(self, query_names: Sequence[str], reason: str) -> int:
+        recorded = 0
+        for query_name in query_names:
+            for iteration in range(1, self.profile.total_iterations + 1):
+                if (query_name, iteration) in self._started_query_steps:
+                    continue
+                self.record_skipped_query_step(query_name, iteration, reason, error_message=reason)
+                recorded += 1
+        return recorded
 
     def execute_query_iteration(
         self,
@@ -598,6 +635,7 @@ class Database(BaseModel, ABC):
         self._push_active_step(step_id)
 
         kwargs = dict(fetch_kwargs or {})
+        self._query_hashes[query_name] = sha256_text(query)
 
         try:
             t0 = perf_counter()
@@ -625,6 +663,16 @@ class Database(BaseModel, ABC):
         )
 
         return df, duration_seconds
+
+    def _executed_query_metadata(self) -> dict[str, Any] | None:
+        if not self._query_hashes:
+            return None
+        return {
+            "queries": {
+                **digest_hashes(self._query_hashes),
+                "scope": "SHA-256 of the query text each query name executed, after any scale-factor substitution",
+            }
+        }
 
     def restart_event(self) -> None:
         commands = self.restart_commands
@@ -803,7 +851,10 @@ class Database(BaseModel, ABC):
     def benchmark(self, suite: SuiteName, operation: Operation, scale_factor: int | None = None) -> None:
         self._current_suite = suite
         self._current_suite_scale_factor = resolve_suite_scale_factor(suite, scale_factor)
+        self._current_operation = operation
         self._active_step_ids_by_thread = {}
+        self._query_hashes = {}
+        self._started_query_steps = set()
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:
@@ -839,6 +890,7 @@ class Database(BaseModel, ABC):
 
         self._result_storage = self.create_result_storage()
 
+        planned_query_names = tuple(benchmark.planned_query_names()) if operation == "select" else ()
         system_metadata = build_system_metadata()
         run_metadata = build_run_metadata(
             execution_mode=self.execution_mode,
@@ -850,6 +902,14 @@ class Database(BaseModel, ABC):
             input_directory=self.input_directory,
             options=self.run_options,
             sampling_interval_seconds=SAMPLING_INTERVAL_SECONDS,
+            profile=self.profile,
+            schema=hash_schema_files(suite, self.name),
+            plan=(
+                {"query_names": list(planned_query_names), "iterations": self.profile.total_iterations}
+                if planned_query_names
+                else None
+            ),
+            page_cache_dropped=self._page_cache_dropped,
         )
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(
@@ -861,6 +921,7 @@ class Database(BaseModel, ABC):
             operation=operation,
             system=SETTINGS.system,
             started_at=started_at,
+            benchmark_profile=self.profile.id,
             system_metadata=system_metadata,
             metadata=run_metadata,
         )
@@ -888,6 +949,8 @@ class Database(BaseModel, ABC):
         try:
             operation_error: BaseException | None = None
             try:
+                if operation == "select" and self.profile.restart_server_before_select:
+                    self.restart_event()
                 self.before_benchmark_operation()
                 with self.phase_context(operation):
                     benchmark_func()
@@ -912,6 +975,17 @@ class Database(BaseModel, ABC):
             error_message = str(exc)
             raise
         finally:
+            if planned_query_names:
+                reason = (
+                    f"never started: the run aborted after {error_type}: {error_message}"
+                    if status == "failed"
+                    else "never started: the select loop ended before reaching this step"
+                )
+                try:
+                    self.record_unstarted_planned_steps(planned_query_names, reason)
+                except Exception:
+                    _LOGGER.exception(f"Could not record the unstarted planned steps of run {self.run_id}")
+
             finished_at = datetime.now(UTC).replace(tzinfo=None)
             metric_sampler.finish(finished_at)
 
@@ -921,6 +995,7 @@ class Database(BaseModel, ABC):
                 status=status,
                 error_type=error_type,
                 error_message=error_message,
+                metadata_update=self._executed_query_metadata(),
             )
 
         _LOGGER.info(f"Finished benchmark run {self.run_id} with status={status} in {perf_counter() - t0:_.2f} seconds")

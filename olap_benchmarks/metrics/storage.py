@@ -14,10 +14,11 @@ from typing import Any, Literal, TypedDict, cast
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from ..profile import IterationRole
 from ..results import get_results_engine
 from ..results.models import DebugEntry, QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from ..results.schema import ensure_results_schema
-from ..run_metadata import IterationRole, StepResultStatus
+from ..run_metadata import StepResultStatus
 from ..settings import DatabaseName, Operation, Revision, SuiteName, setup_stdout_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -131,22 +132,25 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
                         status=cast(str, msg["args"][7]),
                         started_at=cast(datetime, msg["args"][8]),
                         metadata_json=cast(dict[str, Any] | None, msg["args"][10]),
+                        benchmark_profile=cast(str, msg["args"][11]),
                     )
                     session.add(row)
                     session.commit()
                     result_queue.put(row.id)
 
                 case "finish_run":
-                    session.execute(
-                        update(Run)
-                        .where(Run.id == cast(int, msg["args"][4]))
-                        .values(
-                            finished_at=cast(datetime, msg["args"][0]),
-                            status=cast(str, msg["args"][1]),
-                            error_type=cast(str | None, msg["args"][2]),
-                            error_message=cast(str | None, msg["args"][3]),
-                        )
-                    )
+                    run_id = cast(int, msg["args"][4])
+                    run_values: dict[str, Any] = {
+                        "finished_at": cast(datetime, msg["args"][0]),
+                        "status": cast(str, msg["args"][1]),
+                        "error_type": cast(str | None, msg["args"][2]),
+                        "error_message": cast(str | None, msg["args"][3]),
+                    }
+                    metadata_update = cast(dict[str, Any] | None, msg["args"][5])
+                    if metadata_update:
+                        current = session.scalar(select(Run.metadata_json).where(Run.id == run_id)) or {}
+                        run_values["metadata_json"] = {**current, **metadata_update}
+                    session.execute(update(Run).where(Run.id == run_id).values(**run_values))
                     session.commit()
 
                 case "insert_metric":
@@ -303,6 +307,7 @@ class Storage:
         operation: Operation,
         system: str,
         started_at: datetime,
+        benchmark_profile: str,
         system_metadata: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> int:
@@ -320,6 +325,7 @@ class Storage:
                 started_at,
                 system_metadata,
                 metadata,
+                benchmark_profile,
             ],
         )
 
@@ -330,8 +336,9 @@ class Storage:
         status: RunStatus,
         error_type: str | None = None,
         error_message: str | None = None,
+        metadata_update: dict[str, Any] | None = None,
     ) -> None:
-        self.put("finish_run", [finished_at, status, error_type, error_message, run_id])
+        self.put("finish_run", [finished_at, status, error_type, error_message, run_id, metadata_update])
 
     def start_step(
         self,

@@ -2,7 +2,6 @@
 # https://github.com/ClickHouse/ClickBench
 
 import logging
-from time import perf_counter
 from typing import Any
 
 import polars as pl
@@ -14,7 +13,6 @@ from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
 
-ITERATIONS = 5
 CLICKBENCH_QUERY_COUNT = 43
 CLICKBENCH_DATASET_URL = "https://datasets.clickhouse.com/hits_compatible/hits.parquet"
 
@@ -82,9 +80,6 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def include_query(self, query_name: str) -> bool:
-        return True
-
     def load_queries(self) -> list[str]:
         with (REPO_ROOT / f"olap_benchmarks/suites/clickbench/queries/{self.db.name}.sql").open() as f:
             queries = f.readlines()
@@ -93,39 +88,8 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
             raise RuntimeError(f"Expected {CLICKBENCH_QUERY_COUNT} ClickBench queries for {self.db.name}")
         return queries
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        queries = self.load_queries()
+    def planned_query_names(self) -> tuple[str, ...]:
+        return tuple(f"Q{idx}" for idx in range(CLICKBENCH_QUERY_COUNT))
 
-        failed_queries = 0
-        for idx, query in enumerate(queries):
-            query_name = f"Q{idx}"
-            progress_label = f"({idx + 1:_}/{len(queries):_})"
-
-            if not self.include_query(query_name):
-                self.record_skipped_query_steps(
-                    query_name,
-                    ITERATIONS,
-                    result_status="skipped",
-                    reason="query excluded by suite/database",
-                )
-                continue
-
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=ITERATIONS,
-                query_loader=lambda query=query: query,
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
-                progress_label=progress_label,
-                log_success=lambda it, df, t, query_name=query_name, progress_label=progress_label: _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{ITERATIONS:_} "
-                    f"in {1_000 * (t):_.2f} ms\ndf={df}"
-                ),
-            )
-            if not ok:
-                failed_queries += 1
-
-        self.assert_no_failed_queries(failed_queries, len(queries))
-
-        _LOGGER.info(f"Executed {len(queries):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds")
+    def load_query(self, query_name: str) -> str:
+        return self.load_queries()[int(query_name.removeprefix("Q"))]

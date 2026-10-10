@@ -26,6 +26,7 @@ def _seed(db_path: Path) -> None:
     try:
         with Session(engine) as session:
             containerised = Run(
+                benchmark_profile="resident-hot-v1",
                 suite="clickbench",
                 suite_scale_factor=1,
                 db="monetdb",
@@ -38,6 +39,7 @@ def _seed(db_path: Path) -> None:
                 finished_at=datetime(2026, 1, 1, 1),
             )
             in_process = Run(
+                benchmark_profile="resident-hot-v1",
                 suite="clickbench",
                 suite_scale_factor=1,
                 db="duckdb",
@@ -109,6 +111,7 @@ def _seed_lane_sampled_run(db_path: Path) -> None:
     try:
         with Session(engine) as session:
             run = Run(
+                benchmark_profile="resident-hot-v1",
                 suite="clickbench",
                 suite_scale_factor=1,
                 db="clickhouse",
@@ -268,6 +271,7 @@ def test_describe_run_resource_usage_reports_unavailable_reason(tmp_path: Path) 
     try:
         with Session(engine) as session:
             legacy = Run(
+                benchmark_profile="resident-hot-v1",
                 suite="clickbench",
                 suite_scale_factor=1,
                 db="polars",

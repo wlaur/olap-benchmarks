@@ -48,6 +48,7 @@ def _insert_select_run(
     try:
         with Session(engine) as session:
             run = Run(
+                benchmark_profile="resident-hot-v1",
                 suite=suite,
                 suite_scale_factor=suite_scale_factor,
                 db=db,
@@ -432,6 +433,7 @@ def test_iteration_inconsistencies_are_reported(tmp_path: Path) -> None:
     try:
         with Session(engine) as session:
             run = Run(
+                benchmark_profile="resident-hot-v1",
                 suite="rtabench",
                 suite_scale_factor=1,
                 db="clickhouse",

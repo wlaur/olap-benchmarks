@@ -32,34 +32,21 @@ def test_failed_queries_raise(failed: int, expected: str) -> None:
         _suite().assert_no_failed_queries(failed, 22)
 
 
-def _select_calls_assert(source: Path) -> bool:
-    """True if every select() in the module ends up calling assert_no_failed_queries."""
+def _defines_select(source: Path) -> bool:
     tree = ast.parse(source.read_text())
-    selects = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "select" and node.args.args[:1]
-    ]
-    if not selects:
-        return False
-
-    return all(
-        any(
-            isinstance(call.func, ast.Attribute) and call.func.attr == "assert_no_failed_queries"
-            for call in ast.walk(select)
-            if isinstance(call, ast.Call)
-        )
-        for select in selects
-    )
+    return any(isinstance(node, ast.FunctionDef) and node.name == "select" for node in ast.walk(tree))
 
 
-@pytest.mark.parametrize("suite", SUITE_NAMES)
-def test_every_suite_fails_the_run_when_a_query_fails(suite: str) -> None:
-    """execute_query_with_isolation keeps going after a failed query so the remaining ones are
-    still measured. Every suite must then fail the run, or a query that fails on every single
-    iteration is recorded as a completed run with nothing but a log line to show for it."""
-    source = REPO_ROOT / f"olap_benchmarks/suites/{suite}/config.py"
-    assert _select_calls_assert(source), (
-        f"{suite}/config.py select() does not call assert_no_failed_queries, so failed queries "
-        f"would be reported as a completed run"
-    )
+@pytest.mark.parametrize(
+    "source",
+    [
+        *(REPO_ROOT / f"olap_benchmarks/suites/{suite}/config.py" for suite in SUITE_NAMES),
+        *sorted((REPO_ROOT / "olap_benchmarks/dbs").rglob("*.py")),
+    ],
+    ids=lambda path: path.relative_to(REPO_ROOT / "olap_benchmarks").as_posix(),
+)
+def test_select_always_runs_the_profile_loop(source: Path) -> None:
+    """BenchmarkSuite.run_select_queries applies the benchmark profile's iteration policy and fails
+    the run when a query fails after the remaining ones were measured. A suite or connector with its
+    own select() would bypass both."""
+    assert not _defines_select(source), f"{source.name} overrides select(); use run_select_queries instead"

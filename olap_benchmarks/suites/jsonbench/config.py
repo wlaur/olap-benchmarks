@@ -3,11 +3,9 @@ import logging
 from collections.abc import Iterator
 from gzip import open as gzip_open
 from pathlib import Path
-from time import perf_counter
-
-import polars as pl
 
 from ...dbs import Database
+from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
     SETTINGS,
@@ -26,13 +24,13 @@ JSONBENCH_DATASET_BASE_URL = "https://clickhouse-public-datasets.s3.amazonaws.co
 JSONBENCH_FILE_COUNTS = {10: 10}
 JSONBENCH_EMPTY_OBJECT_LINE = "{}\n"
 
-JSONBENCH_QUERY_NAMES = {
-    "01_events_by_collection": 5,
-    "02_create_events_by_collection": 5,
-    "03_create_events_by_hour": 5,
-    "04_first_post_users": 5,
-    "05_longest_post_activity": 5,
-}
+JSONBENCH_QUERY_NAMES = (
+    "01_events_by_collection",
+    "02_create_events_by_collection",
+    "03_create_events_by_hour",
+    "04_first_post_users",
+    "05_longest_post_activity",
+)
 
 
 def get_jsonbench_input_directory(scale_factor: int) -> Path:
@@ -138,48 +136,13 @@ class JSONBench[DBT: Database](BenchmarkSuite[DBT]):
         common = JSONBENCH_QUERIES_DIRECTORY / f"{query_name}.sql"
         return db_specific.is_file() or common.is_file()
 
-    def select(self) -> None:
-        t0 = perf_counter()
-        failed_queries = 0
-        for idx, (query_name, iterations) in enumerate(JSONBENCH_QUERY_NAMES.items()):
-            progress_label = f"({idx + 1:_}/{len(JSONBENCH_QUERY_NAMES):_})"
-            if not self.include_query(query_name):
-                self.record_skipped_query_steps(
-                    query_name,
-                    iterations,
-                    result_status="unsupported",
-                    reason="query file is not defined for suite/database",
-                )
-                continue
+    def planned_query_names(self) -> tuple[str, ...]:
+        return JSONBENCH_QUERY_NAMES
 
-            def log_success(
-                it: int,
-                df: pl.DataFrame,
-                t: float,
-                *,
-                query_name: str = query_name,
-                progress_label: str = progress_label,
-                iterations: int = iterations,
-            ) -> None:
-                _LOGGER.info(
-                    f"Executed {query_name} {progress_label} "
-                    f"iteration {it:_}/{iterations:_} "
-                    f"in {1_000 * (t):_.2f} ms, shape=({df.shape[0]:_}, {df.shape[1]:_})"
-                )
+    def load_query(self, query_name: str) -> str:
+        return self.load_jsonbench_query(query_name)
 
-            ok = self.execute_query_with_isolation(
-                query_name=query_name,
-                iterations=iterations,
-                query_loader=lambda query_name=query_name: self.load_jsonbench_query(query_name),
-                fetch_kwargs_factory=lambda: self.fetch_kwargs,
-                progress_label=progress_label,
-                log_success=log_success,
-            )
-            if not ok:
-                failed_queries += 1
-
-        self.assert_no_failed_queries(failed_queries, len(JSONBENCH_QUERY_NAMES))
-
-        _LOGGER.info(
-            f"Executed {len(JSONBENCH_QUERY_NAMES):_} queries (with repetitions) in {perf_counter() - t0:_.2f} seconds"
-        )
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        if self.include_query(query_name):
+            return None
+        return ("unsupported", "query file is not defined for suite/database")
