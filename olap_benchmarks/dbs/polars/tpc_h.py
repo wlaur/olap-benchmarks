@@ -293,12 +293,10 @@ def execute_tpc_h_query(tables: TpcHTables, query_name: str, scale_factor: int) 
                     .is_in(["1-URGENT", "2-HIGH"])
                     .cast(pl.Int64)
                     .sum()
-                    .cast(pl.Float64)
                     .alias("high_line_count"),
                     (~pl.col("o_orderpriority").is_in(["1-URGENT", "2-HIGH"]))
                     .cast(pl.Int64)
                     .sum()
-                    .cast(pl.Float64)
                     .alias("low_line_count"),
                 )
                 .sort("l_shipmode")
