@@ -23,7 +23,8 @@
 uv sync
 ```
 
-Configuration lives in `.env` (see `olap config` for the resolved values):
+Configuration lives in `.env` at the repository root, read on first use whatever the working
+directory (see `olap config` for the resolved values). Environment variables override it:
 
 | Variable                             | Purpose                                              |
 | ------------------------------------ | ---------------------------------------------------- |
@@ -36,6 +37,9 @@ Configuration lives in `.env` (see `olap config` for the resolved values):
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
+
+The effective `OLAP_BENCHMARKS_MONETDB_*` values are recorded on every MonetDB run under
+`metadata.settings`.
 
 Container images follow the Docker engine architecture automatically, including
 OrbStack's Linux engine on Apple Silicon. The pinned ClickHouse, TimescaleDB,
@@ -75,9 +79,9 @@ uv run olap publish --merge --upload
 A release campaign runs the declared matrix instead of individual suites:
 
 ```bash
-uv run olap matrix status --published-only            # planned cells vs the latest run of each
-uv run olap matrix run --published-only --revision 2026-10 --keep-going
-uv run olap matrix run --published-only --revision 2026-10 --missing-only   # retry what is not ok
+uv run olap matrix status                              # planned cells vs the latest run of each
+uv run olap matrix run --revision 2026-10 --keep-going
+uv run olap matrix run --revision 2026-10 --missing-only   # retry what is not ok
 uv run olap publish --revision 2026-10 --upload
 
 # 5. view locally
@@ -97,15 +101,15 @@ cd site && bun install && bun run dev
 | `clickbench`           | Manual: download [hits.parquet](https://datasets.clickhouse.com/hits_compatible/hits.parquet) to `data/input/clickbench/` |
 | `kaggle_airbnb`        | Manual: download the Austin CSVs from [Kaggle](https://www.kaggle.com/datasets/konradb/inside-airbnb-usa) to `data/input/kaggle_airbnb/`, then run `prepare` to convert to Parquet |
 
-### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N] [--drop-caches]`
+### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N] [--drop-caches] [--include-experimental]`
 
-- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`
+- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`. `all` means the engines the matrix declares published (ClickHouse, DuckDB, MonetDB, Polars); the experimental ones (Postgres, TimescaleDB, QuestDB, StarRocks, Doris, Arc) run only when named or with `--include-experimental`
 - `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
 - `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series` and `chat_threads`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
 - `--omit`: skip databases when using `db=all`, e.g. `--omit questdb --omit starrocks`
-- `--scale-factor`: suite scale factor (`>= 1`). Time-series and chat-threads support SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`.
+- `--scale-factor`: suite scale factor. Time-series and chat-threads support SF1/SF10, JSONBench currently supports SF10, TPC-H supports SF10/SF50, and TPC-DS supports SF1; fixed-size suites require `1`. The supported factors are declared per suite in `SUITE_SPECS` (`olap_benchmarks/settings.py`); anything else is rejected.
 - `--drop-caches`: drop the operating-system page cache before each container starts (see [Input hashing and the page cache](#input-hashing-and-the-page-cache))
 
 The container is started and stopped automatically. Populate is skipped when
@@ -118,7 +122,8 @@ explicitly to include row-store low-scale runs. Examples:
 uv run olap benchmark all tpc_h --scale-factor 10  # every db, explicit suite/scale
 uv run olap benchmark duckdb all                # one db, every default suite/scale
 uv run olap benchmark starrocks clickbench select   # re-run only the select queries
-uv run olap benchmark all all --omit questdb    # the default matrix, minus one db
+uv run olap benchmark all all --omit polars     # every published db but one
+uv run olap benchmark all clickbench --include-experimental   # experimental engines too
 ```
 
 `olap benchmark` does not mark wrong results. After a select it compares answers
@@ -135,20 +140,24 @@ git checkout.
 
 The intended benchmark matrix is declared once in `olap_benchmarks/matrix.py`:
 per engine, the (suite, scale factor, operations) it runs and whether it is
-published. Operations default to everything the engine registers for the suite,
+published. Unpublished engines are experimental: `status` and `run` leave them
+out unless they are named with `--db` or `--include-experimental` is passed,
+and `olap benchmark all` does the same. Operations default to everything the engine registers for the suite,
 and a test checks every declared cell against the engine's suite registry. A new
 engine gets one entry listing only the suites it is meant to run.
 
 ```bash
-uv run olap matrix status [--db X ...] [--revision R] [--published-only] [--check]
-uv run olap matrix run [--db X ...] [--revision R] [--published-only] [--missing-only] [--keep-going]
+uv run olap matrix status [--db X ...] [--revision R] [--include-experimental] [--check]
+uv run olap matrix run [--db X ...] [--revision R] [--include-experimental] [--missing-only] [--keep-going]
 ```
 
 `status` compares each cell with its latest run: `ok`, `missing`, `failed` (the
 latest run did not complete) or `stale` (another benchmark profile than the
 current one, another `db_version` than the current pin, or another repository
-commit than the newest in the revision). `--check`
-exits non-zero unless every cell is ok.
+commit than the newest in the revision). The `unsupported` column counts the
+select queries the engine declares unsupported (see [Query SQL and unsupported
+queries](#query-sql-and-unsupported-queries)). `--check` exits non-zero unless
+every cell is ok.
 
 `run` groups cells by (db, suite, scale factor) and runs each group's operations
 on one container through the same code path as `olap benchmark`, then removes the
@@ -240,6 +249,7 @@ Besides the system snapshot, image digests and `metadata.repository`, every run 
 | `metadata.queries` | written when the run finishes: SHA-256 of the query text each query name executed (after scale-factor substitution, e.g. TPC-H Q11), plus a digest over the sorted map |
 | `metadata.schema` | SHA-256 of the suite's static schema files for the engine (`suites/<suite>/schemas/<db>.sql` and `schemas/<db>/`), plus a digest; DDL a connector builds in code is covered by the commit |
 | `metadata.input` | SHA-256 of every input file and a manifest digest |
+| `metadata.settings` | the effective benchmark-affecting settings, keyed by environment variable (today the `OLAP_BENCHMARKS_MONETDB_*` ingest settings on MonetDB runs) |
 | `metadata.plan` | select runs only: the planned query names and iterations per query |
 | `metadata.page_cache` | whether the page cache was dropped before the container started |
 
@@ -405,7 +415,8 @@ non-deterministic). `--mark` first clears every earlier
 `wrong_result` mark in scope, restoring `ok`, and then marks the consensus
 outliers of the current comparison, so it is idempotent and a corrected rerun
 heals its old marks. `--clear` only removes the marks. Queries listed in
-`ANSWER_COMPARISON_EXCLUSIONS` are not compared.
+`ANSWER_COMPARISON_EXCLUSIONS` (`olap_benchmarks/query_registry.py`) are not
+compared, either at all or for the one engine an entry names.
 
 `prune --superseded` keeps the latest completed run per cell (system, db,
 db_version, db_driver, suite, scale factor, operation) and deletes the runs of
@@ -484,6 +495,23 @@ git commit -m "publish cloud c7i tpc ds results"
 `publish --merge` verifies that the source and published databases are at the
 current schema revision before merging. Use a unique revision name per host/run
 so independent benchmark branches do not overwrite each other's result files.
+
+## Query SQL and unsupported queries
+
+Each suite keeps its SQL in `olap_benchmarks/suites/<suite>/queries/`: a shared
+`<query>.sql` written for DuckDB/PostgreSQL-style SQL, and `queries/<db>/<query>.sql`
+overrides only where an engine needs different text (ClickBench keeps one
+`<db>.sql` file per engine, one query per line). `BenchmarkSuite.load_query`
+resolves the override, else the shared file; a query with neither is an error,
+not a skip.
+
+A query an engine does not run is declared in `UNSUPPORTED_QUERIES` in
+`olap_benchmarks/query_registry.py`, keyed `(suite, db, query)`, with the reason.
+The select loop records those queries as `unsupported` steps carrying that reason,
+and `olap matrix status` counts them. To declare one, add the entry; do not delete
+its SQL file to skip it. Tests fail when a planned query neither resolves nor is
+declared, when an entry names a query or engine that does not exist, and when an
+override is byte-identical to the shared file it replaces.
 
 ## Database versions
 
@@ -586,6 +614,18 @@ bun run verify    # typecheck + lint + format check + build
 uv run pyright
 uv run ruff check && uv run ruff format --check
 uv run pytest
+```
+
+pytest works from any directory (e.g. `cd olap_benchmarks/tests && ../../.venv/bin/pytest -q`).
+
+Live smoke tests are opt-in. They start each published engine (and Arc), populate its
+cheapest suite (`SMOKE_SUITES` in `tests/test_live_smoke.py`) into a throwaway store and
+revision, and require every select query to complete. They need Docker and the prepared input
+data, and take minutes per engine:
+
+```bash
+uv run pytest -m live              # every engine
+uv run pytest -m live -k duckdb    # one engine
 ```
 
 ## Attribution

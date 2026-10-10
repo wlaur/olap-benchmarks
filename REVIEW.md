@@ -13,8 +13,13 @@ Only unfinished work. Remove items when they are done; history lives in git.
   publish gate (one commit, clean tree, one snapshot, current pins, complete and validated cells) are in place.
   RTABench queries gained deterministic tie-breakers, so their stored answer hashes are no longer comparable to new
   runs.
-- Connectors with no published results: Polars, Postgres, TimescaleDB, QuestDB, StarRocks, Doris. They carry ~2.7k
-  lines and ~370 SQL files that every interface change has to touch.
+- Experimental (unpublished) connectors: Postgres, TimescaleDB, QuestDB, StarRocks, Doris and Arc. `olap benchmark all`
+  and `olap matrix status|run` leave them out unless named or `--include-experimental` is passed; their code stays.
+  Polars is published but has no runs yet.
+- Unsupported queries are declared in one registry (`olap_benchmarks/query_registry.py`), which also holds the
+  answer-comparison exclusions; a missing SQL file is an error. SQL resolution lives in `BenchmarkSuite`, RTABench
+  has a shared base, suite metadata is one `SuiteSpec` per suite, settings load lazily from the repository's `.env`,
+  and `pytest -m live` smoke-tests each published engine (only DuckDB has been run so far).
 - Higher scale factors (time_series/chat_threads SF10, TPC-H SF50) do not fit this machine's RAM and disk; they
   belong to the cloud campaign.
 
@@ -27,7 +32,7 @@ one-command path from "bump a version" to "published".
 - [ ] **Publish one coherent campaign.** The current set mixes five commits (one dirty tree), two OS snapshots and
       three dates, predates `metadata.repository` and is `legacy-per-suite` rather than `resident-hot-v1`, so
       `olap publish` now refuses it. Run
-      `olap matrix run --published-only` into a fresh revision from one clean commit (this adds Polars) and publish
+      `olap matrix run` into a fresh revision from one clean commit (this adds Polars) and publish
       it through the gate.
 - [ ] **No amd64 image for the MonetDB pin.** `monetdb/monetdb:Dec2025-SP4` does not exist on Docker Hub (newest
       tag: Dec2025-SP3), and `wlaur/monetdb-container` is arm64-only, so `olap versions --check` fails for the amd64
@@ -46,45 +51,7 @@ place (README "Benchmark profile"). Remaining, all optional:
       `--drop-caches` only covers populate on Linux. A cold profile would need a drop (or container restart with
       dropped caches) before every measured iteration and its own profile id.
 
-## 3. CLI and architecture
-
-Ordered by how much they reduce the cost of rerunning and publishing.
-
-- [ ] **3.4 One way to declare unsupported queries.** There are four: reasoned dicts (`UNSUPPORTED_QUERIES`), a bare
-      frozenset (`tpc_ds/config.py:263`), a Postgres-only set, and "the SQL file is missing" (generic reason). Answer
-      comparison exclusions live in yet another list (`validation.py:17`). Use one registry
-      `{(suite, db, query): reason}` that `matrix status` and the site both read.
-- [ ] **3.5 Deduplicate query SQL.** RTABench has no shared base: 268 files, 159 distinct texts. chat_threads has 11
-      overrides identical to the shared file. The "engine file, else shared file" lookup is reimplemented in six suite
-      configs. Move resolution into `BenchmarkSuite`, give RTABench a shared directory, and add a test that fails on an
-      override identical to its base.
-- [ ] **3.6 Collapse suite metadata into one spec.** Suite properties are ~10 parallel dicts held together by asserts
-      (`settings.py:43-120`) plus per-suite branches in `resolve_suite_scale_factor`; TPC-H/TPC-DS scale factors are
-      not validated. Use one `SuiteSpec` per suite.
-- [ ] **3.7 Load settings lazily.** `SETTINGS` is validated at import from `.env` in the current directory, so any
-      command outside the repo root fails and pytest from a subdirectory errors at collection. Resolve `.env` from the
-      repo root, and record the effective benchmark-affecting settings (e.g. `OLAP_BENCHMARKS_MONETDB_*`) in run
-      metadata.
-- [ ] **3.8 Live smoke tests.** Only one test can touch a live engine (MonetDB ADBC, env-gated). Add an opt-in
-      `pytest -m live` that starts each published engine and runs every select query at the smallest scale, so a
-      broken dialect file or engine upgrade fails in minutes instead of mid-campaign.
-- [ ] **3.9 Decide the unpublished engines' future.** Either put them behind an `experimental` flag excluded from
-      `all` and from interface-change obligations, or publish them. Known state after the 2026-10-10 version bump:
-      - StarRocks 4.1.6 runs all 99 TPC-DS queries at SF1 (49, 70 and 86 have StarRocks variants that match
-        DuckDB), but 11 answers still differ from DuckDB (09, 18, 27, 31, 51, 58, 59, 66, 78, 83, 98) and 51 is
-        non-deterministic across iterations. Not investigated.
-      - Doris 4.1.4.1 RTABench populate and select complete (stream loads go to the BE's published port; the FE
-        redirect points at a Docker-internal address). Seven answers differ from DuckDB/Postgres/TimescaleDB
-        (0005, 0006, 0010, 0011, 0012, 0017, 0022). Doris registers no time_series.
-      - Postgres 18.6 and TimescaleDB 2.30.2 RTABench complete and agree with DuckDB. TimescaleDB now creates the
-        upstream continuous aggregates its 1000-series queries read and sorts 0008 like the others; the 0028 age
-        bucketing fix it shares with Postgres was verified on Postgres only. In the 2026-10 time_series smoke run
-        the TimescaleDB server went away at `upsert_data_large_1` and every later mutation failed, yet the mutate
-        run is recorded as completed and concurrent never ran; not investigated.
-      - QuestDB 10.0.1 runs all time_series operations at SF1 and agrees with DuckDB (version check reads
-        `build()`; top-N hourly has a QuestDB variant). RTABench, ClickBench and Kaggle are untested on 10.x.
-
-## 4. Site
+## 3. Site
 
 Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which needs an in-browser engine, and a
 ~12-15 MB first load is acceptable. The six fixed views stay as SQL over `run`/`run_step`.
@@ -97,7 +64,7 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
       any change. Make the assertion conditional on the row count or drop it.
 - [ ] **Arbitrary-query UI** (later): a SQL editor page over the same DuckDB instance, with the schema documented.
 
-## 5. Engine coverage
+## 4. Engine coverage
 
 - [ ] **Arc** (implemented, pending a real run). `olap_benchmarks/dbs/arc/` pins `basekicklabs/arc:26.09.3` and
       registers time_series (all four operations), clickbench (populate/select) and chat_threads (all four operations).
@@ -114,9 +81,29 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
       time_series `large_03` (a 4.4-year range) took ~10 s cold while it checked ~40k hourly directories. Close once
       a campaign has run each registered suite on Arc and the answers match the other engines.
 - [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
-- [ ] **MonetDB JSONBench**, or record why not in the unsupported registry.
+- [ ] **MonetDB JSONBench**, or record why not: MonetDB does not register the suite at all, so nothing states why.
+- [ ] **Run the live smoke tests for the other published engines.** `pytest -m live` has only been run for DuckDB;
+      run it for ClickHouse, MonetDB, Polars and Arc once and fix what it finds.
+- [ ] **Experimental engines: publish or keep parked.** They are excluded from `all` (README "olap benchmark"). Known
+      state after the 2026-10-10 version bump:
+      - StarRocks 4.1.6 runs all 99 TPC-DS queries at SF1 (49, 70 and 86 have StarRocks variants that match
+        DuckDB), but 11 answers still differ from DuckDB (09, 18, 27, 31, 51, 58, 59, 66, 78, 83, 98) and 51 is
+        non-deterministic across iterations. Not investigated.
+      - Doris 4.1.4.1 RTABench populate and select complete (stream loads go to the BE's published port; the FE
+        redirect points at a Docker-internal address). Seven answers differ from DuckDB/Postgres/TimescaleDB
+        (0005, 0006, 0010, 0011, 0012, 0017, 0022). Doris registers no time_series.
+      - Postgres 18.6 and TimescaleDB 2.30.2 RTABench complete and agree with DuckDB. TimescaleDB now creates the
+        upstream continuous aggregates its 1000-series queries read and sorts 0008 like the others; the 0028 age
+        bucketing fix it shares with Postgres was verified on Postgres only. In the 2026-10 time_series smoke run
+        the TimescaleDB server went away at `upsert_data_large_1` and every later mutation failed, yet the mutate
+        run is recorded as completed and concurrent never ran; not investigated.
+      - QuestDB 10.0.1 runs all time_series operations at SF1 and agrees with DuckDB (version check reads
+        `build()`; top-N hourly has a QuestDB variant). RTABench, ClickBench and Kaggle are untested on 10.x.
+      - TimescaleDB's SQL is mostly a byte copy of Postgres's (all 23 chat_threads and 29 time_series overrides). An
+        engine-level SQL fallback (timescaledb -> postgres) would remove ~54 files but needs a few new TimescaleDB
+        copies where it deliberately runs the shared SQL (e.g. JSONBench); worth doing only if they stay.
 
-## 6. Resource reporting
+## 5. Resource reporting
 
 - [ ] **Show memory on the site.** Metric schema v7 now records the cgroup anon/file/shmem split and a data/WAL disk
       split, and `olap results resources` labels DuckDB and Polars `client_only`. Publish runs recorded at v7 first
@@ -126,15 +113,15 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
       benchmark has run with it yet; check that one ClickHouse and one PostgreSQL run record plausible anon, shmem
       and WAL figures.
 
-## 7. Deferred
+## 6. Deferred
 
 - [ ] **Cloud campaign** on one x86-64 Linux `i4i` host per `CLOUD.md`, including the higher scale factors this
-      machine cannot run. Do it after sections 1-3 so the campaign is a single `olap matrix run`.
+      machine cannot run. Do it after section 1 so the campaign is a single `olap matrix run`.
 - [ ] **JOB**, after `resident-hot-v1` has been exercised by a public run.
 - [ ] **TSBS and InfluxDB 3**, only as a complete time-series expansion (Arc first).
 
 ## Suggested order
 
 1. Section 1: a fresh campaign published through the new gate.
-2. Section 4 (site), independent of the harness work.
-3. The cloud campaign under `resident-hot-v1`; sections 5-6 fit around these.
+2. Section 3 (site), independent of the harness work.
+3. The cloud campaign under `resident-hot-v1`; sections 4-5 fit around these.
