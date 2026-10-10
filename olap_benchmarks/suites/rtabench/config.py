@@ -9,12 +9,9 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...run_metadata import StepResultStatus
-from ...settings import REPO_ROOT, SuiteName, TableName, get_settings
+from ...settings import SuiteName, TableName, get_settings
 from .. import BenchmarkSuite
 from ..download import download_file
-
-RTABENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/rtabench/queries"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -174,24 +171,5 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
         if restart:
             self.db.restart_event()
 
-    @property
-    def fetch_kwargs(self) -> dict[str, Any]:
-        return {}
-
-    def load_rtabench_query(self, query_name: str) -> str:
-        with (RTABENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql").open() as f:
-            return f.read()
-
-    def include_query(self, query_name: str) -> bool:
-        return (RTABENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql").is_file()
-
     def planned_query_names(self) -> tuple[str, ...]:
         return RTABENCH_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_rtabench_query(query_name)
-
-    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        if self.include_query(query_name):
-            return None
-        return ("unsupported", "query file is not defined for suite/database")

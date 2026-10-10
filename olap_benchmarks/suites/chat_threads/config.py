@@ -14,7 +14,6 @@ from typing import Any, ClassVar, Literal, cast
 import polars as pl
 
 from ...dbs import Database
-from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
     Operation,
@@ -261,31 +260,12 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
         if restart:
             self.db.restart_event()
 
-    def load_chat_threads_query(self, query_name: str) -> str:
-        db_specific = CHAT_THREADS_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = CHAT_THREADS_QUERIES_DIRECTORY / f"{query_name}.sql"
-        sql_source = db_specific if db_specific.is_file() else common
-        return sql_source.read_text()
-
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def include_query(self, query_name: str) -> bool:
-        db_specific = CHAT_THREADS_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = CHAT_THREADS_QUERIES_DIRECTORY / f"{query_name}.sql"
-        return db_specific.is_file() or common.is_file()
-
-    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        if self.include_query(query_name):
-            return None
-        return ("unsupported", "query file is not defined for suite/database")
-
     def planned_query_names(self) -> tuple[str, ...]:
         return CHAT_THREADS_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_chat_threads_query(query_name)
 
     def get_mutate_steps(self) -> tuple[list[ChatMutateStep], list[ChatMutateStep]]:
         enabled: list[ChatMutateStep] = []
@@ -526,7 +506,7 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
                         continue
 
                     with suite.db.query_context(query_name):
-                        query = suite.load_chat_threads_query(query_name)
+                        query = suite.load_query(query_name)
                         df, duration_seconds = suite.db.execute_query_iteration(
                             query_name=query_name,
                             iteration=iteration,

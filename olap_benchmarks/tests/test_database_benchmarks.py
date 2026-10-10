@@ -226,9 +226,11 @@ def test_rtabench_marks_missing_db_specific_queries_unsupported() -> None:
         RTABench.model_construct(db=ClickHouseDummyDatabase(), name="rtabench", scale_factor=1),
     )
 
-    assert duckdb_suite.include_query("0000_terminal_hourly_stats")
-    assert not duckdb_suite.include_query("1000_terminal_hourly_stats")
-    assert clickhouse_suite.include_query("1000_terminal_hourly_stats")
+    assert duckdb_suite.query_skip("0000_terminal_hourly_stats") is None
+    skip = duckdb_suite.query_skip("1000_terminal_hourly_stats")
+    assert skip is not None
+    assert skip[0] == "unsupported"
+    assert clickhouse_suite.query_skip("1000_terminal_hourly_stats") is None
 
 
 def test_database_benchmarks_resolves_all_suites() -> None:

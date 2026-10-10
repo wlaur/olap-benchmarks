@@ -7,7 +7,7 @@ from datetime import datetime
 import duckdb
 import pytest
 
-from olap_benchmarks.suites.jsonbench.config import JSONBENCH_QUERIES_DIRECTORY
+from olap_benchmarks.query_registry import SUITES_DIRECTORY
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def duckdb_jsonbench() -> Iterator[duckdb.DuckDBPyConnection]:
 
 
 def run_query(con: duckdb.DuckDBPyConnection, query_name: str) -> list[tuple[object, ...]]:
-    query = (JSONBENCH_QUERIES_DIRECTORY / f"{query_name}.sql").read_text()
+    query = (SUITES_DIRECTORY / "jsonbench/queries" / f"{query_name}.sql").read_text()
     return con.execute(query).fetchall()
 
 

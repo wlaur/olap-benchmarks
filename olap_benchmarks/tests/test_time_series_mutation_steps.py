@@ -97,7 +97,7 @@ def _fake_delete_keys(self: TimeSeries[Any], step: MutateStep, seed: int) -> pl.
     return pl.DataFrame({"time": [datetime(2025, 1, 1)]})
 
 
-def _fake_load_time_series_query(self: TimeSeries[Any], query_name: str) -> str:
+def _fake_load_query(self: TimeSeries[Any], query_name: str) -> str:
     _ = self
     return f"select '{query_name}'"
 
@@ -167,7 +167,7 @@ def test_time_series_concurrent_runs_writer_and_readers(monkeypatch: pytest.Monk
     monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_WRITER_BATCH_ROWS", 1)
     monkeypatch.setattr("olap_benchmarks.suites.time_series.config.CONCURRENT_WRITER_ITERATIONS", 2)
     monkeypatch.setattr(TimeSeries, "_generate_insert_data", _fake_insert_data)
-    monkeypatch.setattr(TimeSeries, "load_time_series_query", _fake_load_time_series_query)
+    monkeypatch.setattr(TimeSeries, "load_query", _fake_load_query)
     monkeypatch.setattr(TimeSeries, "_create_concurrent_worker_suite", _same_concurrent_worker_suite)
 
     suite.concurrent()

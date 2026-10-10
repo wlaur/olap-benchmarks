@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy.orm import Session
 
-from ..results import get_results_engine, migrate_results
+from ..results import get_results_engine, migrate_results, validation
 from ..results.models import Run, RunStep
 from ..results.validation import (
     AnswerHashMismatch,
@@ -479,3 +480,21 @@ def test_iteration_inconsistencies_are_reported(tmp_path: Path) -> None:
         ("flaky", ("h1", "h2"))
     ]
     assert "non-deterministic" in report.format()
+
+
+def test_answer_comparison_exclusions_skip_a_query_or_one_engine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    # one suite per query, because a run holds the steps of one suite
+    for suite in ("rtabench", "tpc_ds", "tpc_h"):
+        for db, answer_hash in (("duckdb", "hash-a"), ("clickhouse", "hash-b"), ("monetdb", "hash-a")):
+            _insert_select_run(db_path, db, 10, suite=suite, query_name="q1", answer_hash=answer_hash)
+    monkeypatch.setattr(validation, "ANSWER_COMPARISON_EXCLUSIONS", {})
+    monkeypatch.setitem(validation.ANSWER_COMPARISON_EXCLUSIONS, ("rtabench", "q1", None), "test")
+    monkeypatch.setitem(validation.ANSWER_COMPARISON_EXCLUSIONS, ("tpc_ds", "q1", "clickhouse"), "test")
+
+    mismatches = validate_latest_query_answer_hashes(db_path=db_path)
+
+    assert [mismatch.suite for mismatch in mismatches] == ["tpc_h"]

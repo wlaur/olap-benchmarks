@@ -80,7 +80,7 @@ class PolarsClickbench(Clickbench["Polars"]):
 
 
 class PolarsTpcH(TpcH["Polars"]):
-    def load_tpch_query(self, query_name: str) -> str:
+    def load_query(self, query_name: str) -> str:
         return f"Polars LazyFrame expression {query_name}"
 
     def populate(self, restart: bool = True) -> None:

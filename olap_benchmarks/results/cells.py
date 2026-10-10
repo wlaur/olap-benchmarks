@@ -10,6 +10,7 @@ import duckdb
 
 from ..matrix import MatrixCell
 from ..profile import BENCHMARK_PROFILE
+from ..query_registry import unsupported_query_count
 
 CellState = Literal["ok", "missing", "failed", "stale"]
 
@@ -184,7 +185,7 @@ def format_table(header: tuple[str, ...], rows: Iterable[tuple[object, ...]]) ->
 
 def format_matrix_status(statuses: Iterable[CellStatus]) -> str:
     return format_table(
-        ("db", "suite", "sf", "operation", "state", "run", "version", "commit", "detail"),
+        ("db", "suite", "sf", "operation", "state", "unsupported", "run", "version", "commit", "detail"),
         (
             (
                 status.cell.db,
@@ -192,6 +193,9 @@ def format_matrix_status(statuses: Iterable[CellStatus]) -> str:
                 status.cell.scale_factor,
                 status.cell.operation,
                 status.state,
+                unsupported_query_count(status.cell.suite, status.cell.db)
+                if status.cell.operation == "select"
+                else None,
                 status.run.id if status.run is not None else None,
                 status.run.db_version if status.run is not None else None,
                 _short(status.run.commit) if status.run is not None else None,

@@ -8,28 +8,12 @@ from typing import Any, cast
 
 import duckdb
 
+from ..query_registry import ANSWER_COMPARISON_EXCLUSIONS
 from ..settings import Revision, SuiteName, get_settings
 
-# Queries whose answers are legitimately not comparable across engines, mapped to why. These still
-# run and are still timed; only the cross-engine answer comparison is skipped, because the engines
-# disagree by dialect rather than because one of them is wrong. Keep this list short: an entry here
-# is a claim that no engine is at fault, which is a much stronger claim than a failing query.
-ANSWER_COMPARISON_EXCLUSIONS: dict[SuiteName, dict[str, str]] = {
-    "clickbench": {
-        "Q28": (
-            "DuckDB and ClickHouse apply different regex semantics to the roughly 1031 Referer "
-            "values containing a newline: RE2's default leaves '.' not matching a newline and '$' "
-            "meaning end of text, which DuckDB follows and ClickHouse does not. Neither is wrong "
-            "and no rewrite reconciles them without changing what the query asks."
-        )
-    },
-}
 
-
-def _excluded_query_names(suite: SuiteName | None) -> dict[SuiteName, dict[str, str]]:
-    if suite is None:
-        return ANSWER_COMPARISON_EXCLUSIONS
-    return {suite: ANSWER_COMPARISON_EXCLUSIONS[suite]} if suite in ANSWER_COMPARISON_EXCLUSIONS else {}
+def _answer_comparison_exclusions(suite: SuiteName | None) -> list[tuple[SuiteName, str, str | None]]:
+    return [key for key in ANSWER_COMPARISON_EXCLUSIONS if suite is None or key[0] == suite]
 
 
 @dataclass(frozen=True)
@@ -142,11 +126,12 @@ class _Scope:
                 for db, version in self.pins.items():
                     params.extend((db, version))
         exclusion_clauses: list[str] = []
-        for excluded_suite, queries in _excluded_query_names(self.suite).items():
-            placeholders = ", ".join("?" for _ in queries)
-            exclusion_clauses.append(f"and not (lr.suite = ? and s.query_name in ({placeholders}))")
-            params.append(excluded_suite)
-            params.extend(queries)
+        for excluded_suite, query_name, excluded_db in _answer_comparison_exclusions(self.suite):
+            db_sql = " and lr.db = ?" if excluded_db is not None else ""
+            exclusion_clauses.append(f"and not (lr.suite = ? and s.query_name = ?{db_sql})")
+            params.extend((excluded_suite, query_name))
+            if excluded_db is not None:
+                params.append(excluded_db)
         exclusion_sql = "\n            ".join(exclusion_clauses)
 
         # a cell is (system, suite, scale factor, db, driver); restricting to the pinned versions first makes

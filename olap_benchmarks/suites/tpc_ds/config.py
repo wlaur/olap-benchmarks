@@ -24,15 +24,12 @@ import shutil
 import subprocess
 from pathlib import Path
 from time import perf_counter
-from typing import Any, ClassVar
+from typing import Any
 
 import polars as pl
 
 from ...dbs import Database
-from ...run_metadata import StepResultStatus
 from ...settings import (
-    REPO_ROOT,
-    DatabaseName,
     TableName,
     format_suite_data_directory_name,
     get_settings,
@@ -41,8 +38,6 @@ from ...settings import (
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
-
-TPC_DS_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/tpc_ds/queries"
 
 TPCDS_TABLES = (
     "call_center",
@@ -257,10 +252,6 @@ def prepare_data(scale_factor: int) -> None:
 
 
 class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
-    # queries an engine cannot run, with the error class documented next to
-    # each entry; skipped instead of failing the whole select run
-    UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, frozenset[str]]] = {}
-
     def expected_table_row_counts(self) -> dict[TableName, int]:
         return {
             table_name: self.parquet_row_count(self.input_data_directory / f"{table_name}.parquet")
@@ -295,25 +286,5 @@ class TpcDs[DBT: Database](BenchmarkSuite[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def load_tpcds_query(self, query_name: str) -> str:
-        db_specific = TPC_DS_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = TPC_DS_QUERIES_DIRECTORY / f"{query_name}.sql"
-
-        sql_source = db_specific if db_specific.is_file() else common
-
-        with sql_source.open() as f:
-            return f.read()
-
-    def include_query(self, query_name: str) -> bool:
-        return query_name not in self.UNSUPPORTED_QUERIES.get(self.db.name, frozenset())
-
     def planned_query_names(self) -> tuple[str, ...]:
         return TPCDS_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_tpcds_query(query_name)
-
-    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        if self.include_query(query_name):
-            return None
-        return ("unsupported", f"query is unsupported by {self.db.name}")

@@ -11,6 +11,7 @@ from sqlalchemy import Connection
 from .. import dbs
 from ..dbs import Database
 from ..profile import BENCHMARK_PROFILE
+from ..query_registry import UNSUPPORTED_QUERIES
 from ..settings import DatabaseName, TableName
 from ..suites import FailedQueriesError
 from ..suites.tpc_ds import config as tpcds_config
@@ -91,7 +92,7 @@ def _suite(db: FakeTpcDsDatabase) -> TpcDs[FakeTpcDsDatabase]:
     return cast(TpcDs[FakeTpcDsDatabase], TpcDs.model_construct(db=db, name="tpc_ds", scale_factor=1))
 
 
-def _fake_load_tpcds_query(self: TpcDs[FakeTpcDsDatabase], query_name: str) -> str:
+def _fake_load_query(self: TpcDs[FakeTpcDsDatabase], query_name: str) -> str:
     _ = self
     return f"select '{query_name}'"
 
@@ -101,21 +102,21 @@ def _patch_tpcds_queries(monkeypatch: pytest.MonkeyPatch, query_names: list[str]
     monkeypatch.setattr(
         dbs, "BENCHMARK_PROFILE", replace(BENCHMARK_PROFILE, warmup_iterations=1, measured_iterations=1)
     )
-    monkeypatch.setattr(TpcDs, "load_tpcds_query", _fake_load_tpcds_query)
+    monkeypatch.setattr(TpcDs, "load_query", _fake_load_query)
 
 
 def test_tpcds_select_records_unsupported_query_steps(monkeypatch: pytest.MonkeyPatch) -> None:
     db = FakeTpcDsDatabase()
     suite = _suite(db)
     _patch_tpcds_queries(monkeypatch, ["01", "02", "03"])
-    monkeypatch.setattr(TpcDs, "UNSUPPORTED_QUERIES", {"duckdb": frozenset({"02"})})
+    monkeypatch.setitem(UNSUPPORTED_QUERIES, ("tpc_ds", "duckdb", "02"), "the test declares 02 unsupported")
 
     suite.select()
 
     assert db.executed_iterations == [("01", 1), ("01", 2), ("03", 1), ("03", 2)]
     assert db.skipped_iterations == [
-        ("02", 1, "unsupported", "query is unsupported by duckdb"),
-        ("02", 2, "unsupported", "query is unsupported by duckdb"),
+        ("02", 1, "unsupported", "the test declares 02 unsupported"),
+        ("02", 2, "unsupported", "the test declares 02 unsupported"),
     ]
 
 
@@ -123,7 +124,6 @@ def test_tpcds_select_continues_after_query_failure_then_fails_the_run(monkeypat
     db = FakeTpcDsDatabase(fail_query_names={"01"})
     suite = _suite(db)
     _patch_tpcds_queries(monkeypatch, ["01", "02"])
-    monkeypatch.setattr(TpcDs, "UNSUPPORTED_QUERIES", {})
 
     # the remaining queries are still measured, but the operation must not be recorded as
     # completed when one of them never produced a result

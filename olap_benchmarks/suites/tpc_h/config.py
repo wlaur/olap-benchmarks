@@ -25,12 +25,10 @@ from time import perf_counter
 from typing import Any
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, TableName, format_suite_data_directory_name, get_settings, resolve_suite_scale_factor
+from ...settings import TableName, format_suite_data_directory_name, get_settings, resolve_suite_scale_factor
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
-
-TPC_H_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/tpc_h/queries"
 
 TPCH_TABLES = (
     "region",
@@ -159,14 +157,8 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
         _ = query_name
         return self.fetch_kwargs
 
-    def load_tpch_query(self, query_name: str) -> str:
-        db_specific = TPC_H_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = TPC_H_QUERIES_DIRECTORY / f"{query_name}.sql"
-
-        sql_source = db_specific if db_specific.is_file() else common
-
-        with sql_source.open() as f:
-            query = f.read()
+    def load_query(self, query_name: str) -> str:
+        query = super().load_query(query_name)
 
         if query_name.startswith("11_"):
             assert query.count(Q11_SF1_FRACTION) == 1
@@ -176,6 +168,3 @@ class TpcH[DBT: Database](BenchmarkSuite[DBT]):
 
     def planned_query_names(self) -> tuple[str, ...]:
         return TPCH_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_tpch_query(query_name)

@@ -10,6 +10,7 @@ import polars as pl
 from pydantic import BaseModel, Field
 
 from ..dbs import Database
+from ..query_registry import SUITES_DIRECTORY, unsupported_reason
 from ..run_metadata import StepResultStatus
 from ..settings import (
     Operation,
@@ -161,17 +162,31 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     def planned_query_names(self) -> Sequence[str]:
         return ()
 
-    def include_query(self, query_name: str) -> bool:
-        _ = query_name
-        return True
-
     def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        if self.include_query(query_name):
+        reason = unsupported_reason(self.name, self.db.name, query_name)
+        if reason is None:
             return None
-        return ("skipped", "query excluded by suite/database")
+        return ("unsupported", reason)
+
+    @property
+    def queries_directory(self) -> Path:
+        return SUITES_DIRECTORY / self.name / "queries"
+
+    def query_path(self, query_name: str) -> Path | None:
+        override = self.queries_directory / self.db.name / f"{query_name}.sql"
+        if override.is_file():
+            return override
+        shared = self.queries_directory / f"{query_name}.sql"
+        return shared if shared.is_file() else None
 
     def load_query(self, query_name: str) -> str:
-        raise NotImplementedError(f"{type(self).__name__} does not load queries by name")
+        path = self.query_path(query_name)
+        if path is None:
+            raise FileNotFoundError(
+                f"{self.name} query {query_name} has neither a {self.db.name} override nor a shared file in "
+                f"{self.queries_directory}; add one or declare it in query_registry.UNSUPPORTED_QUERIES"
+            )
+        return path.read_text()
 
     @property
     def fetch_kwargs(self) -> Mapping[str, Any]:

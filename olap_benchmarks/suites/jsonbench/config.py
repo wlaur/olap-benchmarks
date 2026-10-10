@@ -5,9 +5,7 @@ from gzip import open as gzip_open
 from pathlib import Path
 
 from ...dbs import Database
-from ...run_metadata import StepResultStatus
 from ...settings import (
-    REPO_ROOT,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
@@ -19,7 +17,6 @@ from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
 
-JSONBENCH_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/jsonbench/queries"
 JSONBENCH_DATASET_BASE_URL = "https://clickhouse-public-datasets.s3.amazonaws.com/bluesky"
 JSONBENCH_FILE_COUNTS = {10: 10}
 JSONBENCH_EMPTY_OBJECT_LINE = "{}\n"
@@ -121,28 +118,9 @@ class JSONBench[DBT: Database](BenchmarkSuite[DBT]):
     def populate(self) -> None:
         raise NotImplementedError(f"{type(self).__name__} must implement JSONBench populate")
 
-    def load_jsonbench_query(self, query_name: str) -> str:
-        db_specific = JSONBENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = JSONBENCH_QUERIES_DIRECTORY / f"{query_name}.sql"
-        sql_source = db_specific if db_specific.is_file() else common
-        return sql_source.read_text()
-
     @property
     def fetch_kwargs(self) -> dict[str, object]:
         return {}
 
-    def include_query(self, query_name: str) -> bool:
-        db_specific = JSONBENCH_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = JSONBENCH_QUERIES_DIRECTORY / f"{query_name}.sql"
-        return db_specific.is_file() or common.is_file()
-
     def planned_query_names(self) -> tuple[str, ...]:
         return JSONBENCH_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_jsonbench_query(query_name)
-
-    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        if self.include_query(query_name):
-            return None
-        return ("unsupported", "query file is not defined for suite/database")

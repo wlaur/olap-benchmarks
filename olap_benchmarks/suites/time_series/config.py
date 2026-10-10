@@ -8,16 +8,14 @@ from math import sqrt
 from pathlib import Path
 from threading import Barrier
 from time import perf_counter
-from typing import Any, ClassVar, Literal, cast, get_args
+from typing import Any, Literal, cast, get_args
 
 import numpy as np
 import polars as pl
 
 from ...dbs import Database
-from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
-    DatabaseName,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
@@ -31,9 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 TIME_SERIES_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series/queries"
 
 
-TIME_SERIES_QUERY_NAMES = tuple(
-    n.stem for n in sorted((REPO_ROOT / "olap_benchmarks/suites/time_series/queries").glob("*.sql"))
-)
+TIME_SERIES_QUERY_NAMES = tuple(n.stem for n in sorted(TIME_SERIES_QUERIES_DIRECTORY.glob("*.sql")))
 
 
 DatasetSize = Literal[
@@ -543,40 +539,12 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         if restart:
             self.db.restart_event()
 
-    def load_time_series_query(self, query_name: str) -> str:
-        db_specific = TIME_SERIES_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = TIME_SERIES_QUERIES_DIRECTORY / f"{query_name}.sql"
-
-        sql_source = db_specific if db_specific.is_file() else common
-
-        with (sql_source).open() as f:
-            return f.read()
-
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
-    # Queries a connector cannot answer correctly, mapped to why. Recording these as unsupported
-    # keeps a known-wrong result out of the published set without failing the run or, worse,
-    # publishing a runtime for an answer we know to be incorrect.
-    UNSUPPORTED_QUERIES: ClassVar[dict[DatabaseName, dict[str, str]]] = {}
-
-    def include_query(self, query_name: str) -> bool:
-        return query_name not in self.UNSUPPORTED_QUERIES.get(self.db.name, {})
-
-    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        if self.include_query(query_name):
-            return None
-        reason = self.UNSUPPORTED_QUERIES.get(self.db.name, {}).get(query_name)
-        if reason is not None:
-            return ("unsupported", reason)
-        return ("skipped", "query excluded by suite/database")
-
     def planned_query_names(self) -> tuple[str, ...]:
         return TIME_SERIES_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_time_series_query(query_name)
 
     def _get_mutate_primary_key(self, table_name: TableName) -> str | list[str]:
         _ = table_name
@@ -729,7 +697,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                         continue
 
                     with suite.db.query_context(query_name):
-                        query = suite.load_time_series_query(query_name)
+                        query = suite.load_query(query_name)
                         df, duration_seconds = suite.db.execute_query_iteration(
                             query_name=query_name,
                             iteration=iteration,

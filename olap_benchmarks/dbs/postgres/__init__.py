@@ -11,7 +11,6 @@ from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
-from ...run_metadata import StepResultStatus
 from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
@@ -312,7 +311,6 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
     # large_* select queries and *_data_large_* mutation steps. The EAV insert
     # code path is still wired up so re-enabling is just emptying this set.
     SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
-    UNSUPPORTED_EAV_QUERIES: ClassVar[frozenset[str]] = frozenset({"large_23_batch_export"})
 
     # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
     # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch. Each
@@ -336,24 +334,6 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
         if table_name in self.EAV_TABLES:
             return ["time", "metric_name"]
         return "time"
-
-    def include_query(self, query_name: str) -> bool:
-        # Queries against tables we never populated must be skipped.
-        for table in self.SKIP_TABLES:
-            size = table.removeprefix("data_")
-            if query_name.startswith(f"{size}_"):
-                return False
-        return True
-
-    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
-        skipped = super().query_skip(query_name)
-        if skipped is not None:
-            return skipped
-
-        if query_name in self.UNSUPPORTED_EAV_QUERIES:
-            return ("unsupported", "query requires wide-row export shape, but this database stores data_large as EAV")
-
-        return None
 
     def index_tables(self) -> None:
         for table_name in get_time_series_input_files(self.scale_factor):

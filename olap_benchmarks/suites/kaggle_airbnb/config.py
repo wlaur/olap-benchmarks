@@ -10,12 +10,11 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SuiteName, TableName, get_settings
+from ...settings import SuiteName, TableName, get_settings
 from .. import BenchmarkSuite
 from ..download import download_file
 
 _LOGGER = logging.getLogger(__name__)
-KAGGLE_AIRBNB_QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/kaggle_airbnb/queries"
 INSIDE_AIRBNB_SNAPSHOT_URL = "https://data.insideairbnb.com/united-states/tx/austin/2024-12-14"
 INSIDE_AIRBNB_FILES = {
     "calendar": "data/calendar.csv.gz",
@@ -159,17 +158,5 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
-    def load_kaggle_airbnb_query(self, query_name: str) -> str:
-        db_specific = KAGGLE_AIRBNB_QUERIES_DIRECTORY / f"{self.db.name}/{query_name}.sql"
-        common = KAGGLE_AIRBNB_QUERIES_DIRECTORY / f"{query_name}.sql"
-
-        sql_source = db_specific if db_specific.is_file() else common
-
-        with (sql_source).open() as f:
-            return f.read()
-
     def planned_query_names(self) -> tuple[str, ...]:
         return KAGGLE_AIRBNB_QUERY_NAMES
-
-    def load_query(self, query_name: str) -> str:
-        return self.load_kaggle_airbnb_query(query_name)

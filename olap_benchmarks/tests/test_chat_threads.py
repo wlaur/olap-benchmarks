@@ -13,7 +13,6 @@ from ..suites.chat_threads.config import (
     ANCHOR_USER_IDS,
     CHAT_THREADS_MUTATE_STEPS,
     CHAT_THREADS_QUERIES_DIRECTORY,
-    CHAT_THREADS_QUERY_NAMES,
 )
 from ..suites.chat_threads.corpus import CONTENT_SCHEMA, TOPICS
 from ..suites.chat_threads.generator import (
@@ -88,13 +87,6 @@ def test_query_literals_reference_existing_anchors() -> None:
         if anchor_user in path.read_text() or anchor_thread in path.read_text()
     ]
     assert referenced, "no query references the anchor user or thread"
-
-
-def test_every_query_has_overrides_for_json_dialects() -> None:
-    for query_name in CHAT_THREADS_QUERY_NAMES:
-        for database in OVERRIDE_DATABASES:
-            override = CHAT_THREADS_QUERIES_DIRECTORY / database / f"{query_name}.sql"
-            assert override.is_file(), f"missing {database} override for {query_name}"
 
 
 def test_schema_exists_for_every_registered_database() -> None:
