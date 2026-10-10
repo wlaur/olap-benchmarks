@@ -90,3 +90,8 @@ strictDictionaryInference = true
 strictSetInference = true
 reportUnusedImport = true
 reportMissingTypeStubs = "none"
+
+[tool.pytest.ini_options]
+# live tests start real engine containers; run them with `pytest -m live`
+addopts = "-m 'not live'"
+markers = ["live: starts a real engine and runs its select queries (opt-in: pytest -m live)"]
