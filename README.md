@@ -103,7 +103,7 @@ cd site && bun install && bun run dev
 
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N] [--drop-caches] [--include-experimental]`
 
-- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`. `all` means the engines the matrix declares published (ClickHouse, DuckDB, MonetDB, Polars); the experimental ones (Postgres, TimescaleDB, QuestDB, StarRocks, Doris, Arc) run only when named or with `--include-experimental`
+- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`. `all` means the engines the matrix declares published (ClickHouse, DuckDB, MonetDB, Polars, Arc); the experimental ones (Postgres, TimescaleDB, QuestDB, StarRocks, Doris) run only when named or with `--include-experimental`
 - `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
 - `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series` and `chat_threads`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
@@ -618,7 +618,7 @@ uv run pytest
 
 pytest works from any directory (e.g. `cd olap_benchmarks/tests && ../../.venv/bin/pytest -q`).
 
-Live smoke tests are opt-in. They start each published engine (and Arc), populate its
+Live smoke tests are opt-in. They start each published engine, populate its
 cheapest suite (`SMOKE_SUITES` in `tests/test_live_smoke.py`) into a throwaway store and
 revision, and require every select query to complete. They need Docker and the prepared input
 data, and take minutes per engine:

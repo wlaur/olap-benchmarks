@@ -19,7 +19,7 @@ def test_every_declared_cell_is_registered_by_its_engine() -> None:
 def test_published_matrix_content() -> None:
     cells = set(expand_matrix(published_only=True))
 
-    assert published_databases() == ["clickhouse", "duckdb", "monetdb", "polars"]
+    assert published_databases() == ["clickhouse", "duckdb", "monetdb", "polars", "arc"]
     for db in ("clickhouse", "duckdb"):
         assert MatrixCell(db, "chat_threads", 1, "concurrent") in cells
         assert MatrixCell(db, "jsonbench", 10, "select") in cells

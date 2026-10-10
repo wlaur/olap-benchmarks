@@ -13,9 +13,9 @@ Only unfinished work. Remove items when they are done; history lives in git.
   publish gate (one commit, clean tree, one snapshot, current pins, complete and validated cells) are in place.
   RTABench queries gained deterministic tie-breakers, so their stored answer hashes are no longer comparable to new
   runs.
-- Experimental (unpublished) connectors: Postgres, TimescaleDB, QuestDB, StarRocks, Doris and Arc. `olap benchmark all`
+- Experimental (unpublished) connectors: Postgres, TimescaleDB, QuestDB, StarRocks and Doris. `olap benchmark all`
   and `olap matrix status|run` leave them out unless named or `--include-experimental` is passed; their code stays.
-  Polars is published but has no runs yet.
+  Polars and Arc are published but have no runs yet.
 - Unsupported queries are declared in one registry (`olap_benchmarks/query_registry.py`), which also holds the
   answer-comparison exclusions; a missing SQL file is an error. SQL resolution lives in `BenchmarkSuite`, RTABench
   has a shared base, suite metadata is one `SuiteSpec` per suite, settings load lazily from the repository's `.env`,
@@ -66,20 +66,20 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 ## 4. Engine coverage
 
-- [ ] **Arc** (implemented, pending a real run). `olap_benchmarks/dbs/arc/` pins `basekicklabs/arc:26.09.3` and
-      registers time_series (all four operations), clickbench (populate/select) and chat_threads (all four operations).
-      Every select query executed on a tiny probe slice of each, which says nothing about answers or timings at scale.
-      Arc requires a non-null `time` column, so `hits.EventTime` and both chat tables' `created_at` are imported as
-      `time` and the `queries/arc` overrides refer to it by that name. Arc has no other timestamp or date type, so
-      further timestamps are stored as BIGINT microseconds and dates as midnight timestamps; the overrides convert back
-      with `make_timestamp()` where a query returns one. Writes use the typed Parquet import because the MessagePack
-      path corrupts types and timestamps. ClickBench and chat input is sorted by time on the host before import
-      (Arc writes one file per hour partition per flush). Upsert is delete (file rewrite) then insert, and populate
-      ends with an explicit compaction. rtabench, kaggle_airbnb, tpc_h and tpc_ds have tables with no timestamp,
-      and jsonbench has placeholder rows without one, so those stay unregistered (reasons in
-      `Arc.suite_registry`; defects in [`issues/arc/`](issues/arc/)). Watch for the partition pruner: the first
-      time_series `large_03` (a 4.4-year range) took ~10 s cold while it checked ~40k hourly directories. Close once
-      a campaign has run each registered suite on Arc and the answers match the other engines.
+- [ ] **Arc** (published for populate/select, pending a campaign). `olap_benchmarks/dbs/arc/` pins
+      `basekicklabs/arc:26.09.3` and registers time_series, clickbench and chat_threads with populate and select only.
+      Mutate and concurrent are not measured: every row-targeted upsert or delete rewrites the immutable hourly
+      Parquet files it touches, so the time_series SF1 mutate run took 88 minutes (10k-row iterations up to ~6 minutes,
+      slowing as files fragment) and the concurrent run after it was OOM-killed within 40 s. Arc requires a non-null
+      `time` column, so `hits.EventTime` and both chat tables' `created_at` are imported as `time` and the
+      `queries/arc` overrides refer to it by that name; other timestamps are stored as BIGINT microseconds and dates as
+      midnight timestamps, converted back with `make_timestamp()` where a query returns one. Writes use the typed
+      Parquet import (the MessagePack path corrupts types and timestamps), split below Arc's 500 MiB import limit.
+      Populate sorts by time on the host and ends with Arc's manual compaction, which runs the hourly and daily tiers
+      (one file per day for this historical data). rtabench, kaggle_airbnb, tpc_h and tpc_ds have tables with no
+      timestamp and jsonbench has placeholder rows without one, so those stay unregistered (reasons in
+      `Arc.suite_registry`; defects in [`issues/arc/`](issues/arc/)). Close once a campaign has run each registered
+      suite and the answers match the other engines.
 - [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
 - [ ] **MonetDB JSONBench**, or record why not: MonetDB does not register the suite at all, so nothing states why.
 - [ ] **Run the live smoke tests for the other published engines.** `pytest -m live` has only been run for DuckDB;

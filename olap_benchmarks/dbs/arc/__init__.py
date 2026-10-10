@@ -15,7 +15,7 @@ from pyarrow import ipc
 from pydantic import Field, PrivateAttr
 from sqlalchemy import Connection
 
-from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
+from ...settings import DatabaseName, Operation, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_files
 from ...suites.clickbench.config import Clickbench
@@ -138,6 +138,12 @@ def finish_populate(suite: BenchmarkSuite["Arc"], restart: bool) -> None:
 
 
 class ArcTimeSeries(TimeSeries["Arc"]):
+    # Mutate and concurrent are not measured. Every row-targeted upsert or delete rewrites the
+    # immutable hourly Parquet files it touches: the time_series SF1 mutate run took 88 minutes
+    # (10k-row iterations up to ~6 minutes each, slowing as files fragment), and the concurrent run
+    # that followed was OOM-killed within 40 s (Arc 26.09.3).
+    supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select")
+
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
         finish_populate(self, restart)
@@ -158,6 +164,9 @@ class ArcClickbench(Clickbench["Arc"]):
 
 
 class ArcChatThreads(ChatThreads["Arc"]):
+    # Not measured for the same reason as ArcTimeSeries.
+    supported_operations: ClassVar[tuple[Operation, ...]] = ("populate", "select")
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():

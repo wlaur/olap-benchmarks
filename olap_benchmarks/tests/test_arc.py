@@ -112,8 +112,8 @@ def test_arc_registers_the_suites_it_can_store() -> None:
         "clickbench": ArcClickbench,
         "chat_threads": ArcChatThreads,
     }
-    assert ArcTimeSeries.supported_operations == ("populate", "select", "mutate", "concurrent")
-    assert ArcChatThreads.supported_operations == ("populate", "select", "mutate", "concurrent")
+    assert ArcTimeSeries.supported_operations == ("populate", "select")
+    assert ArcChatThreads.supported_operations == ("populate", "select")
     assert ArcClickbench.supported_operations == ("populate", "select")
     assert not db.DISABLED_MUTATION_STEPS
 
