@@ -134,14 +134,20 @@ schema changes caught by Python tests at publish time instead of in the browser.
 
 ## 5. Engine coverage
 
-- [ ] **Arc on time_series** (implemented, pending a real run). `olap_benchmarks/dbs/arc/` pins
-      `basekicklabs/arc:26.09.3` and registers time_series only, with populate, select, mutate and concurrent all
-      enabled. Queries go over HTTP with Arrow IPC results; writes use the typed Parquet import, because the MessagePack
-      write path corrupts types and timestamps ([`issues/arc/`](issues/arc/)); upsert is delete (file rewrite) then
-      insert; populate ends with an explicit compaction. Every query executed on a tiny probe slice, which says nothing
-      about answers or timings at scale. Watch for the partition pruner: the first `large_03` (a 4.4-year range)
-      took ~10 s cold while it checked ~40k hourly directories on the bind mount. Close once a campaign has run
-      `olap benchmark arc time_series` and the answers match the other engines.
+- [ ] **Arc** (implemented, pending a real run). `olap_benchmarks/dbs/arc/` pins `basekicklabs/arc:26.09.3` and
+      registers time_series (all four operations), clickbench (populate/select) and chat_threads (all four operations).
+      Every select query executed on a tiny probe slice of each, which says nothing about answers or timings at scale.
+      Arc requires a non-null `time` column, so `hits.EventTime` and both chat tables' `created_at` are imported as
+      `time` and the `queries/arc` overrides refer to it by that name. Arc has no other timestamp or date type, so
+      further timestamps are stored as BIGINT microseconds and dates as midnight timestamps; the overrides convert back
+      with `make_timestamp()` where a query returns one. Writes use the typed Parquet import because the MessagePack
+      path corrupts types and timestamps. ClickBench and chat input is sorted by time on the host before import
+      (Arc writes one file per hour partition per flush). Upsert is delete (file rewrite) then insert, and populate
+      ends with an explicit compaction. rtabench, kaggle_airbnb, tpc_h and tpc_ds have tables with no timestamp,
+      and jsonbench has placeholder rows without one, so those stay unregistered (reasons in
+      `Arc.suite_registry`; defects in [`issues/arc/`](issues/arc/)). Watch for the partition pruner: the first
+      time_series `large_03` (a 4.4-year range) took ~10 s cold while it checked ~40k hourly directories. Close once
+      a campaign has run each registered suite on Arc and the answers match the other engines.
 - [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
 - [ ] **MonetDB JSONBench**, or record why not in the unsupported registry.
 - [ ] **Re-test MonetDB `chat_threads` concurrent** on SP4; the SIGSEGV is unexplained and was last seen on 11.55.7.

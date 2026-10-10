@@ -320,7 +320,7 @@ version pins live in each connector:
 | timescaledb | `olap_benchmarks/dbs/timescaledb/__init__.py`      |
 | questdb     | `olap_benchmarks/dbs/questdb/__init__.py`          |
 | starrocks   | `olap_benchmarks/dbs/starrocks/__init__.py`        |
-| arc         | `olap_benchmarks/dbs/arc/__init__.py` (`VERSION`, Docker image tag; `time_series` only) |
+| arc         | `olap_benchmarks/dbs/arc/__init__.py` (`VERSION`, Docker image tag; `time_series`, `clickbench` and `chat_threads` only) |
 | duckdb      | `pyproject.toml` (runs in-process; version follows the installed `duckdb` package) |
 
 To benchmark a new version: bump the pin, rerun `olap benchmark`, and publish —

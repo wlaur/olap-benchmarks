@@ -1,19 +1,24 @@
 import io
 import logging
 import subprocess
+import uuid
 from collections.abc import Iterator, Mapping
+from datetime import datetime
 from time import perf_counter, sleep
 from typing import Any, ClassVar, cast
 
 import httpx
 import polars as pl
 import pyarrow as pa
+import pyarrow.parquet as pq
 from pyarrow import ipc
 from pydantic import PrivateAttr
 from sqlalchemy import Connection
 
-from ...settings import DatabaseName, SuiteName, TableName, host_port
+from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
 from ...suites import BenchmarkSuite
+from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_files
+from ...suites.clickbench.config import Clickbench
 from ...suites.time_series.config import TimeSeries
 from .. import Database
 from ..utils import require_columns
@@ -34,6 +39,16 @@ ARC_VISIBILITY_TIMEOUT_SECONDS = 600.0
 
 ARC_COMPACTION_TIMEOUT_SECONDS = 3_600.0
 
+# Arc stores every measurement partitioned by a non-null `time` column. A table whose own
+# timestamp has another name is imported with that column as `time`, which Arc stores in its
+# place; the Arc query overrides refer to it as `time`. Arc has no other timestamp or date type:
+# any further timestamp column is stored as BIGINT epoch microseconds, and the overrides convert
+# it back with make_timestamp() where a query returns it.
+ARC_TIME_COLUMNS: Mapping[SuiteName, Mapping[TableName, str]] = {
+    "clickbench": {"hits": "EventTime"},
+    "chat_threads": {"chat_thread": "created_at", "chat_message": "created_at"},
+}
+
 
 class ArcError(RuntimeError):
     pass
@@ -52,19 +67,44 @@ def iter_write_batches(
     yield from df.iter_slices(batch_rows)
 
 
+def to_arc_arrow(df: pl.DataFrame) -> pa.Table:
+    # Arc's Parquet import rejects DATE and large_utf8/large_binary, which is what Polars writes.
+    # A date becomes midnight UTC, as QuestDB stores ClickBench's EventDate.
+    table = df.with_columns(pl.selectors.date().cast(pl.Datetime("us"))).to_arrow()
+    types = [
+        pa.string() if pa.types.is_large_string(dtype) else pa.binary() if pa.types.is_large_binary(dtype) else dtype
+        for dtype in table.schema.types
+    ]
+    return table.cast(pa.schema(list(zip(table.schema.names, types, strict=True))))
+
+
 def encode_parquet(df: pl.DataFrame) -> bytes:
     buffer = io.BytesIO()
-    df.write_parquet(buffer, compression="uncompressed", statistics=False)
+    cast(Any, pq).write_table(to_arc_arrow(df), buffer, compression="none", write_statistics=False)
     return buffer.getvalue()
 
 
-def build_time_key_predicate(keys: pl.DataFrame, primary_key: list[str]) -> str:
-    if primary_key != ["time"]:
-        raise ValueError(f"Arc deletes are keyed on the time column only, got {primary_key}")
+def sql_literal(value: object) -> str:
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    if isinstance(value, datetime):
+        return f"'{value.isoformat(sep=' ')}'"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    raise ValueError(f"Unsupported Arc delete key value: {value!r}")
 
-    values = keys.get_column("time").cast(pl.Datetime("us")).unique().sort()
-    literals = ", ".join(f"'{value.isoformat(sep=' ')}'" for value in values.to_list())
-    return f"time IN ({literals})"
+
+def build_key_predicate(keys: pl.DataFrame, primary_key: list[str], time_column: str) -> str:
+    if len(primary_key) != 1:
+        raise ValueError(f"Arc deletes support a single key column, got {primary_key}")
+
+    (key,) = primary_key
+    values = keys.get_column(key)
+    if isinstance(values.dtype, pl.Datetime):
+        values = values.cast(pl.Datetime("us"))
+    column = "time" if key == time_column else key
+    literals = ", ".join(sql_literal(value) for value in values.unique().sort().to_list())
+    return f"{column} IN ({literals})"
 
 
 def decode_arrow_stream(payload: bytes) -> pl.DataFrame:
@@ -77,18 +117,50 @@ def decode_arrow_stream(payload: bytes) -> pl.DataFrame:
     )
 
 
+def finish_populate(suite: BenchmarkSuite["Arc"], restart: bool) -> None:
+    with suite.db.phase_context("compact"):
+        suite.db.compact()
+
+    with suite.db.phase_context("verify_compacted"):
+        suite.verify_populated_data()
+
+    if restart:
+        suite.db.restart_event()
+
+
 class ArcTimeSeries(TimeSeries["Arc"]):
     def populate(self, restart: bool = True) -> None:
         super().populate(restart=False)
+        finish_populate(self, restart)
 
-        with self.db.phase_context("compact"):
-            self.db.compact()
 
-        with self.db.phase_context("verify_compacted"):
+class ArcClickbench(Clickbench["Arc"]):
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        self.db.insert_sorted(self.load_dataset(), "hits")
+
+        with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
 
-        if restart:
-            self.db.restart_event()
+        finish_populate(self, restart)
+
+
+class ArcChatThreads(ChatThreads["Arc"]):
+    def populate(self, restart: bool = True) -> None:
+        with self.db.phase_context("verify_existing_data"):
+            if not self.should_populate():
+                return
+
+        for table_name, fpath in get_chat_threads_input_files(self.scale_factor).items():
+            self.db.insert_sorted(pl.scan_parquet(fpath), table_name)
+
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
+        finish_populate(self, restart)
 
 
 class Arc(Database):
@@ -222,6 +294,22 @@ class Arc(Database):
             sleep(interval_seconds)
             interval_seconds = min(1.0, 2 * interval_seconds)
 
+    def time_column(self, table: TableName) -> str:
+        return ARC_TIME_COLUMNS.get(self.current_suite, {}).get(table, "time")
+
+    def insert_sorted(self, source: pl.LazyFrame, table: TableName) -> None:
+        # Arc writes one file per hour partition per flush, so unsorted input scatters every batch
+        # over the whole time range. Sort on the host first, as the QuestDB connector does.
+        staged = SETTINGS.temporary_directory / "arc" / f"{table}_{uuid.uuid4().hex}.parquet"
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self.phase_context("sort_input", table_name=table):
+                source.sort(self.time_column(table)).sink_parquet(staged)
+            with self.phase_context("insert", table_name=table):
+                self.insert(pl.scan_parquet(staged), table)
+        finally:
+            staged.unlink(missing_ok=True)
+
     def _write(self, df: pl.DataFrame | pl.LazyFrame, table: TableName) -> int:
         # The typed Parquet import is used instead of the MessagePack write API: MessagePack
         # infers types per write (an all-null column becomes VARCHAR for the whole measurement)
@@ -233,7 +321,7 @@ class Arc(Database):
             self._request(
                 "POST",
                 "/api/v1/import/parquet",
-                params={"measurement": table},
+                params={"measurement": table, "time_column": self.time_column(table)},
                 files={"file": (f"{table}.parquet", encode_parquet(batch), "application/vnd.apache.parquet")},
             )
             rows += batch.height
@@ -259,7 +347,7 @@ class Arc(Database):
             json={
                 "database": ARC_DATABASE,
                 "measurement": table,
-                "where": build_time_key_predicate(keys, require_columns(primary_key)),
+                "where": build_key_predicate(keys, require_columns(primary_key), self.time_column(table)),
                 "confirm": True,
             },
         )
@@ -272,7 +360,7 @@ class Arc(Database):
         # Arc has no upsert; the delete API rewrites the affected Parquet files synchronously,
         # so delete-then-insert leaves exactly one row per key once the insert is visible
         initial_count = self.get_count(table)
-        deleted = self._delete(table, primary_key, df)
+        deleted = self._delete(table, primary_key, df.select(require_columns(primary_key)))
         rows = self._write(df, table)
         self.wait_until_count(table, initial_count - deleted + rows)
 
@@ -303,4 +391,12 @@ class Arc(Database):
             sleep(1.0)
 
     def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
-        return {"time_series": ArcTimeSeries}
+        # Arc stores a measurement only with a non-null `time` column: its Parquet import rejects
+        # a table without one or with a null in it, and its MessagePack API fills a missing `time`
+        # with the ingestion time, adding a column the suite does not have. Not registered:
+        # - rtabench: products and order_items have no timestamp column
+        # - kaggle_airbnb: neighbourhoods has no timestamp column, and listings has no non-null one
+        # - tpc_h, tpc_ds: the dimension tables have no timestamp column
+        # - jsonbench: the loader keeps the row count by inserting `{}` for each repaired split
+        #   record, and those rows have no time_us
+        return {"time_series": ArcTimeSeries, "clickbench": ArcClickbench, "chat_threads": ArcChatThreads}

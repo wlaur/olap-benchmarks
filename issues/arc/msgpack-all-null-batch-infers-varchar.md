@@ -41,13 +41,16 @@ import httpx, msgpack
 
 arc = httpx.Client(base_url="http://localhost:18000", headers={"x-arc-database": "repro"})
 
+
 def write(columns: dict) -> None:
     body = msgpack.packb({"m": "readings", "columns": columns})
     arc.post("/api/v1/write/msgpack", content=body, headers={"content-type": "application/msgpack"}).raise_for_status()
     arc.post("/api/v1/write/line-protocol/flush").raise_for_status()
 
+
 def query(sql: str) -> str:
     return arc.post("/api/v1/query", json={"sql": sql}).text
+
 
 t0 = 1_704_067_200_000_000  # 2024-01-01T00:00:00Z in microseconds
 write({"time": [t0, t0 + 60_000_000], "value": [1.5, 2.5]})
