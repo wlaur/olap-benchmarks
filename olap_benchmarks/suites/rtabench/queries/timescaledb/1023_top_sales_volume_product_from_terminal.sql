@@ -8,6 +8,7 @@ WHERE
     event_created = '2024-07-01'
     and terminal = 'Berlin'
 ORDER BY
-    volume DESC
+    volume DESC,
+    product_id
 LIMIT
     10;

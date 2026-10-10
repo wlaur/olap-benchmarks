@@ -9,6 +9,7 @@ WHERE
 GROUP BY
     day
 ORDER BY
-    delayed_orders desc
+    delayed_orders desc,
+    day
 limit
     20;

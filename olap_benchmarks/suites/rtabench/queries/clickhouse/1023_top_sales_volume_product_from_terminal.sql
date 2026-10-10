@@ -12,6 +12,7 @@ GROUP BY
     product_id,
     product_name
 ORDER BY
-    sum(volume) DESC
+    sum(volume) DESC,
+    product_id
 LIMIT
     10;

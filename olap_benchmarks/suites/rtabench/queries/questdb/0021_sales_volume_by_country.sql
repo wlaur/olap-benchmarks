@@ -12,4 +12,5 @@ WHERE
 GROUP BY
     c.country
 ORDER BY
-    total_sales DESC;
+    total_sales DESC,
+    c.country;

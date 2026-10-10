@@ -9,4 +9,5 @@ WHERE
 GROUP BY
     category
 ORDER BY
-    sum(volume) DESC;
+    sum(volume) DESC,
+    category;

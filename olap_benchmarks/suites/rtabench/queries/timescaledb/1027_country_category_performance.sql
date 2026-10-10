@@ -12,4 +12,5 @@ GROUP BY
     country,
     product_category
 ORDER BY
-    sum(revenue) DESC;
+    sum(revenue) DESC,
+    product_category;

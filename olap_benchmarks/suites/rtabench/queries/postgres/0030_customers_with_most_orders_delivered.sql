@@ -12,5 +12,6 @@ WHERE
 GROUP BY
     c.customer_id
 ORDER BY
-    count(o.order_id) DESC
+    count(o.order_id) DESC,
+    c.customer_id
 LIMIT 10;

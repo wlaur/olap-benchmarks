@@ -12,4 +12,5 @@ WHERE
 GROUP BY
     c.country
 ORDER BY
-    2 DESC;
+    2 DESC,
+    c.country;

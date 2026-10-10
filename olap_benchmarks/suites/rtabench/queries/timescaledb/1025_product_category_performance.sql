@@ -6,4 +6,5 @@ FROM
 WHERE
     event_created = '2024-01-01'
 ORDER BY
-    volume DESC;
+    volume DESC,
+    category;

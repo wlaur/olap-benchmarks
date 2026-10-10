@@ -7,6 +7,7 @@ WHERE
     week >= '2024-01-29'
     and week < '2024-02-05'
 ORDER BY
-    count desc
+    count desc,
+    order_id
 LIMIT
     1;

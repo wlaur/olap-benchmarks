@@ -13,6 +13,7 @@ GROUP BY
     c.name
 ORDER BY
     count(o.order_id) DESC,
-    c.name
+    c.name,
+    c.customer_id
 LIMIT
     10;

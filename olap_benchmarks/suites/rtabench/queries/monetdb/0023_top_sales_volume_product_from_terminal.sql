@@ -15,6 +15,7 @@ GROUP BY
     product_id,
     p.name
 ORDER BY
-    sum(oi.amount * p.price) DESC
+    sum(oi.amount * p.price) DESC,
+    product_id
 LIMIT
     10;

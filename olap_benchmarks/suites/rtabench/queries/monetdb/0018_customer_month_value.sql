@@ -14,6 +14,7 @@ GROUP BY
     customer_id,
     c.name
 ORDER BY
-    sum(oi.amount * p.price) DESC
+    sum(oi.amount * p.price) DESC,
+    customer_id
 LIMIT
     10;

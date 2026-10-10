@@ -11,6 +11,8 @@ GROUP BY
     day,
     order_id
 ORDER BY
-    delayed_orders desc
+    delayed_orders desc,
+    day,
+    order_id
 limit
     1;

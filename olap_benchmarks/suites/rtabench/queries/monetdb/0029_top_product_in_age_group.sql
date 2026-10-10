@@ -64,6 +64,7 @@ GROUP BY
     product_id,
     p.name
 ORDER BY
-    total_sales DESC
+    total_sales DESC,
+    product_id
 LIMIT
     10;

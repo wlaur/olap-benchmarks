@@ -14,6 +14,7 @@ GROUP BY
     c.customer_id,
     c.name
 ORDER BY
-    total_sales DESC
+    total_sales DESC,
+    c.customer_id
 LIMIT
     10;

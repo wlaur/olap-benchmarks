@@ -7,6 +7,7 @@ WHERE
     day > '2024-05-01'
     and day < '2024-06-01'
 ORDER BY
-    count desc
+    count desc,
+    day
 limit
     20;

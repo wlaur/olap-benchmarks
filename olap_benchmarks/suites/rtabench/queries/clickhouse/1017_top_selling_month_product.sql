@@ -11,6 +11,7 @@ GROUP BY
     product_id,
     product_name
 ORDER BY
-    sum(amount) DESC
+    sum(amount) DESC,
+    product_id
 LIMIT
     10;

@@ -14,6 +14,7 @@ GROUP BY
     customer_id,
     c.name
 ORDER BY
-    count(order_id) DESC
+    count(order_id) DESC,
+    customer_id
 LIMIT
     10;
