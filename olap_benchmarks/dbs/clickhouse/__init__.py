@@ -84,6 +84,10 @@ def get_clickhouse_client() -> ClickhouseClient:
             username=parsed_sqlalchemy_connection_string.username,
             password=parsed_sqlalchemy_connection_string.password or "no-password",
             database="default",
+            # Nothing relies on session state (no temporary tables or SET); with a session id the
+            # driver's retried reads can collide with the server still holding the session and fail
+            # with SESSION_IS_LOCKED.
+            autogenerate_session_id=False,
         ),
     )
 
