@@ -5,6 +5,7 @@ import { getKyselyDb, type ResultsDb } from "./duckdb"
 import type {
   CatalogRunDimension,
   ExplorerQueryMetric,
+  ProfileScope,
   QueriesManifest,
   QueryCoverage,
   QuerySummary,
@@ -27,12 +28,63 @@ export async function fetchQueriesManifest(): Promise<QueriesManifest> {
   return queriesCache
 }
 
+let profileScopeCache: Promise<ProfileScope> | null = null
+
+export function fetchProfileScope(): Promise<ProfileScope> {
+  profileScopeCache ??= loadProfileScope()
+  return profileScopeCache
+}
+
+async function loadProfileScope(): Promise<ProfileScope> {
+  const db = await getKyselyDb()
+  const rows = await db
+    .selectFrom("run")
+    .select((eb) => [
+      eb.ref("run.benchmark_profile").as("profile"),
+      sql<number>`cast(count(*) as integer)`.as("runs"),
+      sql<
+        number | null
+      >`max(cast(json_extract(${eb.ref("run.metadata")}, '$.benchmark_profile.warmup_iterations') as integer))`.as(
+        "warmup_iterations",
+      ),
+      sql<
+        number | null
+      >`max(cast(json_extract(${eb.ref("run.metadata")}, '$.benchmark_profile.measured_iterations') as integer))`.as(
+        "measured_iterations",
+      ),
+    ])
+    .where("run.operation", "=", "select")
+    .where("run.status", "=", "completed")
+    .where("run.finished_at", "is not", null)
+    .groupBy("run.benchmark_profile")
+    .orderBy(sql`max(${sql.ref("run.finished_at")})`, "desc")
+    .execute()
+
+  const [active, ...excluded] = rows
+  return {
+    active: active
+      ? {
+          id: active.profile,
+          warmupIterations: active.warmup_iterations,
+          measuredIterations: active.measured_iterations,
+        }
+      : null,
+    excluded: excluded.map((row) => ({ id: row.profile, runs: row.runs })),
+  }
+}
+
+async function activeProfileId(): Promise<string> {
+  return (await fetchProfileScope()).active?.id ?? ""
+}
+
 export async function fetchSystems(): Promise<string[]> {
   const db = await getKyselyDb()
+  const profile = await activeProfileId()
   const rows = await db
     .selectFrom("run")
     .select("system")
     .distinct()
+    .where("benchmark_profile", "=", profile)
     .where("status", "=", "completed")
     .where("finished_at", "is not", null)
     .orderBy("system")
@@ -43,10 +95,12 @@ export async function fetchSystems(): Promise<string[]> {
 
 export async function fetchSystemSuiteScaleFactors(system: string): Promise<SuiteScaleFactor[]> {
   const db = await getKyselyDb()
+  const profile = await activeProfileId()
   return db
     .selectFrom("run")
     .select(["suite", "suite_scale_factor"])
     .distinct()
+    .where("benchmark_profile", "=", profile)
     .where("system", "=", system)
     .where("status", "!=", "running")
     .orderBy("suite")
@@ -56,10 +110,12 @@ export async function fetchSystemSuiteScaleFactors(system: string): Promise<Suit
 
 export async function fetchCatalogRunDimensions(): Promise<CatalogRunDimension[]> {
   const db = await getKyselyDb()
+  const profile = await activeProfileId()
   return db
     .selectFrom("run")
     .select(["system", "suite", "suite_scale_factor", "db", "db_version", "db_driver"])
     .distinct()
+    .where("benchmark_profile", "=", profile)
     .where("operation", "=", "select")
     .where("status", "=", "completed")
     .where("finished_at", "is not", null)
@@ -76,6 +132,7 @@ export async function fetchExplorerQueryMetrics(
   suite: BenchmarkSuiteId,
 ): Promise<ExplorerQueryMetric[]> {
   const db = await getKyselyDb()
+  const profile = await activeProfileId()
 
   return db
     .with("latest_explorer_runs", (qb) =>
@@ -88,6 +145,7 @@ export async function fetchExplorerQueryMetrics(
           "run.db",
           "run.db_version",
           "run.db_driver",
+          "run.system_snapshot_id",
           "run.finished_at",
         ])
         .select((eb) => [
@@ -102,6 +160,7 @@ export async function fetchExplorerQueryMetrics(
           )`.as("run_rank"),
         ])
         .where("run.suite", "=", suite)
+        .where("run.benchmark_profile", "=", profile)
         .where("run.operation", "=", "select")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null),
@@ -109,9 +168,6 @@ export async function fetchExplorerQueryMetrics(
     .selectFrom("run_step")
     .innerJoin("latest_explorer_runs", "latest_explorer_runs.run_id", "run_step.run_id")
     .select((eb) => {
-      const duration = sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))`
-      const warm = sql`${eb.ref("run_step.iteration_role")} in ('warm', 'steady_state')`
-
       return [
         eb.ref("latest_explorer_runs.run_id").as("run_id"),
         eb.ref("latest_explorer_runs.system").as("system"),
@@ -119,9 +175,10 @@ export async function fetchExplorerQueryMetrics(
         eb.ref("latest_explorer_runs.db").as("db"),
         eb.ref("latest_explorer_runs.db_version").as("db_version"),
         eb.ref("latest_explorer_runs.db_driver").as("db_driver"),
+        eb.ref("latest_explorer_runs.system_snapshot_id").as("system_snapshot_id"),
         isoTimestamp(eb.ref("latest_explorer_runs.finished_at").$notNull()).as("finished_at"),
         eb.ref("run_step.query_name").$notNull().as("query_name"),
-        sql<number>`coalesce(median(${duration}) filter (where ${warm}), median(${duration}))`.as(
+        sql<number>`median(${measuredLatencySeconds(eb.ref("run_step.metadata"))})`.as(
           "median_duration_s",
         ),
       ]
@@ -130,7 +187,7 @@ export async function fetchExplorerQueryMetrics(
     .where("run_step.step_type", "=", "query")
     .where("run_step.status", "=", "completed")
     .where("run_step.result_status", "=", "ok")
-    .where("run_step.finished_at", "is not", null)
+    .where("run_step.iteration_role", "=", "measured")
     .where("run_step.query_name", "is not", null)
     .groupBy([
       "latest_explorer_runs.run_id",
@@ -139,6 +196,7 @@ export async function fetchExplorerQueryMetrics(
       "latest_explorer_runs.db",
       "latest_explorer_runs.db_version",
       "latest_explorer_runs.db_driver",
+      "latest_explorer_runs.system_snapshot_id",
       "latest_explorer_runs.finished_at",
       "run_step.query_name",
     ])
@@ -155,10 +213,17 @@ function isoTimestamp(column: Expression<Date>) {
   return sql<string>`strftime(${column}, ${ISO_TIMESTAMP_FORMAT})`
 }
 
+// the harness's perf_counter around fetch(): the timed boundary, without the answer hashing and
+// result-writer round trips that the step's started_at/finished_at timestamps also span
+function measuredLatencySeconds(metadata: Expression<unknown>) {
+  return sql<number>`cast(json_extract(${metadata}, '$.duration_ms') as double) / 1000`
+}
+
 interface LatestRunsOptions {
   system: string
   suite: BenchmarkSuiteId
   suiteScaleFactor: number
+  profile: string
 }
 
 function withRunLabels(db: ResultsDb, options: LatestRunsOptions) {
@@ -187,6 +252,7 @@ function withRunLabels(db: ResultsDb, options: LatestRunsOptions) {
       .where("run.suite", "=", options.suite)
       .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
       .where("run.system", "=", options.system)
+      .where("run.benchmark_profile", "=", options.profile)
       .where("run.operation", "=", "select")
       .where("run.status", "!=", "running"),
   )
@@ -209,11 +275,13 @@ function withLatestCompletedSelectRuns(db: ResultsDb, options: LatestRunsOptions
           eb.ref("run.db_version").as("db_version"),
           eb.ref("run.db_driver").as("db_driver"),
           eb.ref("run_labels.db_label").as("db_label"),
+          eb.ref("run.system_snapshot_id").as("system_snapshot_id"),
           eb.ref("run.finished_at").$notNull().as("run_finished_at"),
         ])
         .where("run.suite", "=", options.suite)
         .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
         .where("run.system", "=", options.system)
+        .where("run.benchmark_profile", "=", options.profile)
         .where("run.operation", "=", "select")
         .where("run.status", "=", "completed")
         .where("run.finished_at", "is not", null),
@@ -257,6 +325,7 @@ function withLatestAttemptedSelectRuns(db: ResultsDb, options: LatestRunsOptions
         .where("run.suite", "=", options.suite)
         .where("run.suite_scale_factor", "=", options.suiteScaleFactor)
         .where("run.system", "=", options.system)
+        .where("run.benchmark_profile", "=", options.profile)
         .where("run.operation", "=", "select")
         .where("run.status", "!=", "running"),
     )
@@ -280,8 +349,9 @@ export async function fetchQueryCoverage(
   suiteScaleFactor: number,
 ): Promise<QueryCoverage[]> {
   const db = await getKyselyDb()
+  const profile = await activeProfileId()
 
-  return withLatestAttemptedSelectRuns(db, { system, suite, suiteScaleFactor })
+  return withLatestAttemptedSelectRuns(db, { system, suite, suiteScaleFactor, profile })
     .selectFrom("latest_runs")
     .leftJoin("run_step", "run_step.run_id", "latest_runs.run_id")
     .select((eb) => [
@@ -332,46 +402,27 @@ export async function fetchQuerySummaries(
   suiteScaleFactor: number,
 ): Promise<QuerySummary[]> {
   const db = await getKyselyDb()
+  const profile = await activeProfileId()
 
-  return withLatestCompletedSelectRuns(db, { system, suite, suiteScaleFactor })
+  return withLatestCompletedSelectRuns(db, { system, suite, suiteScaleFactor, profile })
     .selectFrom("run_step")
     .innerJoin("latest_runs", "latest_runs.run_id", "run_step.run_id")
-    .select((eb) => {
-      const duration = sql<number>`EXTRACT(EPOCH FROM (${eb.ref("run_step.finished_at")} - ${eb.ref("run_step.started_at")}))`
-      const warm = sql`${eb.ref("run_step.iteration_role")} in ('warm', 'steady_state')`
-      const firstRun = sql`${eb.ref("run_step.iteration_role")} = 'first_run'`
-
-      return [
-        eb.ref("run_step.query_name").$notNull().as("query_name"),
-        eb.ref("latest_runs.db_label").as("db"),
-        eb.ref("latest_runs.db").as("db_name"),
-        eb.ref("latest_runs.db_version").as("db_version"),
-        eb.ref("latest_runs.db_driver").as("db_driver"),
-        sql<number>`coalesce(median(${duration}) filter (where ${warm}), median(${duration}))`.as(
-          "median_duration_s",
-        ),
-        sql<number | null>`min(${duration}) filter (where ${firstRun})`.as("first_run_duration_s"),
-        sql<number | null>`median(${duration}) filter (where ${warm})`.as("warm_median_duration_s"),
-        sql<number | null>`min(${duration}) filter (where ${warm})`.as("best_warm_duration_s"),
-        sql<number>`median(${duration})`.as("all_iterations_median_duration_s"),
-        sql<number>`coalesce(avg(${duration}) filter (where ${warm}), avg(${duration}))`.as(
-          "avg_duration_s",
-        ),
-        sql<number>`coalesce(min(${duration}) filter (where ${warm}), min(${duration}))`.as(
-          "min_duration_s",
-        ),
-        sql<number>`coalesce(max(${duration}) filter (where ${warm}), max(${duration}))`.as(
-          "max_duration_s",
-        ),
-        sql<number>`cast(count(*) as integer)`.as("iterations"),
-        sql<number>`cast(count(*) filter (where ${warm}) as integer)`.as("warm_iterations"),
-      ]
-    })
+    .select((eb) => [
+      eb.ref("run_step.query_name").$notNull().as("query_name"),
+      eb.ref("latest_runs.db_label").as("db"),
+      eb.ref("latest_runs.db").as("db_name"),
+      eb.ref("latest_runs.db_version").as("db_version"),
+      eb.ref("latest_runs.db_driver").as("db_driver"),
+      eb.ref("latest_runs.system_snapshot_id").as("system_snapshot_id"),
+      sql<number>`median(${measuredLatencySeconds(eb.ref("run_step.metadata"))})`.as(
+        "median_duration_s",
+      ),
+    ])
     .where("latest_runs.run_rank", "=", 1)
     .where("run_step.step_type", "=", "query")
     .where("run_step.status", "=", "completed")
     .where("run_step.result_status", "=", "ok")
-    .where("run_step.finished_at", "is not", null)
+    .where("run_step.iteration_role", "=", "measured")
     .where("run_step.query_name", "is not", null)
     .groupBy([
       "run_step.query_name",
@@ -379,6 +430,7 @@ export async function fetchQuerySummaries(
       "latest_runs.db",
       "latest_runs.db_version",
       "latest_runs.db_driver",
+      "latest_runs.system_snapshot_id",
     ])
     .orderBy("run_step.query_name")
     .orderBy("latest_runs.db_label")

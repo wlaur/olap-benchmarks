@@ -7,7 +7,7 @@ import {
   fetchQuerySummaries,
   fetchSystemSuiteScaleFactors,
 } from "../lib/queries"
-import { computeDatabaseScores, type DatabaseScore } from "../lib/score"
+import { computeDatabaseScores, geometricMean, type DatabaseScore } from "../lib/score"
 import { getSuiteConfig } from "../lib/suiteConfig"
 
 export interface HomeDatabase {
@@ -16,6 +16,7 @@ export interface HomeDatabase {
   dbName: string
   dbVersion: string
   overallScore: number
+  overallLatencyS: number | null
 }
 
 export interface SuiteOverview {
@@ -25,6 +26,7 @@ export interface SuiteOverview {
   title: string
   publicRole: BenchmarkDefinition["publicRole"]
   scores: DatabaseScore[]
+  snapshotIds: (number | null)[]
 }
 
 export interface HomeOverview {
@@ -33,6 +35,7 @@ export interface HomeOverview {
   databases: HomeDatabase[]
   suites: SuiteOverview[]
   scoresByDbAndSuite: Map<string, Map<string, DatabaseScore>>
+  snapshotCount: number
 }
 
 const EMPTY_OVERVIEW: HomeOverview = {
@@ -41,6 +44,7 @@ const EMPTY_OVERVIEW: HomeOverview = {
   databases: [],
   suites: [],
   scoresByDbAndSuite: new Map(),
+  snapshotCount: 0,
 }
 
 export function useHomeOverview(
@@ -79,6 +83,7 @@ export function useHomeOverview(
               title: column.title,
               publicRole: column.definition.publicRole,
               scores: computeDatabaseScores(summaries, coverage, Object.keys(suiteQueries)),
+              snapshotIds: summaries.map((summary) => summary.system_snapshot_id),
             }
           }),
         )
@@ -110,6 +115,18 @@ export function useHomeOverview(
           if (finite.length > 0) worstBySuite.set(suite.key, Math.max(...finite))
         }
 
+        const overallLatencies = new Map<string, number | null>()
+        for (const dbKey of databasesByKey.keys()) {
+          overallLatencies.set(
+            dbKey,
+            geometricMean(
+              rankedSuites.flatMap(
+                (suite) => scoresByDbAndSuite.get(dbKey)?.get(suite.key)?.latenciesS ?? [],
+              ),
+            ),
+          )
+        }
+
         const overallScores = new Map<string, number>()
         for (const dbKey of databasesByKey.keys()) {
           let logSum = 0
@@ -137,6 +154,7 @@ export function useHomeOverview(
             .map((database) => ({
               ...database,
               overallScore: overallScores.get(database.key) ?? Number.POSITIVE_INFINITY,
+              overallLatencyS: overallLatencies.get(database.key) ?? null,
               label:
                 (versionCountsByDb.get(database.dbName)?.size ?? 0) > 1
                   ? `${database.dbName} ${database.dbVersion}`
@@ -149,6 +167,7 @@ export function useHomeOverview(
             }),
           suites,
           scoresByDbAndSuite,
+          snapshotCount: new Set(suites.flatMap((suite) => suite.snapshotIds)).size,
         })
       })
       .catch((error) => {

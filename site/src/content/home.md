@@ -20,16 +20,17 @@ Every run records the system it ran on, and results from different systems are n
 
 ### What is timed
 
-- **Query latency** is end-to-end client latency: a `perf_counter` timer around the client's `fetch()`, from sending the query until the full result is materialized as a Polars DataFrame. It includes driver, transfer, and conversion time, and is not the engine's internal execution time.
-- Each select query runs a fixed number of iterations defined per suite (mostly 3–5). The reported value is the median of the warm iterations (all iterations after the first); a query with a single recorded iteration falls back to that value.
-- The first iteration is not a true cold run. Each benchmark operation (populate, select, …) runs in a fresh process, so embedded engines such as DuckDB and Polars are reopened per operation, and server engines are restarted after populate. Operating-system file caches are never dropped, so the first iteration may still read warm pages.
+- **Query latency** is end-to-end client latency: a `perf_counter` timer around the client's `fetch()`, from sending the query until the full result is materialized as a Polars DataFrame. It includes driver, transfer, and conversion time, and is not the engine's internal execution time. Answer hashing and result recording happen outside the timer.
+- Every run follows a versioned **benchmark profile**, shown above the ranking. The current profile, `resident-hot-v1`, runs each select query once as an unscored warm-up and then three measured times; the reported value is the median of the three measured iterations. Runs recorded under a different profile are never compared with it.
+- Before the select queries, server engines are restarted and embedded engines such as DuckDB and Polars are reopened (every benchmark operation runs in a fresh process). Operating-system file caches are not dropped between iterations, so measured iterations read data that is resident in memory: the profile measures hot latency, not cold storage reads.
+- Every run records the SHA-256 of each query text it executed and of the schema files it used, the profile and its parameters, the repository commit, the container image digests, and a fingerprint of the input files. Comparisons on this site are limited to one system; a warning appears when the compared runs span more than one snapshot of that system (operating system, Docker or hardware changed).
 - Populate time, mutation and concurrency workloads, and resource usage (CPU, server and client memory, disk) are recorded with every run but not yet shown on this site.
 
 ### Scores
 
 A suite score is the geometric mean, over the suite's queries, of each engine's latency divided by the fastest latency for that query, with 10 ms added to both sides so very fast queries do not dominate. A missing or failed query counts as 10× or twice the slowest engine's ratio for that query, whichever is larger. The overall ranking is the geometric mean across benchmark suites. 1.0× means fastest on every query.
 
-Scores are relative to the fastest engine **in the current selection**, not absolute. Adding or removing an engine (or changing the explorer comparison) can change every other engine's score, including the penalty for missing queries; compare absolute latencies in the explorer for anything that must hold across selections.
+Scores are relative to the fastest engine **in the current selection**, not absolute. Adding or removing an engine (or changing the explorer comparison) can change every other engine's score, including the penalty for missing queries; compare the absolute latencies shown below each score, or in the explorer, for anything that must hold across selections.
 
 ### Engine configuration
 

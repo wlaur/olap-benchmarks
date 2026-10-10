@@ -4,16 +4,13 @@ export interface QuerySummary {
   db_name: string
   db_version: string
   db_driver: string | null
+  system_snapshot_id: number | null
   median_duration_s: number
-  first_run_duration_s: number | null
-  warm_median_duration_s: number | null
-  best_warm_duration_s: number | null
-  all_iterations_median_duration_s: number
-  avg_duration_s: number
-  min_duration_s: number
-  max_duration_s: number
-  iterations: number
-  warm_iterations: number
+}
+
+export interface ProfileScope {
+  active: { id: string; warmupIterations: number | null; measuredIterations: number | null } | null
+  excluded: { id: string; runs: number }[]
 }
 
 export type RunStatus = "running" | "completed" | "failed"
@@ -53,6 +50,7 @@ export interface ExplorerQueryMetric {
   db: string
   db_version: string
   db_driver: string | null
+  system_snapshot_id: number | null
   finished_at: string
   query_name: string
   median_duration_s: number

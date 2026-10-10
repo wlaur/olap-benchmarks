@@ -4,10 +4,12 @@ import { useNavigate } from "react-router-dom"
 import { useHomeOverview } from "../../hooks/useHomeOverview"
 import { cn } from "../../lib/cn"
 import { getDatabaseColors } from "../../lib/databaseColors"
-import { formatScore } from "../../lib/score"
+import { formatLatencyMs } from "../../lib/format"
+import { formatScore, geometricMean } from "../../lib/score"
 import { useAppStore } from "../../stores/useAppStore"
+import { ProfileScopeNotice, SnapshotSpanWarning } from "../methodology/ComparisonScopeNotices"
 import { Skeleton } from "../Skeleton"
-import { BodyText, SectionTitle } from "../Typography"
+import { BodyText, CaptionText, NumericText, SectionTitle } from "../Typography"
 
 export function HomeScoreTable() {
   const navigate = useNavigate()
@@ -45,7 +47,8 @@ export function HomeScoreTable() {
         <BodyText className="mt-1">
           Overall score across benchmark suites, relative to the fastest of the databases shown, so
           scores shift when databases are added or removed. Lower is better; 1.0× means fastest on
-          every query. Missing results are penalized.{" "}
+          every query. Missing results are penalized. Below each score is the absolute geometric
+          mean of the per-query median latency over the queries that database completed.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -60,9 +63,14 @@ export function HomeScoreTable() {
             Each suite score is the geometric mean of per-query latency ratios versus the fastest
             database shown, with 10ms smoothing and missing queries penalized. Overall ordering is
             the geometric mean across benchmark suites; smoke suites are shown but excluded. A
-            missing suite counts as that suite&apos;s worst recorded score.
+            missing suite counts as that suite&apos;s worst recorded score. Latency is end-to-end
+            client latency, from sending the query until the result is a Polars DataFrame, as the
+            median of the measured iterations; the absolute figures cover only completed queries, so
+            compare them between databases with the same completed count.
           </p>
         </details>
+        <ProfileScopeNotice className="mt-3" />
+        <SnapshotSpanWarning snapshotCount={overview.snapshotCount} className="mt-2" />
       </div>
 
       <div className="panel-scrollbar hidden overflow-x-auto overscroll-x-contain lg:block">
@@ -72,7 +80,12 @@ export function HomeScoreTable() {
               <th className="sticky left-0 z-20 w-44 bg-surface-inset px-4 py-3 font-medium">
                 Database
               </th>
-              <th className="w-24 px-2 py-3 text-right font-medium">Overall</th>
+              <th className="w-24 px-2 py-3 text-right font-medium">
+                Overall
+                <CaptionText className="mt-0.5 tracking-normal normal-case">
+                  score · geo-mean latency
+                </CaptionText>
+              </th>
               {suites.map((suite) => (
                 <th key={suite.key} className="px-2 py-3 text-right font-medium last:pr-6">
                   <button
@@ -122,9 +135,10 @@ export function HomeScoreTable() {
                     </div>
                   </td>
                   <td className="px-2 py-3 text-right align-middle">
-                    <span className="font-mono text-sm font-semibold text-slate-100 tabular-nums">
+                    <NumericText className="font-semibold">
                       {formatScore(database.overallScore)}
-                    </span>
+                    </NumericText>
+                    <LatencyCaption latencyS={database.overallLatencyS} className="text-right" />
                   </td>
                   {suites.map((suite) => (
                     <ScoreCell
@@ -175,9 +189,12 @@ export function HomeScoreTable() {
                       {database.label}
                     </span>
                   </div>
-                  <span className="shrink-0 font-mono text-sm font-semibold text-slate-100 tabular-nums">
-                    {formatScore(database.overallScore)}
-                  </span>
+                  <div className="shrink-0 text-right">
+                    <NumericText className="font-semibold">
+                      {formatScore(database.overallScore)}
+                    </NumericText>
+                    <LatencyCaption latencyS={database.overallLatencyS} />
+                  </div>
                 </div>
                 <details className="mt-3">
                   <summary className="w-fit cursor-pointer rounded-sm text-xs text-slate-400 outline-none hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-slate-300/20">
@@ -240,8 +257,8 @@ function ScoreValue({ score, rank, align }: ScoreCellProps & { align: "left" | "
   if (!score) {
     return (
       <div className={cn(align === "right" ? "text-right" : "mt-2 text-left")}>
-        <span className="font-mono text-sm text-slate-500 tabular-nums">—</span>
-        <p className="mt-0.5 text-[10px] text-slate-500">not run</p>
+        <NumericText className="text-slate-500">—</NumericText>
+        <CaptionText className="mt-0.5 text-slate-500">not run</CaptionText>
       </div>
     )
   }
@@ -258,25 +275,34 @@ function ScoreValue({ score, rank, align }: ScoreCellProps & { align: "left" | "
     <div className={cn(align === "left" && "mt-2")}>
       <div className={cn("flex items-center gap-2", align === "right" && "justify-end")}>
         {isLeader ? <Trophy className="size-3.5 text-amber-300" aria-label="Leader" /> : null}
-        <span
-          className={cn(
-            "font-mono text-sm tabular-nums",
-            isLeader ? "font-semibold text-amber-200" : "text-slate-100",
-          )}
-        >
+        <NumericText className={cn(isLeader && "font-semibold text-amber-200")}>
           {formatScore(score.score)}
-        </span>
+        </NumericText>
       </div>
-      <p
-        className={cn(
-          "mt-0.5 text-[10px] leading-tight text-slate-400",
-          align === "right" && "text-right",
-        )}
-      >
+      <LatencyCaption
+        latencyS={geometricMean(score.latenciesS)}
+        className={cn(align === "right" && "text-right")}
+      />
+      <CaptionText className={cn("mt-0.5", align === "right" && "text-right")}>
         {coverageParts.join(" · ")}
         {score.missing > 0 && score.failed > 0 && score.neverCompleted === 0 ? " penalized" : ""}
-      </p>
+      </CaptionText>
     </div>
+  )
+}
+
+function LatencyCaption({ latencyS, className }: { latencyS: number | null; className?: string }) {
+  if (latencyS === null) return null
+
+  return (
+    <CaptionText
+      className={cn("mt-0.5 font-mono whitespace-nowrap text-slate-300 tabular-nums", className)}
+      as="p"
+    >
+      <span title="Geometric mean of the per-query median measured latency over the completed queries">
+        {formatLatencyMs(latencyS * 1000)}
+      </span>
+    </CaptionText>
   )
 }
 
