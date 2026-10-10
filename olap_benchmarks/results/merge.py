@@ -9,9 +9,9 @@ import duckdb
 
 _LOGGER = logging.getLogger(__name__)
 
-# Run rows have no stable id across database files (each file starts its
-# sequences at 1), so runs are matched by this natural key when merging.
-RUN_NATURAL_KEY = (
+# Run rows have no stable id across database files (each file starts its sequences at 1), so runs
+# are matched by the benchmark cell they measure. A rerun of a cell therefore replaces the old run.
+RUN_CELL_KEY = (
     "system",
     "db",
     "db_version",
@@ -19,7 +19,6 @@ RUN_NATURAL_KEY = (
     "suite",
     "suite_scale_factor",
     "operation",
-    "started_at",
 )
 
 MERGE_TABLES = ("system_snapshot", "run", "run_step", "run_metric", "query_execution")
@@ -66,9 +65,9 @@ def _require_same_schema_revision(con: duckdb.DuckDBPyConnection, head: str) -> 
 def merge_results(source_db_path: Path, dest_db_path: Path, head_revision: str) -> MergeStats:
     """Merge all runs from `source_db_path` into `dest_db_path`.
 
-    Runs are matched on RUN_NATURAL_KEY: matching destination runs are replaced
-    (the whole run subtree), unmatched source runs are added. Ids are remapped
-    since both files allocate ids from 1. Orphaned 'running' runs are skipped.
+    Runs are matched on RUN_CELL_KEY: every destination run of a cell the source
+    contains is removed (the whole run subtree) and the source runs are added. Ids are
+    remapped since both files allocate ids from 1. Orphaned 'running' runs are skipped.
     """
     con = cast(Any, duckdb).connect(str(dest_db_path))
 
@@ -76,9 +75,20 @@ def merge_results(source_db_path: Path, dest_db_path: Path, head_revision: str) 
         con.execute(f"ATTACH '{source_db_path.as_posix()}' AS src (READ_ONLY)")
         _require_same_schema_revision(con, head_revision)
 
+        # DuckDB checks a unique index against rows deleted earlier in the same transaction, so a rerun
+        # whose started_at equals the replaced run's would collide; removal therefore commits first.
+        # Callers that need all-or-nothing semantics merge into a copy (publish stages its output).
         con.execute("BEGIN")
         try:
-            stats = _merge_attached(con)
+            runs_replaced = _remove_replaced_runs(con)
+            con.execute("COMMIT")
+        except BaseException:
+            con.execute("ROLLBACK")
+            raise
+
+        con.execute("BEGIN")
+        try:
+            stats = _merge_attached(con, runs_replaced)
             _sync_sequences(con)
             con.execute("COMMIT")
         except BaseException:
@@ -94,22 +104,28 @@ def merge_results(source_db_path: Path, dest_db_path: Path, head_revision: str) 
     return stats
 
 
-def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
-    key_join = " and ".join(f"d.{column} is not distinct from s.{column}" for column in RUN_NATURAL_KEY)
+def _remove_replaced_runs(con: duckdb.DuckDBPyConnection) -> int:
+    key_join = " and ".join(f"d.{column} is not distinct from s.{column}" for column in RUN_CELL_KEY)
 
+    con.execute("create or replace temp table source_run as select * from src.run where status <> 'running'")
     con.execute(
         f"""
-        create or replace temp table matched_run as
-        select d.id as dest_id, s.id as src_id
-        from run d join src.run s on {key_join}
-        where s.status <> 'running'
+        create or replace temp table replaced_run as
+        select d.id from run d where exists (select 1 from source_run s where {key_join})
         """
     )
-    runs_replaced = _fetch_scalar(con, "select count(*) from matched_run")
+    runs_replaced = _fetch_scalar(
+        con, f"select count(*) from source_run s where exists (select 1 from run d where {key_join})"
+    )
 
-    con.execute("delete from query_execution where run_id in (select dest_id from matched_run)")
-    con.execute("delete from run_metric where run_id in (select dest_id from matched_run)")
-    con.execute("delete from run_step where run_id in (select dest_id from matched_run)")
+    con.execute("delete from query_execution where run_id in (select id from replaced_run)")
+    con.execute("delete from run_metric where run_id in (select id from replaced_run)")
+    con.execute("delete from run_step where run_id in (select id from replaced_run)")
+    con.execute("delete from run where id in (select id from replaced_run)")
+    return runs_replaced
+
+
+def _merge_attached(con: duckdb.DuckDBPyConnection, runs_replaced: int) -> MergeStats:
 
     con.execute(
         """
@@ -178,45 +194,14 @@ def _merge_attached(con: duckdb.DuckDBPyConnection) -> MergeStats:
     con.execute(
         """
         create or replace temp table unmatched_source_run as
-        select s.id
-        from src.run s
-        left join matched_run m on s.id = m.src_id
-        where s.status <> 'running' and m.src_id is null
+        select s.id from source_run s
         """
     )
-    runs_added = _fetch_scalar(con, "select count(*) from unmatched_source_run")
-
-    con.execute(
-        """
-        update run as d
-        set
-            suite = s.suite,
-            suite_scale_factor = s.suite_scale_factor,
-            db = s.db,
-            db_version = s.db_version,
-            db_driver = s.db_driver,
-            operation = s.operation,
-            system = s.system,
-            system_snapshot_id = (
-                select m.new_id from system_snapshot_map m where m.src_id = s.system_snapshot_id
-            ),
-            status = s.status,
-            started_at = s.started_at,
-            finished_at = s.finished_at,
-            error_type = s.error_type,
-            error_message = s.error_message,
-            "metadata" = s."metadata"
-        from src.run s
-        join matched_run m on s.id = m.src_id
-        where d.id = m.dest_id
-        """
-    )
+    runs_added = _fetch_scalar(con, "select count(*) from unmatched_source_run") - runs_replaced
 
     con.execute(
         f"""
         create or replace temp table run_map as
-        select src_id, dest_id as new_id from matched_run
-        union all
         select s.id as src_id, {run_offset} + row_number() over (order by s.id) as new_id
         from unmatched_source_run s
         """

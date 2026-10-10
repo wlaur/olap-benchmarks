@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 
+from ..matrix import MatrixCell, current_drivers, current_pins, expand_matrix
 from ..settings import (
     ALL_SUITE_SCALE_FACTORS,
     DEFAULT_SUITE_SCALE_FACTORS,
@@ -32,12 +35,17 @@ from ..settings import (
     SUITE_QUERY_NAME_PARSERS,
     Revision,
 )
+from .cells import StoredRun, load_runs, superseded_runs
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from .merge import MergeStats, merge_results
 from .models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
+from .publishing import publishable_run_ids, single_system, validate_publishable_runs
 from .schema import ensure_results_schema
+from .validation import validate_results
 
 _LOGGER = logging.getLogger(__name__)
+
+PUBLISHED_DATA_DIRECTORY = REPO_ROOT / "site" / "public" / "data"
 
 
 def _serialize_json(value: object) -> str:
@@ -175,168 +183,31 @@ def _published_table_counts(db_path: Path) -> dict[str, int]:
         con.close()
 
 
-def _validate_publishable_runs(db_path: Path) -> None:
-    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
-    try:
-        running_row = con.execute("select count(*) from run where status = 'running'").fetchone()
-        assert running_row is not None
-        running = int(running_row[0])
-        if running:
-            raise RuntimeError(f"Results database contains {running} running run(s)")
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(8 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
-        drivers = {
-            str(row[0])
-            for row in con.execute(
-                "select distinct db_driver from run where db = 'monetdb' and db_driver is not null"
-            ).fetchall()
-        }
-        if not drivers:
-            return
-        unexpected_drivers = sorted(drivers - {"adbc"})
-        if unexpected_drivers:
-            raise RuntimeError(f"Unknown MonetDB db_driver values: {unexpected_drivers}")
 
-        from ..dbs.monetdb.manifest import monetdb_benchmark_manifest
-
-        completed_cells = {
-            (str(suite), int(scale_factor), str(operation))
-            for suite, scale_factor, operation in con.execute(
-                """
-                select suite, suite_scale_factor, operation
-                from run
-                where db = 'monetdb' and status = 'completed' and db_driver = 'adbc'
-                group by suite, suite_scale_factor, operation
-                """
-            ).fetchall()
-        }
-
-        # The gate exists so a partially validated MonetDB is never published, and it stays scoped
-        # to the (suite, scale factor) pairs this results database actually contains. Demanding
-        # every configured scale factor would instead block any publish that deliberately ran a
-        # subset, which is the normal case: a default-scale run has no reason to generate the
-        # 31 GB of SF10 and SF50 input the full fan-out needs. Whatever was run must still be
-        # complete, so a suite missing an operation is still caught.
-        benchmarked = {(suite, scale_factor) for suite, scale_factor, _ in completed_cells}
-        expected = {
-            (cell.suite, cell.scale_factor, cell.operation)
-            for cell in monetdb_benchmark_manifest()
-            if (cell.suite, cell.scale_factor) in benchmarked
-        }
-        missing = sorted(expected - completed_cells)
-        if missing:
-            formatted = ", ".join(f"{suite}:sf{scale}:{operation}" for suite, scale, operation in missing)
-            raise RuntimeError(f"MonetDB release matrix lacks completed ADBC runs: {formatted}")
-
-        missing_baselines = [
-            int(row[0])
-            for row in con.execute(
-                """
-                select r.id
-                from run r
-                where r.db = 'monetdb'
-                  and r.db_driver is not null
-                  and r.status in ('completed', 'failed')
-                  and (
-                    (
-                      select count(*)
-                      from run_step s
-                      where s.run_id = r.id
-                        and s.step_name = 'session_baseline_before'
-                        and s.status = 'completed'
-                        and s.row_count = 1
-                        and coalesce(
-                          cast(json_extract(s."metadata", '$.temporary_ingest_tables') as integer),
-                          -1
-                        ) = 0
-                    ) <> 1
-                    or
-                    (
-                      select count(*)
-                      from run_step s
-                      where s.run_id = r.id
-                        and s.step_name = 'session_baseline_after'
-                        and s.status = 'completed'
-                        and s.row_count = 0
-                        and coalesce(
-                          cast(json_extract(s."metadata", '$.temporary_ingest_tables') as integer),
-                          -1
-                        ) = 0
-                    ) <> 1
-                  )
-                order by r.id
-                """
-            ).fetchall()
-        ]
-        if missing_baselines:
-            raise RuntimeError(f"MonetDB runs lack clean session baselines: {missing_baselines}")
-
-        invalid_query_steps = [
-            int(row[0])
-            for row in con.execute(
-                """
-                select s.id
-                from run_step s
-                join run r on r.id = s.run_id
-                where r.db = 'monetdb'
-                  and r.db_driver is not null
-                  and r.status = 'completed'
-                  and r.operation = 'select'
-                  and s.step_type = 'query'
-                  and (
-                    s.status <> 'completed'
-                    or s.result_status not in ('ok', 'skipped', 'unsupported')
-                    or (
-                      s.result_status = 'ok'
-                      and (
-                        s.row_count is null
-                        or (
-                          json_extract_string(s."metadata", '$.answer_hash') is null
-                          and json_extract_string(s."metadata", '$.answer_hash_skipped_reason') is null
-                        )
-                      )
-                    )
-                    or (
-                      s.result_status in ('skipped', 'unsupported')
-                      and json_extract_string(s."metadata", '$.skip_reason') is null
-                    )
-                  )
-                order by s.id
-                """
-            ).fetchall()
-        ]
-        missing_query_runs = [
-            int(row[0])
-            for row in con.execute(
-                """
-                select r.id
-                from run r
-                where r.db = 'monetdb'
-                  and r.db_driver is not null
-                  and r.status = 'completed'
-                  and r.operation = 'select'
-                  and not exists (
-                    select 1 from run_step s where s.run_id = r.id and s.step_type = 'query'
-                  )
-                order by r.id
-                """
-            ).fetchall()
-        ]
-        if invalid_query_steps or missing_query_runs:
-            raise RuntimeError(
-                "MonetDB select runs lack correctness results: "
-                f"runs_without_queries={missing_query_runs}, invalid_query_steps={invalid_query_steps}"
-            )
-    finally:
-        con.close()
+def _restrict_to_publishable_runs(db_path: Path, cells: list[MatrixCell], drivers: Mapping[str, str | None]) -> int:
+    runs = load_runs(db_path)
+    keep = publishable_run_ids(runs, cells, system=single_system(runs), drivers=drivers)
+    dropped = [run.id for run in runs if run.id not in keep]
+    if dropped:
+        delete_runs(dropped, db_path=db_path)
+    return len(dropped)
 
 
 def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, MergeStats | None]:
     source_db_path = _require_revision(revision)
-    output_dir = REPO_ROOT / "site" / "public" / "data"
+    output_dir = PUBLISHED_DATA_DIRECTORY
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_db_path = output_dir / "results.db"
     manifest_path = output_dir / "manifest.json"
+    staging_path = output_dir / "results.db.staging"
 
     engine = get_results_engine(read_only=True, db_path=source_db_path)
 
@@ -344,27 +215,40 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
         ensure_results_schema(engine, allow_create=False)
     finally:
         engine.dispose()
-    _validate_publishable_runs(source_db_path)
 
-    merge_stats: MergeStats | None = None
-
-    if merge:
+    if merge and not output_db_path.is_file():
         # the published database is no longer committed, so a fresh clone has no local copy.
         # Quietly copying instead of merging would drop every previously published run, and
         # --upload would then overwrite the release asset with that truncated dataset.
-        if not output_db_path.is_file():
-            raise SystemExit(
-                f"--merge needs the currently published database at {output_db_path}, which is missing.\n"
-                "Fetch it first ('cd site && bun run fetch-data'), or rerun without --merge to "
-                "deliberately replace everything that is published."
-            )
+        raise SystemExit(
+            f"--merge needs the currently published database at {output_db_path}, which is missing.\n"
+            "Fetch it first ('cd site && bun run fetch-data'), or rerun without --merge to "
+            "deliberately replace everything that is published."
+        )
 
-        merge_stats = merge_results(source_db_path, output_db_path, head_revision=get_results_head_revision())
-    else:
-        if output_db_path.is_file():
-            output_db_path.unlink()
+    cells = expand_matrix(published_only=True)
+    pins = current_pins()
+    drivers = current_drivers()
+    merge_stats: MergeStats | None = None
 
-        shutil.copy2(source_db_path, output_db_path)
+    staging_path.unlink(missing_ok=True)
+    try:
+        if merge:
+            shutil.copy2(output_db_path, staging_path)
+            merge_stats = merge_results(source_db_path, staging_path, head_revision=get_results_head_revision())
+        else:
+            shutil.copy2(source_db_path, staging_path)
+
+        dropped = _restrict_to_publishable_runs(staging_path, cells, drivers)
+        if dropped:
+            _LOGGER.info(f"Left out {dropped} run(s) that are not the latest run of a published matrix cell")
+
+        validate_results(db_path=staging_path, pins=pins, mark=True)
+        validate_publishable_runs(staging_path, cells, pins=pins, drivers=drivers)
+        compact_results(db_path=staging_path)
+        staging_path.replace(output_db_path)
+    finally:
+        staging_path.unlink(missing_ok=True)
 
     manifest = {
         "published_at": datetime.now(UTC).isoformat(),
@@ -372,6 +256,8 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
         "source": source_db_path.as_posix(),
         "merged": merge_stats is not None,
         "schema_revision": get_results_head_revision(),
+        "results_db_sha256": _file_sha256(output_db_path),
+        "results_db_bytes": output_db_path.stat().st_size,
         "table_counts": _published_table_counts(output_db_path),
     }
 
@@ -423,11 +309,20 @@ def upload_published_database() -> None:
     The database is not committed: it is large and rewritten on every publish, so git would keep
     every version forever. The site build fetches this asset instead (`bun run fetch-data`).
     """
-    output_db_path = REPO_ROOT / "site" / "public" / "data" / "results.db"
+    output_db_path = PUBLISHED_DATA_DIRECTORY / "results.db"
     if not output_db_path.is_file():
         raise FileNotFoundError(f"No published database at {output_db_path}; run 'olap publish' first")
 
     _upload_release_asset(PUBLISHED_DATABASE_RELEASE_TAG, output_db_path)
+
+
+PAGES_WORKFLOW = "pages.yml"
+
+
+def trigger_pages_deploy() -> None:
+    _require_gh(PUBLISHED_DATABASE_RELEASE_TAG)
+    _LOGGER.info(f"Triggering the {PAGES_WORKFLOW} workflow on main")
+    subprocess.run(["gh", "workflow", "run", PAGES_WORKFLOW, "--ref", "main"], check=True)
 
 
 def upload_results_revision(revision: Revision) -> Path:
@@ -627,6 +522,13 @@ def delete_runs_by_status(status: str, revision: Revision = "default", db_path: 
             return len(run_ids)
     finally:
         engine.dispose()
+
+
+def find_superseded_runs(
+    revision: Revision = "default", db_path: Path | None = None, *, stale_versions: bool = False
+) -> list[StoredRun]:
+    path = db_path or _require_revision(revision)
+    return superseded_runs(load_runs(path), pins=current_pins(), stale_versions=stale_versions)
 
 
 def rename_database(

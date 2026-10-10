@@ -107,6 +107,7 @@ def _populate(
     started_at: datetime | None = None,
     query: str = "select 1",
     snapshot_metadata: dict[str, Any] | None = None,
+    db_version: str = "1.0",
 ) -> int:
     engine = get_results_engine(read_only=False, db_path=db_path)
     try:
@@ -116,6 +117,7 @@ def _populate(
                 suite=suite,
                 suite_scale_factor=suite_scale_factor,
                 db=db,
+                db_version=db_version,
                 db_driver=db_driver,
                 status=status,
                 started_at=started_at,
@@ -206,6 +208,26 @@ def test_merge_replaces_matching_runs(tmp_path: Path) -> None:
     assert _query(dest, "select count(*) from run_step")[0][0] == 2
     assert _query(dest, "select count(*) from run_metric")[0][0] == 2
     assert _query(dest, "select count(*) from query_execution")[0][0] == 2
+
+
+def test_merge_replaces_every_run_of_a_rerun_cell(tmp_path: Path) -> None:
+    source, dest = tmp_path / "source.db", tmp_path / "dest.db"
+    _create_results_db(source)
+    _create_results_db(dest)
+
+    _populate(dest, db="monetdb", started_at=datetime(2026, 3, 1), query="first attempt")
+    _populate(dest, db="monetdb", started_at=datetime(2026, 3, 2), query="second attempt")
+    _populate(dest, db="monetdb", db_version="0.9", started_at=datetime(2026, 2, 1), query="older version")
+    _populate(source, db="monetdb", started_at=datetime(2026, 4, 1), query="rerun")
+
+    stats = merge_results(source, dest, head_revision=get_results_head_revision())
+
+    assert (stats.runs_added, stats.runs_replaced) == (0, 1)
+    assert _query(dest, "select db_version, started_at from run order by started_at") == [
+        ("0.9", datetime(2026, 2, 1)),
+        ("1.0", datetime(2026, 4, 1)),
+    ]
+    assert _query(dest, "select query from query_execution order by query") == [("older version",), ("rerun",)]
 
 
 def test_merge_keeps_distinct_database_drivers_and_matches_null_drivers(

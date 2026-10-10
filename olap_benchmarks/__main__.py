@@ -1,12 +1,14 @@
 import json
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import cyclopts
 from setproctitle import setproctitle
 
 from .dbs import get_databases
-from .metrics.storage import start_writer_process
+from .matrix import MatrixCell, current_drivers, current_pins, expand_matrix
+from .metrics.storage import WriterProcessHandle, start_writer_process
 from .operation_runner import run_operation
 from .results import (
     PUBLISHED_DATABASE_RELEASE_TAG,
@@ -15,12 +17,15 @@ from .results import (
     delete_runs,
     delete_runs_by_status,
     fetch_results_revision,
+    find_superseded_runs,
+    get_results_db_path,
     list_revisions,
     list_runs,
     mark_running_runs_failed,
     migrate_results,
     query_results,
     rename_database,
+    trigger_pages_deploy,
     upload_published_database,
     upload_results_revision,
 )
@@ -30,20 +35,14 @@ from .results import (
 from .results import (
     publish as publish_results,
 )
+from .results.cells import CellStatus, format_matrix_status, format_table, load_runs, matrix_status
+from .results.publishing import PublishValidationError
 from .results.resource_usage import (
     describe_run_resource_usage,
     load_run_resource_usage,
 )
-from .results.validation import (
-    AnswerHashValidationError,
-    RowCountValidationError,
-    assert_latest_query_answer_hashes,
-    assert_latest_query_row_counts,
-    format_answer_hash_mismatches,
-    format_row_count_mismatches,
-    validate_latest_query_answer_hashes,
-    validate_latest_query_row_counts,
-)
+from .results.validation import ValidationReport, clear_wrong_result_marks, validate_results
+from .run_metadata import build_repository_provenance
 from .settings import (
     MAIN_PROCESS_TITLE,
     ROW_STORE_DATABASES,
@@ -78,6 +77,9 @@ cast(Any, app).register_install_completion_command()
 
 results_app = cyclopts.App(name="results", help="Inspect and manage the results database.")
 app.command(results_app)
+
+matrix_app = cyclopts.App(name="matrix", help="Inspect and run the declared benchmark matrix.")
+app.command(matrix_app)
 
 
 def _start_db(db_instance: "Database") -> None:
@@ -220,6 +222,99 @@ def _unique_suite_scale_factor_pairs(
     return pairs
 
 
+@dataclass(frozen=True, slots=True)
+class BenchmarkGroup:
+    db: DatabaseName
+    suite: SuiteName
+    scale_factor: int
+    operations: tuple[Operation, ...]
+
+    @property
+    def label(self) -> str:
+        return f"{self.db}:{self.suite}:sf{self.scale_factor} ({', '.join(self.operations)})"
+
+
+@dataclass(frozen=True, slots=True)
+class GroupOutcome:
+    group: BenchmarkGroup
+    error: str | None
+
+
+def _run_benchmark_group(group: BenchmarkGroup, writer: WriterProcessHandle, cleanup: bool) -> None:
+    db_instance = get_databases()[group.db]
+
+    _LOGGER.info(f"Benchmarking {group.label}")
+    db_instance._current_suite = group.suite
+    db_instance._current_suite_scale_factor = group.scale_factor
+    db_instance.set_queues(writer.queue, writer.result_queue)
+    db_instance._writer_process = writer.process
+
+    try:
+        _start_db(db_instance)
+        # readiness probing opens a connection here, but each operation runs in its own
+        # process and opens its own. Leaving this one open would hold a second server session
+        # for the whole run, which for MonetDB keeps pending changes alive and forces large
+        # ingests onto the ordinary write-ahead-log path.
+        db_instance.close_connection()
+
+        # each operation runs in its own process so that its peak client RSS is its own,
+        # not inherited from a preceding operation (see operation_runner)
+        for suite_operation in group.operations:
+            run_operation(
+                db_instance,
+                group.suite,
+                suite_operation,
+                group.scale_factor,
+                writer.queue,
+                writer.result_queue,
+            )
+    finally:
+        _stop_db(db_instance)
+        if cleanup:
+            _cleanup_db_files(group.db, group.suite, group.scale_factor)
+
+
+def run_benchmark_groups(
+    groups: list[BenchmarkGroup],
+    *,
+    revision: Revision,
+    cleanup: bool,
+    keep_going: bool,
+) -> list[GroupOutcome]:
+    inputs: dict[tuple[SuiteName, int], None] = {(group.suite, group.scale_factor): None for group in groups}
+    for suite_name, scale_factor in inputs:
+        _check_input_data(suite_name, scale_factor)
+    # fails before any container starts when the harness is not running from a git checkout
+    build_repository_provenance()
+
+    writer = start_writer_process(revision=revision)
+    interrupted = False
+    outcomes: list[GroupOutcome] = []
+
+    try:
+        for group in groups:
+            try:
+                _run_benchmark_group(group, writer, cleanup)
+            except Exception as exc:
+                _LOGGER.exception(f"{group.label} failed")
+                outcomes.append(GroupOutcome(group, f"{type(exc).__name__}: {exc}"))
+                if not keep_going:
+                    break
+            else:
+                outcomes.append(GroupOutcome(group, None))
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
+    finally:
+        writer.close()
+        if interrupted:
+            failed_runs = mark_running_runs_failed(revision=revision)
+            if failed_runs:
+                _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
+
+    return outcomes
+
+
 @app.command
 def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
     """Generate input data files for a benchmark suite (e.g. Parquet files)."""
@@ -263,82 +358,40 @@ def benchmark(
     TPC-H/TPC-DS runs by default; select those suites explicitly to include them.
     """
     plan = _filter_supported_benchmark_plan(_resolve_benchmark_plan(db, suite, scale_factor, omit))
-    suite_scale_factor_pairs = _unique_suite_scale_factor_pairs(plan)
 
     if not plan:
         raise SystemExit("No benchmark runs selected.")
 
-    for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
-        _check_input_data(suite_name, resolved_scale_factor)
-
-    writer = start_writer_process(revision=revision)
-    interrupted = False
-
-    try:
-        for db_name, suite_name, resolved_scale_factor in plan:
-            db_instance = get_databases()[db_name]
-
-            _LOGGER.info(f"Benchmarking {suite_name} scale factor {resolved_scale_factor} on {db_name} ({operation})")
-            db_instance._current_suite = suite_name
-            db_instance._current_suite_scale_factor = resolved_scale_factor
-            db_instance.set_queues(writer.queue, writer.result_queue)
-            db_instance._writer_process = getattr(writer, "process", None)
-
-            _start_db(db_instance)
-            # readiness probing opens a connection here, but each operation runs in its own
-            # process and opens its own. Leaving this one open would hold a second server session
-            # for the whole run, which for MonetDB keeps pending changes alive and forces large
-            # ingests onto the ordinary write-ahead-log path.
-            db_instance.close_connection()
-
-            try:
-                operations = (
-                    db_instance.benchmarks[suite_name].supported_operations if operation == "all" else (operation,)
-                )
-                # each operation runs in its own process so that its peak client RSS is its own,
-                # not inherited from a preceding operation (see operation_runner)
-                for suite_operation in operations:
-                    run_operation(
-                        db_instance,
-                        suite_name,
-                        suite_operation,
-                        resolved_scale_factor,
-                        writer.queue,
-                        writer.result_queue,
-                    )
-            finally:
-                _stop_db(db_instance)
-                if cleanup:
-                    _cleanup_db_files(db_name, suite_name, resolved_scale_factor)
-    except KeyboardInterrupt:
-        interrupted = True
-        raise
-    finally:
-        writer.close()
-        if interrupted:
-            failed_runs = mark_running_runs_failed(revision=revision)
-            if failed_runs:
-                _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
+    databases = get_databases()
+    groups = [
+        BenchmarkGroup(
+            db_name,
+            suite_name,
+            resolved_scale_factor,
+            databases[db_name].benchmarks[suite_name].supported_operations if operation == "all" else (operation,),
+        )
+        for db_name, suite_name, resolved_scale_factor in plan
+    ]
+    outcomes = run_benchmark_groups(groups, revision=revision, cleanup=cleanup, keep_going=False)
+    failed = [outcome for outcome in outcomes if outcome.error is not None]
+    if failed:
+        raise SystemExit(f"{failed[0].group.label} failed: {failed[0].error}")
 
     if operation in ("select", "all"):
-        try:
-            for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
-                assert_latest_query_row_counts(
-                    revision=revision,
-                    system=SETTINGS.system,
-                    suite=suite_name,
-                    suite_scale_factor=resolved_scale_factor,
-                    mark_wrong_results=True,
+        pins = current_pins()
+        for suite_name, resolved_scale_factor in _unique_suite_scale_factor_pairs(plan):
+            report = validate_results(
+                revision=revision,
+                pins=pins,
+                system=SETTINGS.system,
+                suite=suite_name,
+                suite_scale_factor=resolved_scale_factor,
+            )
+            if not report.ok:
+                _LOGGER.warning(
+                    f"{report.format()}\nRun 'olap results validate --mark' to record wrong results once every "
+                    "engine of the campaign has run."
                 )
-                assert_latest_query_answer_hashes(
-                    revision=revision,
-                    system=SETTINGS.system,
-                    suite=suite_name,
-                    suite_scale_factor=resolved_scale_factor,
-                    mark_wrong_results=True,
-                )
-        except (AnswerHashValidationError, RowCountValidationError) as exc:
-            raise SystemExit(str(exc)) from exc
 
 
 @app.command
@@ -372,17 +425,27 @@ def docker(
 
 @app.command
 def publish(revision: Revision = "default", merge: bool = False, upload: bool = False) -> None:
-    """Copy a results database to site/public/data for the webpage, with a manifest.
+    """Publish a results revision to site/public/data for the webpage, with a manifest.
+
+    Only the latest run of each cell of the declared matrix (`olap matrix status --published-only`)
+    is published. The set must be complete and coherent: every cell completed with answer hashes,
+    no wrong results after validation, current version pins only, one repository commit with a
+    clean tree, and one system snapshot. Otherwise nothing is written and the offending cells are
+    listed. The published file is compacted, and its SHA-256 and size go into manifest.json.
 
     With `--merge`, runs from the revision are merged into the already published
-    results.db instead of replacing the whole file: runs matching an existing
-    (system, db, db_version, suite, suite_scale_factor, operation, started_at) are replaced, new
-    runs are added, and everything else in the published file is kept.
+    results.db instead of replacing the whole file: runs of a cell (system, db, db_version,
+    db_driver, suite, suite_scale_factor, operation) the revision contains replace the published
+    runs of that cell, and everything else in the published file is kept.
 
     With `--upload`, the published results.db is uploaded to the `data` GitHub release, which is
-    where the site build fetches it from. The database is not committed to the repository.
+    where the site build fetches it from, and the Pages workflow is triggered so the site serves
+    the new file. The database is not committed to the repository.
     """
-    output_dir, merge_stats = publish_results(revision=revision, merge=merge)
+    try:
+        output_dir, merge_stats = publish_results(revision=revision, merge=merge)
+    except PublishValidationError as exc:
+        raise SystemExit(str(exc)) from exc
 
     if merge_stats is not None:
         print(
@@ -395,6 +458,8 @@ def publish(revision: Revision = "default", merge: bool = False, upload: bool = 
     if upload:
         upload_published_database()
         print(f"Uploaded results.db to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
+        trigger_pages_deploy()
+        print("Triggered the Pages deployment")
 
 
 @app.command
@@ -500,42 +565,89 @@ def resources(
     print(json.dumps([describe_run_resource_usage(row) for row in rows], indent=2))
 
 
-@results_app.command(name="validate-row-counts")
-def validate_row_counts(
+@results_app.command
+def validate(
     revision: Revision = "default",
     system: str | None = None,
     suite: SuiteName | None = None,
     scale_factor: int | None = None,
+    mark: bool = False,
+    clear: bool = False,
 ) -> None:
-    """Validate query row counts across latest completed select runs."""
-    mismatches = validate_latest_query_row_counts(
+    """Validate answers of the latest completed select run per cell of the current version pins.
+
+    Compares row counts and answer hashes across engines and flags queries whose answer hash
+    differs between iterations of one run. Runs of versions other than the current pins are
+    ignored.
+
+    `--mark` clears every earlier wrong-result mark in scope and then marks the consensus
+    outliers of this comparison, so repeating it gives the same result and a corrected rerun
+    heals its old marks. `--clear` only removes the marks. Exits non-zero on any finding.
+    """
+    if mark and clear:
+        raise SystemExit("Specify either --mark or --clear, not both.")
+
+    if clear:
+        cleared = clear_wrong_result_marks(
+            revision=revision, system=system, suite=suite, suite_scale_factor=scale_factor
+        )
+        print(f"Cleared {cleared} wrong-result mark(s).")
+        return
+
+    report = validate_results(
         revision=revision,
+        pins=current_pins(),
         system=system,
         suite=suite,
         suite_scale_factor=scale_factor,
+        mark=mark,
     )
-    if mismatches:
-        raise SystemExit(format_row_count_mismatches(mismatches))
-    print(format_row_count_mismatches(mismatches))
+    _exit_on_findings(report)
 
 
-@results_app.command(name="validate-answer-hashes")
-def validate_answer_hashes(
+def _exit_on_findings(report: ValidationReport) -> None:
+    if not report.ok:
+        raise SystemExit(report.format())
+    print(report.format())
+
+
+@results_app.command
+def prune(
+    superseded: bool = False,
+    stale_versions: bool = False,
     revision: Revision = "default",
-    system: str | None = None,
-    suite: SuiteName | None = None,
-    scale_factor: int | None = None,
+    dry_run: bool = False,
+    force: bool = False,
 ) -> None:
-    """Validate query answer hashes across latest completed select runs."""
-    mismatches = validate_latest_query_answer_hashes(
-        revision=revision,
-        system=system,
-        suite=suite,
-        suite_scale_factor=scale_factor,
-    )
-    if mismatches:
-        raise SystemExit(format_answer_hash_mismatches(mismatches))
-    print(format_answer_hash_mismatches(mismatches))
+    """Delete runs that no longer describe a current benchmark cell.
+
+    `--superseded` keeps the latest completed run per cell (system, db, db_version, db_driver,
+    suite, scale factor, operation) and deletes the runs of that cell that started before it.
+    Cells without a completed run, later failed attempts and running runs are kept.
+    `--stale-versions` also deletes every run of a db_version other than the current pin.
+    """
+    if not superseded and not stale_versions:
+        raise SystemExit("Specify --superseded and/or --stale-versions.")
+
+    doomed = find_superseded_runs(revision=revision, stale_versions=stale_versions)
+    if not superseded:
+        pins = current_pins()
+        doomed = [run for run in doomed if run.db in pins and run.db_version != pins[run.db]]
+
+    if not doomed:
+        print("Nothing to prune.")
+        return
+
+    print(f"{'Would delete' if dry_run else 'Deleting'} {len(doomed)} run(s):")
+    for run in doomed:
+        print(f"  {run.label}")
+
+    if dry_run:
+        return
+
+    _confirm(f"delete {len(doomed)} run(s)", force=force)
+    count = delete_runs([run.id for run in doomed], revision=revision)
+    print(f"Deleted {count} run(s) and their associated steps and metrics.")
 
 
 @results_app.command
@@ -586,6 +698,100 @@ def rename_database_cmd(old_name: str, new_name: str, revision: Revision = "defa
     """Rename a database name stored in a results database revision."""
     renamed_runs = rename_database(old_name, new_name, revision=revision)
     print(f"Renamed database '{old_name}' to '{new_name}' in {renamed_runs} run(s).")
+
+
+def _matrix_statuses(cells: list[MatrixCell], revision: Revision) -> list[CellStatus]:
+    db_path = get_results_db_path(revision)
+    runs = load_runs(db_path) if db_path.is_file() else []
+    return matrix_status(runs, cells, system=SETTINGS.system, pins=current_pins(), drivers=current_drivers())
+
+
+@matrix_app.command(name="status")
+def matrix_status_cmd(
+    db: list[DatabaseName] | None = None,
+    revision: Revision = "default",
+    published_only: bool = False,
+    check: bool = False,
+) -> None:
+    """Show each declared cell against its latest run in a revision.
+
+    A cell is `ok` when its latest run completed on the current version pin and the newest
+    repository commit in the revision, `stale` when it completed on another version or commit,
+    `failed` when the latest run did not complete and `missing` without any run. With `--check`,
+    exits non-zero unless every cell is ok.
+    """
+    statuses = _matrix_statuses(expand_matrix(dbs=db, published_only=published_only), revision)
+    print(format_matrix_status(statuses))
+
+    counts: dict[str, int] = {}
+    for status in statuses:
+        counts[status.state] = counts.get(status.state, 0) + 1
+    print(", ".join(f"{count} {state}" for state, count in sorted(counts.items())))
+
+    if check and any(status.state != "ok" for status in statuses):
+        raise SystemExit(1)
+
+
+@matrix_app.command(name="run")
+def matrix_run(
+    db: list[DatabaseName] | None = None,
+    revision: Revision = "default",
+    missing_only: bool = False,
+    keep_going: bool = False,
+    published_only: bool = False,
+) -> None:
+    """Run the declared matrix through the benchmark machinery, then validate once.
+
+    Cells are grouped by (db, suite, scale factor) and each group runs its declared operations in
+    order on one container, followed by cleanup of the database files. With `--missing-only`, only
+    groups with a cell that is not ok are run, and they are run in full because the operations
+    share the populated data. Without `--keep-going` the run stops at the first failed group.
+
+    Wrong-result marking runs once at the end (as `olap results validate --mark`). Prints a summary
+    and exits non-zero when any group failed.
+    """
+    cells = expand_matrix(dbs=db, published_only=published_only)
+    selected = cells
+    if missing_only:
+        pending = {
+            (status.cell.db, status.cell.suite, status.cell.scale_factor)
+            for status in _matrix_statuses(cells, revision)
+            if status.state != "ok"
+        }
+        selected = [cell for cell in cells if (cell.db, cell.suite, cell.scale_factor) in pending]
+
+    operations: dict[tuple[DatabaseName, SuiteName, int], list[Operation]] = {}
+    for cell in selected:
+        operations.setdefault((cell.db, cell.suite, cell.scale_factor), []).append(cell.operation)
+    groups = [BenchmarkGroup(db_name, suite, scale, tuple(ops)) for (db_name, suite, scale), ops in operations.items()]
+
+    if not groups:
+        print("Every selected cell is ok; nothing to run.")
+        return
+
+    outcomes = run_benchmark_groups(groups, revision=revision, cleanup=True, keep_going=keep_going)
+
+    report = validate_results(revision=revision, pins=current_pins(), system=SETTINGS.system, mark=True)
+    print(report.format())
+    print()
+    print(format_matrix_status(_matrix_statuses(selected, revision)))
+    print()
+    finished = {outcome.group: outcome for outcome in outcomes}
+    print(
+        format_table(
+            ("group", "outcome"),
+            (
+                (
+                    group.label,
+                    "not run" if group not in finished else (finished[group].error or "ok"),
+                )
+                for group in groups
+            ),
+        )
+    )
+
+    if any(outcome.error is not None for outcome in outcomes):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
