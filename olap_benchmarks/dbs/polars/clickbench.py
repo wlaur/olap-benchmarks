@@ -25,7 +25,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
             return lf.filter(pl.col("AdvEngineID") != 0).select(_count())
         case "Q2":
             return lf.select(
-                pl.col("AdvEngineID").sum().cast(pl.Float64),
+                pl.col("AdvEngineID").sum(),
                 _count(),
                 pl.col("ResolutionWidth").mean(),
             )
@@ -58,7 +58,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
             return (
                 lf.group_by("RegionID")
                 .agg(
-                    pl.col("AdvEngineID").sum().cast(pl.Float64),
+                    pl.col("AdvEngineID").sum(),
                     _count("c"),
                     pl.col("ResolutionWidth").mean(),
                     pl.col("UserID").n_unique().cast(pl.Int64),
@@ -191,17 +191,14 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 .limit(25)
             )
         case "Q29":
-            return lf.select(
-                (pl.col("ResolutionWidth") + offset).sum().cast(pl.Float64).alias(f"sum_{offset}")
-                for offset in range(90)
-            )
+            return lf.select((pl.col("ResolutionWidth") + offset).sum().alias(f"sum_{offset}") for offset in range(90))
         case "Q30":
             return (
                 lf.filter(pl.col("SearchPhrase") != "")
                 .group_by("SearchEngineID", "ClientIP")
                 .agg(
                     _count("c"),
-                    pl.col("IsRefresh").sum().cast(pl.Float64),
+                    pl.col("IsRefresh").sum(),
                     pl.col("ResolutionWidth").mean(),
                 )
                 .sort(["c", "SearchEngineID", "ClientIP"], descending=[True, False, False])
@@ -213,7 +210,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 .group_by("WatchID", "ClientIP")
                 .agg(
                     _count("c"),
-                    pl.col("IsRefresh").sum().cast(pl.Float64),
+                    pl.col("IsRefresh").sum(),
                     pl.col("ResolutionWidth").mean(),
                 )
                 .sort(["c", "WatchID", "ClientIP"], descending=[True, False, False])
@@ -224,7 +221,7 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 lf.group_by("WatchID", "ClientIP")
                 .agg(
                     _count("c"),
-                    pl.col("IsRefresh").sum().cast(pl.Float64),
+                    pl.col("IsRefresh").sum(),
                     pl.col("ResolutionWidth").mean(),
                 )
                 .sort(["c", "WatchID", "ClientIP"], descending=[True, False, False])

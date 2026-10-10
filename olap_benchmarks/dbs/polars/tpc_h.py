@@ -276,7 +276,7 @@ def execute_tpc_h_query(tables: TpcHTables, query_name: str, scale_factor: int) 
                 .join(threshold, how="cross")
                 .filter(pl.col("value_at_threshold_scale") > pl.col("threshold"))
                 .select("ps_partkey", "value")
-                .sort("value", descending=True)
+                .sort(["value", "ps_partkey"], descending=[True, False])
             )
         case "12_shipping_modes":
             return (
