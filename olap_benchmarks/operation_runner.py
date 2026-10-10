@@ -13,13 +13,28 @@ the operation's own process rather than the orchestrating one.
 """
 
 import logging
+import os
+import shutil
 from multiprocessing import Process, Queue
 
 from .dbs import Database, get_databases
 from .metrics.storage import WriterMessage
-from .settings import DatabaseName, Operation, SuiteName
+from .settings import SETTINGS, DatabaseName, Operation, SuiteName
 
 _LOGGER = logging.getLogger(__name__)
+
+# Polars 2 spills out-of-core sorts (e.g. sorting ClickBench before a time-partitioned load) to the
+# system temp directory under a small default disk budget and aborts the query when it runs out.
+POLARS_SPILL_HEADROOM_MB = 30 * 1024
+
+
+def configure_polars_spill() -> None:
+    spill_directory = SETTINGS.temporary_directory / "polars"
+    spill_directory.mkdir(parents=True, exist_ok=True)
+    free_mb = shutil.disk_usage(spill_directory).free // (1024 * 1024)
+    os.environ["POLARS_TEMP_DIR"] = spill_directory.as_posix()
+    os.environ["POLARS_OOC_SPILL_DIR"] = spill_directory.as_posix()
+    os.environ["POLARS_OOC_DISK_BUDGET_MB"] = str(max(free_mb - POLARS_SPILL_HEADROOM_MB, 1024))
 
 
 def _operation_entrypoint(
@@ -49,6 +64,7 @@ def run_operation(
     queue: "Queue[WriterMessage]",
     result_queue: "Queue[object]",
 ) -> None:
+    configure_polars_spill()
     process = Process(
         target=_operation_entrypoint,
         args=(

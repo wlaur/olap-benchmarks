@@ -31,6 +31,10 @@ ARC_DATABASE = "olap"
 
 ARC_WRITE_BATCH_CELLS = 8_000_000
 
+# Arc rejects a Parquet import larger than 500 MiB (HTTP 413); wide JSON batches exceed it well
+# within the cell budget, so encoded batches above this size are split in half until they fit.
+ARC_IMPORT_MAX_BYTES = 256 * 1024 * 1024
+
 ARC_VISIBILITY_TIMEOUT_SECONDS = 600.0
 
 ARC_COMPACTION_TIMEOUT_SECONDS = 3_600.0
@@ -61,6 +65,16 @@ def iter_write_batches(
         return
 
     yield from df.iter_slices(batch_rows)
+
+
+def encode_import_chunks(batch: pl.DataFrame, max_bytes: int = ARC_IMPORT_MAX_BYTES) -> Iterator[bytes]:
+    encoded = encode_parquet(batch)
+    if len(encoded) <= max_bytes or batch.height == 1:
+        yield encoded
+        return
+    half = batch.height // 2
+    yield from encode_import_chunks(batch.slice(0, half), max_bytes)
+    yield from encode_import_chunks(batch.slice(half), max_bytes)
 
 
 def to_arc_arrow(df: pl.DataFrame) -> pa.Table:
@@ -312,12 +326,13 @@ class Arc(Database):
         for batch in iter_write_batches(df):
             if batch.is_empty():
                 continue
-            self._request(
-                "POST",
-                "/api/v1/import/parquet",
-                params={"measurement": table, "time_column": self.time_column(table)},
-                files={"file": (f"{table}.parquet", encode_parquet(batch), "application/vnd.apache.parquet")},
-            )
+            for chunk in encode_import_chunks(batch):
+                self._request(
+                    "POST",
+                    "/api/v1/import/parquet",
+                    params={"measurement": table, "time_column": self.time_column(table)},
+                    files={"file": (f"{table}.parquet", chunk, "application/vnd.apache.parquet")},
+                )
             rows += batch.height
         return rows
 

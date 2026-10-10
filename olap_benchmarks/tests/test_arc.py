@@ -13,6 +13,7 @@ from olap_benchmarks.dbs.arc import (
     ArcTimeSeries,
     build_key_predicate,
     decode_arrow_stream,
+    encode_import_chunks,
     encode_parquet,
     iter_write_batches,
     to_arc_arrow,
@@ -120,3 +121,12 @@ def test_arc_registers_the_suites_it_can_store() -> None:
 def test_arc_connect_is_not_a_sql_connection() -> None:
     with pytest.raises(NotImplementedError):
         Arc().connect()
+
+
+def test_encode_import_chunks_splits_batches_above_the_size_limit() -> None:
+    df = pl.DataFrame({"time": list(range(1_000)), "body": [f"{i:06d}" * 150 for i in range(1_000)]})
+    chunks = list(encode_import_chunks(df, max_bytes=20_000))
+    decoded = pl.concat([pl.read_parquet(io.BytesIO(chunk)) for chunk in chunks])
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 20_000 for chunk in chunks)
+    assert decoded.equals(df)
