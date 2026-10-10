@@ -1,170 +1,168 @@
-# Remaining project work - 2026-07-17
+# Remaining project work - 2026-10-10
 
-This document contains only unfinished work. Completed findings and implementation history have been removed.
+Only unfinished work. Remove items when they are done; history lives in git.
 
-The current published data is development evidence, not a defensible cross-engine leaderboard. The checked-in public
-database contains only `macbook-pro-m4` runs, all 82 runs predate run methodology metadata, none of its 5,215 query
-steps has a `canonical-v4` answer hash, and it is one migration behind the current results schema. Its ClickBench
-comparison also mixes three-iteration DuckDB/ClickHouse runs with five-iteration QuestDB/StarRocks runs. The deployed
-GitHub Pages database is an older, different artifact and does not contain QuestDB.
+## Where things stand
 
-## 1. Lock the benchmark methodology before another public campaign
+- Published: one system (`macbook-m4-pro`), three engines — ClickHouse, DuckDB, MonetDB (Dec2025-SP4, ADBC) —
+  across all eight suites at SF1 (TPC-H and JSONBench at SF10). MonetDB has no JSONBench queries and skips
+  `chat_threads` concurrent (server crash). Answer hashes are `canonical-v10`; the published DB is at the Alembic head.
+- Connectors with no published results: Polars, Postgres, TimescaleDB, QuestDB, StarRocks, Doris. They carry ~2.7k
+  lines and ~370 SQL files that every interface change has to touch.
+- Higher scale factors (time_series/chat_threads SF10, TPC-H SF50) do not fit this machine's RAM and disk; they
+  belong to the cloud campaign.
 
-- [ ] **Define and version a resident-hot execution profile.**
-      Start select runs from the same process state by reopening embedded engines and restarting server engines once, then
-      keep every process and connection resident for the query phase. Use the same warm-up and measurement window for every
-      engine. Store a profile identifier on each run and prevent the site from comparing runs with different profiles.
+**Releasable** means: a published set produced by one commit, one system snapshot and one benchmark profile; every
+published cell validated; a site that loads fast and states exactly what is being compared; and a repeatable
+one-command path from "bump a version" to "published".
 
-- [ ] **Replace the fixed five-iteration ClickBench policy with a demonstrated steady-state policy.**
-      The published QuestDB run is still accelerating from a 0.3248 s per-query geometric mean at iteration 2 to 0.2544 s
-      at iteration 5. Use a common longer warm-up, such as ten unscored iterations followed by a fixed measured window, or
-      a documented convergence rule. Record warm-up and measured iterations separately instead of classifying every
-      iteration after the first as equally warm.
+## 1. Release blockers
 
-- [ ] **Keep end-to-end, engine-execution, and cold results distinct.**
-      The current timer measures `fetch()` through materialization into Polars, so label it end-to-end DataFrame latency.
-      Add engine-internal timing only as a separate metric if direct ClickBench comparison is required. Do not call the
-      first iteration cold: OS caches are not cleared, containers are restarted only once, and DuckDB is not restarted.
-      Publish a cold profile only on controlled Linux with an engine restart/reopen and OS-cache clearing before each query.
+- [ ] **Publish one coherent campaign, and enforce it.** The current set mixes five commits (one dirty tree), two
+      OS snapshots and three dates: ClickHouse/DuckDB RTABench were rerun on 2026-10-10, the rest is from 2026-08-04.
+      Run the published matrix into a fresh revision from one clean commit, and make `publish` reject a set with more
+      than one commit, dirty trees, more than one system snapshot or mixed profiles.
+- [ ] **Extend the publish gate to every published engine.** `_validate_publishable_runs` only checks MonetDB
+      (ADBC matrix, session baselines, hashes). Generalise it to "every cell of the declared matrix is present,
+      completed, hashed and in cross-engine agreement" (see 3.1).
+- [ ] **Make wrong-result marking order-independent and self-healing.** After every select, `__main__.py:324-343`
+      compares the latest run per `(system, suite, sf, db, driver)` *ignoring `db_version`*, then writes
+      `result_status='wrong_result'` permanently — and can mark the *other* engines when one stale run sits in the
+      majority. Nothing clears it. Validate once at the end of a matrix run or at publish; recompute marks
+      idempotently (clear, then apply); add `olap results validate [--mark|--clear]`.
+- [ ] **Fix non-deterministic queries.** RTABench `1008_most_week_delayed_order` returns a different answer hash on
+      each ClickHouse iteration (`ORDER BY delayed_orders DESC LIMIT 1` with ties). Add tie-breakers, and add a check
+      that flags any query whose hash differs between iterations of one run.
+- [ ] **Make the site's methodology text true.** `site/src/content/home.md` still names `macbook-pro-m4`, says
+      QuestDB is published, says results are "checked into git", describes a MonetDB "binary fetch path", and says
+      DuckDB is not reopened between operations (it is, since per-operation process isolation).
+- [ ] **Redeploy Pages when the data asset changes.** `publish --upload` replaces the release asset, but Pages only
+      rebuilds on a push to `main`, so the site can serve a database that does not match the committed manifest.
+      Trigger the workflow from `publish --upload` (`gh workflow run`) and put the asset's SHA-256 in `manifest.json`;
+      have the build verify it instead of only the `DUCK` magic bytes.
+- [ ] **Record image digests for every engine.** The locally built MonetDB image has no RepoDigest, so
+      `container_image_digest` is null for all MonetDB runs. Pull from the registry before a campaign (now that the
+      image is published) or record the registry digest explicitly; refuse to publish runs without one.
 
-- [ ] **Make the relative score's comparison scope explicit.**
-      The 10 ms-smoothed score is recalculated against the fastest selected engine for each query, so an unchanged database
-      receives a different score when another engine is added or removed. Keep absolute latency visible, state that scores
-      are contender-set-relative wherever they appear, and never compare scores copied from different selections.
+## 2. Methodology
 
-- [ ] **Record enough identity to reproduce a run exactly.**
-      In addition to system snapshots, versions, and image digests, store the repository commit, benchmark-profile revision,
-      input-data checksum, query/schema hashes, iteration policy, and timed boundary. Scope site comparisons to a single
-      system snapshot and benchmark profile.
+- [ ] **Define and version a benchmark profile.** Today every suite has its own fixed iteration count (ClickBench 5,
+      TPC-H/TPC-DS 3, RTABench 2-5 per query, Kaggle 3-10) and `classify_iteration_role` only produces `first_run` and
+      `warm` (`steady_state` is declared but never set). Define one profile: restart/reopen once before select, N
+      unscored warm-up iterations, M measured; store a profile id on each run; have the site refuse to compare runs
+      with different profiles.
+- [ ] **Name the timed boundary.** The timer covers `fetch()` through materialisation into Polars. Label it
+      end-to-end latency on the site, stop showing `first_run_duration_s` as if it were cold, and add engine-internal
+      timing only as a separate, clearly labelled metric.
+- [ ] **State that scores are relative to the selected engines.** The 10 ms-smoothed score is recomputed against
+      the fastest selected engine, so a run's score changes when another engine is added. Say so wherever a score
+      appears, and keep absolute latency next to it.
+- [ ] **Finish the reproducibility identity.** Already recorded: repo commit (editable installs only), image IDs,
+      input manifest hashes, query text. Missing: query/schema hashes, profile revision, iteration policy, and a repo
+      commit for non-editable installs. Scope site comparisons by system snapshot, not just `system`.
+- [ ] **Decouple input hashing from populate.** Hashing the inputs right before populate warms the page cache, which
+      favours engines that read the files directly. Hash in a separate step (or cache hashes by size+mtime) and drop
+      the cache before populate on Linux.
+- [ ] **Account for planned-but-never-started steps.** An interrupt marks running steps failed, but planned steps
+      that never started leave no row; coverage then undercounts the denominator.
 
-## 2. Validate correctness and failure accounting
+## 3. CLI and architecture
 
-- [ ] **Exercise value-level validation across the intended public matrix.**
-      Run latest-select row-count and `canonical-v4` answer-hash validation for ClickBench, TPC-H, TPC-DS, RTABench, and
-      time-series coverage not included in the isolated SF1 validation. Review every result above the answer-hash cell
-      limit rather than treating an absent hash as a pass.
+Ordered by how much they reduce the cost of rerunning and publishing.
 
-- [ ] **Live-confirm the remaining known correctness risks on the campaign commit.**
-      Verify ClickBench Q28 on MonetDB and StarRocks after the replacement-backreference fixes, and perform value-level
-      checks on QuestDB's dialect rewrites. Treat the old published divergences as historical and accept only clean results
-      produced by the exact code and version pins used for the campaign.
+- [ ] **3.1 Declare the matrix in code and add `olap matrix`.** The intended matrix exists only for MonetDB
+      (`dbs/monetdb/manifest.py`); everything else is implied by `db × suite` plus hidden rules
+      (row-store engines skip TPC-H/TPC-DS, scale-factor fan-out differs with `suite=all`). Add one declaration
+      (`{db: [(suite, sf, operations)]}`, with a `published` flag per engine) and:
+      - `olap matrix status [--db X] [--revision R]` — planned vs latest completed run per cell: missing, failed,
+        stale version, stale commit.
+      - `olap matrix run [--db X] [--missing-only] [--keep-going]` — replaces hand-written shell loops, resumes a
+        partial campaign, validates once at the end, prints a summary table and exits non-zero on any failed cell.
+- [ ] **3.2 Replace superseded runs without run-id lists.** The merge key includes `started_at`, so reruns are added
+      next to old runs; the site hides them, the file keeps them. Add `olap results prune --superseded [--dry-run]`
+      (keep the latest completed run per cell) and a `publish --merge` mode keyed on the cell, not the start time.
+- [ ] **3.3 One version manifest.** Pins are `VERSION` constants in six connector modules, a dataclass for MonetDB,
+      and `pyproject.toml` for DuckDB/Polars. Move them to one `versions.toml` (version, image tags, expected digest)
+      and add `olap versions [--check] [--outdated]` that pulls/verifies images and lists newer upstream releases.
+- [ ] **3.4 One way to declare unsupported queries.** There are four: reasoned dicts (`UNSUPPORTED_QUERIES`), a bare
+      frozenset (`tpc_ds/config.py:263`), a Postgres-only set, and "the SQL file is missing" (generic reason). Answer
+      comparison exclusions live in yet another list (`validation.py:17`). Use one registry
+      `{(suite, db, query): reason}` that `matrix status` and the site both read.
+- [ ] **3.5 Deduplicate query SQL.** RTABench has no shared base: 268 files, 159 distinct texts. chat_threads has 11
+      overrides identical to the shared file. The "engine file, else shared file" lookup is reimplemented in six suite
+      configs. Move resolution into `BenchmarkSuite`, give RTABench a shared directory, and add a test that fails on an
+      override identical to its base.
+- [ ] **3.6 Collapse suite metadata into one spec.** Suite properties are ~10 parallel dicts held together by asserts
+      (`settings.py:43-120`) plus per-suite branches in `resolve_suite_scale_factor`; TPC-H/TPC-DS scale factors are
+      not validated. Use one `SuiteSpec` per suite.
+- [ ] **3.7 Load settings lazily.** `SETTINGS` is validated at import from `.env` in the current directory, so any
+      command outside the repo root fails and pytest from a subdirectory errors at collection. Resolve `.env` from the
+      repo root, and record the effective benchmark-affecting settings (e.g. `OLAP_BENCHMARKS_MONETDB_*`) in run
+      metadata.
+- [ ] **3.8 Live smoke tests.** Only one test can touch a live engine (MonetDB ADBC, env-gated). Add an opt-in
+      `pytest -m live` that starts each published engine and runs every select query at the smallest scale, so a
+      broken dialect file or engine upgrade fails in minutes instead of mid-campaign.
+- [ ] **3.9 Decide the unpublished engines' future.** Either put them behind an `experimental` flag excluded from
+      `all` and from interface-change obligations, or publish them. Known state after the 2026-10-10 version bump:
+      - StarRocks 4.1.6 now starts on Apple Silicon (the 4.1.0 segfault is gone), but TPC-DS 49, 70 and 86 fail
+        with new analyzer errors (`ORDER BY clause cannot contain grouping`, ambiguous column).
+      - Doris 4.1.4.1 RTABench populate fails: stream load cannot reach the BE on port 8040 — readiness only waits
+        for the FE.
+      - Postgres, TimescaleDB and QuestDB: smoke-tested on time_series (see the 2026-10 campaign notes).
 
-- [ ] **Confirm complete step accounting during failure and mutation runs.**
-      Rerun TimescaleDB time-series mutation and verify all planned iterations, especially
-      `insert_data_large_10000`, have an explicit result status. Also interrupt a disposable run and confirm that failed or
-      skipped steps remain visible instead of silently disappearing.
+## 4. Site: drop DuckDB-WASM for publish-time JSON
 
-## 3. Replace and deploy the public benchmark data
+The site runs six fixed queries (systems, suite/scale factors, per-query summaries, coverage, catalog dimensions,
+explorer metrics) over `run` and `run_step` only; there is no ad-hoc SQL (CodeMirror only highlights static query
+text). Yet a cold visit downloads ~12.4 MB before showing a number — `duckdb-eh.wasm` 7.9 MB and `results.db`
+4.1 MB on the wire (GitHub Pages gzips the file, so DuckDB cannot use range reads and fetches all of it) — and
+holds 38 MB in WASM memory. Everything actually displayed is ~331 KB of JSON (35 KB gzipped). The published file is
+also half free blocks (38 MB; 15.5 MB when compacted).
 
-- [ ] **Run one controlled x86-64 Linux campaign using `CLOUD.md`.**
-      Use a single AWS `i4i` machine and system label for the complete comparison, with native-architecture containers,
-      local NVMe, fixed CPU/RAM, and one pinned repository commit. Confirm every live runtime version and container digest,
-      retain the opt-in policy for row-store TPC-H/TPC-DS runs, and preserve enough disk headroom for cleanup and compaction.
-      Do not use the MacBook runs for the main cross-engine ranking.
+- [ ] **Precompute the views at publish time.** Move the six queries (and the "latest run per cell" and `db_label`
+      logic) into Python, emit `index.json`, `summary/<system>/<suite>-<sf>.json` and `explorer/<suite>.json` from
+      `olap publish`, define the payloads once as pydantic models and test them with pytest.
+- [ ] **Generate TS types from those models** and turn `queries.ts` into `fetch().json()` with the same return
+      types, so hooks and pages are unchanged. Delete `duckdb.ts`, Kysely, `generate-db-types.mjs`,
+      `generated/db.ts`, and the duckdb-wasm / node-duckdb dependencies.
+- [ ] **Ship the raw database only as a download.** Keep a compacted `results.db` on the release for people who want
+      the raw data; serve per-run metric series as small JSON/Parquet on demand if memory charts are added later. An
+      interactive SQL page, if ever wanted, can lazy-load DuckDB-WASM on its own route.
 
-- [ ] **Validate the complete campaign before publishing.**
-      Require source and populated row-count checks, latest-select row-count checks, `canonical-v4` answer-hash checks,
-      explicit unsupported/skipped statuses, complete run metrics, current-schema `system_snapshot_id` links, and one
-      methodology profile across compared runs. Resolve every ambiguous consensus split or `wrong_result` first.
+Expected result: ~400 KB first load, data visible after one small request, a ~2 MB `dist/` instead of 111 MB, and
+schema changes caught by Python tests at publish time instead of in the browser.
 
-- [ ] **Publish a clean replacement rather than merging the development runs.**
-      Build `site/public/data/results.db` at the current Alembic head using only the validated Linux campaign. Regenerate the
-      manifest, suite registry, and query catalog; compact the file; and verify the site against the exact generated
-      artifact before committing it.
+## 5. Engine coverage
 
-- [ ] **Verify deployment integrity.**
-      After GitHub Pages deploys, download `/olap-benchmarks/data/results.db` and compare its checksum, size, schema revision,
-      manifest timestamp, run count, and database coverage with the committed artifact. Automate this check so a stale Pages
-      database cannot silently diverge again.
+- [ ] **Arc on time_series.** Arc (Basekick Labs, AGPL-3.0, DuckDB + Parquet, multi-arch `basekicklabs/arc` image)
+      is a dedicated time-series database: MessagePack columnar ingest, SQL over HTTP with Arrow IPC results,
+      API deletes, no documented UPDATE. Add it for time_series populate/select (mutate/concurrent only where Arc's
+      delete API matches the workload), declared as a time_series-only engine in the matrix. Not every engine needs
+      every suite.
+- [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
+- [ ] **MonetDB JSONBench**, or record why not in the unsupported registry.
+- [ ] **Re-test MonetDB `chat_threads` concurrent** on SP4; the SIGSEGV is unexplained and was last seen on 11.55.7.
 
-## 4. Deferred larger additions
+## 6. Resource reporting
 
-- [ ] **Add JOB only after the new methodology is exercised by the public rerun.**
-      Port the optimizer-heavy workload after profile-aware comparison and unsupported, skipped, timeout, error, and
-      wrong-result reporting have been proven end to end in published data.
+- [ ] **Stop calling cgroup charge server memory.** `measure.py:223` uses `memory_stats.usage`, which includes page
+      cache. Record anon and file separately (cgroup `memory.stat`) and report anon (or engine RSS) as server memory.
+- [ ] **Split disk into data and WAL**, and report peak and final separately (currently one `du` over the store).
+- [ ] **Fix the client-memory claim for MonetDB.** `monetdb/adbc.py:28-30` keeps the Arrow table and the Polars
+      frame alive together, and README:116 still says Polars adopts them zero-copy.
+- [ ] **Show memory on the site** only once the above is fixed, with in-process engines (DuckDB, Polars) labelled as
+      client-only.
 
-- [ ] **Add TSBS and InfluxDB 3 only as a complete time-series expansion.**
-      Include ingest throughput, compression/storage, recent-window queries, and concurrent read/write behavior; do not
-      add a query-only comparison.
+## 7. Deferred
 
-## 5. Fix how memory is reported
+- [ ] **Cloud campaign** on one x86-64 Linux `i4i` host per `CLOUD.md`, including the higher scale factors this
+      machine cannot run. Do it after sections 1-3 so the campaign is a single `olap matrix run`.
+- [ ] **JOB**, after the profile from section 2 has been exercised by a public run.
+- [ ] **TSBS and InfluxDB 3**, only as a complete time-series expansion (Arc first).
 
-Measured 2026-08-02/03 while comparing MonetDB ADBC driver versions. Every item below was
-observed, not inferred, and each one has already produced a wrong conclusion at least once.
+## Suggested order
 
-- [ ] **Stop reporting cgroup charge as server memory.**
-      `metrics/measure.py` sets `server_mem_mb` from `memory_stats.usage`, the container's total
-      cgroup charge. That includes file-backed page cache, so it rises when the kernel caches the
-      data the engine just wrote and falls when the kernel reclaims it, neither of which is an
-      engine memory change. It is also higher than the figure `docker stats` prints, because the
-      CLI subtracts `inactive_file` first and the raw API field does not. Record the engine
-      process RSS separately, keep the cgroup charge under its own name, and never present the
-      cgroup number alone as "server memory".
-
-- [ ] **Record the cgroup anon/file split.**
-      Read `memory.stat` from the container and store `anon` and `file` as distinct fields. Without
-      them there is no way to tell an allocation regression from page cache, which is exactly the
-      ambiguity that made a measured 4x rise in MonetDB read-path server memory impossible to
-      interpret.
-
-- [ ] **Split disk into data and write-ahead log, and keep peak separately from final.**
-      `disk_mb` is the whole engine directory, so a 58 GB MonetDB WAL beside 46 GB of data reads as
-      one number, and the failure it causes is invisible. Peak also matters more than final: TPC-H
-      SF10 ends at a 9.7 GB dbfarm after peaking near 30 GB, so a final-size metric would miss the
-      transient cost entirely.
-
-- [ ] **Do not treat `client_mem_mb` as the driver's client memory.**
-      `dbs/monetdb/adbc.py::fetch_adbc` calls `fetch_arrow_table()` and then `pl.from_arrow()`,
-      holding both alive. Measured on a 218,880 x 786 result: the Arrow table alone peaks at 768 MB
-      and the pair at 1,458 MB, because `pl.from_arrow()` copies rather than adopting the buffers
-      (`rechunk=False` does not avoid it). The harness figure is therefore roughly 3x the driver's
-      own peak. This does not distort cross-engine comparison, since every engine converts to
-      Polars the same way, but the column must not be quoted as a driver measurement. The README
-      claim that Polars adopts these Arrow tables zero-copy is wrong and should be corrected.
-
-- [ ] **Never sum server and client memory.**
-      They fund different budgets and the client usually runs on another host. Summing separately
-      computed maxima also assumes the peaks coincide: on one measured ClickBench run
-      `max(server) + max(client)` overstated `max(server + client)` by 31 GB. If a combined figure
-      is ever wanted, sum per sample and then take the maximum.
-
-- [x] **Close the readiness connection before operations run.** *(fixed)*
-      `_start_db` probes readiness with `wait_until_accessible()`, which opens a connection in the
-      orchestrating process, and `_stop_db` only closed it after every operation had finished. Once
-      operations moved into their own processes that connection stayed open as a second server
-      session for the whole run. For MonetDB this keeps pending changes alive and pushes a large
-      ingest off the large-transaction shortcut onto the ordinary write-ahead-log path: ClickBench
-      went from a 2.2 s restart to a 58 GB WAL and a 300 s restart timeout, TPC-H SF10 from 87 s to
-      192 s with nearly twice the peak disk, and MonetDB server memory appeared 11x higher. All of
-      it was this one open session, and all of it was briefly misattributed to driver regressions.
-
-- [ ] **Keep per-operation process isolation, and document why.**
-      Peak RSS is a high-water mark that does not fall when memory is freed, so operations sharing
-      a process charge each later operation with the earlier one's peak. Before `operation_runner`
-      existed, a ClickBench select returning at most 25 rows was credited with 1,327 MB inherited
-      from its populate, which was reported as an 890% driver regression before being traced to the
-      harness. Anything that reintroduces shared-process operations reintroduces that error.
-
-- [ ] **Make in-process engines explicit wherever memory is presented.**
-      `duckdb` and `polars` have no container, so `server_mem_mb` is structurally 0 for them and
-      their whole footprint sits in `client_mem_mb`. `results/resource_usage.py` already resolves
-      this for reads, but any chart or export that touches memory needs the same treatment or those
-      two engines will appear to use none.
-
-- [ ] **Sample often enough to see transient peaks, and keep the last sample on failure.**
-      A `docker stats --no-stream` call takes about a second, so it cannot sample a sub-second
-      query at all; streaming `docker stats` emits ANSI control codes that break naive parsing and
-      silently yield zero. Disk can be sampled more slowly than memory because walking a large
-      directory perturbs the run. A failed run's final sample is often the interesting one and must
-      not be discarded.
-
-## Execution order
-
-1. Define the profile, warm-up policy, timing boundaries, and score presentation.
-2. Complete the remaining correctness and failure-accounting checks on the pinned campaign commit.
-3. Run and validate the controlled Linux campaign.
-4. Publish the clean replacement and verify that the deployed database matches it.
-5. Continue with JOB and the broader TSBS/InfluxDB work.
-
-Section 5 is independent of the campaign order and should land before the next public run, since it
-changes what the published resource numbers mean.
+1. Section 3.1-3.3 (matrix, prune, versions): they turn the rest into single commands.
+2. Section 1, then a fresh campaign published through the new gate.
+3. Section 4 (site), independent of the harness work and the biggest visible improvement.
+4. Section 2 profile, then the cloud campaign; sections 5-6 fit around these.
