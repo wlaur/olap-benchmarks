@@ -10,7 +10,7 @@ FROM
     AND o.created_at < '2025-01-01T00:00:00'
     JOIN customers c ON c.customer_id = o.customer_id
 WHERE
-    datediff('y', c.birthday, now()) BETWEEN 18
+    datediff('y', c.birthday, '2025-01-01T00:00:00.000000Z'::timestamp) BETWEEN 18
     AND 25
 GROUP BY
     p.product_id,

@@ -1,27 +1,27 @@
 SELECT
     sum(p.price * oi.amount) FILTER (
         WHERE
-            age(now(), c.birthday) >= '18 year' :: interval
-            AND age(now(), c.birthday) < '26 year' :: interval
+            age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) >= '18 year' :: interval
+            AND age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) < '26 year' :: interval
     ) AS "18-25",
     sum(p.price * oi.amount) FILTER (
         WHERE
-            age(now(), c.birthday) >= '26 year' :: interval
-            AND age(now(), c.birthday) < '36 year' :: interval
+            age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) >= '26 year' :: interval
+            AND age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) < '36 year' :: interval
     ) AS "26-35",
     sum(p.price * oi.amount) FILTER (
         WHERE
-            age(now(), c.birthday) >= '36 year' :: interval
-            AND age(now(), c.birthday) < '51 year' :: interval
+            age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) >= '36 year' :: interval
+            AND age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) < '51 year' :: interval
     ) AS "36-50",
     sum(p.price * oi.amount) FILTER (
         WHERE
-            age(now(), c.birthday) >= '51 year' :: interval
-            AND age(now(), c.birthday) < '66 year' :: interval
+            age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) >= '51 year' :: interval
+            AND age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) < '66 year' :: interval
     ) AS "51-65",
     sum(p.price * oi.amount) FILTER (
         WHERE
-            age(now(), c.birthday) >= '66 year' :: interval
+            age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) >= '66 year' :: interval
     ) AS "66+"
 FROM
     products p

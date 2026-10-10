@@ -9,8 +9,8 @@ FROM
         AND o.created_at > '2024-12-24'
         AND o.created_at < '2025-01-01'
     INNER JOIN customers c ON c.customer_id = o.customer_id
-        AND years_diff(now(), c.birthday) >= 18
-        AND years_diff(now(), c.birthday) < 26
+        AND years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) >= 18
+        AND years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) < 26
 GROUP BY
     product_id, p.name
 ORDER BY

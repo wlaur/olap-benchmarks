@@ -374,7 +374,7 @@ uv run pytest
 
 - **ClickBench** suite is based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse
 - **JSONBench** suite is based on [JSONBench](https://github.com/ClickHouse/JSONBench) by ClickHouse
-- **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale
+- **RTABench** suite is based on [RTABench](https://github.com/timescale/rtabench) by Timescale. The age-group queries (`0028`, `0029`) measure customer age at a fixed 2025-01-01 reference date instead of `now()`, so their answers do not drift between runs
 - **Chat Threads** suite (`chat_threads`) is original to this repository. Message documents follow the Anthropic Messages / MCP content-block shape, and visualization parts embed [Vega-Lite](https://vega.github.io/vega-lite/) specs. Data is generated locally, so results are not comparable to any published benchmark
 - **Kaggle Airbnb** suite is based on ["Testing query speed for DuckDB vs ClickHouse vs StarRocks databases"](https://medium.com/@marvin_data/testing-query-speed-for-duckdb-vs-clickhouse-vs-starrocks-databases-fecc6614d1ef) by Vitaliy
 - **TPC-H** suite (`tpc_h`) is derived from the [TPC-H benchmark](https://www.tpc.org/tpch/); results are not comparable to published TPC-H results. Data is generated with [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs) (requires `cargo install tpchgen-cli`). Base queries come from the [DuckDB tpch extension](https://github.com/duckdb/duckdb/tree/main/extension/tpch/dbgen/queries), with per-database adaptations from [ClickHouse](https://github.com/ClickHouse/ClickHouse/tree/master/tests/benchmarks/tpc-h) and [StarRocks](https://docs.starrocks.io/docs/benchmarking/TPC-H_Benchmarking/)

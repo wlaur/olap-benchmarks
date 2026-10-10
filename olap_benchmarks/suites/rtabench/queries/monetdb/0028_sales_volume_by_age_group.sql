@@ -1,14 +1,14 @@
 WITH customer_ages AS (
     SELECT
         c.customer_id,
-        -- complete years elapsed, as in upstream RTABench's age(now(), birthday) >= '18 year'.
-        -- MonetDB has no age(), so subtract calendar years and take one back when this year's
-        -- birthday has not arrived yet.
+        -- complete years elapsed at the fixed reference date, as age(reference, birthday) in the
+        -- other dialects. MonetDB has no age(), so subtract calendar years and take one back when
+        -- the birthday has not arrived yet in the reference year.
         (
             EXTRACT(
                 YEAR
                 FROM
-                    now()
+                    TIMESTAMP '2025-01-01 00:00:00'
             ) - EXTRACT(
                 YEAR
                 FROM
@@ -17,7 +17,7 @@ WITH customer_ages AS (
                 WHEN EXTRACT(
                     MONTH
                     FROM
-                        now()
+                        TIMESTAMP '2025-01-01 00:00:00'
                 ) < EXTRACT(
                     MONTH
                     FROM
@@ -27,7 +27,7 @@ WITH customer_ages AS (
                     EXTRACT(
                         MONTH
                         FROM
-                            now()
+                            TIMESTAMP '2025-01-01 00:00:00'
                     ) = EXTRACT(
                         MONTH
                         FROM
@@ -36,7 +36,7 @@ WITH customer_ages AS (
                     AND EXTRACT(
                         DAY
                         FROM
-                            now()
+                            TIMESTAMP '2025-01-01 00:00:00'
                     ) < EXTRACT(
                         DAY
                         FROM

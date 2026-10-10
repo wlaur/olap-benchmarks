@@ -10,7 +10,7 @@ FROM
         AND o.created_at > '2024-12-24'
         AND o.created_at < '2025-01-01'
     INNER JOIN customers c ON c.customer_id = o.customer_id
-        AND age(now(), c.birthday) >= '18 years' AND age(now(), c.birthday) < '26 years'
+        AND age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) >= '18 years' AND age(TIMESTAMP '2025-01-01 00:00:00', c.birthday) < '26 years'
 GROUP BY
     product_id
 ORDER BY

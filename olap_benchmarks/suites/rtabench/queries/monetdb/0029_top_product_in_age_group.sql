@@ -1,11 +1,11 @@
 WITH customer_ages AS (
     SELECT
         c.customer_id,
-        -- this age calculation might be incorrect, query output matches DuckDB at least
+        -- complete years elapsed at the fixed reference date; see 0028_sales_volume_by_age_group.sql
         EXTRACT(
             YEAR
             FROM
-                now()
+                TIMESTAMP '2025-01-01 00:00:00'
         ) - EXTRACT(
             YEAR
             FROM
@@ -15,7 +15,7 @@ WITH customer_ages AS (
                 EXTRACT(
                     MONTH
                     FROM
-                        now()
+                        TIMESTAMP '2025-01-01 00:00:00'
                 ) < EXTRACT(
                     MONTH
                     FROM
@@ -26,7 +26,7 @@ WITH customer_ages AS (
                 EXTRACT(
                     MONTH
                     FROM
-                        now()
+                        TIMESTAMP '2025-01-01 00:00:00'
                 ) = EXTRACT(
                     MONTH
                     FROM
@@ -35,7 +35,7 @@ WITH customer_ages AS (
                 AND EXTRACT(
                     DAY
                     FROM
-                        now()
+                        TIMESTAMP '2025-01-01 00:00:00'
                 ) < EXTRACT(
                     DAY
                     FROM

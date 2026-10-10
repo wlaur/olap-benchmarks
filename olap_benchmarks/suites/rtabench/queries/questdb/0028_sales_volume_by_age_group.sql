@@ -1,35 +1,35 @@
 SELECT
     sum(
         CASE
-            WHEN datediff('y', c.birthday, now()) BETWEEN 18
+            WHEN datediff('y', c.birthday, '2025-01-01T00:00:00.000000Z'::timestamp) BETWEEN 18
             AND 25 THEN p.price * oi.amount
             ELSE 0
         END
     ) AS "18_25",
     sum(
         CASE
-            WHEN datediff('y', c.birthday, now()) BETWEEN 26
+            WHEN datediff('y', c.birthday, '2025-01-01T00:00:00.000000Z'::timestamp) BETWEEN 26
             AND 35 THEN p.price * oi.amount
             ELSE 0
         END
     ) AS "26_35",
     sum(
         CASE
-            WHEN datediff('y', c.birthday, now()) BETWEEN 36
+            WHEN datediff('y', c.birthday, '2025-01-01T00:00:00.000000Z'::timestamp) BETWEEN 36
             AND 50 THEN p.price * oi.amount
             ELSE 0
         END
     ) AS "36_50",
     sum(
         CASE
-            WHEN datediff('y', c.birthday, now()) BETWEEN 51
+            WHEN datediff('y', c.birthday, '2025-01-01T00:00:00.000000Z'::timestamp) BETWEEN 51
             AND 65 THEN p.price * oi.amount
             ELSE 0
         END
     ) AS "51_65",
     sum(
         CASE
-            WHEN datediff('y', c.birthday, now()) > 65 THEN p.price * oi.amount
+            WHEN datediff('y', c.birthday, '2025-01-01T00:00:00.000000Z'::timestamp) > 65 THEN p.price * oi.amount
             ELSE 0
         END
     ) AS "66_plus"

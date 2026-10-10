@@ -1,11 +1,11 @@
 WITH customer_ages AS (
     SELECT
         c.customer_id,
-        -- complete years elapsed, as in upstream RTABench's age(now(), birthday) >= '18 year'
+        -- complete years elapsed, as in upstream RTABench's age(TIMESTAMP '2025-01-01 00:00:00', birthday) >= '18 year'
         EXTRACT(
             YEAR
             FROM
-                age(now(), c.birthday)
+                age(TIMESTAMP '2025-01-01 00:00:00', c.birthday)
         ) AS customer_age_years
     FROM
         customers c

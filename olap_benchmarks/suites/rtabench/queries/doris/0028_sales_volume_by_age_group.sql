@@ -1,10 +1,10 @@
 
 SELECT
-    sum(CASE WHEN years_diff(now(), c.birthday) >= 18 AND years_diff(now(), c.birthday) < 26 THEN p.price * oi.amount END) AS `18-25`,
-    sum(CASE WHEN years_diff(now(), c.birthday) >= 26 AND years_diff(now(), c.birthday) < 36 THEN p.price * oi.amount END) AS `26-35`,
-    sum(CASE WHEN years_diff(now(), c.birthday) >= 36 AND years_diff(now(), c.birthday) < 51 THEN p.price * oi.amount END) AS `36-50`,
-    sum(CASE WHEN years_diff(now(), c.birthday) >= 51 AND years_diff(now(), c.birthday) < 66 THEN p.price * oi.amount END) AS `51-65`,
-    sum(CASE WHEN years_diff(now(), c.birthday) >= 66 THEN p.price * oi.amount END) AS `66+`
+    sum(CASE WHEN years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) >= 18 AND years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) < 26 THEN p.price * oi.amount END) AS `18-25`,
+    sum(CASE WHEN years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) >= 26 AND years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) < 36 THEN p.price * oi.amount END) AS `26-35`,
+    sum(CASE WHEN years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) >= 36 AND years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) < 51 THEN p.price * oi.amount END) AS `36-50`,
+    sum(CASE WHEN years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) >= 51 AND years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) < 66 THEN p.price * oi.amount END) AS `51-65`,
+    sum(CASE WHEN years_diff(CAST('2025-01-01 00:00:00' AS DATETIME), c.birthday) >= 66 THEN p.price * oi.amount END) AS `66+`
 FROM
     products p
     INNER JOIN order_items oi USING (product_id)
