@@ -60,6 +60,11 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
         with self.db.phase_context("compress"):
             self.compress_tables()
 
+        with self.db.phase_context("continuous_aggregates"):
+            self.db.execute_schema_file(
+                REPO_ROOT / "olap_benchmarks/suites/rtabench/schemas/timescaledb_caggs.sql", autocommit=True
+            )
+
         if restart:
             self.db.restart_event()
 
