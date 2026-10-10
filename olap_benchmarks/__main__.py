@@ -8,7 +8,7 @@ from setproctitle import setproctitle
 
 from .dbs import get_databases
 from .inputs import drop_page_cache, fingerprint_input_directory
-from .matrix import MatrixCell, current_drivers, current_pins, expand_matrix
+from .matrix import MatrixCell, current_drivers, current_pins, expand_matrix, published_databases
 from .metrics.storage import WriterProcessHandle, start_writer_process
 from .operation_runner import run_operation
 from .results import (
@@ -182,13 +182,18 @@ def _resolve_benchmark_plan(
     suite: SuiteArg,
     scale_factor: int | None,
     omit: list[DatabaseName] | None = None,
+    include_experimental: bool = False,
 ) -> list[tuple[DatabaseName, SuiteName, int]]:
     omitted = set(omit or [])
+    published = set(published_databases())
     suite_scale_factor_pairs = _resolve_suite_scale_factor_pairs(suite, scale_factor)
     plan: list[tuple[DatabaseName, SuiteName, int]] = []
 
     for db_name in resolve_dbs(db):
         if db_name in omitted:
+            continue
+        if db == "all" and not include_experimental and db_name not in published:
+            _LOGGER.info(f"Skipping experimental {db_name}; name it or pass --include-experimental")
             continue
 
         for suite_name, resolved_scale_factor in suite_scale_factor_pairs:
@@ -350,11 +355,13 @@ def benchmark(
     omit: list[DatabaseName] | None = None,
     scale_factor: int | None = None,
     drop_caches: bool = False,
+    include_experimental: bool = False,
 ) -> None:
     """Run a benchmark suite against a database. Starts and stops the database container automatically.
 
     `db` and `suite` accept `all`, so `olap benchmark all all` runs every
-    supported operation of every suite against every database.
+    supported operation of every suite against every published database. Experimental
+    (unpublished) engines run only when named or with `--include-experimental`.
 
     If `--cleanup` is set, persistent db files (under OLAP_BENCHMARKS_DATABASE_DIRECTORY)
     and temp files (under OLAP_BENCHMARKS_TEMPORARY_DIRECTORY) for the (db, suite)
@@ -374,7 +381,9 @@ def benchmark(
     page cache before each container starts (Linux only, needs root; logged and skipped otherwise),
     so populate reads its inputs cold.
     """
-    plan = _filter_supported_benchmark_plan(_resolve_benchmark_plan(db, suite, scale_factor, omit))
+    plan = _filter_supported_benchmark_plan(
+        _resolve_benchmark_plan(db, suite, scale_factor, omit, include_experimental)
+    )
 
     if not plan:
         raise SystemExit("No benchmark runs selected.")
@@ -446,7 +455,7 @@ def docker(
 def publish(revision: Revision = "default", merge: bool = False, upload: bool = False) -> None:
     """Publish a results revision to site/public/data for the webpage, with a manifest.
 
-    Only the latest run of each cell of the declared matrix (`olap matrix status --published-only`)
+    Only the latest run of each cell of the declared matrix (`olap matrix status`)
     is published. The set must be complete and coherent: every cell completed with answer hashes,
     no wrong results after validation, current version pins only, one repository commit with a
     clean tree, and one system snapshot. Otherwise nothing is written and the offending cells are
@@ -777,21 +786,27 @@ def _matrix_statuses(cells: list[MatrixCell], revision: Revision) -> list[CellSt
     return matrix_status(runs, cells, system=get_settings().system, pins=current_pins(), drivers=current_drivers())
 
 
+def _matrix_cells(db: list[DatabaseName] | None, include_experimental: bool) -> list[MatrixCell]:
+    return expand_matrix(dbs=db, published_only=db is None and not include_experimental)
+
+
 @matrix_app.command(name="status")
 def matrix_status_cmd(
     db: list[DatabaseName] | None = None,
     revision: Revision = "default",
-    published_only: bool = False,
+    include_experimental: bool = False,
     check: bool = False,
 ) -> None:
     """Show each declared cell against its latest run in a revision.
 
     A cell is `ok` when its latest run completed on the current version pin and the newest
     repository commit in the revision, `stale` when it completed on another version or commit,
-    `failed` when the latest run did not complete and `missing` without any run. With `--check`,
-    exits non-zero unless every cell is ok.
+    `failed` when the latest run did not complete and `missing` without any run. The `unsupported`
+    column counts the select queries the engine declares unsupported in query_registry. With
+    `--check`, exits non-zero unless every cell is ok. Experimental (unpublished) engines are
+    included when named with `--db` or with `--include-experimental`.
     """
-    statuses = _matrix_statuses(expand_matrix(dbs=db, published_only=published_only), revision)
+    statuses = _matrix_statuses(_matrix_cells(db, include_experimental), revision)
     print(format_matrix_status(statuses))
 
     counts: dict[str, int] = {}
@@ -809,7 +824,7 @@ def matrix_run(
     revision: Revision = "default",
     missing_only: bool = False,
     keep_going: bool = False,
-    published_only: bool = False,
+    include_experimental: bool = False,
     drop_caches: bool = False,
 ) -> None:
     """Run the declared matrix through the benchmark machinery, then validate once.
@@ -821,9 +836,10 @@ def matrix_run(
 
     Wrong-result marking runs once at the end (as `olap results validate --mark`). Prints a summary
     and exits non-zero when any group failed. `--drop-caches` drops the page cache before each
-    container starts, as for `olap benchmark`.
+    container starts, as for `olap benchmark`. Experimental (unpublished) engines run only when
+    named with `--db` or with `--include-experimental`.
     """
-    cells = expand_matrix(dbs=db, published_only=published_only)
+    cells = _matrix_cells(db, include_experimental)
     selected = cells
     if missing_only:
         pending = {

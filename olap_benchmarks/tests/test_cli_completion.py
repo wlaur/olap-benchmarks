@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from typing import Protocol
+from typing import Protocol, get_args
 
 import pytest
 from cyclopts.exceptions import CoercionError
@@ -606,7 +606,7 @@ def test_default_benchmark_plan_skips_row_store_optional_suites(
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
 
-    plan = __main__._resolve_benchmark_plan(db="all", suite="all", scale_factor=None)
+    plan = __main__._resolve_benchmark_plan(db="all", suite="all", scale_factor=None, include_experimental=True)
 
     assert ("duckdb", "tpc_h", 10) in plan
     assert ("duckdb", "tpc_h", 50) in plan
@@ -634,7 +634,29 @@ def test_explicit_row_store_optional_suite_stays_in_plan(
     monkeypatch.setattr(__main__, "resolve_suites", fake_resolve_suites)
     monkeypatch.setattr(__main__, "resolve_dbs", fake_resolve_dbs)
 
-    assert __main__._resolve_benchmark_plan(db="all", suite="tpc_h", scale_factor=None) == [
+    assert __main__._resolve_benchmark_plan(db="postgres", suite="tpc_h", scale_factor=None) == [
         ("postgres", "tpc_h", 10),
         ("timescaledb", "tpc_h", 10),
     ]
+
+
+def test_benchmark_all_runs_published_engines_unless_experimental_ones_are_included() -> None:
+    default = {db for db, _, _ in __main__._resolve_benchmark_plan(db="all", suite="clickbench", scale_factor=None)}
+    everything = {
+        db
+        for db, _, _ in __main__._resolve_benchmark_plan(
+            db="all", suite="clickbench", scale_factor=None, include_experimental=True
+        )
+    }
+
+    assert default == {"clickhouse", "duckdb", "monetdb", "polars"}
+    assert everything == set(get_args(DatabaseName))
+    assert __main__._resolve_benchmark_plan(db="doris", suite="clickbench", scale_factor=None) == [
+        ("doris", "clickbench", 1)
+    ]
+
+
+def test_matrix_commands_include_experimental_engines_only_on_request() -> None:
+    assert {cell.db for cell in __main__._matrix_cells(None, False)} == {"clickhouse", "duckdb", "monetdb", "polars"}
+    assert "doris" in {cell.db for cell in __main__._matrix_cells(None, True)}
+    assert {cell.db for cell in __main__._matrix_cells(["arc"], False)} == {"arc"}
