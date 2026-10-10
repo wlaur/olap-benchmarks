@@ -8,7 +8,6 @@ itself belong in [`../REVIEW.md`](../REVIEW.md).
 | Engine | Contents |
 | --- | --- |
 | [`clickhouse/`](clickhouse/) | [`FixedString` deserialization failure under `parallel_hash`](clickhouse/fixedstring-too-large-under-parallel-hash.md) |
-| [`monetdb/`](monetdb/) | [Pipeline-engine evaluation](monetdb/master-pipeline-evaluation.md) — build, benchmark and findings for the `pp_hashjoin` engine |
 
 ## Conventions
 

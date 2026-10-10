@@ -52,7 +52,7 @@ class MonetDBRelease:
         return f"wlaur/monetdb-container:{self.runtime_version}-{self.arm64_image_revision}"
 
 
-MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP3", runtime_version="11.55.7", arm64_image_revision=2)
+MONETDB_RELEASE = MonetDBRelease(label="Dec2025-SP4", runtime_version="11.55.9", arm64_image_revision=1)
 MONETDB_APPLICATION = "olap-benchmarks"
 MONETDB_CONTAINER_PORT = "50000"
 MONETDB_HOST_PORT = host_port("monetdb")
@@ -73,7 +73,7 @@ def _monetdb_connection_string() -> str:
 
 
 _ROLLING_AVG_WINDOW_BUG = (
-    "MonetDB 11.55.7 returns wrong values from avg() over a ROWS frame wider than 16 rows, "
+    "MonetDB 11.55.7 through 11.55.9 return wrong values from avg() over a ROWS frame wider than 16 rows, "
     "from the 17th row onward. A 60-row moving average cannot be expressed correctly, so the query "
     "is not measured rather than publishing a runtime for a wrong answer."
 )
