@@ -7,6 +7,11 @@ Only unfinished work. Remove items when they are done; history lives in git.
 - Published: one system (`macbook-m4-pro`), three engines — ClickHouse, DuckDB, MonetDB (Dec2025-SP4, ADBC) —
   across all eight suites at SF1 (TPC-H and JSONBench at SF10). MonetDB has no JSONBench queries and skips
   `chat_threads` concurrent (server crash). Answer hashes are `canonical-v10`; the published DB is at the Alembic head.
+- The intended matrix is declared in `olap_benchmarks/matrix.py` (Polars is declared published for TPC-H, JSONBench
+  and ClickBench but has no runs yet). `olap matrix status|run`, `olap results validate|prune` and the generalised
+  publish gate (one commit, clean tree, one snapshot, current pins, complete and validated cells) are in place.
+  RTABench queries gained deterministic tie-breakers, so their stored answer hashes are no longer comparable to new
+  runs.
 - Connectors with no published results: Polars, Postgres, TimescaleDB, QuestDB, StarRocks, Doris. They carry ~2.7k
   lines and ~370 SQL files that every interface change has to touch.
 - Higher scale factors (time_series/chat_threads SF10, TPC-H SF50) do not fit this machine's RAM and disk; they
@@ -18,28 +23,15 @@ one-command path from "bump a version" to "published".
 
 ## 1. Release blockers
 
-- [ ] **Publish one coherent campaign, and enforce it.** The current set mixes five commits (one dirty tree), two
-      OS snapshots and three dates: ClickHouse/DuckDB RTABench were rerun on 2026-10-10, the rest is from 2026-08-04.
-      Run the published matrix into a fresh revision from one clean commit, and make `publish` reject a set with more
-      than one commit, dirty trees, more than one system snapshot or mixed profiles.
-- [ ] **Extend the publish gate to every published engine.** `_validate_publishable_runs` only checks MonetDB
-      (ADBC matrix, session baselines, hashes). Generalise it to "every cell of the declared matrix is present,
-      completed, hashed and in cross-engine agreement" (see 3.1).
-- [ ] **Make wrong-result marking order-independent and self-healing.** After every select, `__main__.py:324-343`
-      compares the latest run per `(system, suite, sf, db, driver)` *ignoring `db_version`*, then writes
-      `result_status='wrong_result'` permanently — and can mark the *other* engines when one stale run sits in the
-      majority. Nothing clears it. Validate once at the end of a matrix run or at publish; recompute marks
-      idempotently (clear, then apply); add `olap results validate [--mark|--clear]`.
-- [ ] **Fix non-deterministic queries.** RTABench `1008_most_week_delayed_order` returns a different answer hash on
-      each ClickHouse iteration (`ORDER BY delayed_orders DESC LIMIT 1` with ties). Add tie-breakers, and add a check
-      that flags any query whose hash differs between iterations of one run.
+- [ ] **Publish one coherent campaign.** The current set mixes five commits (one dirty tree), two OS snapshots and
+      three dates, and predates `metadata.repository`, so `olap publish` now refuses it. Run
+      `olap matrix run --published-only` into a fresh revision from one clean commit (this adds Polars) and publish
+      it through the gate.
 - [ ] **Make the site's methodology text true.** `site/src/content/home.md` still names `macbook-pro-m4`, says
       QuestDB is published, says results are "checked into git", describes a MonetDB "binary fetch path", and says
       DuckDB is not reopened between operations (it is, since per-operation process isolation).
-- [ ] **Redeploy Pages when the data asset changes.** `publish --upload` replaces the release asset, but Pages only
-      rebuilds on a push to `main`, so the site can serve a database that does not match the committed manifest.
-      Trigger the workflow from `publish --upload` (`gh workflow run`) and put the asset's SHA-256 in `manifest.json`;
-      have the build verify it instead of only the `DUCK` magic bytes.
+- [ ] **Verify the data asset in the Pages build.** `publish --upload` now triggers `pages.yml` and `manifest.json`
+      carries `results_db_sha256` and `results_db_bytes`; the build still only checks the `DUCK` magic bytes.
 - [ ] **Record image digests for every engine.** The locally built MonetDB image has no RepoDigest, so
       `container_image_digest` is null for all MonetDB runs. Pull from the registry before a campaign (now that the
       image is published) or record the registry digest explicitly; refuse to publish runs without one.
@@ -57,9 +49,9 @@ one-command path from "bump a version" to "published".
 - [ ] **State that scores are relative to the selected engines.** The 10 ms-smoothed score is recomputed against
       the fastest selected engine, so a run's score changes when another engine is added. Say so wherever a score
       appears, and keep absolute latency next to it.
-- [ ] **Finish the reproducibility identity.** Already recorded: repo commit (editable installs only), image IDs,
-      input manifest hashes, query text. Missing: query/schema hashes, profile revision, iteration policy, and a repo
-      commit for non-editable installs. Scope site comparisons by system snapshot, not just `system`.
+- [ ] **Finish the reproducibility identity.** Already recorded: `metadata.repository` (commit, dirty flag, diff
+      hash) for every run, image IDs, input manifest hashes, query text. Missing: query/schema hashes, profile
+      revision, iteration policy. Scope site comparisons by system snapshot, not just `system`.
 - [ ] **Decouple input hashing from populate.** Hashing the inputs right before populate warms the page cache, which
       favours engines that read the files directly. Hash in a separate step (or cache hashes by size+mtime) and drop
       the cache before populate on Linux.
@@ -70,17 +62,6 @@ one-command path from "bump a version" to "published".
 
 Ordered by how much they reduce the cost of rerunning and publishing.
 
-- [ ] **3.1 Declare the matrix in code and add `olap matrix`.** The intended matrix exists only for MonetDB
-      (`dbs/monetdb/manifest.py`); everything else is implied by `db × suite` plus hidden rules
-      (row-store engines skip TPC-H/TPC-DS, scale-factor fan-out differs with `suite=all`). Add one declaration
-      (`{db: [(suite, sf, operations)]}`, with a `published` flag per engine) and:
-      - `olap matrix status [--db X] [--revision R]` — planned vs latest completed run per cell: missing, failed,
-        stale version, stale commit.
-      - `olap matrix run [--db X] [--missing-only] [--keep-going]` — replaces hand-written shell loops, resumes a
-        partial campaign, validates once at the end, prints a summary table and exits non-zero on any failed cell.
-- [ ] **3.2 Replace superseded runs without run-id lists.** The merge key includes `started_at`, so reruns are added
-      next to old runs; the site hides them, the file keeps them. Add `olap results prune --superseded [--dry-run]`
-      (keep the latest completed run per cell) and a `publish --merge` mode keyed on the cell, not the start time.
 - [ ] **3.3 One version manifest.** Pins are `VERSION` constants in six connector modules, a dataclass for MonetDB,
       and `pyproject.toml` for DuckDB/Polars. Move them to one `versions.toml` (version, image tags, expected digest)
       and add `olap versions [--check] [--outdated]` that pulls/verifies images and lists newer upstream releases.
@@ -108,6 +89,8 @@ Ordered by how much they reduce the cost of rerunning and publishing.
         with new analyzer errors (`ORDER BY clause cannot contain grouping`, ambiguous column).
       - Doris 4.1.4.1 RTABench populate fails: stream load cannot reach the BE on port 8040 — readiness only waits
         for the FE.
+      - TimescaleDB RTABench `0008` orders by `count desc` (the most-delayed order) while every other engine orders
+        ascending, so its answer cannot agree.
       - Postgres, TimescaleDB and QuestDB: smoke-tested on time_series (see the 2026-10 campaign notes).
 
 ## 4. Site
@@ -115,8 +98,6 @@ Ordered by how much they reduce the cost of rerunning and publishing.
 Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which needs an in-browser engine, and a
 ~12-15 MB first load is acceptable. The six fixed views stay as SQL over `run`/`run_step`.
 
-- [ ] **Compact the published database.** The published file is half free blocks (38 MB; 15.5 MB when copied into a
-      fresh file). Compact on publish so the download and WASM memory shrink by more than half.
 - [ ] **Keep the typed query layer in step with migrations.** `bun run codegen` introspects the published file, so a
       schema change reaches the site only when someone regenerates; run codegen from `olap publish` (or check in CI
       that `generated/db.ts` matches the current schema).
@@ -152,7 +133,7 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 ## Suggested order
 
-1. Section 3.1-3.3 (matrix, prune, versions): they turn the rest into single commands.
+1. Section 3.3 (versions), so a version bump is one edit and `olap matrix status` shows what it invalidates.
 2. Section 1, then a fresh campaign published through the new gate.
 3. Section 4 (site), independent of the harness work.
 4. Section 2 profile, then the cloud campaign; sections 5-6 fit around these.

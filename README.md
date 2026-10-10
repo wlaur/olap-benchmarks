@@ -66,9 +66,19 @@ uv run olap benchmark clickhouse tpc_h --scale-factor 10
 # 3. inspect the results
 uv run olap results runs --suite tpc_h --db clickhouse
 uv run olap results query "select * from run order by started_at desc limit 5"
+uv run olap results validate --mark
 
 # 4. publish to the site and upload the database to the `data` release
 uv run olap publish --merge --upload
+```
+
+A release campaign runs the declared matrix instead of individual suites:
+
+```bash
+uv run olap matrix status --published-only            # planned cells vs the latest run of each
+uv run olap matrix run --published-only --revision 2026-10 --keep-going
+uv run olap matrix run --published-only --revision 2026-10 --missing-only   # retry what is not ok
+uv run olap publish --revision 2026-10 --upload
 
 # 5. view locally
 cd site && bun install && bun run dev
@@ -109,6 +119,41 @@ uv run olap benchmark duckdb all                # one db, every default suite/sc
 uv run olap benchmark starrocks clickbench select   # re-run only the select queries
 uv run olap benchmark all all --omit questdb    # the default matrix, minus one db
 ```
+
+`olap benchmark` does not mark wrong results. After a select it compares answers
+with the other engines and logs mismatches as warnings; marking happens once the
+whole campaign has run, through `olap results validate --mark` or at the end of
+`olap matrix run`.
+
+Every run records `metadata.repository = {commit, dirty, diff_sha256}` for the
+checkout the harness runs from (`diff_sha256` hashes `git diff HEAD` plus the
+untracked files, and is null for a clean tree). A run refuses to start outside a
+git checkout.
+
+### `olap matrix status|run`
+
+The intended benchmark matrix is declared once in `olap_benchmarks/matrix.py`:
+per engine, the (suite, scale factor, operations) it runs and whether it is
+published. Operations default to everything the engine registers for the suite,
+and a test checks every declared cell against the engine's suite registry. A new
+engine gets one entry listing only the suites it is meant to run.
+
+```bash
+uv run olap matrix status [--db X ...] [--revision R] [--published-only] [--check]
+uv run olap matrix run [--db X ...] [--revision R] [--published-only] [--missing-only] [--keep-going]
+```
+
+`status` compares each cell with its latest run: `ok`, `missing`, `failed` (the
+latest run did not complete) or `stale` (another `db_version` than the current
+pin, or another repository commit than the newest in the revision). `--check`
+exits non-zero unless every cell is ok.
+
+`run` groups cells by (db, suite, scale factor) and runs each group's operations
+on one container through the same code path as `olap benchmark`, then removes the
+database files. `--missing-only` reruns only groups with a cell that is not ok,
+in full, because their operations share the populated data. Validation and
+wrong-result marking run once at the end; the command prints a summary and exits
+non-zero if any group failed.
 
 MonetDB connects exclusively through ADBC (`adbc-driver-monetdb` +
 `sqlalchemy-monetdb-adbc`). Ingest streams Arrow data over the wire — eager
@@ -242,21 +287,50 @@ uv run olap results resources --db duckdb            # peak server/client memory
 uv run olap results delete --status failed           # delete failed + orphaned runs
 uv run olap results delete --run-id 12 --run-id 13   # delete specific runs
 uv run olap results rename-db old_name new_name      # rename a db in stored runs
+uv run olap results validate [--mark|--clear]        # cross-engine and per-iteration answer checks
+uv run olap results prune --superseded --dry-run     # drop runs replaced by a later completed run
+uv run olap results prune --stale-versions           # drop runs of versions other than the pins
+uv run olap results compact                          # reclaim space after deleting runs
 ```
+
+`validate` compares the latest completed select run per cell of the current
+version pins: row counts and answer hashes across engines, and answer hashes
+across the iterations of each run (a query whose answer changes between
+iterations is non-deterministic). `--mark` first clears every earlier
+`wrong_result` mark in scope, restoring `ok`, and then marks the consensus
+outliers of the current comparison, so it is idempotent and a corrected rerun
+heals its old marks. `--clear` only removes the marks. Queries listed in
+`ANSWER_COMPARISON_EXCLUSIONS` are not compared.
+
+`prune --superseded` keeps the latest completed run per cell (system, db,
+db_version, db_driver, suite, scale factor, operation) and deletes the runs of
+that cell that started before it; later failed attempts and running runs stay.
 
 All `results` commands accept `--revision` (default `default`).
 
 ### `olap publish [--revision NAME] [--merge] [--upload]`
 
-Copies `results/<revision>.db` to `site/public/data/results.db` along with
-`manifest.json` and `queries.json`. With `--merge`, runs are merged into the
-already-published file instead of replacing it: runs matching an existing
-(system, db, db_version, db_driver, suite, suite_scale_factor, operation,
-started_at) are replaced, new runs are added, everything else is kept.
+Publishes the latest run of every published cell of the declared matrix from
+`results/<revision>.db` to `site/public/data/results.db`, along with
+`manifest.json`, `queries.json` and `suites.json`. Runs of unpublished engines,
+undeclared cells and superseded runs are left out. Before anything is written,
+publish marks wrong results on the staged copy and refuses the set unless every
+declared cell completed, every select query has an answer hash (or a recorded
+reason why not), no query is marked `wrong_result` or changes answer between
+iterations, all runs use the current version pins, one repository commit with a
+clean tree and one system snapshot. MonetDB runs must additionally use the ADBC
+driver and have clean session baselines. The error lists every offending cell.
+
+The published file is compacted, and `manifest.json` records its
+`results_db_sha256` and `results_db_bytes`. With `--merge`, runs are merged into
+the already-published file instead of replacing it: the revision's runs replace
+every published run of the same cell (system, db, db_version, db_driver, suite,
+suite_scale_factor, operation), and everything else is kept.
 
 **`results.db` is not committed.** It is large and rewritten on every publish, so
 git would keep every version forever. It ships as the `results.db` asset on the
-`data` release: `--upload` replaces that asset via the GitHub CLI, and the site
+`data` release: `--upload` replaces that asset via the GitHub CLI and triggers
+the Pages workflow (`gh workflow run pages.yml --ref main`), and the site
 build fetches it with `bun run fetch-data` (the Pages workflow runs this before
 `bun run build` and fails the build if the asset is missing or truncated). The
 small `manifest.json`, `queries.json` and `suites.json` stay in git.
@@ -322,8 +396,9 @@ version pins live in each connector:
 | starrocks   | `olap_benchmarks/dbs/starrocks/__init__.py`        |
 | duckdb      | `pyproject.toml` (runs in-process; version follows the installed `duckdb` package) |
 
-To benchmark a new version: bump the pin, rerun `olap benchmark`, and publish —
-old-version runs remain in the results database.
+To benchmark a new version: bump the pin, rerun the affected cells
+(`olap matrix status` lists them as stale), and publish. Old-version runs remain
+in the results database until `olap results prune --stale-versions`.
 
 ## Results schema migrations
 
