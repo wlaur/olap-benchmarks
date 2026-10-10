@@ -20,6 +20,7 @@ DatabaseName = Literal[
     "postgres",
     "starrocks",
     "doris",
+    "arc",
 ]
 
 SuiteName = Literal[
@@ -211,6 +212,7 @@ DEFAULT_HOST_PORTS: dict[str, int] = {
     "starrocks_fe_mysql": 9030,
     "starrocks_fe_http": 8030,
     "starrocks_be_http": 8040,
+    "arc": 8000,
 }
 
 

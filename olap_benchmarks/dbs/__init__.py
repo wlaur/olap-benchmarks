@@ -928,6 +928,7 @@ class Database(BaseModel, ABC):
 
 @lru_cache(maxsize=1)
 def get_databases() -> dict[DatabaseName, Database]:
+    from .arc import Arc
     from .clickhouse import Clickhouse
     from .doris import Doris
     from .duckdb import DuckDB
@@ -948,6 +949,7 @@ def get_databases() -> dict[DatabaseName, Database]:
         "postgres": Postgres(),
         "starrocks": StarRocks(),
         "doris": Doris(),
+        "arc": Arc(),
     }
 
     assert set(databases) == set(get_args(DatabaseName))

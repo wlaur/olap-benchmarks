@@ -10,6 +10,10 @@
 # In-process engines: `package` names the Python distribution. pyproject.toml pins it (`==`) and uv.lock
 # installs it; the recorded db_version is the installed package version.
 
+[arc]
+version = "26.09.3"
+images.server = "basekicklabs/arc:26.09.3"
+
 [clickhouse]
 version = "26.9.8.3"
 images.server = "clickhouse:26.9.8.3-jammy"

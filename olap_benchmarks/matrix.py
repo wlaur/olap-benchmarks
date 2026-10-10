@@ -81,6 +81,10 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
         published=False,
         suites=_default_scale("time_series", "rtabench", "kaggle_airbnb", "tpc_ds", "tpc_h", "jsonbench", "clickbench"),
     ),
+    "arc": EnginePlan(
+        published=False,
+        suites=_default_scale("time_series", "chat_threads", "clickbench"),
+    ),
     "doris": EnginePlan(
         published=False,
         suites=_default_scale("rtabench", "jsonbench", "clickbench"),

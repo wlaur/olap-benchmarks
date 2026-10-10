@@ -32,14 +32,14 @@ Configuration lives in `.env` (see `olap config` for the resolved values):
 | `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY` | Scratch space used during populate                  |
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
-| `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http` |
+| `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http`, `arc` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
 
 Container images follow the Docker engine architecture automatically, including
 OrbStack's Linux engine on Apple Silicon. The pinned ClickHouse, TimescaleDB,
-QuestDB, PostgreSQL, StarRocks, and Doris references are multi-architecture.
+QuestDB, PostgreSQL, StarRocks, Doris, and Arc references are multi-architecture.
 MonetDB uses the official `monetdb/monetdb` image on amd64 and
 `wlaur/monetdb-container` on ARM64. A connector marked as lacking an ARM64 image
 still runs its amd64 image but emits a prominent warning that CPU virtualization
@@ -99,7 +99,7 @@ cd site && bun install && bun run dev
 
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N]`
 
-- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, or `all`
+- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`
 - `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
 - `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series` and `chat_threads`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
