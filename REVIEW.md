@@ -5,8 +5,9 @@ Only unfinished work. Remove items when they are done; history lives in git.
 ## Where things stand
 
 - Published: one system (`macbook-m4-pro`), three engines — ClickHouse, DuckDB, MonetDB (Dec2025-SP4, ADBC) —
-  across all eight suites at SF1 (TPC-H and JSONBench at SF10). MonetDB has no JSONBench queries and skips
-  `chat_threads` concurrent (server crash). Answer hashes are `canonical-v10`; the published DB is at the Alembic head.
+  across all eight suites at SF1 (TPC-H and JSONBench at SF10). MonetDB has no JSONBench queries; its published set
+  lacks `chat_threads` concurrent, which is registered again since it passed on SP4 and still needs a campaign run.
+  Answer hashes are `canonical-v10`; the published DB is at the Alembic head.
 - The intended matrix is declared in `olap_benchmarks/matrix.py` (Polars is declared published for TPC-H, JSONBench
   and ClickBench but has no runs yet). `olap matrix status|run`, `olap results validate|prune` and the generalised
   publish gate (one commit, clean tree, one snapshot, current pins, complete and validated cells) are in place.
@@ -69,13 +70,19 @@ Ordered by how much they reduce the cost of rerunning and publishing.
       broken dialect file or engine upgrade fails in minutes instead of mid-campaign.
 - [ ] **3.9 Decide the unpublished engines' future.** Either put them behind an `experimental` flag excluded from
       `all` and from interface-change obligations, or publish them. Known state after the 2026-10-10 version bump:
-      - StarRocks 4.1.6 now starts on Apple Silicon (the 4.1.0 segfault is gone), but TPC-DS 49, 70 and 86 fail
-        with new analyzer errors (`ORDER BY clause cannot contain grouping`, ambiguous column).
-      - Doris 4.1.4.1 RTABench populate fails: stream load cannot reach the BE on port 8040 — readiness only waits
-        for the FE.
-      - TimescaleDB RTABench `0008` orders by `count desc` (the most-delayed order) while every other engine orders
-        ascending, so its answer cannot agree.
-      - Postgres, TimescaleDB and QuestDB: smoke-tested on time_series (see the 2026-10 campaign notes).
+      - StarRocks 4.1.6 runs all 99 TPC-DS queries at SF1 (49, 70 and 86 have StarRocks variants that match
+        DuckDB), but 11 answers still differ from DuckDB (09, 18, 27, 31, 51, 58, 59, 66, 78, 83, 98) and 51 is
+        non-deterministic across iterations. Not investigated.
+      - Doris 4.1.4.1 RTABench populate and select complete (stream loads go to the BE's published port; the FE
+        redirect points at a Docker-internal address). Seven answers differ from DuckDB/Postgres/TimescaleDB
+        (0005, 0006, 0010, 0011, 0012, 0017, 0022). Doris registers no time_series.
+      - Postgres 18.6 and TimescaleDB 2.30.2 RTABench complete and agree with DuckDB. TimescaleDB now creates the
+        upstream continuous aggregates its 1000-series queries read and sorts 0008 like the others; the 0028 age
+        bucketing fix it shares with Postgres was verified on Postgres only. In the 2026-10 time_series smoke run
+        the TimescaleDB server went away at `upsert_data_large_1` and every later mutation failed, yet the mutate
+        run is recorded as completed and concurrent never ran; not investigated.
+      - QuestDB 10.0.1 runs all time_series operations at SF1 and agrees with DuckDB (version check reads
+        `build()`; top-N hourly has a QuestDB variant). RTABench, ClickBench and Kaggle are untested on 10.x.
 
 ## 4. Site
 
@@ -108,7 +115,6 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
       a campaign has run each registered suite on Arc and the answers match the other engines.
 - [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
 - [ ] **MonetDB JSONBench**, or record why not in the unsupported registry.
-- [ ] **Re-test MonetDB `chat_threads` concurrent** on SP4; the SIGSEGV is unexplained and was last seen on 11.55.7.
 
 ## 6. Resource reporting
 

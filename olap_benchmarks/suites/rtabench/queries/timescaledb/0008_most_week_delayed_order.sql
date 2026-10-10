@@ -10,7 +10,7 @@ WHERE
 GROUP BY
   order_id
 ORDER BY
-  count desc,
-    order_id desc
+  count,
+  order_id desc
 limit
   1;

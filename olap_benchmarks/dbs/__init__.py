@@ -689,7 +689,7 @@ class Database(BaseModel, ABC):
             _LOGGER.info(f"Restarted service {self.name}")
             self.wait_until_accessible()
 
-    def execute_schema_file(self, fpath: Path) -> None:
+    def execute_schema_file(self, fpath: Path, autocommit: bool = False) -> None:
         with fpath.open() as f:
             statements = f.read()
 
@@ -701,6 +701,10 @@ class Database(BaseModel, ABC):
             stmt = stmt.strip()
 
             if not stmt:
+                continue
+
+            if autocommit:
+                self.execute(stmt, autocommit=True)
                 continue
 
             # ensure the connection used when initializing the schema is not reused

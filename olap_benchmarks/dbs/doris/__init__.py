@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, Literal, cast
+from urllib.request import urlopen
 
 import polars as pl
 from sqlalchemy import Connection, create_engine, text
@@ -242,7 +243,7 @@ class Doris(Database):
 
                 self.connect(reconnect=True)
                 self.fetch("select 1 as one", schema={"one": pl.Int64}, method="python")
-                self.fetch("select host, alive from backends()", method="python")
+                self._wait_for_backend()
 
                 self.execute("DROP TABLE IF EXISTS _probe")
                 self.execute(
@@ -267,6 +268,18 @@ class Doris(Database):
                 sleep(interval_seconds)
 
         raise TimeoutError(f"Timed out after {timeout_seconds:.0f}s waiting for database {self.name}")
+
+    def _wait_for_backend(self) -> None:
+        backends = self.fetch("SHOW BACKENDS", method="python")
+        alive = backends.filter(pl.col("Alive").cast(pl.String).str.to_lowercase() == "true")
+        if alive.is_empty():
+            raise RuntimeError(f"no alive Doris backend registered: {backends.select('Host', 'Alive').rows()}")
+
+        url = f"http://{DORIS_HOST}:{DORIS_BE_HTTP_PORT}/api/health"
+        with urlopen(url, timeout=5) as response:
+            health = json.loads(response.read())
+        if health.get("status") != "OK":
+            raise RuntimeError(f"Doris backend {url} is not healthy: {health}")
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
@@ -387,7 +400,9 @@ class Doris(Database):
         _LOGGER.info(f"Created table {table} with {len(schema):_} columns")
 
     def stream_load_file(self, table: TableName, file_path: Path, headers: Mapping[str, str]) -> None:
-        url = f"http://{DORIS_HOST}:{DORIS_HTTP_PORT}/api/{DORIS_DATABASE}/{table}/_stream_load"
+        # The FE redirects stream loads to the BE's address inside the Docker network, which the
+        # host cannot route to, so the load goes to the BE's published HTTP port directly.
+        url = f"http://{DORIS_HOST}:{DORIS_BE_HTTP_PORT}/api/{DORIS_DATABASE}/{table}/_stream_load"
         command = [
             "curl",
             "-sS",

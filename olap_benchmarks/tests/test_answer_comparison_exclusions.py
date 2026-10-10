@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ..dbs import get_databases
 from ..results.validation import ANSWER_COMPARISON_EXCLUSIONS, _excluded_query_names
 from ..settings import SUITE_NAMES
 
@@ -26,18 +25,3 @@ def test_clickbench_q28_is_the_only_exclusion() -> None:
     # the list should stay short; a new entry deserves the same scrutiny Q28 got
     assert list(ANSWER_COMPARISON_EXCLUSIONS) == ["clickbench"]
     assert list(ANSWER_COMPARISON_EXCLUSIONS["clickbench"]) == ["Q28"]
-
-
-def test_monetdb_chat_threads_skips_the_crashing_concurrent_operation() -> None:
-    databases = get_databases()
-
-    monetdb = databases["monetdb"]
-    monetdb._current_suite = "chat_threads"
-    monetdb._current_suite_scale_factor = 1
-    assert monetdb.benchmarks["chat_threads"].supported_operations == ("populate", "select", "mutate")
-
-    for other in ("duckdb", "clickhouse"):
-        database = databases[other]
-        database._current_suite = "chat_threads"
-        database._current_suite_scale_factor = 1
-        assert "concurrent" in database.benchmarks["chat_threads"].supported_operations
