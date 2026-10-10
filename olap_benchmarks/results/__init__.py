@@ -22,16 +22,8 @@ from alembic import command
 
 from ..matrix import MatrixCell, current_drivers, current_pins, expand_matrix
 from ..settings import (
-    ALL_SUITE_SCALE_FACTORS,
-    DEFAULT_SUITE_SCALE_FACTORS,
     REPO_ROOT,
-    SCALE_FACTOR_SUITES,
-    SUITE_DISPLAY_ORDER,
-    SUITE_LABELS,
-    SUITE_NAV_LABELS,
-    SUITE_OPERATIONS,
-    SUITE_PUBLIC_ROLES,
-    SUITE_QUERY_NAME_PARSERS,
+    SUITE_SPECS,
     Revision,
     get_settings,
 )
@@ -367,17 +359,17 @@ def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:
         "suites": [
             {
                 "id": suite,
-                "title": SUITE_LABELS[suite],
-                "nav_label": SUITE_NAV_LABELS[suite],
+                "title": spec.label,
+                "nav_label": spec.nav_label,
                 "queries_key": suite,
-                "default_scale_factor": DEFAULT_SUITE_SCALE_FACTORS[suite],
-                "supported_scale_factors": list(ALL_SUITE_SCALE_FACTORS[suite]),
-                "scale_factor_supported": suite in SCALE_FACTOR_SUITES,
-                "operations": list(SUITE_OPERATIONS[suite]),
-                "query_name_parser": SUITE_QUERY_NAME_PARSERS[suite],
-                "public_role": SUITE_PUBLIC_ROLES[suite],
+                "default_scale_factor": spec.default_scale_factor,
+                "supported_scale_factors": list(spec.scale_factors),
+                "scale_factor_supported": spec.scalable,
+                "operations": list(spec.operations),
+                "query_name_parser": spec.query_name_parser,
+                "public_role": spec.public_role,
             }
-            for suite in SUITE_DISPLAY_ORDER
+            for suite, spec in SUITE_SPECS.items()
         ]
     }
 

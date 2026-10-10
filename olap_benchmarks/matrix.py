@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from .settings import DEFAULT_SUITE_SCALE_FACTORS, DatabaseName, Operation, SuiteName
+from .settings import SUITE_SPECS, DatabaseName, Operation, SuiteName
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +33,7 @@ class MatrixCell:
 
 
 def _default_scale(*suites: SuiteName) -> tuple[SuitePlan, ...]:
-    return tuple(SuitePlan(suite, DEFAULT_SUITE_SCALE_FACTORS[suite]) for suite in suites)
+    return tuple(SuitePlan(suite, SUITE_SPECS[suite].default_scale_factor) for suite in suites)
 
 
 _COLUMN_STORE_SUITES: tuple[SuitePlan, ...] = (

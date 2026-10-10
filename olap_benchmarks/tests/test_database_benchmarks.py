@@ -16,6 +16,7 @@ from ..images import ImageDigestError, ResolvedImage
 from ..settings import (
     DatabaseName,
     SuiteName,
+    SuiteSpec,
     TableName,
     resolve_suite_scale_factor,
     resolve_suite_scale_factors,
@@ -308,6 +309,21 @@ def test_jsonbench_restricts_supported_scale_factors() -> None:
 
     with pytest.raises(ValueError, match="supports scale factors: 10"):
         resolve_suite_scale_factor("jsonbench", 100)
+
+
+def test_tpc_scale_factors_are_validated() -> None:
+    assert resolve_suite_scale_factor("tpc_h", 50) == 50
+    with pytest.raises(ValueError, match="supports scale factors: 10, 50"):
+        resolve_suite_scale_factor("tpc_h", 1)
+    with pytest.raises(ValueError, match="supports scale factors: 1"):
+        resolve_suite_scale_factor("tpc_ds", 10)
+    with pytest.raises(ValueError, match="fixed scale factor of 1"):
+        resolve_suite_scale_factor("clickbench", 10)
+
+
+def test_suite_spec_rejects_an_unsupported_default() -> None:
+    with pytest.raises(ValueError, match="default scale factor 1 is not supported"):
+        SuiteSpec("X", scale_factors=(10,), default_scale_factor=1, scalable=True)
 
 
 def test_all_suite_scale_factor_resolution_fans_out_time_series() -> None:

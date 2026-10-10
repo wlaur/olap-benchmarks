@@ -42,7 +42,6 @@ from ..settings import (
     TableName,
     format_suite_data_directory_name,
     get_settings,
-    get_suite_scale_factor,
     resolve_suite_scale_factor,
 )
 from ..utils import run_shell
@@ -850,7 +849,7 @@ class Database(BaseModel, ABC):
                 scale_factor=(
                     self.current_suite_scale_factor
                     if self._current_suite == suite_name
-                    else get_suite_scale_factor(suite_name)
+                    else resolve_suite_scale_factor(suite_name)
                 ),
             )
             for suite_name, suite_class in self.suite_registry().items()

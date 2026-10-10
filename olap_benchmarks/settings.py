@@ -1,5 +1,6 @@
 import logging
 import sys
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, cast, get_args
@@ -35,72 +36,65 @@ type DatabaseArg = DatabaseName | Literal["all"]
 type SuiteArg = SuiteName | Literal["all"]
 SuitePublicRole = Literal["benchmark", "smoke"]
 
-SUITE_NAMES = cast(tuple[SuiteName, ...], get_args(SuiteName))
-
-SUITE_DISPLAY_ORDER: tuple[SuiteName, ...] = (
-    "time_series",
-    "rtabench",
-    "clickbench",
-    "jsonbench",
-    "chat_threads",
-    "kaggle_airbnb",
-    "tpc_h",
-    "tpc_ds",
-)
-
-DEFAULT_SUITE_SCALE_FACTORS: dict[SuiteName, int] = {
-    "rtabench": 1,
-    "time_series": 1,
-    "clickbench": 1,
-    "jsonbench": 10,
-    "chat_threads": 1,
-    "kaggle_airbnb": 1,
-    "tpc_h": 10,
-    "tpc_ds": 1,
-}
-
-TIME_SERIES_SCALE_FACTORS = (1, 10)
-JSONBENCH_SCALE_FACTORS = (10,)
-CHAT_THREADS_SCALE_FACTORS = (1, 10)
-TPCH_SCALE_FACTORS = (10, 50)
-
-ALL_SUITE_SCALE_FACTORS: dict[SuiteName, tuple[int, ...]] = {
-    suite: (scale_factor,) for suite, scale_factor in DEFAULT_SUITE_SCALE_FACTORS.items()
-}
-ALL_SUITE_SCALE_FACTORS["time_series"] = TIME_SERIES_SCALE_FACTORS
-ALL_SUITE_SCALE_FACTORS["jsonbench"] = JSONBENCH_SCALE_FACTORS
-ALL_SUITE_SCALE_FACTORS["chat_threads"] = CHAT_THREADS_SCALE_FACTORS
-ALL_SUITE_SCALE_FACTORS["tpc_h"] = TPCH_SCALE_FACTORS
-
-SCALE_FACTOR_SUITES: frozenset[SuiteName] = frozenset({"time_series", "jsonbench", "chat_threads", "tpc_h", "tpc_ds"})
-
-SUITE_LABELS: dict[SuiteName, str] = {
-    "rtabench": "RTABench",
-    "time_series": "Time Series",
-    "clickbench": "ClickBench",
-    "jsonbench": "JSONBench",
-    "chat_threads": "Chat Threads",
-    "kaggle_airbnb": "Kaggle Airbnb",
-    "tpc_h": "TPC-H",
-    "tpc_ds": "TPC-DS",
-}
-
-SUITE_NAV_LABELS: dict[SuiteName, str] = SUITE_LABELS.copy()
-
-SUITE_OPERATIONS: dict[SuiteName, tuple[Operation, ...]] = dict.fromkeys(SUITE_NAMES, ("populate", "select"))
-SUITE_OPERATIONS["time_series"] = ("populate", "select", "mutate", "concurrent")
-SUITE_OPERATIONS["chat_threads"] = ("populate", "select", "mutate", "concurrent")
-
 SuiteQueryNameParser = Literal["generic", "time_series"]
 
-SUITE_QUERY_NAME_PARSERS: dict[SuiteName, SuiteQueryNameParser] = dict.fromkeys(SUITE_NAMES, "generic")
-SUITE_QUERY_NAME_PARSERS["time_series"] = "time_series"
 
-SUITE_PUBLIC_ROLES = cast(dict[SuiteName, SuitePublicRole], dict.fromkeys(SUITE_NAMES, "benchmark"))
-SUITE_PUBLIC_ROLES["kaggle_airbnb"] = "smoke"
+@dataclass(frozen=True, slots=True)
+class SuiteSpec:
+    label: str
+    scale_factors: tuple[int, ...]
+    default_scale_factor: int
+    # whether the scale factor is part of the data directory name and of `--scale-factor`
+    scalable: bool
+    operations: tuple[Operation, ...] = ("populate", "select")
+    query_name_parser: SuiteQueryNameParser = "generic"
+    public_role: SuitePublicRole = "benchmark"
+    # row-store engines skip the suite under `olap benchmark <db> all` unless it is named explicitly
+    row_store_optional: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.scale_factors or any(scale_factor < 1 for scale_factor in self.scale_factors):
+            raise ValueError(f"{self.label}: scale factors must be >= 1: {self.scale_factors}")
+        if self.default_scale_factor not in self.scale_factors:
+            raise ValueError(f"{self.label}: default scale factor {self.default_scale_factor} is not supported")
+        if not self.scalable and self.scale_factors != (1,):
+            raise ValueError(f"{self.label}: a fixed-size suite has the single scale factor 1")
+
+    @property
+    def nav_label(self) -> str:
+        return self.label
+
+
+_ALL_OPERATIONS: tuple[Operation, ...] = ("populate", "select", "mutate", "concurrent")
+
+# one entry per suite, in display order
+SUITE_SPECS: dict[SuiteName, SuiteSpec] = {
+    "time_series": SuiteSpec(
+        "Time Series",
+        scale_factors=(1, 10),
+        default_scale_factor=1,
+        scalable=True,
+        operations=_ALL_OPERATIONS,
+        query_name_parser="time_series",
+    ),
+    "rtabench": SuiteSpec("RTABench", scale_factors=(1,), default_scale_factor=1, scalable=False),
+    "clickbench": SuiteSpec("ClickBench", scale_factors=(1,), default_scale_factor=1, scalable=False),
+    "jsonbench": SuiteSpec("JSONBench", scale_factors=(10,), default_scale_factor=10, scalable=True),
+    "chat_threads": SuiteSpec(
+        "Chat Threads", scale_factors=(1, 10), default_scale_factor=1, scalable=True, operations=_ALL_OPERATIONS
+    ),
+    "kaggle_airbnb": SuiteSpec(
+        "Kaggle Airbnb", scale_factors=(1,), default_scale_factor=1, scalable=False, public_role="smoke"
+    ),
+    "tpc_h": SuiteSpec(
+        "TPC-H", scale_factors=(10, 50), default_scale_factor=10, scalable=True, row_store_optional=True
+    ),
+    "tpc_ds": SuiteSpec("TPC-DS", scale_factors=(1,), default_scale_factor=1, scalable=True, row_store_optional=True),
+}
+
+SUITE_NAMES = cast(tuple[SuiteName, ...], get_args(SuiteName))
 
 ROW_STORE_DATABASES: frozenset[DatabaseName] = frozenset({"postgres", "timescaledb"})
-ROW_STORE_OPTIONAL_SUITE_NAMES: frozenset[SuiteName] = frozenset({"tpc_h", "tpc_ds"})
 
 # These engines have no server: they execute inside the benchmark client process, so their whole
 # footprint is recorded as client memory and the `run_metric.server_*` columns are always 0 for them.
@@ -108,39 +102,18 @@ ROW_STORE_OPTIONAL_SUITE_NAMES: frozenset[SuiteName] = frozenset({"tpc_h", "tpc_
 # test_results_resource_usage.test_in_process_databases_match_database_execution_mode.
 IN_PROCESS_DATABASES: frozenset[DatabaseName] = frozenset({"duckdb", "polars"})
 
-assert set(DEFAULT_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
-assert set(ALL_SUITE_SCALE_FACTORS) == set(SUITE_NAMES)
-assert set(SUITE_DISPLAY_ORDER) == set(SUITE_NAMES)
-assert set(SUITE_LABELS) == set(SUITE_NAMES)
-assert set(SUITE_NAV_LABELS) == set(SUITE_NAMES)
-assert set(SUITE_OPERATIONS) == set(SUITE_NAMES)
-assert set(SUITE_QUERY_NAME_PARSERS) == set(SUITE_NAMES)
-assert set(SUITE_PUBLIC_ROLES) == set(SUITE_NAMES)
-assert ROW_STORE_DATABASES.issubset(set(get_args(DatabaseName)))
-assert ROW_STORE_OPTIONAL_SUITE_NAMES.issubset(set(SUITE_NAMES))
-assert IN_PROCESS_DATABASES.issubset(set(get_args(DatabaseName)))
+assert set(SUITE_SPECS) == set(SUITE_NAMES)
 
 
 def resolve_suite_scale_factor(suite: SuiteName, scale_factor: int | None = None) -> int:
-    resolved_scale_factor = DEFAULT_SUITE_SCALE_FACTORS[suite] if scale_factor is None else scale_factor
+    spec = SUITE_SPECS[suite]
+    resolved_scale_factor = spec.default_scale_factor if scale_factor is None else scale_factor
 
-    if resolved_scale_factor < 1:
-        raise ValueError(f"Suite scale factor must be >= 1 for {suite}: {resolved_scale_factor}")
-
-    if suite not in SCALE_FACTOR_SUITES and resolved_scale_factor != 1:
-        raise ValueError(f"Suite {suite} has a fixed scale factor of 1")
-
-    if suite == "time_series" and resolved_scale_factor not in TIME_SERIES_SCALE_FACTORS:
-        valid = ", ".join(str(value) for value in TIME_SERIES_SCALE_FACTORS)
-        raise ValueError(f"Suite time_series supports scale factors: {valid}")
-
-    if suite == "jsonbench" and resolved_scale_factor not in JSONBENCH_SCALE_FACTORS:
-        valid = ", ".join(str(value) for value in JSONBENCH_SCALE_FACTORS)
-        raise ValueError(f"Suite jsonbench supports scale factors: {valid}")
-
-    if suite == "chat_threads" and resolved_scale_factor not in CHAT_THREADS_SCALE_FACTORS:
-        valid = ", ".join(str(value) for value in CHAT_THREADS_SCALE_FACTORS)
-        raise ValueError(f"Suite chat_threads supports scale factors: {valid}")
+    if resolved_scale_factor not in spec.scale_factors:
+        if not spec.scalable:
+            raise ValueError(f"Suite {suite} has a fixed scale factor of 1")
+        valid = ", ".join(str(value) for value in spec.scale_factors)
+        raise ValueError(f"Suite {suite} supports scale factors: {valid}")
 
     return resolved_scale_factor
 
@@ -152,31 +125,25 @@ def resolve_suite_scale_factors(
     include_all_supported: bool = False,
     allow_fixed_default: bool = False,
 ) -> tuple[int, ...]:
+    spec = SUITE_SPECS[suite]
     if scale_factor is None:
         if include_all_supported:
-            return ALL_SUITE_SCALE_FACTORS[suite]
-        return (DEFAULT_SUITE_SCALE_FACTORS[suite],)
+            return spec.scale_factors
+        return (spec.default_scale_factor,)
 
     try:
         return (resolve_suite_scale_factor(suite, scale_factor),)
     except ValueError:
-        if allow_fixed_default and len(ALL_SUITE_SCALE_FACTORS[suite]) == 1:
-            return (DEFAULT_SUITE_SCALE_FACTORS[suite],)
+        if allow_fixed_default and len(spec.scale_factors) == 1:
+            return (spec.default_scale_factor,)
         raise
 
 
 def format_suite_data_directory_name(suite: SuiteName, scale_factor: int) -> str:
     scale_factor = resolve_suite_scale_factor(suite, scale_factor)
-    if suite in SCALE_FACTOR_SUITES:
+    if SUITE_SPECS[suite].scalable:
         return f"{suite}_sf{scale_factor}"
     return suite
-
-
-def get_suite_scale_factor(suite: SuiteName) -> int:
-    scale_factor = resolve_suite_scale_factor(suite)
-    if scale_factor < 1:
-        raise ValueError(f"Suite scale factor must be >= 1 for {suite}: {scale_factor}")
-    return scale_factor
 
 
 def resolve_dbs(arg: DatabaseArg) -> list[DatabaseName]:

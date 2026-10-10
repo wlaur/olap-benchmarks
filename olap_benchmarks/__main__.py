@@ -47,7 +47,7 @@ from .run_metadata import build_repository_provenance
 from .settings import (
     MAIN_PROCESS_TITLE,
     ROW_STORE_DATABASES,
-    ROW_STORE_OPTIONAL_SUITE_NAMES,
+    SUITE_SPECS,
     ContainerPlatform,
     DatabaseArg,
     DatabaseName,
@@ -174,7 +174,7 @@ def _resolve_suite_scale_factor_pairs(suite: SuiteArg, scale_factor: int | None)
 
 
 def _should_skip_default_benchmark_pair(db_name: DatabaseName, suite_name: SuiteName, suite_arg: SuiteArg) -> bool:
-    return suite_arg == "all" and db_name in ROW_STORE_DATABASES and suite_name in ROW_STORE_OPTIONAL_SUITE_NAMES
+    return suite_arg == "all" and db_name in ROW_STORE_DATABASES and SUITE_SPECS[suite_name].row_store_optional
 
 
 def _resolve_benchmark_plan(
