@@ -134,11 +134,14 @@ schema changes caught by Python tests at publish time instead of in the browser.
 
 ## 5. Engine coverage
 
-- [ ] **Arc on time_series.** Arc (Basekick Labs, AGPL-3.0, DuckDB + Parquet, multi-arch `basekicklabs/arc` image)
-      is a dedicated time-series database: MessagePack columnar ingest, SQL over HTTP with Arrow IPC results,
-      API deletes, no documented UPDATE. Add it for time_series populate/select (mutate/concurrent only where Arc's
-      delete API matches the workload), declared as a time_series-only engine in the matrix. Not every engine needs
-      every suite.
+- [ ] **Arc on time_series** (implemented, pending a real run). `olap_benchmarks/dbs/arc/` pins
+      `basekicklabs/arc:26.09.3` and registers time_series only, with populate, select, mutate and concurrent all
+      enabled. Queries go over HTTP with Arrow IPC results; writes use the typed Parquet import, because the MessagePack
+      write path corrupts types and timestamps ([`issues/arc/`](issues/arc/)); upsert is delete (file rewrite) then
+      insert; populate ends with an explicit compaction. Every query executed on a tiny probe slice, which says nothing
+      about answers or timings at scale. Watch for the partition pruner: the first `large_03` (a 4.4-year range)
+      took ~10 s cold while it checked ~40k hourly directories on the bind mount. Close once a campaign has run
+      `olap benchmark arc time_series` and the answers match the other engines.
 - [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
 - [ ] **MonetDB JSONBench**, or record why not in the unsupported registry.
 - [ ] **Re-test MonetDB `chat_threads` concurrent** on SP4; the SIGSEGV is unexplained and was last seen on 11.55.7.
