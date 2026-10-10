@@ -24,7 +24,8 @@ one-command path from "bump a version" to "published".
 ## 1. Release blockers
 
 - [ ] **Publish one coherent campaign.** The current set mixes five commits (one dirty tree), two OS snapshots and
-      three dates, and predates `metadata.repository`, so `olap publish` now refuses it. Run
+      three dates, predates `metadata.repository` and is `legacy-per-suite` rather than `resident-hot-v1`, so
+      `olap publish` now refuses it. Run
       `olap matrix run --published-only` into a fresh revision from one clean commit (this adds Polars) and publish
       it through the gate.
 - [ ] **No amd64 image for the MonetDB pin.** `monetdb/monetdb:Dec2025-SP4` does not exist on Docker Hub (newest
@@ -34,24 +35,15 @@ one-command path from "bump a version" to "published".
 
 ## 2. Methodology
 
-- [ ] **Define and version a benchmark profile.** Today every suite has its own fixed iteration count (ClickBench 5,
-      TPC-H/TPC-DS 3, RTABench 2-5 per query, Kaggle 3-10) and `classify_iteration_role` only produces `first_run` and
-      `warm` (`steady_state` is declared but never set). Define one profile: restart/reopen once before select, N
-      unscored warm-up iterations, M measured; store a profile id on each run; have the site refuse to compare runs
-      with different profiles.
-- [ ] **Name the timed boundary.** The timer covers `fetch()` through materialisation into Polars. Label it
-      end-to-end latency on the site, stop showing `first_run_duration_s` as if it were cold, and add engine-internal
-      timing only as a separate, clearly labelled metric.
-- [ ] **Show absolute latency next to the home score.** The ranking now says scores are relative to the engines
-      shown; the home table still has no absolute latency beside each score.
-- [ ] **Finish the reproducibility identity.** Already recorded: `metadata.repository` (commit, dirty flag, diff
-      hash) for every run, image IDs, input manifest hashes, query text. Missing: query/schema hashes, profile
-      revision, iteration policy. Scope site comparisons by system snapshot, not just `system`.
-- [ ] **Decouple input hashing from populate.** Hashing the inputs right before populate warms the page cache, which
-      favours engines that read the files directly. Hash in a separate step (or cache hashes by size+mtime) and drop
-      the cache before populate on Linux.
-- [ ] **Account for planned-but-never-started steps.** An interrupt marks running steps failed, but planned steps
-      that never started leave no row; coverage then undercounts the denominator.
+The `resident-hot-v1` profile, query/schema hashes, decoupled input hashing and planned-step accounting are in
+place (README "Benchmark profile"). Remaining, all optional:
+
+- [ ] **Engine-internal timing** (optional). Latency is end-to-end client latency only. If engine execution time is
+      wanted, record it as a separate, clearly labelled step metric (e.g. ClickHouse `query_log`, DuckDB profiling,
+      MonetDB `sys.queue`), never in place of `duration_ms`.
+- [ ] **Cold-cache profile** (optional). `resident-hot-v1` never drops the page cache between operations;
+      `--drop-caches` only covers populate on Linux. A cold profile would need a drop (or container restart with
+      dropped caches) before every measured iteration and its own profile id.
 
 ## 3. CLI and architecture
 
@@ -93,6 +85,9 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 - [ ] **Keep the typed query layer in step with migrations.** `bun run codegen` introspects the published file, so a
       schema change reaches the site only when someone regenerates; run codegen from `olap publish` (or check in CI
       that `generated/db.ts` matches the current schema).
+- [ ] **Explorer e2e expects an overflowing latency list.** `tests/e2e/explorer.spec.ts` asserts that the per-query
+      latency bars overflow their frame, which three engines do not; it fails on the current data independent of
+      any change. Make the assertion conditional on the row count or drop it.
 - [ ] **Arbitrary-query UI** (later): a SQL editor page over the same DuckDB instance, with the schema documented.
 
 ## 5. Engine coverage
@@ -120,11 +115,11 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 - [ ] **Cloud campaign** on one x86-64 Linux `i4i` host per `CLOUD.md`, including the higher scale factors this
       machine cannot run. Do it after sections 1-3 so the campaign is a single `olap matrix run`.
-- [ ] **JOB**, after the profile from section 2 has been exercised by a public run.
+- [ ] **JOB**, after `resident-hot-v1` has been exercised by a public run.
 - [ ] **TSBS and InfluxDB 3**, only as a complete time-series expansion (Arc first).
 
 ## Suggested order
 
 1. Section 1: a fresh campaign published through the new gate.
 2. Section 4 (site), independent of the harness work.
-3. Section 2 profile, then the cloud campaign; sections 5-6 fit around these.
+3. The cloud campaign under `resident-hot-v1`; sections 5-6 fit around these.
