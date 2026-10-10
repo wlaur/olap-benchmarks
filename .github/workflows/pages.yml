@@ -33,13 +33,15 @@ jobs:
         working-directory: site
         run: bun run fetch-data
 
-      # guard against a truncated or missing asset silently producing a broken site: the DuckDB
-      # magic string sits at byte offset 8, after the header checksum
-      - name: Verify results database is a DuckDB file
+      # the committed manifest pins the asset's size and SHA-256, so a stale, truncated or
+      # replaced-but-not-recommitted asset fails the build instead of shipping mismatched data
+      - name: Verify results database against manifest
         working-directory: site
-        run: |
-          test "$(head -c 12 public/data/results.db | tail -c 4)" = "DUCK" \
-            || { echo "public/data/results.db is not a DuckDB file; the release asset may be missing"; exit 1; }
+        run: bun run verify-data
+
+      - name: Check generated database types match the published schema
+        working-directory: site
+        run: bun run codegen:check
 
       - name: Build
         working-directory: site

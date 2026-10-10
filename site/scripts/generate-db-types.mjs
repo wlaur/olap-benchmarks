@@ -1,10 +1,13 @@
-import { writeFile } from "node:fs/promises"
+import { spawnSync } from "node:child_process"
+import { readFile, writeFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 
 import duckdb from "duckdb"
 
 const RESULTS_DB_PATH = fileURLToPath(new URL("../public/data/results.db", import.meta.url))
-const OUTPUT_PATH = new URL("../src/lib/generated/db.ts", import.meta.url)
+const OUTPUT_PATH = fileURLToPath(new URL("../src/lib/generated/db.ts", import.meta.url))
+const SITE_DIRECTORY = fileURLToPath(new URL("..", import.meta.url))
+const CHECK = process.argv.includes("--check")
 
 const TIMESTAMP_TYPE = "ColumnType<Date, Date | string, Date | string>"
 
@@ -109,5 +112,25 @@ parts.push(
   `export interface DB {\n${tableNames.map((name) => `  ${name}: ${pascalCase(name)}`).join("\n")}\n}`,
 )
 
-await writeFile(OUTPUT_PATH, `${parts.join("\n\n")}\n`)
-console.log(`Generated ${fileURLToPath(OUTPUT_PATH)} (${tableNames.length} tables)`)
+const formatted = spawnSync("oxfmt", [`--stdin-filepath=${OUTPUT_PATH}`], {
+  cwd: SITE_DIRECTORY,
+  input: `${parts.join("\n\n")}\n`,
+  encoding: "utf8",
+})
+if (formatted.status !== 0) {
+  throw new Error(`oxfmt failed: ${formatted.error ?? formatted.stderr}`)
+}
+
+if (CHECK) {
+  const current = await readFile(OUTPUT_PATH, "utf8")
+  if (current !== formatted.stdout) {
+    console.error(
+      `${OUTPUT_PATH} does not match the schema of ${RESULTS_DB_PATH}; run \`bun run codegen\` and update the site`,
+    )
+    process.exit(1)
+  }
+  console.log(`${OUTPUT_PATH} matches the results database schema (${tableNames.length} tables)`)
+} else {
+  await writeFile(OUTPUT_PATH, formatted.stdout)
+  console.log(`Generated ${OUTPUT_PATH} (${tableNames.length} tables)`)
+}

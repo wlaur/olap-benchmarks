@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc && vite build",
     "check": "tsc --noEmit",
-    "codegen": "node ./scripts/generate-db-types.mjs && oxfmt --write src/lib/generated/db.ts",
+    "codegen": "node ./scripts/generate-db-types.mjs",
+    "codegen:check": "node ./scripts/generate-db-types.mjs --check",
     "dev": "vite",
     "fetch-data": "curl -fL --create-dirs -o public/data/results.db https://github.com/wlaur/olap-benchmarks/releases/download/data/results.db",
     "fmt": "oxfmt --write .",
@@ -13,7 +14,8 @@
     "lint": "oxlint .",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "verify": "bun run check && bun run lint && bun run fmt:check && bun run build"
+    "verify": "bun run check && bun run lint && bun run fmt:check && bun run build",
+    "verify-data": "node ./scripts/verify-data.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
