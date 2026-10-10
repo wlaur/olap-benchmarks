@@ -12,10 +12,10 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 from pyarrow import ipc
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 from sqlalchemy import Connection
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
+from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_files
 from ...suites.clickbench.config import Clickbench
@@ -25,7 +25,6 @@ from ..utils import require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-ARC_PORT = host_port("arc")
 
 ARC_DATABASE = "olap"
 
@@ -163,7 +162,7 @@ class Arc(Database):
     name: DatabaseName = "arc"
     supports_arm64_containers: ClassVar[bool] = True
 
-    connection_string: str = f"http://localhost:{ARC_PORT}"
+    connection_string: str = Field(default_factory=lambda: f"http://localhost:{host_port('arc')}")
 
     _client: httpx.Client | None = PrivateAttr(default=None)
 
@@ -171,7 +170,7 @@ class Arc(Database):
     def start(self) -> str:
         return self.docker_run_command(
             self.container_images["server"],
-            ports={str(ARC_PORT): "8000"},
+            ports={str(host_port("arc")): "8000"},
             mounts={self.database_directory.as_posix(): "/app/data"},
             env={
                 "ARC_AUTH_ENABLED": "false",
@@ -294,7 +293,7 @@ class Arc(Database):
     def insert_sorted(self, source: pl.LazyFrame, table: TableName) -> None:
         # Arc writes one file per hour partition per flush, so unsorted input scatters every batch
         # over the whole time range. Sort on the host first, as the QuestDB connector does.
-        staged = SETTINGS.temporary_directory / "arc" / f"{table}_{uuid.uuid4().hex}.parquet"
+        staged = get_settings().temporary_directory / "arc" / f"{table}_{uuid.uuid4().hex}.parquet"
         staged.parent.mkdir(parents=True, exist_ok=True)
         try:
             with self.phase_context("sort_input", table_name=table):

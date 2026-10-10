@@ -7,7 +7,7 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
+from ...settings import REPO_ROOT, SuiteName, TableName, get_settings
 from .. import BenchmarkSuite
 from ..download import download_file
 
@@ -18,7 +18,7 @@ CLICKBENCH_DATASET_URL = "https://datasets.clickhouse.com/hits_compatible/hits.p
 
 
 def prepare_data() -> None:
-    destination = SETTINGS.input_data_directory / "clickbench" / "hits.parquet"
+    destination = get_settings().input_data_directory / "clickbench" / "hits.parquet"
     download_file(CLICKBENCH_DATASET_URL, destination)
 
 
@@ -32,12 +32,12 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "clickbench"
 
     def expected_table_row_counts(self) -> dict[TableName, int]:
-        return {"hits": self.parquet_row_count(SETTINGS.input_data_directory / "clickbench/hits.parquet")}
+        return {"hits": self.parquet_row_count(get_settings().input_data_directory / "clickbench/hits.parquet")}
 
     def load_dataset(self) -> pl.LazyFrame:
         # parquet file stores these as integers, the schema expects correct dtypes
         return (
-            pl.scan_parquet(SETTINGS.input_data_directory / "clickbench/hits.parquet")
+            pl.scan_parquet(get_settings().input_data_directory / "clickbench/hits.parquet")
             .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in CLICKBENCH_TIMESTAMP_COLUMNS)
             .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in CLICKBENCH_DATE_COLUMNS)
         )
@@ -58,7 +58,7 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
                 self.db.insert(self.load_dataset(), "hits", **self.populate_kwargs)
             else:
                 self.db.insert_parquet(
-                    SETTINGS.input_data_directory / "clickbench/hits.parquet",
+                    get_settings().input_data_directory / "clickbench/hits.parquet",
                     "hits",
                     epoch_columns={
                         **dict.fromkeys(CLICKBENCH_TIMESTAMP_COLUMNS, "s"),

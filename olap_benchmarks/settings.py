@@ -1,5 +1,6 @@
 import logging
 import sys
+from functools import cache
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, cast, get_args
 
@@ -191,6 +192,7 @@ def resolve_suites(arg: SuiteArg) -> list[SuiteName]:
 
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
+ENV_FILE = REPO_ROOT / ".env"
 
 MAIN_PROCESS_TITLE = "olap-benchmarks-main"
 
@@ -239,19 +241,26 @@ class Settings(BaseSettings):
         return value
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_prefix="OLAP_BENCHMARKS_",
         extra="ignore",
     )
 
 
-SETTINGS = Settings.model_validate({})
+@cache
+def get_settings() -> Settings:
+    return Settings.model_validate({})
+
+
+def effective_settings(settings: BaseSettings) -> dict[str, object]:
+    prefix = settings.model_config.get("env_prefix", "")
+    return {f"{prefix}{name}".upper(): value for name, value in settings.model_dump().items()}
 
 
 def host_port(name: str) -> int:
     if name not in DEFAULT_HOST_PORTS:
         raise KeyError(f"Unknown host port name: {name}")
-    return SETTINGS.host_ports.get(name, DEFAULT_HOST_PORTS[name])
+    return get_settings().host_ports.get(name, DEFAULT_HOST_PORTS[name])
 
 
 def setup_stdout_logging(level: int = logging.INFO) -> None:

@@ -10,7 +10,7 @@ from typing import Any
 import polars as pl
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
+from ...settings import REPO_ROOT, SuiteName, TableName, get_settings
 from .. import BenchmarkSuite
 from ..download import download_file
 
@@ -65,7 +65,7 @@ def _download_csv(data_dir: Path, table_name: str, source: str) -> Path:
 
 
 def prepare_data() -> None:
-    data_dir = SETTINGS.input_data_directory / "kaggle_airbnb"
+    data_dir = get_settings().input_data_directory / "kaggle_airbnb"
     for table_name, source in INSIDE_AIRBNB_FILES.items():
         _download_csv(data_dir, table_name, source)
 
@@ -121,7 +121,9 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
 
     def expected_table_row_counts(self) -> dict[TableName, int]:
         return {
-            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+            table_name: self.parquet_row_count(
+                get_settings().input_data_directory / f"kaggle_airbnb/{table_name}.parquet"
+            )
             for table_name in KAGGLE_AIRBNB_TABLES
         }
 
@@ -137,7 +139,7 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("kaggle_airbnb")
 
         for table_name in KAGGLE_AIRBNB_TABLES:
-            df = pl.scan_parquet(SETTINGS.input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
+            df = pl.scan_parquet(get_settings().input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)

@@ -32,10 +32,10 @@ from ...dbs import Database
 from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
-    SETTINGS,
     DatabaseName,
     TableName,
     format_suite_data_directory_name,
+    get_settings,
     resolve_suite_scale_factor,
 )
 from .. import BenchmarkSuite
@@ -197,7 +197,7 @@ def _normalize_tpc_ds_parquet(output_directory: Path) -> None:
 def _prepare_tpc_ds_data(scale_factor: int) -> None:
     scale_factor = resolve_suite_scale_factor("tpc_ds", scale_factor)
     data_directory_name = format_suite_data_directory_name("tpc_ds", scale_factor)
-    output_directory = SETTINGS.input_data_directory / data_directory_name
+    output_directory = get_settings().input_data_directory / data_directory_name
     output_directory.mkdir(exist_ok=True, parents=True)
 
     expected_filenames = {f"{table}.parquet" for table in TPCDS_TABLES}

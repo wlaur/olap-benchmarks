@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import duckdb
 
-from ..settings import SETTINGS, Revision, SuiteName
+from ..settings import Revision, SuiteName, get_settings
 
 # Queries whose answers are legitimately not comparable across engines, mapped to why. These still
 # run and are still timed; only the cross-engine answer comparison is skipped, because the engines
@@ -193,7 +193,7 @@ def _database_label(db: str, db_version: str, db_driver: str | None) -> str:
 
 
 def _resolve_results_path(revision: Revision, db_path: Path | None) -> Path:
-    path = db_path or SETTINGS.results_directory / f"{revision}.db"
+    path = db_path or get_settings().results_directory / f"{revision}.db"
     if not path.is_file():
         raise FileNotFoundError(f"Results database does not exist: {path}")
     return path

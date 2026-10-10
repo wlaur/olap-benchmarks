@@ -10,7 +10,7 @@ import polars as pl
 
 from ...dbs import Database
 from ...run_metadata import StepResultStatus
-from ...settings import REPO_ROOT, SETTINGS, SuiteName, TableName
+from ...settings import REPO_ROOT, SuiteName, TableName, get_settings
 from .. import BenchmarkSuite
 from ..download import download_file
 
@@ -106,7 +106,7 @@ RTABENCH_SCHEMAS: dict[str, dict[str, pl.DataType | type[pl.DataType]]] = {
 
 
 def prepare_data() -> None:
-    output_directory = SETTINGS.input_data_directory / "rtabench"
+    output_directory = get_settings().input_data_directory / "rtabench"
     output_directory.mkdir(exist_ok=True, parents=True)
 
     for name, schema in RTABENCH_SCHEMAS.items():
@@ -138,7 +138,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
 
     def expected_table_row_counts(self) -> dict[TableName, int]:
         return {
-            table_name: self.parquet_row_count(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+            table_name: self.parquet_row_count(get_settings().input_data_directory / f"rtabench/{table_name}.parquet")
             for table_name in RTABENCH_SCHEMAS
         }
 
@@ -158,7 +158,7 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("rtabench")
 
         for table_name in self.populate_table_order:
-            df = pl.scan_parquet(SETTINGS.input_data_directory / f"rtabench/{table_name}.parquet")
+            df = pl.scan_parquet(get_settings().input_data_directory / f"rtabench/{table_name}.parquet")
 
             with self.db.phase_context("insert", table_name=table_name):
                 self.db.insert(df, table_name, **self.populate_kwargs)

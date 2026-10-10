@@ -8,10 +8,10 @@ from ...dbs import Database
 from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
-    SETTINGS,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
+    get_settings,
     resolve_suite_scale_factor,
 )
 from .. import BenchmarkSuite
@@ -34,7 +34,7 @@ JSONBENCH_QUERY_NAMES = (
 
 
 def get_jsonbench_input_directory(scale_factor: int) -> Path:
-    return SETTINGS.input_data_directory / format_suite_data_directory_name("jsonbench", scale_factor)
+    return get_settings().input_data_directory / format_suite_data_directory_name("jsonbench", scale_factor)
 
 
 def get_jsonbench_input_files(scale_factor: int) -> list[Path]:

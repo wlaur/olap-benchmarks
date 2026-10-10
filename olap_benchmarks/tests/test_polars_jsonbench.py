@@ -7,12 +7,12 @@ import polars as pl
 import pytest
 
 from olap_benchmarks.dbs.polars import Polars
-from olap_benchmarks.settings import SETTINGS
+from olap_benchmarks.settings import get_settings
 
 
 @pytest.fixture
 def polars_jsonbench_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Polars:
-    monkeypatch.setattr(SETTINGS, "database_directory", tmp_path)
+    monkeypatch.setattr(get_settings(), "database_directory", tmp_path)
 
     db = Polars()
     db._current_suite = "jsonbench"

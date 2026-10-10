@@ -17,11 +17,11 @@ from ...dbs import Database
 from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
-    SETTINGS,
     DatabaseName,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
+    get_settings,
     resolve_suite_scale_factor,
 )
 from .. import BenchmarkSuite
@@ -453,12 +453,14 @@ def write_time_series_dataset(
 
 def get_dataset_path(size: DatasetSize, scale_factor: int) -> Path:
     data_directory_name = format_suite_data_directory_name("time_series", scale_factor)
-    return SETTINGS.input_data_directory / data_directory_name / f"{get_time_series_table_name(size)}.parquet"
+    return get_settings().input_data_directory / data_directory_name / f"{get_time_series_table_name(size)}.parquet"
 
 
 def prepare_data(scale_factor: int = 1, overwrite: bool = False) -> None:
     scale_factor = resolve_suite_scale_factor("time_series", scale_factor)
-    output_directory = SETTINGS.input_data_directory / format_suite_data_directory_name("time_series", scale_factor)
+    output_directory = get_settings().input_data_directory / format_suite_data_directory_name(
+        "time_series", scale_factor
+    )
     output_directory.mkdir(exist_ok=True, parents=True)
 
     for size, (rows, cols) in get_time_series_dataset_sizes(scale_factor).items():

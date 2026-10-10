@@ -26,7 +26,6 @@ from ..settings import (
     DEFAULT_SUITE_SCALE_FACTORS,
     REPO_ROOT,
     SCALE_FACTOR_SUITES,
-    SETTINGS,
     SUITE_DISPLAY_ORDER,
     SUITE_LABELS,
     SUITE_NAV_LABELS,
@@ -34,6 +33,7 @@ from ..settings import (
     SUITE_PUBLIC_ROLES,
     SUITE_QUERY_NAME_PARSERS,
     Revision,
+    get_settings,
 )
 from .cells import StoredRun, load_runs, superseded_runs
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
@@ -53,7 +53,7 @@ def _serialize_json(value: object) -> str:
 
 
 def get_results_db_path(revision: Revision = "default") -> Path:
-    return SETTINGS.results_directory / f"{revision}.db"
+    return get_settings().results_directory / f"{revision}.db"
 
 
 def get_alembic_config(db_path: Path | None = None) -> Config:
@@ -114,20 +114,22 @@ def _require_revision(revision: str) -> Path:
         available = list_revisions()
         if available:
             raise SystemExit(f"Revision '{revision}' not found. Available: {', '.join(available)}")
-        raise SystemExit(f"Revision '{revision}' not found. No result databases exist in {SETTINGS.results_directory}")
+        raise SystemExit(
+            f"Revision '{revision}' not found. No result databases exist in {get_settings().results_directory}"
+        )
 
     return db_path
 
 
 def list_revisions() -> list[str]:
-    results_dir = SETTINGS.results_directory
+    results_dir = get_settings().results_directory
     return sorted(p.stem for p in results_dir.glob("*.db"))
 
 
 def query_results(sql: str, revision: Revision = "default") -> None:
     db_path = _require_revision(revision)
 
-    with tempfile.TemporaryDirectory(dir=SETTINGS.temporary_directory) as tmpdir:
+    with tempfile.TemporaryDirectory(dir=get_settings().temporary_directory) as tmpdir:
         snapshot_path = Path(tmpdir) / db_path.name
         shutil.copy2(db_path, snapshot_path)
 
@@ -663,11 +665,11 @@ def mark_running_runs_failed(
 
 def config(as_json: bool = False) -> None:
     settings_dict = {
-        "input_data_directory": str(SETTINGS.input_data_directory),
-        "results_directory": str(SETTINGS.results_directory),
-        "database_directory": str(SETTINGS.database_directory),
-        "temporary_directory": str(SETTINGS.temporary_directory),
-        "system": SETTINGS.system,
+        "input_data_directory": str(get_settings().input_data_directory),
+        "results_directory": str(get_settings().results_directory),
+        "database_directory": str(get_settings().database_directory),
+        "temporary_directory": str(get_settings().temporary_directory),
+        "system": get_settings().system,
     }
 
     if as_json:
@@ -676,9 +678,9 @@ def config(as_json: bool = False) -> None:
 
     print("\nCurrent Configuration (from .env)")
     print("=" * 60)
-    print(f"  OLAP_BENCHMARKS_INPUT_DATA_DIRECTORY:  {SETTINGS.input_data_directory}")
-    print(f"  OLAP_BENCHMARKS_RESULTS_DIRECTORY:     {SETTINGS.results_directory}")
-    print(f"  OLAP_BENCHMARKS_DATABASE_DIRECTORY:    {SETTINGS.database_directory}")
-    print(f"  OLAP_BENCHMARKS_TEMPORARY_DIRECTORY:   {SETTINGS.temporary_directory}")
-    print(f"  OLAP_BENCHMARKS_SYSTEM:                {SETTINGS.system}")
+    print(f"  OLAP_BENCHMARKS_INPUT_DATA_DIRECTORY:  {get_settings().input_data_directory}")
+    print(f"  OLAP_BENCHMARKS_RESULTS_DIRECTORY:     {get_settings().results_directory}")
+    print(f"  OLAP_BENCHMARKS_DATABASE_DIRECTORY:    {get_settings().database_directory}")
+    print(f"  OLAP_BENCHMARKS_TEMPORARY_DIRECTORY:   {get_settings().temporary_directory}")
+    print(f"  OLAP_BENCHMARKS_SYSTEM:                {get_settings().system}")
     print()

@@ -8,7 +8,7 @@ from typing import Any, cast
 import polars as pl
 from sqlalchemy import Connection
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import DatabaseName, SuiteName, TableName, get_settings
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
@@ -25,7 +25,7 @@ from .tpc_h import execute_tpc_h_query
 
 class PolarsJSONBench(JSONBench["Polars"]):
     def _stage_input_files(self) -> Path:
-        temp_dir = SETTINGS.temporary_directory / "polars/data"
+        temp_dir = get_settings().temporary_directory / "polars/data"
         staging_dir = temp_dir / self.data_directory_name
         if staging_dir.exists():
             rmtree(staging_dir)
@@ -70,7 +70,7 @@ class PolarsClickbench(Clickbench["Polars"]):
                 return
 
         with self.db.phase_context("register", table_name="hits"):
-            self.db.register_table("hits", SETTINGS.input_data_directory / "clickbench/hits.parquet")
+            self.db.register_table("hits", get_settings().input_data_directory / "clickbench/hits.parquet")
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()

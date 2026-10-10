@@ -35,13 +35,13 @@ from ..run_metadata import (
 )
 from ..settings import (
     REPO_ROOT,
-    SETTINGS,
     ContainerPlatform,
     DatabaseName,
     Operation,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
+    get_settings,
     get_suite_scale_factor,
     resolve_suite_scale_factor,
 )
@@ -145,7 +145,7 @@ class Database(BaseModel, ABC):
     @property
     def database_directory(self) -> Path:
         directory = (
-            SETTINGS.database_directory
+            get_settings().database_directory
             / self.name
             / format_suite_data_directory_name(self.current_suite, self.current_suite_scale_factor)
         )
@@ -217,12 +217,16 @@ class Database(BaseModel, ABC):
         return ("olap-benchmarks",)
 
     @property
+    def benchmark_settings(self) -> Mapping[str, object]:
+        return {}
+
+    @property
     def run_options(self) -> Mapping[str, object]:
         return {}
 
     @property
     def input_directory(self) -> Path:
-        return SETTINGS.input_data_directory / format_suite_data_directory_name(
+        return get_settings().input_data_directory / format_suite_data_directory_name(
             self.current_suite,
             self.current_suite_scale_factor,
         )
@@ -905,6 +909,7 @@ class Database(BaseModel, ABC):
             package_names=self.run_package_names,
             input_directory=self.input_directory,
             options=self.run_options,
+            settings=self.benchmark_settings,
             sampling_interval_seconds=SAMPLING_INTERVAL_SECONDS,
             profile=self.profile,
             schema=hash_schema_files(suite, self.name),
@@ -923,7 +928,7 @@ class Database(BaseModel, ABC):
             db_version=self.version,
             db_driver=self.db_driver,
             operation=operation,
-            system=SETTINGS.system,
+            system=get_settings().system,
             started_at=started_at,
             benchmark_profile=self.profile.id,
             system_metadata=system_metadata,

@@ -48,7 +48,6 @@ from .settings import (
     MAIN_PROCESS_TITLE,
     ROW_STORE_DATABASES,
     ROW_STORE_OPTIONAL_SUITE_NAMES,
-    SETTINGS,
     ContainerPlatform,
     DatabaseArg,
     DatabaseName,
@@ -57,6 +56,7 @@ from .settings import (
     SuiteArg,
     SuiteName,
     format_suite_data_directory_name,
+    get_settings,
     resolve_dbs,
     resolve_suite_scale_factors,
     resolve_suites,
@@ -122,18 +122,18 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor
     paths mounted so `rm -rf` runs as root and clears them.
     """
     data_directory_name = format_suite_data_directory_name(suite_name, scale_factor)
-    db_subdir = SETTINGS.database_directory / db_name / data_directory_name
-    temp_subdir = SETTINGS.temporary_directory / db_name
+    db_subdir = get_settings().database_directory / db_name / data_directory_name
+    temp_subdir = get_settings().temporary_directory / db_name
 
     rm_paths: list[str] = []
     mounts: list[str] = []
 
     if db_subdir.exists():
-        mounts.append(f"-v {SETTINGS.database_directory.as_posix()}:/dbs")
+        mounts.append(f"-v {get_settings().database_directory.as_posix()}:/dbs")
         rm_paths.append(f"/dbs/{db_name}/{data_directory_name}")
 
     if temp_subdir.exists():
-        mounts.append(f"-v {SETTINGS.temporary_directory.as_posix()}:/temp")
+        mounts.append(f"-v {get_settings().temporary_directory.as_posix()}:/temp")
         rm_paths.append(f"/temp/{db_name}")
 
     if not rm_paths:
@@ -147,7 +147,7 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor
 
 
 def _check_and_hash_input_data(suite_name: SuiteName, scale_factor: int) -> None:
-    input_dir = SETTINGS.input_data_directory / format_suite_data_directory_name(suite_name, scale_factor)
+    input_dir = get_settings().input_data_directory / format_suite_data_directory_name(suite_name, scale_factor)
 
     if not input_dir.is_dir() or not any(input_dir.iterdir()):
         raise SystemExit(
@@ -402,7 +402,7 @@ def benchmark(
             report = validate_results(
                 revision=revision,
                 pins=pins,
-                system=SETTINGS.system,
+                system=get_settings().system,
                 suite=suite_name,
                 suite_scale_factor=resolved_scale_factor,
             )
@@ -726,7 +726,7 @@ def revisions() -> None:
     """List available result database revisions."""
     names = list_revisions()
     if not names:
-        print(f"No result databases in {SETTINGS.results_directory}")
+        print(f"No result databases in {get_settings().results_directory}")
         return
     for name in names:
         print(name)
@@ -774,7 +774,7 @@ def rename_database_cmd(old_name: str, new_name: str, revision: Revision = "defa
 def _matrix_statuses(cells: list[MatrixCell], revision: Revision) -> list[CellStatus]:
     db_path = get_results_db_path(revision)
     runs = load_runs(db_path) if db_path.is_file() else []
-    return matrix_status(runs, cells, system=SETTINGS.system, pins=current_pins(), drivers=current_drivers())
+    return matrix_status(runs, cells, system=get_settings().system, pins=current_pins(), drivers=current_drivers())
 
 
 @matrix_app.command(name="status")
@@ -846,7 +846,7 @@ def matrix_run(
         groups, revision=revision, cleanup=True, keep_going=keep_going, drop_caches=drop_caches
     )
 
-    report = validate_results(revision=revision, pins=current_pins(), system=SETTINGS.system, mark=True)
+    report = validate_results(revision=revision, pins=current_pins(), system=get_settings().system, mark=True)
     print(report.format())
     print()
     print(format_matrix_status(_matrix_statuses(selected, revision)))

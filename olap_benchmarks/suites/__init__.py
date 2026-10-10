@@ -12,11 +12,11 @@ from pydantic import BaseModel, Field
 from ..dbs import Database
 from ..run_metadata import StepResultStatus
 from ..settings import (
-    SETTINGS,
     Operation,
     SuiteName,
     TableName,
     format_suite_data_directory_name,
+    get_settings,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
 
     @property
     def input_data_directory(self) -> Path:
-        return SETTINGS.input_data_directory / self.data_directory_name
+        return get_settings().input_data_directory / self.data_directory_name
 
     @staticmethod
     def parquet_row_count(fpath: Path) -> int:

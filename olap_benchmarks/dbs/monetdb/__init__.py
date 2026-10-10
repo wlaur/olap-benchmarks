@@ -11,11 +11,12 @@ from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import (
-    SETTINGS,
     DatabaseName,
     SuiteName,
     TableName,
+    effective_settings,
     format_suite_data_directory_name,
+    get_settings,
     host_port,
 )
 from ...suites import BenchmarkSuite
@@ -30,28 +31,33 @@ from .adbc import (
     insert_parquet_adbc,
     upsert_adbc,
 )
-from .settings import SETTINGS as MONETDB_SETTINGS
+from .settings import get_monetdb_settings
 
 _LOGGER = logging.getLogger(__name__)
 
 
 MONETDB_APPLICATION = "olap-benchmarks"
 MONETDB_CONTAINER_PORT = "50000"
-MONETDB_HOST_PORT = host_port("monetdb")
 
-MONETDB_CONNECTION_STRING = f"monetdb+adbc://monetdb:monetdb@localhost:{MONETDB_HOST_PORT}/benchmark"
-MONETDB_OBSERVER_URI = f"{MONETDB_CONNECTION_STRING}?client_application=olap-benchmarks-observer"
+
+def _monetdb_base_uri() -> str:
+    return f"monetdb+adbc://monetdb:monetdb@localhost:{host_port('monetdb')}/benchmark"
+
+
+def _monetdb_observer_uri() -> str:
+    return f"{_monetdb_base_uri()}?client_application=olap-benchmarks-observer"
 
 
 def _monetdb_connection_string() -> str:
+    settings = get_monetdb_settings()
     parameters = {"client_application": MONETDB_APPLICATION}
-    if MONETDB_SETTINGS.write_window_bytes is not None:
-        parameters["write_window_bytes"] = str(MONETDB_SETTINGS.write_window_bytes)
-    if MONETDB_SETTINGS.wire_compression != "auto":
-        parameters["wire_compression"] = MONETDB_SETTINGS.wire_compression
-    if MONETDB_SETTINGS.constrained_append != "auto":
-        parameters["constrained_append"] = MONETDB_SETTINGS.constrained_append
-    return f"{MONETDB_CONNECTION_STRING}?{urlencode(parameters)}"
+    if settings.write_window_bytes is not None:
+        parameters["write_window_bytes"] = str(settings.write_window_bytes)
+    if settings.wire_compression != "auto":
+        parameters["wire_compression"] = settings.wire_compression
+    if settings.constrained_append != "auto":
+        parameters["constrained_append"] = settings.constrained_append
+    return f"{_monetdb_base_uri()}?{urlencode(parameters)}"
 
 
 _ROLLING_AVG_WINDOW_BUG = (
@@ -92,17 +98,18 @@ class MonetDB(Database):
         return {
             "client_application": MONETDB_APPLICATION,
             "session_tracking": "client_application+clientpid",
-            "write_window_bytes": MONETDB_SETTINGS.write_window_bytes,
-            "wire_compression": MONETDB_SETTINGS.wire_compression,
-            "constrained_append": MONETDB_SETTINGS.constrained_append,
         }
+
+    @property
+    def benchmark_settings(self) -> Mapping[str, object]:
+        return effective_settings(get_monetdb_settings())
 
     connection_string: str = Field(default_factory=_monetdb_connection_string)
 
     @property
     def database_directory(self) -> Path:
         directory = (
-            SETTINGS.database_directory
+            get_settings().database_directory
             / self.name
             / format_suite_data_directory_name(self.current_suite, self.current_suite_scale_factor)
         )
@@ -113,7 +120,7 @@ class MonetDB(Database):
     def start(self) -> str:
         return self.docker_run_command(
             self.container_images["server"],
-            ports={str(MONETDB_HOST_PORT): MONETDB_CONTAINER_PORT},
+            ports={str(host_port("monetdb")): MONETDB_CONTAINER_PORT},
             mounts={self.database_directory.as_posix(): "/var/monetdb5/dbfarm"},
             env={"MDB_DB_ADMIN_PASS": "monetdb", "MDB_CREATE_DBS": "benchmark"},
         )
@@ -137,7 +144,7 @@ class MonetDB(Database):
         return self._connection
 
     def _session_state(self) -> tuple[int, int]:
-        engine = create_engine(MONETDB_OBSERVER_URI, pool_reset_on_return=None)
+        engine = create_engine(_monetdb_observer_uri(), pool_reset_on_return=None)
         try:
             with engine.connect() as observer:
                 session_count = observer.execute(

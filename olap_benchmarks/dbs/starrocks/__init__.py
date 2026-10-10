@@ -10,9 +10,10 @@ from time import perf_counter, sleep
 from typing import Any, ClassVar, cast
 
 import polars as pl
+from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
+from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
@@ -31,16 +32,15 @@ _LOGGER = logging.getLogger(__name__)
 # 4.0.9 is the latest 4.0.x patch (2026-04-20) and is one week older than
 # 4.1.0; the LTS-style 4.0 line is fine for benchmarking.
 STARROCKS_HOST = "localhost"
-STARROCKS_QUERY_PORT = host_port("starrocks_fe_mysql")
-STARROCKS_HTTP_PORT = host_port("starrocks_fe_http")
-STARROCKS_BE_HTTP_PORT = host_port("starrocks_be_http")
 STARROCKS_USER = "root"
 STARROCKS_PASSWORD = ""
 STARROCKS_DATABASE = "benchmark"
 
-STARROCKS_CONNECTION_STRING = (
-    f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/{STARROCKS_DATABASE}"
-)
+
+def _starrocks_connection_string() -> str:
+    return f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{host_port('starrocks_fe_mysql')}/{STARROCKS_DATABASE}"
+
+
 POLARS_STARROCKS_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
     pl.Int8: "TINYINT",
     pl.Int16: "SMALLINT",
@@ -90,9 +90,9 @@ class StarRocksClickbench(Clickbench["StarRocks"]):
 
         self.db.initialize_schema("clickbench")
 
-        staging = SETTINGS.temporary_directory / "starrocks/data"
+        staging = get_settings().temporary_directory / "starrocks/data"
         staging.mkdir(parents=True, exist_ok=True)
-        src = SETTINGS.input_data_directory / "clickbench/hits.parquet"
+        src = get_settings().input_data_directory / "clickbench/hits.parquet"
         dst = staging / "hits.parquet"
         if dst.exists() or dst.is_symlink():
             dst.unlink()
@@ -145,7 +145,7 @@ def insert_source_parquet_via_files(db: "StarRocks", source: Path, table_name: T
     The explicit column list matters: the TPC DDL reorders columns to satisfy
     the DUPLICATE KEY prefix rule.
     """
-    staging = SETTINGS.temporary_directory / "starrocks/data"
+    staging = get_settings().temporary_directory / "starrocks/data"
     staging.mkdir(parents=True, exist_ok=True)
     dst = staging / f"{table_name}.parquet"
     if dst.exists() or dst.is_symlink():
@@ -213,7 +213,7 @@ class StarRocksJSONBench(JSONBench["StarRocks"]):
             self.db.restart_event()
 
     def _write_uncompressed_input_file(self, input_file: Path) -> Path:
-        staging = SETTINGS.temporary_directory / "starrocks/data"
+        staging = get_settings().temporary_directory / "starrocks/data"
         staging.mkdir(parents=True, exist_ok=True)
         staged_file = staging / f"bluesky_{uuid.uuid4().hex}.json"
 
@@ -222,7 +222,7 @@ class StarRocksJSONBench(JSONBench["StarRocks"]):
         return staged_file
 
     def _stream_load_file(self, staged_file: Path) -> None:
-        url = f"http://{STARROCKS_HOST}:{STARROCKS_HTTP_PORT}/api/{STARROCKS_DATABASE}/bluesky/_stream_load"
+        url = f"http://{STARROCKS_HOST}:{host_port('starrocks_fe_http')}/api/{STARROCKS_DATABASE}/bluesky/_stream_load"
         command = [
             "curl",
             "-sS",
@@ -259,7 +259,7 @@ class StarRocks(Database):
     name: DatabaseName = "starrocks"
     supports_arm64_containers: ClassVar[bool] = True
 
-    connection_string: str = STARROCKS_CONNECTION_STRING
+    connection_string: str = Field(default_factory=_starrocks_connection_string)
 
     @property
     def start(self) -> str:
@@ -268,7 +268,7 @@ class StarRocks(Database):
         # mounting the parent hides the pre-populated configs and BE crashes.
         meta_dir = self.database_directory / "fe-meta"
         storage_dir = self.database_directory / "be-storage"
-        staging_dir = SETTINGS.temporary_directory / "starrocks/data"
+        staging_dir = get_settings().temporary_directory / "starrocks/data"
 
         for d in (meta_dir, storage_dir, staging_dir):
             d.mkdir(parents=True, exist_ok=True)
@@ -276,9 +276,9 @@ class StarRocks(Database):
         return self.docker_run_command(
             self.container_images["server"],
             ports={
-                str(STARROCKS_QUERY_PORT): "9030",
-                str(STARROCKS_HTTP_PORT): "8030",
-                str(STARROCKS_BE_HTTP_PORT): "8040",
+                str(host_port("starrocks_fe_mysql")): "9030",
+                str(host_port("starrocks_fe_http")): "8030",
+                str(host_port("starrocks_be_http")): "8040",
             },
             mounts={
                 meta_dir.as_posix(): "/data/deploy/starrocks/fe/meta",
@@ -298,7 +298,7 @@ class StarRocks(Database):
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
         deadline = perf_counter() + timeout_seconds
         attempts = 0
-        bootstrap_uri = f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/"
+        bootstrap_uri = f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{host_port('starrocks_fe_mysql')}/"
 
         while perf_counter() < deadline:
             attempts += 1
@@ -316,9 +316,7 @@ class StarRocks(Database):
                 # "backends without enough disk space" until all of them
                 # arrive. Easiest robust check: actually try a probe CREATE
                 # TABLE and drop it.
-                probe_uri = (
-                    f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{STARROCKS_QUERY_PORT}/{STARROCKS_DATABASE}"
-                )
+                probe_uri = f"mysql+pymysql://{STARROCKS_USER}@{STARROCKS_HOST}:{host_port('starrocks_fe_mysql')}/{STARROCKS_DATABASE}"
                 engine = create_engine(probe_uri)
                 try:
                     with engine.connect() as con:
@@ -476,7 +474,7 @@ class StarRocks(Database):
         if table not in self.get_table_names():
             self.create_table(schema, table, primary_key, not_null)
 
-        staging = SETTINGS.temporary_directory / "starrocks/data"
+        staging = get_settings().temporary_directory / "starrocks/data"
         staging.mkdir(parents=True, exist_ok=True)
         parquet_path = staging / f"{table}_{uuid.uuid4().hex}.parquet"
 

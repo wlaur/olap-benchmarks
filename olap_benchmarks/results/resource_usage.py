@@ -6,7 +6,7 @@ from typing import Any, Literal, cast
 
 import duckdb
 
-from ..settings import IN_PROCESS_DATABASES, SETTINGS, Revision
+from ..settings import IN_PROCESS_DATABASES, Revision, get_settings
 
 MemorySource = Literal["server", "client"]
 ResourceScope = Literal["client_only", "client_and_server"]
@@ -129,7 +129,7 @@ def describe_run_resource_usage(usage: RunResourceUsage) -> dict[str, object]:
 
 
 def _resolve_results_path(revision: Revision, db_path: Path | None) -> Path:
-    path = db_path or SETTINGS.results_directory / f"{revision}.db"
+    path = db_path or get_settings().results_directory / f"{revision}.db"
     if not path.is_file():
         raise FileNotFoundError(f"Results database does not exist: {path}")
     return path

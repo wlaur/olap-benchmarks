@@ -11,7 +11,7 @@ from sqlalchemy import Connection
 from .. import dbs as dbs_module
 from ..dbs import Database, apply_parquet_epoch_columns, get_databases
 from ..dbs.monetdb import MonetDB, MonetDBTimeSeries
-from ..dbs.monetdb.settings import SETTINGS as MONETDB_SETTINGS
+from ..dbs.monetdb.settings import get_monetdb_settings
 from ..images import ImageDigestError, ResolvedImage
 from ..settings import (
     DatabaseName,
@@ -370,9 +370,9 @@ def test_connectors_read_versions_and_images_from_the_manifest(monkeypatch: pyte
 def test_monetdb_adbc_uri_exposes_ingest_tuning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(MONETDB_SETTINGS, "write_window_bytes", 268_435_456)
-    monkeypatch.setattr(MONETDB_SETTINGS, "wire_compression", "none")
-    monkeypatch.setattr(MONETDB_SETTINGS, "constrained_append", "direct")
+    monkeypatch.setattr(get_monetdb_settings(), "write_window_bytes", 268_435_456)
+    monkeypatch.setattr(get_monetdb_settings(), "wire_compression", "none")
+    monkeypatch.setattr(get_monetdb_settings(), "constrained_append", "direct")
 
     db = MonetDB()
     assert db.connection_string == (
@@ -380,7 +380,11 @@ def test_monetdb_adbc_uri_exposes_ingest_tuning(
         "?client_application=olap-benchmarks&write_window_bytes=268435456"
         "&wire_compression=none&constrained_append=direct"
     )
-    assert db.run_options["constrained_append"] == "direct"
+    assert db.benchmark_settings == {
+        "OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES": 268_435_456,
+        "OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION": "none",
+        "OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND": "direct",
+    }
 
 
 def test_monetdb_time_series_analyzes_time_after_adbc_ingest(

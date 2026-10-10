@@ -402,7 +402,7 @@ def test_benchmark_all_uses_suite_supported_operations(
         suite_scale_factor: int,
     ) -> ValidationReport:
         assert revision == "default"
-        assert system == __main__.SETTINGS.system
+        assert system == __main__.get_settings().system
         validated.append((system, suite, suite_scale_factor))
         return ValidationReport([], [], [])
 
@@ -419,7 +419,7 @@ def test_benchmark_all_uses_suite_supported_operations(
     __main__.benchmark(db="clickhouse", suite="clickbench", operation="all")
 
     assert db_instance.operations == [("clickbench", "populate", 1), ("clickbench", "select", 1)]
-    assert validated == [(__main__.SETTINGS.system, "clickbench", 1)]
+    assert validated == [(__main__.get_settings().system, "clickbench", 1)]
 
 
 def test_benchmark_all_fans_out_time_series_scale_factors(
@@ -487,7 +487,7 @@ def test_benchmark_all_fans_out_time_series_scale_factors(
         suite_scale_factor: int,
     ) -> ValidationReport:
         assert revision == "default"
-        assert system == __main__.SETTINGS.system
+        assert system == __main__.get_settings().system
         validated.append((suite, suite_scale_factor))
         return ValidationReport([], [], [])
 
@@ -573,7 +573,7 @@ def test_benchmark_filters_unsupported_suites_before_input_checks_and_validation
         suite_scale_factor: int,
     ) -> ValidationReport:
         assert revision == "default"
-        assert system == __main__.SETTINGS.system
+        assert system == __main__.get_settings().system
         validated.append((suite, suite_scale_factor))
         return ValidationReport([], [], [])
 

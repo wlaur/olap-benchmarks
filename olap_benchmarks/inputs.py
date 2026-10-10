@@ -17,7 +17,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TypedDict, cast
 
-from .settings import SETTINGS
+from .settings import get_settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class CachedFileHash(TypedDict):
 
 
 def input_hash_cache_path() -> Path:
-    return SETTINGS.temporary_directory / INPUT_HASH_CACHE_FILE_NAME
+    return get_settings().temporary_directory / INPUT_HASH_CACHE_FILE_NAME
 
 
 def _read_cache(path: Path) -> dict[str, CachedFileHash]:

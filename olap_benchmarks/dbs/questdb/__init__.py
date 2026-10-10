@@ -5,10 +5,11 @@ from time import sleep
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
+from pydantic import Field
 from questdb import Protocol, Sender
 from sqlalchemy import Connection, create_engine, text
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
+from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
     CLICKBENCH_DATE_COLUMNS,
@@ -19,10 +20,9 @@ from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
 
-QUESTDB_HTTP_PORT = host_port("questdb_http")
-QUESTDB_PG_PORT = host_port("questdb_pg")
 
-QUESTDB_CONNECTION_STRING = f"questdb://admin:quest@localhost:{QUESTDB_PG_PORT}/qdb"
+def _questdb_connection_string() -> str:
+    return f"questdb://admin:quest@localhost:{host_port('questdb_pg')}/qdb"
 
 
 def _build_clickbench_insert(
@@ -55,8 +55,8 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 
         self.db.initialize_schema("clickbench")
 
-        fpath = SETTINGS.temporary_directory / "questdb/data/hits.parquet"
-        input_fpath = SETTINGS.input_data_directory / "clickbench/hits.parquet"
+        fpath = get_settings().temporary_directory / "questdb/data/hits.parquet"
+        input_fpath = get_settings().input_data_directory / "clickbench/hits.parquet"
 
         # Convert the epoch-integer columns inline in the INSERT instead of
         # rewriting the casts into the staged parquet.
@@ -102,7 +102,7 @@ class QuestDB(Database):
     supports_arm64_containers: ClassVar[bool] = True
     wal_path_patterns: ClassVar[tuple[str, ...]] = ("db/*/wal*", "db/*/txn_seq")
 
-    connection_string: str = QUESTDB_CONNECTION_STRING
+    connection_string: str = Field(default_factory=_questdb_connection_string)
 
     # No row-level DELETE in QuestDB 10.0.1 (`DELETE FROM t WHERE id = 1` is
     # rejected as "unexpected token [FROM]"); only TRUNCATE TABLE and ALTER
@@ -126,14 +126,14 @@ class QuestDB(Database):
 
     @property
     def start(self) -> str:
-        (SETTINGS.temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
+        (get_settings().temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
 
         return self.docker_run_command(
             self.container_images["server"],
-            ports={str(QUESTDB_HTTP_PORT): "9000", str(QUESTDB_PG_PORT): "8812"},
+            ports={str(host_port("questdb_http")): "9000", str(host_port("questdb_pg")): "8812"},
             mounts={
                 self.database_directory.as_posix(): "/var/lib/questdb",
-                f"{SETTINGS.temporary_directory.as_posix()}/questdb/data": "/import",
+                f"{get_settings().temporary_directory.as_posix()}/questdb/data": "/import",
             },
             env={"QDB_CAIRO_SQL_COPY_ROOT": "/import"},
         )
@@ -281,7 +281,7 @@ class QuestDB(Database):
         except Exception:
             initial_count = 0
 
-        with Sender(Protocol.Http, "localhost", QUESTDB_HTTP_PORT) as sender:
+        with Sender(Protocol.Http, "localhost", host_port("questdb_http")) as sender:
             for i, start in enumerate(range(0, num_rows, batch_size)):
                 end = min(start + batch_size, num_rows)
                 batch_df = df_pd.iloc[start:end]
@@ -303,7 +303,7 @@ class QuestDB(Database):
         table: TableName,
     ) -> None:
         parquet_fname = f"{table}_{uuid.uuid4().hex}.parquet"
-        parquet_fpath = SETTINGS.temporary_directory / "questdb/data" / parquet_fname
+        parquet_fpath = get_settings().temporary_directory / "questdb/data" / parquet_fname
 
         if isinstance(df, pl.LazyFrame):
             df.sink_parquet(parquet_fpath)

@@ -11,7 +11,7 @@ from duckdb import __version__ as duckdb_version_runtime
 from sqlalchemy import Connection, create_engine
 
 from ...results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName
+from ...settings import DatabaseName, SuiteName, TableName, get_settings
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
@@ -20,7 +20,11 @@ from ..utils import normalize_columns, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-(SETTINGS.temporary_directory / "duckdb/data").mkdir(exist_ok=True, parents=True)
+
+def _staging_directory() -> Path:
+    directory = get_settings().temporary_directory / "duckdb/data"
+    directory.mkdir(exist_ok=True, parents=True)
+    return directory
 
 
 POLARS_DUCKDB_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
@@ -65,8 +69,7 @@ DATABASE_FILE_NAME = "duck.db"
 
 class DuckDBJSONBench(JSONBench["DuckDB"]):
     def _stage_input_files(self) -> Path:
-        temp_dir = SETTINGS.temporary_directory / "duckdb/data"
-        staging_dir = temp_dir / self.data_directory_name
+        staging_dir = _staging_directory() / self.data_directory_name
         if staging_dir.exists():
             rmtree(staging_dir)
         staging_dir.mkdir(parents=True)
@@ -206,7 +209,7 @@ class DuckDB(Database):
             self.execute(ddl, commit=False)
 
         if isinstance(df, pl.LazyFrame):
-            fpath = SETTINGS.temporary_directory / "duckdb/data" / f"{uuid.uuid4().hex}.parquet"
+            fpath = _staging_directory() / f"{uuid.uuid4().hex}.parquet"
             df.sink_parquet(fpath)
             _LOGGER.info("Inserting from staged Parquet file via sink_parquet")
 

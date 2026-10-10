@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import polars as pl
+from pydantic import Field
 from sqlalchemy import Connection, Engine, create_engine, text
 
 from ...settings import REPO_ROOT, DatabaseName, SuiteName, TableName, host_port
@@ -23,9 +24,9 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-TIMESCALEDB_HOST_PORT = host_port("timescaledb")
 
-TIMESCALEDB_CONNECTION_STRING = f"postgresql://postgres:password@localhost:{TIMESCALEDB_HOST_PORT}/postgres"
+def _timescaledb_connection_string() -> str:
+    return f"postgresql://postgres:password@localhost:{host_port('timescaledb')}/postgres"
 
 
 class TimescaleRTABench(RTABench["TimescaleDB"]):
@@ -323,7 +324,7 @@ class TimescaleDB(Postgres):
     supports_arm64_containers: ClassVar[bool] = True
     wal_path_patterns: ClassVar[tuple[str, ...]] = ("pg_wal",)
 
-    connection_string: str = TIMESCALEDB_CONNECTION_STRING
+    connection_string: str = Field(default_factory=_timescaledb_connection_string)
 
     # Plain Postgres disables the data_large mutation steps because the table
     # is never populated there; with columnstore compression it is.
@@ -342,7 +343,7 @@ class TimescaleDB(Postgres):
         parts = [
             (
                 f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
-                f"--rm -d -p {TIMESCALEDB_HOST_PORT}:5432"
+                f"--rm -d -p {host_port('timescaledb')}:5432"
             ),
             f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
             "-e POSTGRES_PASSWORD=password",

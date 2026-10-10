@@ -9,10 +9,11 @@ from typing import Any, ClassVar, Literal, cast
 from urllib.request import urlopen
 
 import polars as pl
+from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
+from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
@@ -31,13 +32,14 @@ DORIS_BE_CONTAINER = "doris-be-benchmark"
 DORIS_FE_SERVERS = f"fe1:{DORIS_FE_IP}:9010"
 
 DORIS_HOST = "localhost"
-DORIS_QUERY_PORT = host_port("doris_fe_mysql")
-DORIS_HTTP_PORT = host_port("doris_fe_http")
-DORIS_BE_HTTP_PORT = host_port("doris_be_http")
 DORIS_USER = "root"
 DORIS_PASSWORD = ""
 DORIS_DATABASE = "benchmark"
-DORIS_CONNECTION_STRING = f"mysql+pymysql://{DORIS_USER}@{DORIS_HOST}:{DORIS_QUERY_PORT}/{DORIS_DATABASE}"
+
+
+def _doris_connection_string() -> str:
+    return f"mysql+pymysql://{DORIS_USER}@{DORIS_HOST}:{host_port('doris_fe_mysql')}/{DORIS_DATABASE}"
+
 
 DorisFetchMethod = Literal["connectorx", "python"]
 
@@ -153,7 +155,7 @@ class Doris(Database):
     name: DatabaseName = "doris"
     supports_arm64_containers: ClassVar[bool] = True
 
-    connection_string: str = DORIS_CONNECTION_STRING
+    connection_string: str = Field(default_factory=_doris_connection_string)
 
     @property
     def metric_container_names(self) -> tuple[str, ...]:
@@ -182,7 +184,7 @@ class Doris(Database):
                 name=DORIS_FE_CONTAINER,
                 network=DORIS_NETWORK,
                 ip=DORIS_FE_IP,
-                ports={str(DORIS_QUERY_PORT): "9030", str(DORIS_HTTP_PORT): "8030"},
+                ports={str(host_port("doris_fe_mysql")): "9030", str(host_port("doris_fe_http")): "8030"},
                 mounts={
                     meta_dir.as_posix(): "/opt/apache-doris/fe/doris-meta",
                     fe_log_dir.as_posix(): "/opt/apache-doris/fe/log",
@@ -194,7 +196,7 @@ class Doris(Database):
                 name=DORIS_BE_CONTAINER,
                 network=DORIS_NETWORK,
                 ip=DORIS_BE_IP,
-                ports={str(DORIS_BE_HTTP_PORT): "8040"},
+                ports={str(host_port("doris_be_http")): "8040"},
                 mounts={
                     storage_dir.as_posix(): "/opt/apache-doris/be/storage",
                     be_log_dir.as_posix(): "/opt/apache-doris/be/log",
@@ -217,7 +219,7 @@ class Doris(Database):
 
     @property
     def staging_directory(self) -> Path:
-        directory = SETTINGS.temporary_directory / "doris/data"
+        directory = get_settings().temporary_directory / "doris/data"
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
@@ -229,7 +231,7 @@ class Doris(Database):
         _LOGGER.info(f"Waiting for database {self.name} (timeout: {timeout_seconds:.0f}s)...")
         deadline = perf_counter() + timeout_seconds
         attempts = 0
-        bootstrap_uri = f"mysql+pymysql://{DORIS_USER}@{DORIS_HOST}:{DORIS_QUERY_PORT}/"
+        bootstrap_uri = f"mysql+pymysql://{DORIS_USER}@{DORIS_HOST}:{host_port('doris_fe_mysql')}/"
 
         while perf_counter() < deadline:
             attempts += 1
@@ -275,7 +277,7 @@ class Doris(Database):
         if alive.is_empty():
             raise RuntimeError(f"no alive Doris backend registered: {backends.select('Host', 'Alive').rows()}")
 
-        url = f"http://{DORIS_HOST}:{DORIS_BE_HTTP_PORT}/api/health"
+        url = f"http://{DORIS_HOST}:{host_port('doris_be_http')}/api/health"
         with urlopen(url, timeout=5) as response:
             health = json.loads(response.read())
         if health.get("status") != "OK":
@@ -402,7 +404,7 @@ class Doris(Database):
     def stream_load_file(self, table: TableName, file_path: Path, headers: Mapping[str, str]) -> None:
         # The FE redirects stream loads to the BE's address inside the Docker network, which the
         # host cannot route to, so the load goes to the BE's published HTTP port directly.
-        url = f"http://{DORIS_HOST}:{DORIS_BE_HTTP_PORT}/api/{DORIS_DATABASE}/{table}/_stream_load"
+        url = f"http://{DORIS_HOST}:{host_port('doris_be_http')}/api/{DORIS_DATABASE}/{table}/_stream_load"
         command = [
             "curl",
             "-sS",

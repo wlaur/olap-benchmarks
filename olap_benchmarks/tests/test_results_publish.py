@@ -32,6 +32,7 @@ from olap_benchmarks.settings import (
     SUITE_OPERATIONS,
     SUITE_PUBLIC_ROLES,
     SUITE_QUERY_NAME_PARSERS,
+    get_settings,
 )
 
 
@@ -341,7 +342,7 @@ def _patch_publish(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     def manifest() -> dict[str, object]:
         return {}
 
-    monkeypatch.setattr(results_module.SETTINGS, "results_directory", results_directory)
+    monkeypatch.setattr(get_settings(), "results_directory", results_directory)
     monkeypatch.setattr(results_module, "PUBLISHED_DATA_DIRECTORY", published)
     monkeypatch.setattr(results_module, "expand_matrix", cells)
     monkeypatch.setattr(results_module, "current_pins", pins)

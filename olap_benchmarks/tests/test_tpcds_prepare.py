@@ -6,6 +6,7 @@ from typing import NoReturn
 
 import pytest
 
+from olap_benchmarks.settings import get_settings
 from olap_benchmarks.suites.tpc_ds import config as tpcds_config
 
 
@@ -23,7 +24,7 @@ def test_tpcds_prepare_refuses_low_free_space(tmp_path: Path, monkeypatch: pytes
         _ = command, check
         raise AssertionError("subprocess.run should not be called")
 
-    monkeypatch.setattr(tpcds_config.SETTINGS, "input_data_directory", tmp_path)
+    monkeypatch.setattr(get_settings(), "input_data_directory", tmp_path)
     monkeypatch.setattr(tpcds_config.shutil, "which", fake_tpcgen_path)
     monkeypatch.setattr(tpcds_config, "_free_disk_bytes", one_free_byte)
     monkeypatch.setattr(tpcds_config.subprocess, "run", fail_run)
@@ -39,7 +40,7 @@ def test_tpcds_prepare_rejects_partial_dataset_with_generator_metadata(
     input_dir.mkdir()
     (input_dir / "dbgen_version.parquet").write_bytes(b"partial")
 
-    monkeypatch.setattr(tpcds_config.SETTINGS, "input_data_directory", tmp_path)
+    monkeypatch.setattr(get_settings(), "input_data_directory", tmp_path)
 
     with pytest.raises(ValueError, match="partial dataset"):
         tpcds_config._prepare_tpc_ds_data(1)

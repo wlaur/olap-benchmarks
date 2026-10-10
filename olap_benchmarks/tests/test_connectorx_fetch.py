@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import Connection
 
 from ..dbs.doris import Doris
-from ..dbs.postgres import POSTGRES_CONNECTION_STRING, Postgres
+from ..dbs.postgres import Postgres, _postgres_connection_string
 from ..dbs.starrocks import StarRocks
 
 
@@ -32,7 +32,7 @@ def test_postgres_fetch_uses_connectorx_uri(monkeypatch: pytest.MonkeyPatch) -> 
     df = RecordingPostgres().fetch("select 1 as one;", schema={"one": pl.Int64})
 
     assert df.to_dict(as_series=False) == {"one": [1]}
-    assert calls == [("select 1 as one", POSTGRES_CONNECTION_STRING)]
+    assert calls == [("select 1 as one", _postgres_connection_string())]
     assert recorded_queries == ["select 1 as one"]
 
 

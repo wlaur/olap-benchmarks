@@ -13,9 +13,10 @@ import clickhouse_connect.driver
 import clickhouse_connect.driver.client
 import polars as pl
 from clickhouse_connect.driver.client import Client as ClickhouseClient
+from pydantic import Field
 from sqlalchemy import Connection, create_engine
 
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
+from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
@@ -29,10 +30,10 @@ from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-CLICKHOUSE_HTTP_PORT = host_port("clickhouse_http")
-CLICKHOUSE_NATIVE_PORT = host_port("clickhouse_native")
 
-CLICKHOUSE_CONNECTION_STRING = f"clickhouse://user:password@localhost:{CLICKHOUSE_HTTP_PORT}/default"
+def _clickhouse_connection_string() -> str:
+    return f"clickhouse://user:password@localhost:{host_port('clickhouse_http')}/default"
+
 
 POLARS_CLICKHOUSE_TYPE_MAP: dict[pl.DataType | type[pl.DataType], str] = {
     pl.Int8: "Int8",
@@ -73,13 +74,13 @@ def get_clickhouse_type(dtype: pl.DataType | type[pl.DataType], nullable: bool =
 
 
 def get_clickhouse_client() -> ClickhouseClient:
-    parsed_sqlalchemy_connection_string = urlparse(CLICKHOUSE_CONNECTION_STRING)
+    parsed_sqlalchemy_connection_string = urlparse(_clickhouse_connection_string())
 
     return cast(
         ClickhouseClient,
         cast(Any, clickhouse_connect).get_client(
             host=parsed_sqlalchemy_connection_string.hostname,
-            port=parsed_sqlalchemy_connection_string.port or CLICKHOUSE_HTTP_PORT,
+            port=parsed_sqlalchemy_connection_string.port or host_port("clickhouse_http"),
             username=parsed_sqlalchemy_connection_string.username,
             password=parsed_sqlalchemy_connection_string.password or "no-password",
             database="default",
@@ -181,7 +182,7 @@ class ClickhouseJSONBench(JSONBench["Clickhouse"]):
         return {"time_columns": ["first_post_ts"]}
 
     def _stage_input_files(self) -> Path:
-        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        temp_dir = get_settings().temporary_directory / "clickhouse/data"
         staging_dir = temp_dir / self.data_directory_name
         if staging_dir.exists():
             rmtree(staging_dir)
@@ -326,20 +327,20 @@ class Clickhouse(Database):
     name: DatabaseName = "clickhouse"
     supports_arm64_containers: ClassVar[bool] = True
 
-    connection_string: str = CLICKHOUSE_CONNECTION_STRING
+    connection_string: str = Field(default_factory=_clickhouse_connection_string)
 
     _clickhouse_client: clickhouse_connect.driver.client.Client | None = None
 
     @property
     def start(self) -> str:
-        (SETTINGS.temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
+        (get_settings().temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
         return self.docker_run_command(
             self.container_images["server"],
-            ports={str(CLICKHOUSE_HTTP_PORT): "8123", str(CLICKHOUSE_NATIVE_PORT): "9000"},
+            ports={str(host_port("clickhouse_http")): "8123", str(host_port("clickhouse_native")): "9000"},
             mounts={
                 self.database_directory.as_posix(): "/var/lib/clickhouse",
-                f"{SETTINGS.temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
+                f"{get_settings().temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
             },
             env={
                 # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
@@ -621,7 +622,7 @@ class Clickhouse(Database):
         columns = list(schema.names())
 
         client = self.get_client()
-        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        temp_dir = get_settings().temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
         try:
@@ -678,7 +679,7 @@ class Clickhouse(Database):
         primary_key: str | list[str],
         partitions: int | None = None,
     ) -> None:
-        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        temp_dir = get_settings().temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(df, temp_dir, partitions)
 
         try:
@@ -701,7 +702,7 @@ class Clickhouse(Database):
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         primary_keys = require_columns(primary_key)
 
-        temp_dir = SETTINGS.temporary_directory / "clickhouse/data"
+        temp_dir = get_settings().temporary_directory / "clickhouse/data"
         temp_parquet_path, input_file_string = self._write_temporary_parquet(keys, temp_dir, None)
 
         try:

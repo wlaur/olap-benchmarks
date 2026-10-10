@@ -7,11 +7,12 @@ from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
+from pydantic import Field
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
 from ...run_metadata import StepResultStatus
-from ...settings import SETTINGS, DatabaseName, SuiteName, TableName, host_port
+from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
@@ -29,9 +30,11 @@ from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
 
-POSTGRES_HOST_PORT = host_port("postgres")
 
-POSTGRES_CONNECTION_STRING = f"postgresql://postgres:password@localhost:{POSTGRES_HOST_PORT}/postgres"
+def _postgres_connection_string() -> str:
+    return f"postgresql://postgres:password@localhost:{host_port('postgres')}/postgres"
+
+
 PostgresFetchMethod = Literal["connectorx", "python"]
 
 
@@ -515,7 +518,7 @@ class Postgres(Database):
     supports_arm64_containers: ClassVar[bool] = True
     wal_path_patterns: ClassVar[tuple[str, ...]] = ("pgdata/pg_wal",)
 
-    connection_string: str = POSTGRES_CONNECTION_STRING
+    connection_string: str = Field(default_factory=_postgres_connection_string)
 
     # Mirrors PostgresTimeSeries.SKIP_TABLES: data_large EAV does not fit in
     # the per-(db, suite) disk budget on plain Postgres, so its mutate steps
@@ -536,7 +539,7 @@ class Postgres(Database):
             "docker run",
             f"--platform {self.container_platform}",
             f"--name {self.name}-benchmark",
-            f"--rm -d -p {POSTGRES_HOST_PORT}:5432",
+            f"--rm -d -p {host_port('postgres')}:5432",
             "--user 0:0",
             f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
             "-e PGDATA=/var/lib/postgresql/pgdata",
@@ -658,7 +661,7 @@ class Postgres(Database):
 
     @property
     def _staging_directory(self) -> Path:
-        directory = SETTINGS.temporary_directory / self.name / "data"
+        directory = get_settings().temporary_directory / self.name / "data"
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 

@@ -25,7 +25,7 @@ from time import perf_counter
 from typing import Any
 
 from ...dbs import Database
-from ...settings import REPO_ROOT, SETTINGS, TableName, format_suite_data_directory_name, resolve_suite_scale_factor
+from ...settings import REPO_ROOT, TableName, format_suite_data_directory_name, get_settings, resolve_suite_scale_factor
 from .. import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def q11_fraction(scale_factor: int) -> str:
 def _prepare_tpc_h_data(scale_factor: int) -> None:
     scale_factor = resolve_suite_scale_factor("tpc_h", scale_factor)
     data_directory_name = format_suite_data_directory_name("tpc_h", scale_factor)
-    output_directory = SETTINGS.input_data_directory / data_directory_name
+    output_directory = get_settings().input_data_directory / data_directory_name
     output_directory.mkdir(exist_ok=True, parents=True)
 
     existing = [table for table in TPCH_TABLES if (output_directory / f"{table}.parquet").is_file()]
