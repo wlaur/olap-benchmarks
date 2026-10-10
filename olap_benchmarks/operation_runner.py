@@ -19,7 +19,7 @@ from multiprocessing import Process, Queue
 
 from .dbs import Database, get_databases
 from .metrics.storage import WriterMessage
-from .settings import SETTINGS, DatabaseName, Operation, SuiteName
+from .settings import DatabaseName, Operation, SuiteName, get_settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ POLARS_SPILL_HEADROOM_MB = 30 * 1024
 
 
 def configure_polars_spill() -> None:
-    spill_directory = SETTINGS.temporary_directory / "polars"
+    spill_directory = get_settings().temporary_directory / "polars"
     spill_directory.mkdir(parents=True, exist_ok=True)
     free_mb = shutil.disk_usage(spill_directory).free // (1024 * 1024)
     os.environ["POLARS_TEMP_DIR"] = spill_directory.as_posix()
