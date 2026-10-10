@@ -328,44 +328,39 @@ def get_disk_sample(metric_directories: Sequence[Path], wal_globs: Sequence[str]
     return DiskSample(total_mb=total_mb, data_mb=max(total_mb - wal_mb, 0), wal_mb=wal_mb)
 
 
-def get_glob_size_mb(patterns: Sequence[str]) -> int:
-    last_error: subprocess.CalledProcessError | None = None
+def _du_kilobytes(paths: Sequence[str]) -> list[int] | None:
+    # A file the engine deletes mid-walk (e.g. a ClickHouse tmp_insert part during a mutation)
+    # makes du exit 1 with "No such file or directory", but it still prints a complete total for
+    # what exists; only a failure for any other reason is retried.
+    result = subprocess.run(["du", "-sk", *paths], capture_output=True, text=True, check=False)
+    errors = [line for line in result.stderr.splitlines() if line.strip()]
+    if result.returncode != 0 and not all(line.endswith("No such file or directory") for line in errors):
+        _LOGGER.warning(f"Call to du failed (exit {result.returncode}): {result.stderr.strip()}, retrying...")
+        return None
+    sizes = [int(line.split()[0]) for line in result.stdout.splitlines() if line.strip()]
+    if len(sizes) != len(paths):
+        _LOGGER.warning("du reported no total for a path, retrying...")
+        return None
+    return sizes
 
+
+def get_glob_size_mb(patterns: Sequence[str]) -> int:
     for _ in range(DIRECTORY_SIZE_ATTEMPTS):
         # re-expand on every attempt: WAL segments and DuckDB's .wal file come and go
         paths = sorted({match for pattern in patterns for match in glob.glob(pattern)})
         if not paths:
             return 0
-        try:
-            output = subprocess.check_output(["du", "-sk", *paths], text=True)
-        except subprocess.CalledProcessError as error:
-            _LOGGER.warning(f"Call to du failed: {error}, retrying...")
-            last_error = error
-            continue
+        sizes = _du_kilobytes(paths)
+        if sizes is not None:
+            return sum(sizes) // 1_024
 
-        kilobytes = sum(int(line.split()[0]) for line in output.splitlines() if line.strip())
-        return kilobytes // 1_024
-
-    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts") from last_error
+    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts")
 
 
 def get_directory_size_mb(path: Path) -> int:
-    last_error: subprocess.CalledProcessError | None = None
-
     for _ in range(DIRECTORY_SIZE_ATTEMPTS):
-        try:
-            output = subprocess.check_output(["du", "-sk", path.resolve().as_posix()], text=True)
+        sizes = _du_kilobytes([path.resolve().as_posix()])
+        if sizes is not None:
+            return sizes[0] // 1_024
 
-        # can fail if the db is deleting a file a the exact same instant, e.g. with clickhouse
-        # du: /Users/williamlauren/repos/olap-benchmarks/data/dbs_time_series\
-        # /clickhouse/store/bb1/bb1e5c5b-913d-4009-85a8-c015e07669a3/tmp_insert_all_304_304_0: No such file or directory
-        # the retry restarts the walk, by which point the file is gone for good
-        except subprocess.CalledProcessError as error:
-            _LOGGER.warning(f"Call to du failed: {error}, retrying...")
-            last_error = error
-            continue
-
-        kilobytes = int(output.split()[0])
-        return kilobytes // 1_024
-
-    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts") from last_error
+    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts")

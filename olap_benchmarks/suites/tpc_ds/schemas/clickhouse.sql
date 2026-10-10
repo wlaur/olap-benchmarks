@@ -34,8 +34,8 @@ DROP TABLE IF EXISTS web_site;
 CREATE TABLE call_center (
     cc_call_center_sk Int64,
     cc_call_center_id Nullable(String),
-    cc_rec_start_date Nullable(Date),
-    cc_rec_end_date Nullable(Date),
+    cc_rec_start_date Nullable(Date32),
+    cc_rec_end_date Nullable(Date32),
     cc_closed_date_sk Nullable(Int64),
     cc_open_date_sk Nullable(Int64),
     cc_name Nullable(String),
@@ -203,7 +203,7 @@ PRIMARY KEY (cd_demo_sk);
 CREATE TABLE date_dim (
     d_date_sk Int64,
     d_date_id Nullable(String),
-    d_date Nullable(Date),
+    d_date Nullable(Date32),
     d_month_seq Nullable(Int32),
     d_week_seq Nullable(Int32),
     d_quarter_seq Nullable(Int32),
@@ -259,8 +259,8 @@ PRIMARY KEY (inv_date_sk, inv_item_sk, inv_warehouse_sk);
 CREATE TABLE item (
     i_item_sk Int64,
     i_item_id Nullable(String),
-    i_rec_start_date Nullable(Date),
-    i_rec_end_date Nullable(Date),
+    i_rec_start_date Nullable(Date32),
+    i_rec_end_date Nullable(Date32),
     i_item_desc Nullable(String),
     i_current_price Nullable(Decimal(7, 2)),
     i_wholesale_cost Nullable(Decimal(7, 2)),
@@ -325,8 +325,8 @@ PRIMARY KEY (sm_ship_mode_sk);
 CREATE TABLE store (
     s_store_sk Int64,
     s_store_id Nullable(String),
-    s_rec_start_date Nullable(Date),
-    s_rec_end_date Nullable(Date),
+    s_rec_start_date Nullable(Date32),
+    s_rec_end_date Nullable(Date32),
     s_closed_date_sk Nullable(Int64),
     s_store_name Nullable(String),
     s_number_employees Nullable(Int32),
@@ -441,8 +441,8 @@ PRIMARY KEY (w_warehouse_sk);
 CREATE TABLE web_page (
     wp_web_page_sk Int64,
     wp_web_page_id Nullable(String),
-    wp_rec_start_date Nullable(Date),
-    wp_rec_end_date Nullable(Date),
+    wp_rec_start_date Nullable(Date32),
+    wp_rec_end_date Nullable(Date32),
     wp_creation_date_sk Nullable(Int64),
     wp_access_date_sk Nullable(Int64),
     wp_autogen_flag Nullable(String),
@@ -525,8 +525,8 @@ PRIMARY KEY (ws_item_sk, ws_order_number);
 CREATE TABLE web_site (
     web_site_sk Int64,
     web_site_id Nullable(String),
-    web_rec_start_date Nullable(Date),
-    web_rec_end_date Nullable(Date),
+    web_rec_start_date Nullable(Date32),
+    web_rec_end_date Nullable(Date32),
     web_name Nullable(String),
     web_open_date_sk Nullable(Int64),
     web_close_date_sk Nullable(Int64),

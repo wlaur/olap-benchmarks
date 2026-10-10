@@ -262,6 +262,12 @@ def test_disk_sample_expands_wal_globs_and_tolerates_a_missing_wal(tmp_path: Pat
     assert measure.get_glob_size_mb((f"{tmp_path}/duck.db.wal",)) == 0
 
 
+def _completed(
+    args: list[str], returncode: int, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args, returncode, stdout=stdout, stderr=stderr)
+
+
 def test_wal_size_reglobs_after_a_segment_vanishes(monkeypatch: pytest.MonkeyPatch) -> None:
     globbed: list[str] = []
     calls = 0
@@ -270,42 +276,51 @@ def test_wal_size_reglobs_after_a_segment_vanishes(monkeypatch: pytest.MonkeyPat
         globbed.append(pattern)
         return ["/wal/a", "/wal/b"] if len(globbed) == 1 else ["/wal/b"]
 
-    def check_output(args: list[str], text: bool) -> str:
+    def run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise subprocess.CalledProcessError(1, args)
+            return _completed(args, 1, "3072\t/wal/b\n", "du: /wal/a: No such file or directory\n")
         assert args == ["du", "-sk", "/wal/b"]
-        return "3072\t/wal/b\n"
+        return _completed(args, 0, "3072\t/wal/b\n")
 
     monkeypatch.setattr(measure.glob, "glob", fake_glob)
-    monkeypatch.setattr(measure.subprocess, "check_output", check_output)
+    monkeypatch.setattr(measure.subprocess, "run", run)
 
     assert measure.get_glob_size_mb(("/wal/*",)) == 3
     assert len(globbed) == 2
 
 
+def test_directory_size_accepts_the_total_when_a_file_vanishes_mid_walk(monkeypatch: pytest.MonkeyPatch) -> None:
+    def run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return _completed(args, 1, "2048\t/database\n", "du: /database/tmp_insert_1: No such file or directory\n")
+
+    monkeypatch.setattr(measure.subprocess, "run", run)
+
+    assert measure.get_directory_size_mb(Path("/database")) == 2
+
+
 def test_directory_size_retries_after_a_transient_du_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
 
-    def check_output(args: list[str], text: bool) -> str:
+    def run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise subprocess.CalledProcessError(1, args)
-        return "2048\t/database\n"
+            return _completed(args, 1, "", "du: /database: Permission denied\n")
+        return _completed(args, 0, "2048\t/database\n")
 
-    monkeypatch.setattr(measure.subprocess, "check_output", check_output)
+    monkeypatch.setattr(measure.subprocess, "run", run)
 
     assert measure.get_directory_size_mb(Path("/database")) == 2
     assert calls == 2
 
 
 def test_directory_size_raises_once_the_retries_are_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
-    def check_output(args: list[str], text: bool) -> str:
-        raise subprocess.CalledProcessError(1, args)
+    def run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return _completed(args, 1, "", "du: /database: Permission denied\n")
 
-    monkeypatch.setattr(measure.subprocess, "check_output", check_output)
+    monkeypatch.setattr(measure.subprocess, "run", run)
 
     with pytest.raises(RuntimeError, match="du failed after"):
         measure.get_directory_size_mb(Path("/database"))
