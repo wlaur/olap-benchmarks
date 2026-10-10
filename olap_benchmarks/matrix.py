@@ -52,7 +52,7 @@ _COLUMN_STORE_SUITES: tuple[SuitePlan, ...] = (
 MATRIX: dict[DatabaseName, EnginePlan] = {
     "clickhouse": EnginePlan(published=True, suites=_COLUMN_STORE_SUITES),
     "duckdb": EnginePlan(published=True, suites=_COLUMN_STORE_SUITES),
-    # no JSONBench queries; chat_threads concurrent crashes mserver5 and is not registered
+    # no JSONBench queries
     "monetdb": EnginePlan(
         published=True,
         suites=tuple(plan for plan in _COLUMN_STORE_SUITES if plan.suite != "jsonbench"),

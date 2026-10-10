@@ -24,8 +24,7 @@ def test_published_matrix_content() -> None:
         assert MatrixCell(db, "chat_threads", 1, "concurrent") in cells
         assert MatrixCell(db, "jsonbench", 10, "select") in cells
         assert MatrixCell(db, "time_series", 1, "mutate") in cells
-    assert MatrixCell("monetdb", "chat_threads", 1, "mutate") in cells
-    assert MatrixCell("monetdb", "chat_threads", 1, "concurrent") not in cells
+    assert MatrixCell("monetdb", "chat_threads", 1, "concurrent") in cells
     assert not any(cell.db == "monetdb" and cell.suite == "jsonbench" for cell in cells)
     assert {(cell.suite, cell.scale_factor) for cell in cells if cell.db == "polars"} == {
         ("tpc_h", 10),
