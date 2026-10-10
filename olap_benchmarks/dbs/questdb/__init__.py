@@ -109,7 +109,7 @@ class QuestDB(Database):
 
     connection_string: str = QUESTDB_CONNECTION_STRING
 
-    # No row-level DELETE in QuestDB 9.4.3 (`DELETE FROM t WHERE id = 1` is
+    # No row-level DELETE in QuestDB 10.0.1 (`DELETE FROM t WHERE id = 1` is
     # rejected as "unexpected token [FROM]"); only TRUNCATE TABLE and ALTER
     # TABLE DROP PARTITION are available, neither matches the row-targeted
     # mutate workload. No row-level upsert either -- the QuestDB-native path
@@ -156,7 +156,7 @@ class QuestDB(Database):
         return self._connection
 
     def get_runtime_version(self) -> str:
-        df = self.fetch("select version() as version", schema={"version": pl.String}, method="python")
+        df = self.fetch("select build() as version", schema={"version": pl.String}, method="python")
         return str(df.item(0, 0))
 
     def fetch(
@@ -286,7 +286,7 @@ class QuestDB(Database):
         except Exception:
             initial_count = 0
 
-        with Sender(Protocol.Http, "localhost", 9000) as sender:
+        with Sender(Protocol.Http, "localhost", QUESTDB_HTTP_PORT) as sender:
             for i, start in enumerate(range(0, num_rows, batch_size)):
                 end = min(start + batch_size, num_rows)
                 batch_df = df_pd.iloc[start:end]
