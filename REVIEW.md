@@ -110,27 +110,17 @@ Ordered by how much they reduce the cost of rerunning and publishing.
         for the FE.
       - Postgres, TimescaleDB and QuestDB: smoke-tested on time_series (see the 2026-10 campaign notes).
 
-## 4. Site: drop DuckDB-WASM for publish-time JSON
+## 4. Site
 
-The site runs six fixed queries (systems, suite/scale factors, per-query summaries, coverage, catalog dimensions,
-explorer metrics) over `run` and `run_step` only; there is no ad-hoc SQL (CodeMirror only highlights static query
-text). Yet a cold visit downloads ~12.4 MB before showing a number — `duckdb-eh.wasm` 7.9 MB and `results.db`
-4.1 MB on the wire (GitHub Pages gzips the file, so DuckDB cannot use range reads and fetches all of it) — and
-holds 38 MB in WASM memory. Everything actually displayed is ~331 KB of JSON (35 KB gzipped). The published file is
-also half free blocks (38 MB; 15.5 MB when compacted).
+Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which needs an in-browser engine, and a
+~12-15 MB first load is acceptable. The six fixed views stay as SQL over `run`/`run_step`.
 
-- [ ] **Precompute the views at publish time.** Move the six queries (and the "latest run per cell" and `db_label`
-      logic) into Python, emit `index.json`, `summary/<system>/<suite>-<sf>.json` and `explorer/<suite>.json` from
-      `olap publish`, define the payloads once as pydantic models and test them with pytest.
-- [ ] **Generate TS types from those models** and turn `queries.ts` into `fetch().json()` with the same return
-      types, so hooks and pages are unchanged. Delete `duckdb.ts`, Kysely, `generate-db-types.mjs`,
-      `generated/db.ts`, and the duckdb-wasm / node-duckdb dependencies.
-- [ ] **Ship the raw database only as a download.** Keep a compacted `results.db` on the release for people who want
-      the raw data; serve per-run metric series as small JSON/Parquet on demand if memory charts are added later. An
-      interactive SQL page, if ever wanted, can lazy-load DuckDB-WASM on its own route.
-
-Expected result: ~400 KB first load, data visible after one small request, a ~2 MB `dist/` instead of 111 MB, and
-schema changes caught by Python tests at publish time instead of in the browser.
+- [ ] **Compact the published database.** The published file is half free blocks (38 MB; 15.5 MB when copied into a
+      fresh file). Compact on publish so the download and WASM memory shrink by more than half.
+- [ ] **Keep the typed query layer in step with migrations.** `bun run codegen` introspects the published file, so a
+      schema change reaches the site only when someone regenerates; run codegen from `olap publish` (or check in CI
+      that `generated/db.ts` matches the current schema).
+- [ ] **Arbitrary-query UI** (later): a SQL editor page over the same DuckDB instance, with the schema documented.
 
 ## 5. Engine coverage
 
@@ -164,5 +154,5 @@ schema changes caught by Python tests at publish time instead of in the browser.
 
 1. Section 3.1-3.3 (matrix, prune, versions): they turn the rest into single commands.
 2. Section 1, then a fresh campaign published through the new gate.
-3. Section 4 (site), independent of the harness work and the biggest visible improvement.
+3. Section 4 (site), independent of the harness work.
 4. Section 2 profile, then the cloud campaign; sections 5-6 fit around these.
