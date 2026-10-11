@@ -2,7 +2,7 @@
 
 - **Time Series** — time-series ingestion and analytical queries across wide, tall, and large table shapes. [Results](#/explorer/time_series)
 - **Time Series Metrics** — paired wide/EAV layouts at 100, 1,000, 2,000 and 5,000 metrics over the same 14 days. These are working measurements collected while the laptop was in use, with a two-thread benchmark budget. [Results](#/explorer/time_series_metrics)
-- **Time Series Ranges** — fetch five or ten selected metrics, or average each metric, over the last 1, 10 or 100 days. Paired wide/EAV layouts cover the same four stored widths, with ten-minute samples to bound disk and RAM. These are working measurements. [Results](#/explorer/time_series_ranges)
+- **Time Series Ranges** — fetch five or ten selected metrics, average each metric, or calculate a derived signal from ten aligned metrics and summarize it hourly over the last 1, 10 or 100 days. Paired wide/EAV layouts cover the same four stored widths, with ten-minute samples to bound disk and RAM. These are working measurements. [Results](#/explorer/time_series_ranges)
 - **RTABench** — group-bys, distinct counts, and filtered aggregations over a normalized order-tracking schema. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale. [Results](#/explorer/rtabench)
 - **ClickBench** — full-table scans, filters, and aggregations over a single wide table. Based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse. [Results](#/explorer/clickbench)
 - **JSONBench** — analytical queries over semi-structured Bluesky event JSON. Based on [JSONBench](https://github.com/ClickHouse/JSONBench) by ClickHouse. [Results](#/explorer/jsonbench)

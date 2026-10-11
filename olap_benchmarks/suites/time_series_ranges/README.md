@@ -59,4 +59,6 @@ UNIQUE_NAME`; add `--db ENGINE` for one database. Publish with `olap publish
 --revision UNIQUE_NAME --merge` to retain other suites and their provenance.
 
 See [the working measurements](WORKING_RESULTS.md) for the per-engine,
-per-range comparison and resource usage.
+per-range comparison and resource usage, and
+[the calculation and tuning results](CALCULATION_RESULTS.md) for the expanded
+120-query campaign.

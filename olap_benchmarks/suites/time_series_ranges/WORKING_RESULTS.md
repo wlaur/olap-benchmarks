@@ -1,5 +1,9 @@
 # Working selected-metric range measurements
 
+This records the earlier 96-query campaign. See
+[the expanded calculation and tuning results](CALCULATION_RESULTS.md) for the
+latest 120-query campaign and explicit PREWHERE on ClickHouse wide queries.
+
 Collected on 2026-10-11 during concurrent laptop use. Revision:
 `2026-10-timeseries-ranges-working`. Only the new `time_series_ranges` suite
 was run; all 80 previously published runs are retained unchanged.
@@ -204,6 +208,8 @@ Engines ran one at a time under `nice -n 15`, with two query threads and a
 heap target. Server charge includes reclaimable file cache; Python client
 RSS is separate, so these peaks occur at different times and should not
 be added. The engine limit is not a hard cap on in-process client RSS.
+For MonetDB, the thread setting enforces a two-CPU container quota; its native
+worker pool is not explicitly pinned to two threads.
 
 | Engine | Peak sampled store MiB | Peak server charge MiB | Peak client RSS MiB |
 | --- | ---: | ---: | ---: |
