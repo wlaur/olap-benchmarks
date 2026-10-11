@@ -398,7 +398,9 @@ def test_monetdb_adbc_uri_exposes_ingest_tuning(
         "?client_application=olap-benchmarks&write_window_bytes=268435456"
         "&wire_compression=none&constrained_append=direct"
     )
-    assert db.benchmark_settings == {
+    assert {
+        key: value for key, value in db.benchmark_settings.items() if key.startswith("OLAP_BENCHMARKS_MONETDB_")
+    } == {
         "OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES": 268_435_456,
         "OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION": "none",
         "OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND": "direct",

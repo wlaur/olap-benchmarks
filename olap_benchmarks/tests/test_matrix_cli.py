@@ -96,6 +96,12 @@ def test_matrix_run_exits_non_zero_when_a_group_fails(monkeypatch: pytest.Monkey
     assert len(validations) == 1
 
 
+def test_matrix_run_filters_to_a_single_suite(monkeypatch: pytest.MonkeyPatch) -> None:
+    runs, _ = _patch(monkeypatch, dict.fromkeys(CELLS, "missing"))
+    __main__.matrix_run(suite=["clickbench"])
+    assert runs == [[BenchmarkGroup("duckdb", "clickbench", 1, ("populate", "select"))]]
+
+
 def test_matrix_status_check_fails_unless_every_cell_is_ok(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

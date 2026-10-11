@@ -7,7 +7,7 @@ from typing import Annotated, ClassVar, Literal, cast, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
-from pydantic import DirectoryPath, field_validator
+from pydantic import DirectoryPath, PositiveInt, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TableName = Annotated[str, "Table name"]
@@ -26,7 +26,15 @@ DatabaseName = Literal[
 ]
 
 SuiteName = Literal[
-    "rtabench", "time_series", "clickbench", "jsonbench", "chat_threads", "kaggle_airbnb", "tpc_h", "tpc_ds"
+    "rtabench",
+    "time_series",
+    "time_series_metrics",
+    "clickbench",
+    "jsonbench",
+    "chat_threads",
+    "kaggle_airbnb",
+    "tpc_h",
+    "tpc_ds",
 ]
 Operation = Literal["populate", "select", "mutate", "concurrent"]
 Revision = Annotated[str, "Results database revision"]
@@ -75,6 +83,13 @@ SUITE_SPECS: dict[SuiteName, SuiteSpec] = {
         default_scale_factor=1,
         scalable=True,
         operations=_ALL_OPERATIONS,
+        query_name_parser="time_series",
+    ),
+    "time_series_metrics": SuiteSpec(
+        "Time Series Metrics",
+        scale_factors=(1,),
+        default_scale_factor=1,
+        scalable=False,
         query_name_parser="time_series",
     ),
     "rtabench": SuiteSpec("RTABench", scale_factors=(1,), default_scale_factor=1, scalable=False),
@@ -193,6 +208,9 @@ class Settings(BaseSettings):
     temporary_directory: DirectoryPath
 
     system: str
+    benchmark_threads: PositiveInt | None = None
+    benchmark_memory_gb: PositiveInt | None = None
+    run_note: str | None = None
 
     host_ports: dict[str, int] = {}
 

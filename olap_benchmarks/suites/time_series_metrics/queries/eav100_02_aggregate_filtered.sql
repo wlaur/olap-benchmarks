@@ -1,0 +1,1 @@
+SELECT AVG(value) AS value, COUNT(value) AS cnt FROM (SELECT time, CAST(value AS DOUBLE PRECISION) AS value FROM eav100 WHERE metric_name = 'metric_0001') s WHERE time >= '2024-12-29' AND time < '2024-12-30'

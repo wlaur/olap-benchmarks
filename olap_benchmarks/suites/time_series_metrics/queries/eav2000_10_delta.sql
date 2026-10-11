@@ -1,0 +1,1 @@
+SELECT time, value, value - LAG(value) OVER (ORDER BY time) AS delta FROM (SELECT time, CAST(value AS DOUBLE PRECISION) AS value FROM eav2000 WHERE metric_name = 'metric_0001') s ORDER BY time LIMIT 1000

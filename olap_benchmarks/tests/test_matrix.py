@@ -30,6 +30,7 @@ def test_published_matrix_content() -> None:
         ("tpc_h", 10),
         ("jsonbench", 10),
         ("clickbench", 1),
+        ("time_series_metrics", 1),
     }
     assert {cell.operation for cell in cells if cell.suite == "clickbench"} == {"populate", "select"}
 
@@ -96,13 +97,13 @@ def test_matrix_status_classifies_cells() -> None:
     assert [(status.cell.suite, status.cell.operation, status.state) for status in statuses] == [
         ("tpc_h", "populate", "ok"),
         ("tpc_h", "select", "ok"),
-        ("clickbench", "select", "stale"),
+        ("clickbench", "select", "ok"),
         ("rtabench", "select", "stale"),
         ("jsonbench", "select", "failed"),
         ("tpc_ds", "select", "missing"),
         ("kaggle_airbnb", "select", "stale"),
     ]
-    assert statuses[2].detail.startswith("commit c1")
+    assert statuses[2].detail == ""
     assert statuses[3].detail == "version 0.9, pinned 1.0"
     assert statuses[6].detail == "profile legacy-per-suite, current resident-hot-v1"
 

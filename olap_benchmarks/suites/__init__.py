@@ -320,6 +320,10 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
 
 def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None]:
     match suite:
+        case "time_series_metrics":
+            from .time_series_metrics.config import prepare_data as prepare_metrics_data
+
+            return prepare_metrics_data
         case "rtabench":
             from .rtabench.config import prepare_data as prepare_static_data
 

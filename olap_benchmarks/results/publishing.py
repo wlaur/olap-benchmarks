@@ -224,6 +224,7 @@ def validate_publishable_runs(
     *,
     pins: Mapping[str, str],
     drivers: Mapping[str, str | None],
+    allow_mixed_commits: bool = False,
 ) -> None:
     problems: list[str] = []
     con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
@@ -257,7 +258,7 @@ def validate_publishable_runs(
             problems.append(_listing("Runs of a version other than the current pin", stale))
 
         commits = sorted({run.commit or "none" for run in runs})
-        if len(commits) != 1 or commits == ["none"]:
+        if "none" in commits or (not allow_mixed_commits and len(commits) != 1):
             by_commit = [
                 f"{commit}: {sum(1 for run in runs if (run.commit or 'none') == commit)} run(s)" for commit in commits
             ]

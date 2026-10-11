@@ -7,7 +7,7 @@ itself belong in [`../REVIEW.md`](../REVIEW.md).
 
 | Engine | Contents |
 | --- | --- |
-| [`arc/`](arc/) | [MessagePack write with an all-null column infers `VARCHAR`](arc/msgpack-all-null-batch-infers-varchar.md); [MessagePack timestamp unit guessed from magnitude](arc/msgpack-timestamp-unit-guessed-from-magnitude.md); [Parquet import stores extra timestamps as BIGINT and rejects DATE](arc/parquet-import-drops-timestamp-and-date-types.md) |
+| [`arc/`](arc/) | [MessagePack write with an all-null column infers `VARCHAR`](arc/msgpack-all-null-batch-infers-varchar.md); [MessagePack timestamp unit guessed from magnitude](arc/msgpack-timestamp-unit-guessed-from-magnitude.md); [Parquet import stores extra timestamps as BIGINT and rejects DATE](arc/parquet-import-drops-timestamp-and-date-types.md); [Wide Parquet schema query cost](arc/wide-parquet-query-cost.md) |
 | [`clickhouse/`](clickhouse/) | [`FixedString` deserialization failure under `parallel_hash`](clickhouse/fixedstring-too-large-under-parallel-hash.md) |
 
 ## Conventions

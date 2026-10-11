@@ -1,0 +1,1 @@
+SELECT MIN(value) AS min_val, MAX(value) AS max_val, AVG(value) AS avg_val, STDDEV_SAMP(value) AS stddev_val, COUNT(value) AS cnt FROM (SELECT time, CAST(value AS DOUBLE PRECISION) AS value FROM eav100 WHERE metric_name = 'metric_0001') s

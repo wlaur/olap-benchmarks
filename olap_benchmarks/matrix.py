@@ -38,6 +38,7 @@ def _default_scale(*suites: SuiteName) -> tuple[SuitePlan, ...]:
 
 _COLUMN_STORE_SUITES: tuple[SuitePlan, ...] = (
     SuitePlan("time_series", 1),
+    SuitePlan("time_series_metrics", 1),
     SuitePlan("chat_threads", 1),
     SuitePlan("rtabench", 1),
     SuitePlan("kaggle_airbnb", 1),
@@ -59,7 +60,12 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
     ),
     "polars": EnginePlan(
         published=True,
-        suites=(SuitePlan("tpc_h", 10), SuitePlan("jsonbench", 10), SuitePlan("clickbench", 1)),
+        suites=(
+            SuitePlan("tpc_h", 10),
+            SuitePlan("jsonbench", 10),
+            SuitePlan("clickbench", 1),
+            SuitePlan("time_series_metrics", 1),
+        ),
     ),
     "postgres": EnginePlan(
         published=False,
@@ -83,7 +89,7 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
     ),
     "arc": EnginePlan(
         published=True,
-        suites=_default_scale("time_series", "chat_threads", "clickbench"),
+        suites=_default_scale("time_series", "time_series_metrics", "chat_threads", "clickbench"),
     ),
     "doris": EnginePlan(
         published=False,

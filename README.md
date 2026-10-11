@@ -32,6 +32,9 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_DATABASE_DIRECTORY` | Persistent database files, one subdir per (db, suite) |
 | `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY` | Scratch space used during populate                  |
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
+| `OLAP_BENCHMARKS_BENCHMARK_THREADS` | Optional CPU budget for containers, DuckDB threads and metrics-suite ClickHouse queries; set `POLARS_MAX_THREADS` before Python starts to bound client threads |
+| `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GB |
+| `OLAP_BENCHMARKS_RUN_NOTE` | Run context recorded in `metadata.options.note` |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
 | `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http`, `arc` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
@@ -92,6 +95,7 @@ cd site && bun install && bun run dev
 
 | Suite                  | Data source                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `time_series_metrics`  | Generated locally; paired wide/EAV layouts at 100, 1,000 and 2,000 metrics over the same 14 days |
 | `time_series`          | Generated locally                                                                        |
 | `chat_threads`         | Generated locally; AI chat history as rich JSON, SF1/SF10                                |
 | `rtabench`             | Downloaded automatically from rtadatasets.timescale.com                                  |
@@ -147,14 +151,14 @@ and a test checks every declared cell against the engine's suite registry. A new
 engine gets one entry listing only the suites it is meant to run.
 
 ```bash
-uv run olap matrix status [--db X ...] [--revision R] [--include-experimental] [--check]
-uv run olap matrix run [--db X ...] [--revision R] [--include-experimental] [--missing-only] [--keep-going]
+uv run olap matrix status [--db X ...] [--suite S ...] [--revision R] [--include-experimental] [--check]
+uv run olap matrix run [--db X ...] [--suite S ...] [--revision R] [--include-experimental] [--missing-only] [--keep-going]
 ```
 
 `status` compares each cell with its latest run: `ok`, `missing`, `failed` (the
 latest run did not complete) or `stale` (another benchmark profile than the
-current one, another `db_version` than the current pin, or another repository
-commit than the newest in the revision). The `unsupported` column counts the
+current one, another `db_version` than the current pin, or missing/dirty repository
+provenance). Different clean commits remain valid for targeted reruns. The `unsupported` column counts the
 select queries the engine declares unsupported (see [Query SQL and unsupported
 queries](#query-sql-and-unsupported-queries)). `--check` exits non-zero unless
 every cell is ok.
@@ -202,7 +206,7 @@ primitives with constraint-preserving table creation (primary keys, not-null
 columns), ingest row-count validation, and query recording.
 
 MonetDB runs persist `adbc` as a typed run dimension; publication requires a
-completed ADBC run for all 20 matrix cells and rejects running results,
+completed ADBC run for every declared matrix cell and rejects running results,
 missing query row counts and answer hashes, and unclean session baselines.
 Each MonetDB operation records `session_baseline_before` and
 `session_baseline_after` phases. Connections are tagged as `olap-benchmarks`
@@ -434,7 +438,7 @@ publish marks wrong results on the staged copy and refuses the set unless every
 declared cell completed, every select query has an answer hash (or a recorded
 reason why not), no query is marked `wrong_result` or changes answer between
 iterations, all runs use the current version pins, the current benchmark
-profile, one repository commit with a clean tree and one system snapshot, and every container run recorded one registry
+profile, recorded commits with clean trees and one system snapshot, and every container run recorded one registry
 digest per image (the same one for all runs of an engine). MonetDB runs must additionally use the ADBC
 driver and have clean session baselines. The error lists every offending cell.
 
@@ -442,7 +446,9 @@ The published file is compacted, and `manifest.json` records its
 `results_db_sha256` and `results_db_bytes`. With `--merge`, runs are merged into
 the already-published file instead of replacing it: the revision's runs replace
 every published run of the same cell (system, db, db_version, db_driver, suite,
-suite_scale_factor, operation), and everything else is kept.
+suite_scale_factor, operation), and everything else is kept. A merge accepts different
+repository commits and preserves each run's original provenance; a full replacement
+requires one commit.
 
 **`results.db` is not committed.** It is large and rewritten on every publish, so
 git would keep every version forever. It ships as the `results.db` asset on the
@@ -458,6 +464,36 @@ A fresh clone therefore needs the database before the site will run:
 ```bash
 cd site && bun run fetch-data && bun run dev
 ```
+
+### Targeted reruns and metric-width experiments
+
+`time_series_metrics` extends the time-series benchmarks without changing the historical
+`tall`/`wide`/`large` workload. It has six tables: wide and dense EAV at each of 100,
+1,000 and 2,000 metrics. All have 20,160 one-minute timestamps (14 days), and the
+first N metric values are identical at every width. EAV retains null observations.
+Generation uses 480-timestamp batches; inputs total about 583 MB on this workload.
+The largest EAV table has 40.32 million rows. It measures populate and select only.
+See [the workload definition](olap_benchmarks/suites/time_series_metrics/README.md).
+
+Run just this experiment, or just one database/suite, into a fresh revision:
+
+```bash
+POLARS_MAX_THREADS=2 uv run olap prepare time_series_metrics
+export POLARS_MAX_THREADS=2
+export OLAP_BENCHMARKS_BENCHMARK_THREADS=2
+export OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB=6
+export OLAP_BENCHMARKS_RUN_NOTE="Working results; laptop in use"
+uv run olap matrix run --suite time_series_metrics --revision metrics-working --keep-going
+# A later targeted update can name a single engine:
+uv run olap matrix run --db arc --suite time_series_metrics --revision arc-metrics-rerun
+cd site && bun run fetch-data && cd ..
+uv run olap publish --revision metrics-working --merge
+```
+
+`matrix run` loads and cleans up one engine at a time. Suite filters never run other
+suites. Merge keeps all published cells absent from the revision. Validate the complete
+staged set before uploading; commit the new manifest together with the code needed to
+read the new suite, then upload the asset. The site's build verifies that manifest.
 
 ### Remote benchmark runs
 

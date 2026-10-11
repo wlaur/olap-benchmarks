@@ -23,6 +23,7 @@ from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
 from ...suites.tpc_ds.config import TpcDs
 from ...suites.tpc_h.config import TpcH
 from .. import Database
@@ -325,6 +326,37 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
 
         if table_name not in self.db.get_table_names():
             self._create_time_series_table(frame, table_name, primary_key, normalized)
+
+
+class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        settings: dict[str, int] = {"cast_keep_nullable": 1, "prefer_column_name_to_alias": 1}
+        if (threads := get_settings().benchmark_threads) is not None:
+            settings["max_threads"] = threads
+        return {"time_columns": ["time", "hr"], "settings": settings}
+
+    def populate_table(self, table: str, path: Path) -> None:
+        frame = pl.scan_parquet(path)
+        columns: list[str] = []
+        for name, dtype in frame.collect_schema().items():
+            nullable = name not in ("time", "metric_name")
+            sql_type = get_clickhouse_type(dtype, nullable=nullable)
+            if name == "time":
+                codec = ClickhouseTimeseries.TIME_CODEC
+            elif dtype == pl.Float32:
+                codec = ClickhouseTimeseries.FLOAT_CODEC
+            else:
+                codec = ""
+                if name == "metric_name":
+                    sql_type = "LowCardinality(String)"
+            columns.append(f"`{name}` {sql_type} {codec}")
+        ordering = "metric_name, time" if table.startswith("eav") else "time"
+        self.db.run_sql(
+            f"CREATE TABLE {table} ({', '.join(columns)}) ENGINE = MergeTree "
+            f"ORDER BY ({ordering}) SETTINGS old_parts_lifetime = 5"
+        )
+        super().populate_table(table, path)
 
 
 class Clickhouse(Database):
@@ -724,6 +756,7 @@ class Clickhouse(Database):
             "jsonbench": ClickhouseJSONBench,
             "chat_threads": ChatThreads,
             "time_series": ClickhouseTimeseries,
+            "time_series_metrics": ClickhouseTimeSeriesMetrics,
             "tpc_h": ClickhouseTpcH,
             "tpc_ds": ClickhouseTpcDs,
         }

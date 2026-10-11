@@ -46,6 +46,11 @@ def _time_series_queries(prefix: str) -> list[str]:
 # declaration.
 UNSUPPORTED_QUERIES: dict[tuple[SuiteName, DatabaseName, str], str] = {
     **{
+        ("time_series_metrics", "monetdb", f"{layout}{metrics}_09_rolling_avg"): _MONETDB_ROLLING_AVG_WINDOW_BUG
+        for layout in ("wide", "eav")
+        for metrics in (100, 1000, 2000)
+    },
+    **{
         ("time_series", "monetdb", query): _MONETDB_ROLLING_AVG_WINDOW_BUG
         for query in ("large_13_rolling_avg", "tall_13_rolling_avg", "wide_13_rolling_avg")
     },
