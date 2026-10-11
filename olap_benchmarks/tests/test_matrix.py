@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -122,3 +123,19 @@ def test_superseded_runs_keep_the_latest_completed_run_and_later_attempts() -> N
 
     assert [run.id for run in superseded_runs(runs, pins=pins, stale_versions=False)] == [1, 2, 6]
     assert [run.id for run in superseded_runs(runs, pins=pins, stale_versions=True)] == [1, 2, 6, 7]
+
+
+def test_expanding_queries_makes_the_selected_cell_stale() -> None:
+    run = replace(_run(1, SELECT), query_names=("Q1",))
+    statuses = matrix_status(
+        [run],
+        [SELECT],
+        system="test",
+        pins={"duckdb": "1.0"},
+        drivers={"duckdb": None},
+        current_query_names={SELECT: ("Q1", "Q2")},
+    )
+    assert statuses[0].state == "stale"
+    assert statuses[0].detail == "query list changed: recorded 1, current 2"
+    retained = matrix_status([run], [SELECT], system="test", pins={"duckdb": "1.0"}, drivers={"duckdb": None})
+    assert retained[0].state == "ok"
