@@ -1,10 +1,10 @@
 {
-  "published_at": "2026-10-11T02:28:17.260277+00:00",
+  "published_at": "2026-10-11T02:29:27.839255+00:00",
   "revision": "2026-10",
   "source": "/Users/williamlauren/repos/olap-benchmarks/results/2026-10.db",
   "merged": false,
   "schema_revision": "f6d2b8c4e0a3",
-  "results_db_sha256": "11ccc00107017eae62afa12be673ce8e2dada4a6c1e06745100a035f6f7937e3",
+  "results_db_sha256": "42934ddc4bd829e88b36c9e4c4096fe47a51c4f6862b02ba35a1fca10f50a8b2",
   "results_db_bytes": 18100224,
   "table_counts": {
     "system_snapshot": 1,
