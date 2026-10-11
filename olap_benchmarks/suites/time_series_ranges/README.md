@@ -49,6 +49,11 @@ uses nullable casts, native time decoding and increased SQL/AST limits for wide
 table creation. These queries have only five or ten aggregates and need none of
 the all-metric JIT/block overrides from the earlier suite.
 
+ClickHouse wide queries put the timestamp range in an explicit `PREWHERE`.
+This retains early filtering and primary-index pruning while avoiding the
+automatic WHERE-to-PREWHERE selection cost on thousands of columns. MergeTree,
+time ordering, adaptive granules and the time-series codecs stay the same.
+
 Run only this suite with `olap matrix run --suite time_series_ranges --revision
 UNIQUE_NAME`; add `--db ENGINE` for one database. Publish with `olap publish
 --revision UNIQUE_NAME --merge` to retain other suites and their provenance.

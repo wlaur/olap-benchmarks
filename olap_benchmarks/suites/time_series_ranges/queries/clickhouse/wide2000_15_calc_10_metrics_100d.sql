@@ -19,7 +19,7 @@ FROM (
            CAST(metric_1777 AS DOUBLE PRECISION) AS v9,
            CAST(metric_2000 AS DOUBLE PRECISION) AS v10
     FROM wide2000
-    WHERE time >= '2024-09-23' AND time < '2025-01-01'
+    PREWHERE time >= '2024-09-23' AND time < '2025-01-01'
     ) aligned
 ) calculated
 GROUP BY toStartOfHour(time)
