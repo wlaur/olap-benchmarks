@@ -38,6 +38,10 @@ def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
             wide_result = con.execute((QUERIES_DIRECTORY / f"{wide_name}.sql").read_text()).pl()
             eav_result = con.execute((QUERIES_DIRECTORY / f"{eav_name}.sql").read_text()).pl()
             expected = build_answer_metadata(wide_result)["answer_hash"]
+            override = QUERIES_DIRECTORY / "arc" / f"{wide_name}.sql"
+            if override.is_file():
+                arc_result = con.execute(override.read_text()).pl()
+                assert build_answer_metadata(arc_result)["answer_hash"] == expected, wide_name
             assert build_answer_metadata(eav_result)["answer_hash"] == expected, eav_name
             for frame, name in ((wide, wide_name), (eav, eav_name)):
                 result = execute_time_series_metrics_query(frame.lazy(), name).collect()
