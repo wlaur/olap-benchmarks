@@ -4,6 +4,7 @@ import subprocess
 import uuid
 from collections.abc import Iterator, Mapping
 from datetime import datetime
+from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, cast
 
@@ -165,8 +166,9 @@ class ArcClickbench(Clickbench["Arc"]):
 
 
 class ArcTimeSeriesMetrics(TimeSeriesMetrics["Arc"]):
-    def finish_populate(self) -> None:
-        with self.db.phase_context("compact"):
+    def populate_table(self, table: str, path: Path) -> None:
+        super().populate_table(table, path)
+        with self.db.phase_context("compact", table_name=table):
             self.db.compact()
 
 
@@ -191,6 +193,10 @@ class ArcChatThreads(ChatThreads["Arc"]):
 class Arc(Database):
     name: DatabaseName = "arc"
     supports_arm64_containers: ClassVar[bool] = True
+    METRICS_INGEST_ENV: ClassVar[dict[str, str]] = {
+        "ARC_INGEST_FLUSH_WORKERS": "2",
+        "GOMEMLIMIT": "1GiB",
+    }
 
     connection_string: str = Field(default_factory=lambda: f"http://localhost:{host_port('arc')}")
 
@@ -205,6 +211,7 @@ class Arc(Database):
         }
         if self.current_suite == "time_series_metrics":
             env["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
+            env.update(self.METRICS_INGEST_ENV)
         return self.docker_run_command(
             self.container_images["server"],
             ports={str(host_port("arc")): "8000"},
@@ -221,6 +228,7 @@ class Arc(Database):
         settings = dict(super().benchmark_settings)
         if self.current_suite == "time_series_metrics":
             settings["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
+            settings.update(self.METRICS_INGEST_ENV)
         return settings
 
     @property

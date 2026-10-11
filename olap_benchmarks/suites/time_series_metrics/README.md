@@ -32,8 +32,14 @@ ClickHouse uses time ordering for wide tables and `(metric_name, time)` ordering
 with LowCardinality metric names for EAV, plus the existing time-series codecs.
 Its query/AST limits are raised to 1 MiB/100,000 elements for the 5,000-column
 table definition and aggregate SQL; the limits are recorded with each run.
+Wide all-metric totals use native `arraySum` over column aggregates. Expression
+JIT is disabled for query 12 in both layouts: compiling the wide final scalar
+expression otherwise exceeds the 6 GB budget, despite returning only one row.
 Arc receives time-sorted input, sorts EAV storage by `(metric_name, time)` using its
 per-measurement ingest sort keys, and completes its compaction cycle before select.
+It compacts after each table to release raw-file metadata before loading the next
+width. This suite also sets two ingest flush workers and a 1 GiB Go heap target;
+these settings are recorded separately from Arc's internal DuckDB memory limit.
 MonetDB analyzes the timestamp and EAV metric-name columns after loading.
 DuckDB loads persistent tables; Polars scans the same Parquet inputs lazily.
 These compare supported storage paths, not identical physical indexes or ingestion.

@@ -335,6 +335,7 @@ class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
         "max_query_size": 1_048_576,
         "max_ast_elements": 100_000,
     }
+    ALL_METRIC_SETTINGS: ClassVar[dict[str, int]] = {"compile_expressions": 0}
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
@@ -342,6 +343,12 @@ class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
         if (threads := get_settings().benchmark_threads) is not None:
             settings["max_threads"] = threads
         return {"time_columns": ["time", "hr"], "settings": settings}
+
+    def query_fetch_kwargs(self, query_name: str) -> Mapping[str, Any]:
+        kwargs = self.fetch_kwargs
+        if query_name.endswith("_12_all_metrics"):
+            cast(dict[str, int], kwargs["settings"]).update(self.ALL_METRIC_SETTINGS)
+        return kwargs
 
     def populate_table(self, table: str, path: Path) -> None:
         frame = pl.scan_parquet(path)
@@ -381,6 +388,7 @@ class Clickhouse(Database):
         settings = dict(super().benchmark_settings)
         if self._current_suite == "time_series_metrics":
             settings["time_series_metrics_query_settings"] = dict(ClickhouseTimeSeriesMetrics.QUERY_SETTINGS)
+            settings["time_series_metrics_all_metric_settings"] = dict(ClickhouseTimeSeriesMetrics.ALL_METRIC_SETTINGS)
         return settings
 
     @property

@@ -45,6 +45,10 @@ def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
             if override.is_file():
                 arc_result = con.execute(override.read_text()).pl()
                 assert build_answer_metadata(arc_result)["answer_hash"] == expected, wide_name
+            clickhouse_override = QUERIES_DIRECTORY / "clickhouse" / f"{wide_name}.sql"
+            if wide_name.endswith("_12_all_metrics"):
+                clickhouse_result = con.execute(clickhouse_override.read_text().replace("arraySum", "list_sum")).pl()
+                assert build_answer_metadata(clickhouse_result)["answer_hash"] == expected, wide_name
             assert build_answer_metadata(eav_result)["answer_hash"] == expected, eav_name
             for frame, name in ((wide, wide_name), (eav, eav_name)):
                 result = execute_time_series_metrics_query(frame.lazy(), name).collect()

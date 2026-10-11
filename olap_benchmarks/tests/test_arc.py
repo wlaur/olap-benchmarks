@@ -134,6 +134,9 @@ def test_metrics_sort_keys_and_resource_budgets_are_passed_as_single_arguments(
     assert arguments[arguments.index("--memory-swap") + 1] == "6g"
     assert f"ARC_INGEST_SORT_KEYS={db.metric_sort_keys}" in arguments
     assert db.benchmark_settings["ARC_INGEST_SORT_KEYS"] == db.metric_sort_keys
+    for key, value in Arc.METRICS_INGEST_ENV.items():
+        assert f"{key}={value}" in arguments
+        assert db.benchmark_settings[key] == value
     assert ArcChatThreads.supported_operations == ("populate", "select")
     assert ArcClickbench.supported_operations == ("populate", "select")
     assert not db.DISABLED_MUTATION_STEPS
