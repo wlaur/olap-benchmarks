@@ -22,6 +22,20 @@ from ..suites.time_series_metrics.config import (
 )
 
 
+def _wide_grouped_answer(frame: pl.DataFrame) -> pl.DataFrame:
+    index = ["hr"] if "hr" in frame.columns else []
+    counts = frame.select(*index, pl.col("^cnt_metric_.*$")).unpivot(
+        index=index, variable_name="metric_name", value_name="cnt"
+    )
+    totals = frame.select(*index, pl.col("^total_metric_.*$")).unpivot(
+        index=index, variable_name="metric_name", value_name="total"
+    )
+    counts = counts.with_columns(pl.col("metric_name").str.strip_prefix("cnt_"))
+    totals = totals.with_columns(pl.col("metric_name").str.strip_prefix("total_"))
+    keys = [*index, "metric_name"]
+    return counts.join(totals, on=keys).select(*keys, "cnt", "total").sort(keys)
+
+
 @pytest.mark.parametrize("metrics", METRIC_COUNTS)
 def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
     wide = generate_batch(0, 240, metrics=metrics).with_columns(
@@ -47,12 +61,28 @@ def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
                 assert build_answer_metadata(arc_result)["answer_hash"] == expected, wide_name
             clickhouse_override = QUERIES_DIRECTORY / "clickhouse" / f"{wide_name}.sql"
             if wide_name.endswith("_12_all_metrics"):
-                clickhouse_result = con.execute(clickhouse_override.read_text().replace("arraySum", "list_sum")).pl()
+                first, body = clickhouse_override.read_text().split("\n", 1)
+                measurements = first.removeprefix("WITH ").removesuffix(" AS measurements")
+                sql = f"WITH source AS (SELECT {measurements} AS measurements FROM wide{metrics})\n" + body.replace(
+                    f"FROM wide{metrics}", "FROM source"
+                ).replace("arrayCount(x -> isNotNull(x), measurements)", "list_count(measurements)").replace(
+                    "arraySum(arrayMap(x -> ifNull(toFloat64(x), 0), measurements))",
+                    "list_sum(list_transform(measurements, x -> COALESCE(CAST(x AS DOUBLE), 0)))",
+                )
+                clickhouse_result = con.execute(sql).pl()
                 assert build_answer_metadata(clickhouse_result)["answer_hash"] == expected, wide_name
-            assert build_answer_metadata(eav_result)["answer_hash"] == expected, eav_name
             for frame, name in ((wide, wide_name), (eav, eav_name)):
                 result = execute_time_series_metrics_query(frame.lazy(), name).collect()
-                assert build_answer_metadata(result)["answer_hash"] == expected, name
+                reference = wide_result if name == wide_name else eav_result
+                assert (
+                    build_answer_metadata(result)["answer_hash"] == build_answer_metadata(reference)["answer_hash"]
+                ), name
+            comparable = (
+                _wide_grouped_answer(wide_result) if wide_name.split("_", 2)[1] in ("13", "14") else wide_result
+            )
+            assert (
+                build_answer_metadata(eav_result)["answer_hash"] == build_answer_metadata(comparable)["answer_hash"]
+            ), eav_name
     finally:
         con.close()
 

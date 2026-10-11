@@ -335,7 +335,11 @@ class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
         "max_query_size": 1_048_576,
         "max_ast_elements": 100_000,
     }
-    ALL_METRIC_SETTINGS: ClassVar[dict[str, int]] = {"compile_expressions": 0}
+    ALL_METRIC_SETTINGS: ClassVar[dict[str, int]] = {
+        "compile_expressions": 0,
+        "compile_aggregate_expressions": 0,
+        "max_block_size": 4_096,
+    }
 
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
@@ -346,7 +350,7 @@ class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
 
     def query_fetch_kwargs(self, query_name: str) -> Mapping[str, Any]:
         kwargs = self.fetch_kwargs
-        if query_name.endswith("_12_all_metrics"):
+        if query_name.split("_", 2)[1] in ("12", "13", "14"):
             cast(dict[str, int], kwargs["settings"]).update(self.ALL_METRIC_SETTINGS)
         return kwargs
 

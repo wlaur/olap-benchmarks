@@ -8,6 +8,27 @@ def execute_time_series_metrics_query(source: pl.LazyFrame, query_name: str) -> 
     number = int(raw_number)
     is_eav = family.startswith("eav")
     metrics = int(family.removeprefix("eav").removeprefix("wide"))
+    if number in (13, 14):
+        frame = source
+        if number == 14:
+            frame = frame.filter(
+                (pl.col("time") >= pl.datetime(2024, 12, 29)) & (pl.col("time") < pl.datetime(2024, 12, 30))
+            ).with_columns(pl.col("time").dt.truncate("1h").alias("hr"))
+        if is_eav:
+            groups = ["hr", "metric_name"] if number == 14 else ["metric_name"]
+            return (
+                frame.group_by(groups)
+                .agg(
+                    pl.col("value").count().cast(pl.Int64).alias("cnt"),
+                    pl.col("value").cast(pl.Float64).sum().alias("total"),
+                )
+                .sort(groups)
+            )
+        columns = [metric_name(index) for index in range(1, metrics + 1)]
+        aggregates = [pl.col(name).count().cast(pl.Int64).alias(f"cnt_{name}") for name in columns] + [
+            pl.col(name).cast(pl.Float64).sum().alias(f"total_{name}") for name in columns
+        ]
+        return frame.group_by("hr").agg(aggregates).sort("hr") if number == 14 else frame.select(aggregates)
     if number == 12:
         if is_eav:
             return source.select(

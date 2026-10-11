@@ -16,12 +16,19 @@ datasets and mutation/concurrency workloads.
 | Iterations | Standard resident-hot profile: one warmup plus three measured iterations |
 | Operations | Populate and select |
 
-The same 12 logical queries run against all eight tables: latest 50 observations,
+The same 14 logical queries run against all eight tables: latest 50 observations,
 one-day filtered aggregate, hourly aggregate of one metric and four metrics,
 full-history statistics of one metric, 1,000 raw observations, scalar four-metric
 lookup, filter one metric by another, 60-row moving average, first differences,
-null-gap detection, and count/sum across every metric. Queries return bounded
+null-gap detection, count/sum across every metric, full-history per-metric
+count/sum, and one-day hourly count/sum for every metric. Queries return bounded
 answers. Float32 measurements are promoted to Float64 for arithmetic in all engines.
+
+Queries 13 and 14 retain the schemas' native aggregate outputs: wide returns one
+count and sum column per metric, while EAV returns metric-keyed rows. Query 14
+returns 24 hourly rows in wide and 24 × metric-count rows in EAV. Materializing
+those outputs is included in the fetch timer. Tests reshape wide answers only
+for semantic comparison; benchmark results are not reshaped before timing.
 
 EAV retains a row for every observation, including nulls. Removing null rows would
 change window frames, gaps and timestamp domains, so this workload does not measure
@@ -32,13 +39,16 @@ ClickHouse uses time ordering for wide tables and `(metric_name, time)` ordering
 with LowCardinality metric names for EAV, plus the existing time-series codecs.
 Its query/AST limits are raised to 1 MiB/100,000 elements for the 5,000-column
 table definition and aggregate SQL; the limits are recorded with each run.
-Wide all-metric totals use native `arraySum` over column aggregates. Expression
-JIT is disabled for query 12 in both layouts: compiling the wide final scalar
-expression otherwise exceeds the 6 GB budget, despite returning only one row.
+Wide grand totals use native row-array reductions before aggregation, avoiding
+thousands of aggregate states for an answer that only needs two. Expression and
+aggregate JIT are disabled for queries 12–14 in both layouts: compiling thousands
+of wide aggregates otherwise exceeds the 6 GB budget. These queries also cap
+blocks at 4,096 rows to bound intermediate wide arrays.
 Arc receives time-sorted input, sorts EAV storage by `(metric_name, time)` using its
 per-measurement ingest sort keys, and completes its compaction cycle before select.
-It compacts after each table to release raw-file metadata before loading the next
-width. This suite also sets two ingest flush workers and a 1 GiB Go heap target;
+It compacts each table before verifying its row count, avoiding a count query
+over hundreds of raw wide-file schemas. This suite also sets two ingest flush
+workers and a 1 GiB Go heap target;
 these settings are recorded separately from Arc's internal DuckDB memory limit.
 MonetDB analyzes the timestamp and EAV metric-name columns after loading.
 DuckDB loads persistent tables; Polars scans the same Parquet inputs lazily.

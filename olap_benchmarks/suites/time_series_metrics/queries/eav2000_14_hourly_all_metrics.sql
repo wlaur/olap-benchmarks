@@ -1,0 +1,1 @@
+SELECT DATE_TRUNC('hour', time) AS hr, metric_name, COUNT(value) AS cnt, SUM(CAST(value AS DOUBLE PRECISION)) AS total FROM eav2000 WHERE time >= TIMESTAMP '2024-12-29 00:00:00' AND time < TIMESTAMP '2024-12-30 00:00:00' GROUP BY DATE_TRUNC('hour', time), metric_name ORDER BY hr, metric_name
