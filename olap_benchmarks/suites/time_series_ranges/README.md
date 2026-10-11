@@ -2,7 +2,9 @@
 
 Fetch five or ten selected metrics over the last 1, 10 or 100 days, or average
 each selected metric over that same range. Each operation is paired between
-wide and dense EAV at 100, 1,000, 2,000 and 5,000 stored metrics: 96 queries.
+wide and dense EAV at 100, 1,000, 2,000 and 5,000 stored metrics. Another 24
+queries calculate a derived signal from ten aligned metrics and summarize it
+hourly over the same three ranges: 120 queries in total.
 
 The dataset holds exactly 100 days at ten-minute intervals, ending immediately
 before 2025-01-01: 14,400 timestamps per wide table. The largest EAV table has
@@ -21,7 +23,23 @@ ten value columns; EAV fetches have timestamp, metric name and value columns.
 Wide averages return one row with five or ten columns; EAV averages return five
 or ten metric-keyed rows. SQL planning, transfer, sorting and materializing the
 complete answer are included in client latency. No EAV pivot is required. Small
-tests reshape answers only to verify that the same measurements are returned.
+tests reshape raw/average answers only to verify that the same measurements are returned.
+
+The derived calculation uses ten evenly spaced metrics as `v1` through `v10`:
+
+```text
+balance = (v1 * (v2 - v3) + v4 * (v5 - v6) - abs(v7 * v8)) / (1 + abs(v9))
+score = balance * (1.25 if v10 > 0 else 0.75)
+```
+
+This is a synthetic balance calculation, not a physical model of a plant. Every
+metric participates, and any missing input makes the score null. Each hour
+returns sample count, valid-score count, mean/min/max score and positive-score
+count. Empty-score hours remain in the answer. Wide reads the ten columns;
+EAV first aligns them with conditional aggregation by timestamp. This alignment
+is included in the timer. Both return the same hourly shape, so no client pivot
+is needed. The fixture has exactly one observation per metric and timestamp;
+it does not benchmark duplicate resolution or asynchronous alignment.
 
 Physical loading and ordering follow `time_series_metrics`: time ordering for
 wide, metric/time ordering for Arc and ClickHouse EAV, loaded tables for DuckDB

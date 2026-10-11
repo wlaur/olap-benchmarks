@@ -40,13 +40,15 @@ def test_ranges_match_layouts_and_native_polars_at_filter_boundaries(metrics: in
                 expected_rows = wide.filter((pl.col("time") >= query.start) & (pl.col("time") < END)).height
                 assert wide_result.height == expected_rows
                 assert eav_result.height == expected_rows * query.selected_metrics
-            else:
+            elif query.operation == "avg":
                 comparable = (
                     wide_result.unpivot(variable_name="metric_name", value_name="avg_value")
                     .with_columns(pl.col("metric_name").str.strip_prefix("avg_"))
                     .sort("metric_name")
                 )
                 assert eav_result.height == query.selected_metrics
+            else:
+                comparable = wide_result
             assert build_answer_metadata(comparable)["answer_hash"] == build_answer_metadata(eav_result)["answer_hash"]
     finally:
         con.close()
@@ -67,3 +69,44 @@ def test_generation_uses_exact_history_and_reuses_metric_prefixes(tmp_path: Path
     eav = pl.read_parquet(tmp_path / "eav10.parquet")
     assert eav.height == rows * 10
     assert eav["value"].null_count() == narrow.select(pl.sum_horizontal(pl.all().exclude("time").null_count())).item()
+
+
+def test_calculation_preserves_nulls_alignment_and_both_branches() -> None:
+    columns = RANGE_QUERIES[12].columns(100)
+    observations: tuple[tuple[float | None, ...], ...] = (
+        (None, 8, 3, 3, 7, 5, 2, 3, 1, None),
+        (2, 8, 3, 3, 7, 5, 2, 3, 1, 1),
+        (2, 8, 3, 3, 7, 5, 2, 3, 1, -1),
+        (-2, 8, 3, 3, 7, 5, 2, 3, -1, 1),
+        (None, 8, 3, 3, 7, 5, 2, 3, 1, 1),
+        (2, 8, 3, 3, 7, 5, 2, 3, 1, None),
+    )
+    times = [END - timedelta(hours=2)] + [END - timedelta(hours=1) + timedelta(minutes=10 * i) for i in range(5)]
+    data = {"time": pl.Series("time", times, dtype=pl.Datetime("ms"))}
+    data.update(
+        {name: pl.Series(name, [row[i] for row in observations], dtype=pl.Float32) for i, name in enumerate(columns)}
+    )
+    wide = pl.DataFrame(data)
+    eav = to_eav(wide)
+    expected = pl.DataFrame(
+        {
+            "hr": [END - timedelta(hours=2), END - timedelta(hours=1)],
+            "samples": [1, 5],
+            "valid_samples": [0, 3],
+            "avg_score": [None, 1.25],
+            "min_score": [None, -6.25],
+            "max_score": [None, 6.25],
+            "positive_samples": [0, 2],
+        }
+    )
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(config={"threads": 2})
+    try:
+        for family, frame in (("wide100", wide), ("eav100", eav)):
+            con.register(family, frame)
+            name = f"{family}_13_calc_10_metrics_1d"
+            sql_result = con.execute((QUERIES_DIRECTORY / f"{name}.sql").read_text()).pl()
+            native_result = execute_time_series_ranges_query(frame.lazy(), name).collect()
+            for result in (sql_result, native_result):
+                assert build_answer_metadata(result)["answer_hash"] == build_answer_metadata(expected)["answer_hash"]
+    finally:
+        con.close()
