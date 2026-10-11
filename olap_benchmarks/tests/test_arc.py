@@ -130,3 +130,49 @@ def test_encode_import_chunks_splits_batches_above_the_size_limit() -> None:
     assert len(chunks) > 1
     assert all(len(chunk) <= 20_000 for chunk in chunks)
     assert decoded.equals(df)
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def json(self) -> dict[str, object]:
+        return self.payload
+
+
+def _cycle(cycle_id: int, discovery_errors: int = 0, failed_batches: int = 0) -> dict[str, object]:
+    return {"cycle_id": cycle_id, "discovery_errors": discovery_errors, "failed_batches": failed_batches}
+
+
+def _fake_arc(monkeypatch: pytest.MonkeyPatch, cycles: list[dict[str, object]]) -> list[str]:
+    triggered: list[str] = []
+    pending = iter(cycles)
+    state: dict[str, object] = {"last": _cycle(0)}
+
+    def request(self: Arc, method: str, path: str, **_: object) -> _FakeResponse:
+        if path == "/api/v1/compaction/trigger":
+            triggered.append(path)
+            state["last"] = next(pending)
+            return _FakeResponse({"cycle_id": state["last"]["cycle_id"]})  # type: ignore[index]
+        return _FakeResponse({"last_cycle": state["last"], "cycle_running": False})
+
+    monkeypatch.setattr(Arc, "_request", request)
+    return triggered
+
+
+def test_compact_retriggers_once_after_a_discovery_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    triggered = _fake_arc(monkeypatch, [_cycle(1, discovery_errors=1), _cycle(2)])
+    Arc().compact()
+    assert len(triggered) == 2
+
+
+def test_compact_continues_when_the_retry_still_skips_a_partition(monkeypatch: pytest.MonkeyPatch) -> None:
+    triggered = _fake_arc(monkeypatch, [_cycle(1, discovery_errors=1), _cycle(2, discovery_errors=1)])
+    Arc().compact()
+    assert len(triggered) == 2
+
+
+def test_compact_raises_on_failed_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_arc(monkeypatch, [_cycle(1, failed_batches=1)])
+    with pytest.raises(RuntimeError, match="compaction failed"):
+        Arc().compact()

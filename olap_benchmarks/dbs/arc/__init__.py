@@ -384,28 +384,37 @@ class Arc(Database):
     def delete(self, table: TableName, primary_key: str | list[str], keys: pl.DataFrame) -> None:
         self._delete(table, primary_key, keys)
 
-    def _compaction_pending(self) -> bool:
-        candidates = cast(dict[str, Any], self._request("GET", "/api/v1/compaction/candidates").json())
-        status = cast(dict[str, Any], self._request("GET", "/api/v1/compaction/status").json())
-        pending = [
-            candidate
-            for candidate in cast(list[dict[str, Any]], candidates.get("candidates") or [])
-            if candidate.get("database") == ARC_DATABASE
-        ]
-        return bool(pending) or bool(status["manager"].get("active_jobs"))
+    def _run_compaction_cycle(self) -> dict[str, Any]:
+        triggered = cast(
+            dict[str, Any],
+            self._request("POST", "/api/v1/compaction/trigger", params={"database": ARC_DATABASE}).json(),
+        )
+        cycle_id = int(triggered["cycle_id"])
+        deadline = perf_counter() + ARC_COMPACTION_TIMEOUT_SECONDS
+        while True:
+            stats = cast(dict[str, Any], self._request("GET", "/api/v1/compaction/stats").json())
+            last_cycle = cast(dict[str, Any], stats["last_cycle"])
+            if int(last_cycle["cycle_id"]) >= cycle_id and not stats["cycle_running"]:
+                return last_cycle
+            if perf_counter() > deadline:
+                raise TimeoutError(f"Timed out waiting for Arc compaction cycle {cycle_id}")
+            sleep(1.0)
 
     def compact(self) -> None:
         # Arc writes one Parquet file per hour partition and flush; its scheduled compaction
         # (hourly, and daily at 03:00) merges them. Run it once after loading so queries see the
         # steady-state layout, and so a scheduled cycle does not start in the middle of a run.
-        self._request("POST", "/api/v1/compaction/trigger", params={"database": ARC_DATABASE})
-
-        deadline = perf_counter() + ARC_COMPACTION_TIMEOUT_SECONDS
-        sleep(1.0)
-        while self._compaction_pending():
-            if perf_counter() > deadline:
-                raise TimeoutError("Timed out waiting for Arc compaction")
-            sleep(1.0)
+        cycle = self._run_compaction_cycle()
+        if int(cycle["failed_batches"]):
+            raise ArcError(f"Arc compaction failed: {cycle}")
+        # Arc 26.09.3 sometimes fails to read a partition's compaction manifest and skips that
+        # partition (a discovery error) instead of compacting it; a second cycle usually picks it up.
+        if int(cycle["discovery_errors"]):
+            cycle = self._run_compaction_cycle()
+            if int(cycle["failed_batches"]):
+                raise ArcError(f"Arc compaction failed: {cycle}")
+            if int(cycle["discovery_errors"]):
+                _LOGGER.warning(f"Arc left {cycle['discovery_errors']} partition(s) uncompacted: {cycle}")
 
     def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
         # Arc stores a measurement only with a non-null `time` column: its Parquet import rejects
