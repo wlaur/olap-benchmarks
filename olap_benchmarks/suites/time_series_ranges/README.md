@@ -34,3 +34,6 @@ the all-metric JIT/block overrides from the earlier suite.
 Run only this suite with `olap matrix run --suite time_series_ranges --revision
 UNIQUE_NAME`; add `--db ENGINE` for one database. Publish with `olap publish
 --revision UNIQUE_NAME --merge` to retain other suites and their provenance.
+
+See [the working measurements](WORKING_RESULTS.md) for the per-engine,
+per-range comparison and resource usage.

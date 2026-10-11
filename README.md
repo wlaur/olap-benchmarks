@@ -495,6 +495,17 @@ suites. Merge keeps all published cells absent from the revision. Validate the c
 staged set before uploading; commit the new manifest together with the code needed to
 read the new suite, then upload the asset. The site's build verifies that manifest.
 
+### Selected-metric range workloads
+
+`time_series_ranges` targets fetching five or ten metrics and averaging each metric
+over the last 1, 10 or 100 days. Its 100-day history uses ten-minute samples, with
+the same four stored metric widths and physical loading paths as `time_series_metrics`.
+Raw queries fetch the full range without an EAV pivot. See the
+[workload](olap_benchmarks/suites/time_series_ranges/README.md) and
+[working results](olap_benchmarks/suites/time_series_ranges/WORKING_RESULTS.md).
+Use `olap matrix run --suite time_series_ranges --revision UNIQUE_NAME` and the
+same publication merge workflow above to update only this suite.
+
 ### Remote benchmark runs
 
 Use a named revision when running benchmarks on another host. Revision databases
