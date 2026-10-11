@@ -4,7 +4,6 @@ import subprocess
 import uuid
 from collections.abc import Iterator, Mapping
 from datetime import datetime
-from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, cast
 
@@ -166,10 +165,7 @@ class ArcClickbench(Clickbench["Arc"]):
 
 
 class ArcTimeSeriesMetrics(TimeSeriesMetrics["Arc"]):
-    def populate_table(self, table: str, path: Path) -> None:
-        super().populate_table(table, path)
-        with self.db.phase_context("compact", table_name=table):
-            self.db.compact()
+    pass
 
 
 class ArcChatThreads(ChatThreads["Arc"]):
@@ -383,6 +379,9 @@ class Arc(Database):
         _ = primary_key, not_null
         initial_count = self.get_count(table) if table in self.get_table_names() else 0
         rows = self._write(df, table)
+        if self.current_suite == "time_series_metrics":
+            with self.phase_context("compact", table_name=table):
+                self.compact()
         self.wait_until_count(table, initial_count + rows)
         _LOGGER.info(f"Inserted {rows:_} rows into Arc measurement '{table}'")
 
