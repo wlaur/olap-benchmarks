@@ -20,7 +20,7 @@ from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_files
 from ...suites.clickbench.config import Clickbench
 from ...suites.time_series.config import TimeSeries
-from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_metrics.config import METRIC_COUNTS, TimeSeriesMetrics
 from .. import Database
 from ..utils import require_columns
 
@@ -198,16 +198,30 @@ class Arc(Database):
 
     @property
     def start(self) -> str:
+        env = {
+            "ARC_AUTH_ENABLED": "false",
+            "ARC_TELEMETRY_ENABLED": "false",
+            "ARC_DELETE_ENABLED": "true",
+        }
+        if self.current_suite == "time_series_metrics":
+            env["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
         return self.docker_run_command(
             self.container_images["server"],
             ports={str(host_port("arc")): "8000"},
             mounts={self.database_directory.as_posix(): "/app/data"},
-            env={
-                "ARC_AUTH_ENABLED": "false",
-                "ARC_TELEMETRY_ENABLED": "false",
-                "ARC_DELETE_ENABLED": "true",
-            },
+            env=env,
         )
+
+    @property
+    def metric_sort_keys(self) -> str:
+        return " ".join(f"eav{count}:metric_name" for count in METRIC_COUNTS)
+
+    @property
+    def benchmark_settings(self) -> Mapping[str, object]:
+        settings = dict(super().benchmark_settings)
+        if self.current_suite == "time_series_metrics":
+            settings["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
+        return settings
 
     @property
     def client(self) -> httpx.Client:

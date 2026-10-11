@@ -1,4 +1,5 @@
 import io
+import shlex
 from datetime import date, datetime
 
 import polars as pl
@@ -115,6 +116,24 @@ def test_arc_registers_the_suites_it_can_store() -> None:
         "chat_threads": ArcChatThreads,
     }
     assert ArcTimeSeries.supported_operations == ("populate", "select")
+
+
+def test_metrics_sort_keys_and_resource_budgets_are_passed_as_single_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from ..settings import get_settings
+
+    monkeypatch.setattr(get_settings(), "benchmark_threads", 2)
+    monkeypatch.setattr(get_settings(), "benchmark_memory_gb", 6)
+    db = Arc()
+    db._current_suite = "time_series_metrics"
+    db._current_suite_scale_factor = 1
+    arguments = shlex.split(db.start)
+    assert arguments[arguments.index("--cpus") + 1] == "2"
+    assert arguments[arguments.index("--memory") + 1] == "6g"
+    assert arguments[arguments.index("--memory-swap") + 1] == "6g"
+    assert f"ARC_INGEST_SORT_KEYS={db.metric_sort_keys}" in arguments
+    assert db.benchmark_settings["ARC_INGEST_SORT_KEYS"] == db.metric_sort_keys
     assert ArcChatThreads.supported_operations == ("populate", "select")
     assert ArcClickbench.supported_operations == ("populate", "select")
     assert not db.DISABLED_MUTATION_STEPS

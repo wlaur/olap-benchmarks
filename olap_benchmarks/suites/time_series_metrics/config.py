@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 import numpy as np
 import polars as pl
@@ -15,7 +15,6 @@ METRIC_COUNTS = (100, 1_000, 2_000)
 TIMESTAMP_COUNT = 14 * 24 * 60
 GENERATION_BATCH_ROWS = 480
 LAYOUTS = ("wide", "eav")
-type Layout = Literal["wide", "eav"]
 QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series_metrics/queries"
 QUERY_NAMES = tuple(path.stem for path in sorted(QUERIES_DIRECTORY.glob("*.sql")))
 

@@ -30,7 +30,8 @@ and varying sparsity are separate workload dimensions.
 
 ClickHouse uses time ordering for wide tables and `(metric_name, time)` ordering
 with LowCardinality metric names for EAV, plus the existing time-series codecs.
-Arc receives time-sorted input and completes its compaction cycle before select.
+Arc receives time-sorted input, sorts EAV storage by `(metric_name, time)` using its
+per-measurement ingest sort keys, and completes its compaction cycle before select.
 MonetDB analyzes the timestamp and EAV metric-name columns after loading.
 DuckDB loads persistent tables; Polars scans the same Parquet inputs lazily.
 These compare supported storage paths, not identical physical indexes or ingestion.

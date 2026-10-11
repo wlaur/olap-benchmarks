@@ -206,7 +206,7 @@ primitives with constraint-preserving table creation (primary keys, not-null
 columns), ingest row-count validation, and query recording.
 
 MonetDB runs persist `adbc` as a typed run dimension; publication requires a
-completed ADBC run for all 20 matrix cells and rejects running results,
+completed ADBC run for every declared matrix cell and rejects running results,
 missing query row counts and answer hashes, and unclean session baselines.
 Each MonetDB operation records `session_baseline_before` and
 `session_baseline_after` phases. Connections are tagged as `olap-benchmarks`

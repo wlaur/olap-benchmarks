@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from multiprocessing import Process, Queue
 from pathlib import Path
+from shlex import quote
 from threading import get_ident
 from time import perf_counter, sleep
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args
@@ -337,7 +338,7 @@ class Database(BaseModel, ABC):
             parts.extend(["--ip", ip])
         parts.extend(f"-p {host}:{container}" for host, container in (ports or {}).items())
         parts.extend(f"-v {src}:{dst}" for src, dst in (mounts or {}).items())
-        parts.extend(f"-e {key}={value}" for key, value in (env or {}).items())
+        parts.extend(f"-e {key}={quote(value)}" for key, value in (env or {}).items())
         parts.append(image)
         parts.extend(args)
         return " ".join(parts)

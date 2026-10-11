@@ -54,7 +54,9 @@ function formatTimeSeriesTableFamily(value: string): string {
 function compareTimeSeriesQueryNames(left: string, right: string): number {
   const leftMeta = parseTimeSeriesQueryName(left)
   const rightMeta = parseTimeSeriesQueryName(right)
-  const tableDelta = leftMeta.tableFamily.localeCompare(rightMeta.tableFamily)
+  const tableDelta = leftMeta.tableFamily
+    .replaceAll(",", "")
+    .localeCompare(rightMeta.tableFamily.replaceAll(",", ""), undefined, { numeric: true })
   if (tableDelta !== 0) return tableDelta
 
   const queryIdDelta =

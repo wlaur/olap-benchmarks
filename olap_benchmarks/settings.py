@@ -85,7 +85,6 @@ SUITE_SPECS: dict[SuiteName, SuiteSpec] = {
         operations=_ALL_OPERATIONS,
         query_name_parser="time_series",
     ),
-    "rtabench": SuiteSpec("RTABench", scale_factors=(1,), default_scale_factor=1, scalable=False),
     "time_series_metrics": SuiteSpec(
         "Time Series Metrics",
         scale_factors=(1,),
@@ -93,6 +92,7 @@ SUITE_SPECS: dict[SuiteName, SuiteSpec] = {
         scalable=False,
         query_name_parser="time_series",
     ),
+    "rtabench": SuiteSpec("RTABench", scale_factors=(1,), default_scale_factor=1, scalable=False),
     "clickbench": SuiteSpec("ClickBench", scale_factors=(1,), default_scale_factor=1, scalable=False),
     "jsonbench": SuiteSpec("JSONBench", scale_factors=(10,), default_scale_factor=10, scalable=True),
     "chat_threads": SuiteSpec(
