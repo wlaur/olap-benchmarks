@@ -37,16 +37,21 @@ def input_files() -> dict[TableName, Path]:
 
 
 def generate_batch(
-    start: int, stop: int, *, rows: int = TIMESTAMP_COUNT, metrics: int = max(METRIC_COUNTS)
+    start: int,
+    stop: int,
+    *,
+    rows: int = TIMESTAMP_COUNT,
+    metrics: int = max(METRIC_COUNTS),
+    interval_minutes: int = 1,
+    end: datetime = datetime(2025, 1, 1),
 ) -> pl.DataFrame:
     positions = np.arange(start, stop)
-    end = datetime(2025, 1, 1)
-    beginning = end - timedelta(minutes=rows - 1)
+    beginning = end - timedelta(minutes=(rows - 1) * interval_minutes)
     data: dict[str, pl.Series] = {
         "time": pl.datetime_range(
-            beginning + timedelta(minutes=start),
-            beginning + timedelta(minutes=stop - 1),
-            interval="1m",
+            beginning + timedelta(minutes=start * interval_minutes),
+            beginning + timedelta(minutes=(stop - 1) * interval_minutes),
+            interval=f"{interval_minutes}m",
             time_unit="ms",
             eager=True,
         ).alias("time")
@@ -64,13 +69,27 @@ def to_eav(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.unpivot(index="time", variable_name="metric_name", value_name="value").sort("time", "metric_name")
 
 
-def write_datasets(directory: Path, *, rows: int = TIMESTAMP_COUNT, counts: tuple[int, ...] = METRIC_COUNTS) -> None:
+def write_datasets(
+    directory: Path,
+    *,
+    rows: int = TIMESTAMP_COUNT,
+    counts: tuple[int, ...] = METRIC_COUNTS,
+    interval_minutes: int = 1,
+    end: datetime = datetime(2025, 1, 1),
+) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     writers: dict[str, pq.ParquetWriter] = {}
     partials: dict[str, Path] = {}
     try:
         for start in range(0, rows, GENERATION_BATCH_ROWS):
-            batch = generate_batch(start, min(start + GENERATION_BATCH_ROWS, rows), rows=rows, metrics=max(counts))
+            batch = generate_batch(
+                start,
+                min(start + GENERATION_BATCH_ROWS, rows),
+                rows=rows,
+                metrics=max(counts),
+                interval_minutes=interval_minutes,
+                end=end,
+            )
             for count in counts:
                 wide = batch.select("time", *[metric_name(index) for index in range(1, count + 1)])
                 for layout in LAYOUTS:
@@ -117,6 +136,9 @@ class TimeSeriesMetrics[DBT: Database](BenchmarkSuite[DBT]):
     def planned_query_names(self) -> tuple[str, ...]:
         return QUERY_NAMES
 
+    def dataset_files(self) -> Mapping[TableName, Path]:
+        return input_files()
+
     def load_dataset(self) -> pl.LazyFrame:
         raise NotImplementedError("Time Series Metrics loads each table separately")
 
@@ -130,7 +152,7 @@ class TimeSeriesMetrics[DBT: Database](BenchmarkSuite[DBT]):
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
                 return
-        for table, path in input_files().items():
+        for table, path in self.dataset_files().items():
             with self.db.phase_context("insert", table_name=table):
                 self.populate_table(table, path)
         self.finish_populate()

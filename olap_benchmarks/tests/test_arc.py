@@ -22,6 +22,7 @@ from olap_benchmarks.dbs.arc import (
     iter_write_batches,
     to_arc_arrow,
 )
+from olap_benchmarks.suites.time_series_ranges.config import TimeSeriesRanges
 
 
 def _frame(rows: int) -> pl.DataFrame:
@@ -114,6 +115,7 @@ def test_arc_registers_the_suites_it_can_store() -> None:
     assert dict(db.suite_registry()) == {
         "time_series": ArcTimeSeries,
         "time_series_metrics": ArcTimeSeriesMetrics,
+        "time_series_ranges": TimeSeriesRanges,
         "clickbench": ArcClickbench,
         "chat_threads": ArcChatThreads,
     }

@@ -842,6 +842,7 @@ class Database(BaseModel, ABC):
         from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
         from ..suites.time_series_metrics.config import TimeSeriesMetrics
+        from ..suites.time_series_ranges.config import TimeSeriesRanges
         from ..suites.tpc_ds.config import TpcDs
         from ..suites.tpc_h.config import TpcH
 
@@ -850,6 +851,7 @@ class Database(BaseModel, ABC):
             "clickbench": Clickbench,
             "time_series": TimeSeries,
             "time_series_metrics": TimeSeriesMetrics,
+            "time_series_ranges": TimeSeriesRanges,
             "kaggle_airbnb": KaggleAirbnb,
             "tpc_h": TpcH,
             "tpc_ds": TpcDs,

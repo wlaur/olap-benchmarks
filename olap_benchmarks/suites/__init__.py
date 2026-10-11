@@ -324,6 +324,10 @@ def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None
             from .time_series_metrics.config import prepare_data as prepare_metrics_data
 
             return prepare_metrics_data
+        case "time_series_ranges":
+            from .time_series_ranges.config import prepare_data as prepare_ranges_data
+
+            return prepare_ranges_data
         case "rtabench":
             from .rtabench.config import prepare_data as prepare_static_data
 
