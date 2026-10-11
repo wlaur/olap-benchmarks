@@ -1,16 +1,16 @@
 {
-  "published_at": "2026-10-11T07:15:58.175480+00:00",
+  "published_at": "2026-10-11T07:29:31.080065+00:00",
   "revision": "2026-10-timeseries-metrics-working",
   "source": "/Users/williamlauren/repos/olap-benchmarks/results/2026-10-timeseries-metrics-working.db",
   "merged": true,
   "schema_revision": "f6d2b8c4e0a3",
-  "results_db_sha256": "f4418539dc00f75cb623669e5495d1022207e75b165a55f9f81f94592edb0838",
+  "results_db_sha256": "40b6fa5f6a8c055455a948a1e63dd345faf507c97954e8eadfa3752175b3ab0b",
   "results_db_bytes": 22556672,
   "table_counts": {
     "system_snapshot": 1,
     "run": 80,
     "run_step": 7060,
-    "run_metric": 35827,
+    "run_metric": 35806,
     "query_execution": 8487
   }
 }

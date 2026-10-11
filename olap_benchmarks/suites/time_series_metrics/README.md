@@ -35,6 +35,9 @@ per-measurement ingest sort keys, and completes its compaction cycle before sele
 MonetDB analyzes the timestamp and EAV metric-name columns after loading.
 DuckDB loads persistent tables; Polars scans the same Parquet inputs lazily.
 These compare supported storage paths, not identical physical indexes or ingestion.
+Arc promotes the imported Float32 measurements to Double in its Parquet storage.
+Its compact wide all-metric SQL aggregates each column before combining totals;
+the override stays below Arc's 10,000-character SQL limit.
 
 MonetDB's known 60-row `AVG` window defect is recorded as unsupported in both
 layouts. Other queries still run. Small-data tests compare every SQL query between
@@ -43,3 +46,6 @@ wide and EAV and against the native Polars expressions at every metric count.
 Run this suite alone with `olap matrix run --suite time_series_metrics`; add `--db`
 to select an engine. Use a fresh `--revision` and `olap publish --merge` to preserve
 unrelated published results and each run's own repository provenance.
+
+See [the working measurements](WORKING_RESULTS.md) and
+[the Arc storage investigation](../../../issues/arc/wide-parquet-query-cost.md).

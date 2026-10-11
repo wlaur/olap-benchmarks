@@ -41,6 +41,7 @@ Vendor-recommended settings, storage layout, and per-suite physical design are a
 - **DuckDB** runs in process with the installed Python package and no server. Results are fetched as Polars DataFrames.
 - **MonetDB** uses the pinned Docker image and is accessed only through ADBC ([adbc-driver-monetdb](https://pypi.org/project/adbc-driver-monetdb/)): data is ingested as Arrow streams and results are read as Arrow tables converted to Polars.
 - **Polars** runs in process over Parquet files, using its LazyFrame API instead of SQL, for the suites it implements.
+- **Arc** queries compacted, time-partitioned Parquet through its Arrow HTTP endpoint. The metric-width experiment sorts EAV by `(metric_name, time)` and wide data by time. Its embedded DuckDB reads these files, while the DuckDB connector queries loaded persistent tables.
 - Other connectors in the repository (PostgreSQL, TimescaleDB, QuestDB, StarRocks, Doris) appear only once they have published runs.
 
 ## Explorer
