@@ -1,5 +1,9 @@
 # Working aligned calculations and ClickHouse tuning
 
+The later [six-engine campaign](TDENGINE_RESULTS.md) includes TDengine and
+uses 4,094 metrics at the largest width. This report retains the historical
+5,000-metric measurements.
+
 Collected on 2026-10-11 during concurrent laptop use. Revision:
 `2026-10-timeseries-calculations-working`. Only `time_series_ranges` was run.
 These replace the previous range-suite cells; the 80 previously published runs

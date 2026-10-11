@@ -67,7 +67,8 @@ Run only this suite with `olap matrix run --suite time_series_ranges --revision
 UNIQUE_NAME`; add `--db ENGINE` for one database. Publish with `olap publish
 --revision UNIQUE_NAME --merge` to retain other suites and their provenance.
 
-See [the working measurements](WORKING_RESULTS.md) for the per-engine,
+See [the six-engine 4,094-metric comparison and tested Parquet interchange](TDENGINE_RESULTS.md)
+for the latest campaign. See [the working measurements](WORKING_RESULTS.md) for the per-engine,
 per-range comparison and resource usage, and
 [the calculation and tuning results](CALCULATION_RESULTS.md) for the expanded
 120-query campaign.

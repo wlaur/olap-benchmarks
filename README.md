@@ -36,7 +36,7 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GB |
 | `OLAP_BENCHMARKS_RUN_NOTE` | Run context recorded in `metadata.options.note` |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
-| `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http`, `arc` |
+| `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http`, `arc`, `tdengine_ws` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
@@ -46,7 +46,7 @@ The effective `OLAP_BENCHMARKS_MONETDB_*` values are recorded on every MonetDB r
 
 Container images follow the Docker engine architecture automatically, including
 OrbStack's Linux engine on Apple Silicon. The pinned ClickHouse, TimescaleDB,
-QuestDB, PostgreSQL, StarRocks, Doris, and Arc references are multi-architecture.
+QuestDB, PostgreSQL, StarRocks, Doris, Arc, and TDengine references are multi-architecture.
 MonetDB uses the official `monetdb/monetdb` image on amd64 and
 `wlaur/monetdb-container` on ARM64. A connector marked as lacking an ARM64 image
 still runs its amd64 image but emits a prominent warning that CPU virtualization
@@ -95,6 +95,7 @@ cd site && bun install && bun run dev
 
 | Suite                  | Data source                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `time_series_ranges`   | Generated locally; paired wide/EAV layouts at 100, 1,000, 2,000 and 4,094 metrics over 100 days at ten-minute intervals |
 | `time_series_metrics`  | Generated locally; paired wide/EAV layouts at 100, 1,000, 2,000 and 5,000 metrics over the same 14 days |
 | `time_series`          | Generated locally                                                                        |
 | `chat_threads`         | Generated locally; AI chat history as rich JSON, SF1/SF10                                |
@@ -107,8 +108,8 @@ cd site && bun install && bun run dev
 
 ### `olap benchmark <db|all> <suite|all> [operation] [--revision NAME] [--cleanup] [--omit DB] [--scale-factor N] [--drop-caches] [--include-experimental]`
 
-- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, or `all`. `all` means the engines the matrix declares published (ClickHouse, DuckDB, MonetDB, Polars, Arc); the experimental ones (Postgres, TimescaleDB, QuestDB, StarRocks, Doris) run only when named or with `--include-experimental`
-- `suite`: `rtabench`, `time_series`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
+- `db`: `monetdb`, `clickhouse`, `timescaledb`, `duckdb`, `polars`, `questdb`, `postgres`, `starrocks`, `doris`, `arc`, `tdengine`, or `all`. `all` means the engines the matrix declares published (ClickHouse, DuckDB, MonetDB, Polars, Arc, TDengine); the experimental ones (Postgres, TimescaleDB, QuestDB, StarRocks, Doris) run only when named or with `--include-experimental`
+- `suite`: `rtabench`, `time_series`, `time_series_metrics`, `time_series_ranges`, `clickbench`, `jsonbench`, `chat_threads`, `kaggle_airbnb`, `tpc_h`, `tpc_ds`, or `all`
 - `operation`: `populate`, `select`, `mutate`, `concurrent`, or `all` (default). `mutate` and `concurrent` are only supported by `time_series` and `chat_threads`.
 - `--revision`: which results database to write to (`results/<revision>.db`, default `default`)
 - `--cleanup`: delete the database files for the (db, suite) combination after the run
@@ -499,10 +500,13 @@ read the new suite, then upload the asset. The site's build verifies that manife
 
 `time_series_ranges` targets fetching five or ten metrics and averaging each metric
 over the last 1, 10 or 100 days. Its 100-day history uses ten-minute samples, with
-the same four stored metric widths and physical loading paths as `time_series_metrics`.
+100, 1,000, 2,000 and 4,094 stored metrics. The range suite reserves two of
+TDengine's 4,096 physical columns for time and a device tag; the historical metric
+suite keeps its 5,000-metric maximum. TDengine is registered only for the range
+suite and supports both wide and EAV through bounded WebSocket STMT2 inserts.
 Raw queries fetch the full range without an EAV pivot. See the
 [workload](olap_benchmarks/suites/time_series_ranges/README.md) and
-[working results](olap_benchmarks/suites/time_series_ranges/WORKING_RESULTS.md).
+[six-engine results and tested Parquet interchange](olap_benchmarks/suites/time_series_ranges/TDENGINE_RESULTS.md).
 Use `olap matrix run --suite time_series_ranges --revision UNIQUE_NAME` and the
 same publication merge workflow above to update only this suite.
 
