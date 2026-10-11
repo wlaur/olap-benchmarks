@@ -1,16 +1,16 @@
 {
-  "published_at": "2026-10-11T11:11:58.893264+00:00",
-  "revision": "2026-10-timeseries-calculations-working",
-  "source": "/Users/williamlauren/repos/olap-benchmarks/results/2026-10-timeseries-calculations-working.db",
+  "published_at": "2026-10-11T12:08:06.426846+00:00",
+  "revision": "2026-10-timeseries-4094-tdengine-working",
+  "source": "/Users/williamlauren/repos/olap-benchmarks/results/2026-10-timeseries-4094-tdengine-working.db",
   "merged": true,
   "schema_revision": "f6d2b8c4e0a3",
-  "results_db_sha256": "6d89bc0f1ab65c9f43c6c2e179db423cf85c9ddd75b84fbd3862dbf6d2047959",
-  "results_db_bytes": 49295360,
+  "results_db_sha256": "97001b80edbe9c350dfd7738573491537c951ee9966f9a6ddd58a07676c07f89",
+  "results_db_bytes": 51130368,
   "table_counts": {
     "system_snapshot": 1,
-    "run": 90,
-    "run_step": 10355,
-    "run_metric": 46956,
-    "query_execution": 11239
+    "run": 92,
+    "run_step": 10849,
+    "run_metric": 45380,
+    "query_execution": 13586
   }
 }

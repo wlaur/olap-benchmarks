@@ -1,0 +1,1 @@
+SELECT time, CAST(metric_0001 AS DOUBLE) AS metric_0001, CAST(metric_0250 AS DOUBLE) AS metric_0250, CAST(metric_0500 AS DOUBLE) AS metric_0500, CAST(metric_0750 AS DOUBLE) AS metric_0750, CAST(metric_1000 AS DOUBLE) AS metric_1000 FROM wide1000 WHERE time >= '2024-12-31' AND time < '2025-01-01' ORDER BY time

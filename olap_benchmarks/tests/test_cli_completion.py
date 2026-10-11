@@ -649,7 +649,7 @@ def test_benchmark_all_runs_published_engines_unless_experimental_ones_are_inclu
         )
     }
 
-    assert default == {"clickhouse", "duckdb", "monetdb", "polars", "arc"}
+    assert default == {"clickhouse", "duckdb", "monetdb", "polars", "arc", "tdengine"}
     assert everything == set(get_args(DatabaseName))
     assert __main__._resolve_benchmark_plan(db="doris", suite="clickbench", scale_factor=None) == [
         ("doris", "clickbench", 1)
@@ -663,6 +663,7 @@ def test_matrix_commands_include_experimental_engines_only_on_request() -> None:
         "monetdb",
         "polars",
         "arc",
+        "tdengine",
     }
     assert "doris" in {cell.db for cell in __main__._matrix_cells(None, True)}
     assert {cell.db for cell in __main__._matrix_cells(["arc"], False)} == {"arc"}

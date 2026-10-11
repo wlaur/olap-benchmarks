@@ -1,0 +1,1 @@
+SELECT AVG(CAST(metric_0001 AS DOUBLE)) AS avg_metric_0001, AVG(CAST(metric_0025 AS DOUBLE)) AS avg_metric_0025, AVG(CAST(metric_0050 AS DOUBLE)) AS avg_metric_0050, AVG(CAST(metric_0075 AS DOUBLE)) AS avg_metric_0075, AVG(CAST(metric_0100 AS DOUBLE)) AS avg_metric_0100 FROM wide100 WHERE time >= '2024-12-22' AND time < '2025-01-01'

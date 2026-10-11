@@ -1940,6 +1940,7 @@ function formatDatabaseName(database: string) {
     postgres: "PostgreSQL",
     questdb: "QuestDB",
     starrocks: "StarRocks",
+    tdengine: "TDengine",
     timescaledb: "TimescaleDB",
   }
   return labels[database] ?? database

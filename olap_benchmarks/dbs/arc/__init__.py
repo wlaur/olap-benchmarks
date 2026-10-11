@@ -21,6 +21,7 @@ from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_fi
 from ...suites.clickbench.config import Clickbench
 from ...suites.time_series.config import TimeSeries
 from ...suites.time_series_metrics.config import METRIC_COUNTS, TimeSeriesMetrics
+from ...suites.time_series_ranges.config import METRIC_COUNTS as RANGE_METRIC_COUNTS
 from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
 from ..utils import require_columns
@@ -218,7 +219,8 @@ class Arc(Database):
 
     @property
     def metric_sort_keys(self) -> str:
-        return " ".join(f"eav{count}:metric_name" for count in METRIC_COUNTS)
+        counts = RANGE_METRIC_COUNTS if self.current_suite == "time_series_ranges" else METRIC_COUNTS
+        return " ".join(f"eav{count}:metric_name" for count in counts)
 
     @property
     def benchmark_settings(self) -> Mapping[str, object]:

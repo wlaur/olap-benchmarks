@@ -1425,6 +1425,7 @@ dependencies = [
     { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "sqlalchemy-monetdb-adbc" },
+    { name = "taos-ws-py" },
 ]
 
 [package.dev-dependencies]
@@ -1473,6 +1474,7 @@ requires-dist = [
     { name = "setuptools", specifier = ">=70.0.0,<80" },
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "sqlalchemy-monetdb-adbc", specifier = "==0.3.10" },
+    { name = "taos-ws-py", specifier = "==0.7.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -2632,6 +2634,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/28/e3/55dcc2cfbc3ca9c29519eb6884dd1415ecb53b0e934862d3559ddcb7e20b/stack_data-0.6.3.tar.gz", hash = "sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9", size = 44707, upload-time = "2023-09-30T13:58:05.479Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl", hash = "sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695", size = 24521, upload-time = "2023-09-30T13:58:03.53Z" },
+]
+
+[[package]]
+name = "taos-ws-py"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/a5/88bfb460f0089435b0438148d209a18b5d059a2bac392bd2436edb340c31/taos_ws_py-0.7.0-cp37-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:c989c6c66b8ee2f8c4180203a0eeb42a4c8eb3bfeb798bd8463f9456895a6bfb", size = 8144784, upload-time = "2026-07-08T07:56:57.262Z" },
+    { url = "https://files.pythonhosted.org/packages/48/ad/a4a0d68f00f5c3ca766f81f6d15744db129bb25470898eb887ecc6ca789e/taos_ws_py-0.7.0-cp37-abi3-macosx_10_12_x86_64.whl", hash = "sha256:196baa53682950f53a3e60db4e1a45efdb260cd3da6ddb16ec8b7d970d9fe4fe", size = 4156856, upload-time = "2026-07-08T07:56:58.943Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/aa/e845fe032c806f87e8b53a7ab117787059e21efccc2a8439fa0436c07052/taos_ws_py-0.7.0-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2ff9f5b9514a466ae25f777ff5ec6acaa0cb425e48eb652a4d904a949154811c", size = 4335859, upload-time = "2026-07-08T07:57:00.216Z" },
+    { url = "https://files.pythonhosted.org/packages/96/0a/3d13657299513cef684fac70a2898ba6e53b1bcea71e0bad9f61873bb9c8/taos_ws_py-0.7.0-cp37-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:9ad7d0bfcf9fbc3073835c986269f88b75c5922defdf238ad3a899f2973ed82f", size = 4047089, upload-time = "2026-07-08T07:57:01.524Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/fa/609ca52d32fe76d3533f3924dcf946a64cb39d02a17e44e10a34ac9e317d/taos_ws_py-0.7.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:724595be039f5f6974c6fd1a41aa68098ce9c338801560cfdcf6e7fd7268046b", size = 4525811, upload-time = "2026-07-08T07:57:02.818Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/3a/0798bc633a65c5bb09046f1d6fac18bd821129d3e1feed249a6368c648ad/taos_ws_py-0.7.0-cp37-abi3-manylinux_2_31_riscv64.whl", hash = "sha256:aea6e705d0601efaace35da81b582f4875f0b15000f020b10f595d62785f0eb6", size = 4271085, upload-time = "2026-07-08T07:57:04.09Z" },
+    { url = "https://files.pythonhosted.org/packages/71/5f/dd061aafe2d2439fa8aa203cb0a8f5d9fb3fa41b07d494bdf8632530b6aa/taos_ws_py-0.7.0-cp37-abi3-win_amd64.whl", hash = "sha256:57c304510102f09538ac92b0ba8d81fec300b01e5ea4583411cf8b09869eb843", size = 4814663, upload-time = "2026-07-08T07:57:05.648Z" },
 ]
 
 [[package]]

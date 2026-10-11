@@ -8,7 +8,6 @@ from ...dbs import Database
 from ...settings import REPO_ROOT, SuiteName, TableName, get_settings
 from ..time_series_metrics.config import (
     LAYOUTS,
-    METRIC_COUNTS,
     TimeSeriesMetrics,
     metric_name,
     table_name,
@@ -16,6 +15,7 @@ from ..time_series_metrics.config import (
 )
 
 HISTORY_DAYS = 100
+METRIC_COUNTS = (100, 1_000, 2_000, 4_094)
 INTERVAL_MINUTES = 10
 TIMESTAMP_COUNT = HISTORY_DAYS * 24 * 60 // INTERVAL_MINUTES
 END = datetime(2025, 1, 1)

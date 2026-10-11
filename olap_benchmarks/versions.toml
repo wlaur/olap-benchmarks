@@ -51,3 +51,7 @@ images.server = "starrocks/allin1-ubuntu:4.1.6"
 [timescaledb]
 version = "2.30.2"
 images.server = "timescale/timescaledb:2.30.2-pg18"
+
+[tdengine]
+version = "3.4.2.8"
+images.server = "tdengine/tsdb:3.4.2.8"
