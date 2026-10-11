@@ -95,7 +95,7 @@ cd site && bun install && bun run dev
 
 | Suite                  | Data source                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
-| `time_series_metrics`  | Generated locally; paired wide/EAV layouts at 100, 1,000 and 2,000 metrics over the same 14 days |
+| `time_series_metrics`  | Generated locally; paired wide/EAV layouts at 100, 1,000, 2,000 and 5,000 metrics over the same 14 days |
 | `time_series`          | Generated locally                                                                        |
 | `chat_threads`         | Generated locally; AI chat history as rich JSON, SF1/SF10                                |
 | `rtabench`             | Downloaded automatically from rtadatasets.timescale.com                                  |
@@ -468,11 +468,11 @@ cd site && bun run fetch-data && bun run dev
 ### Targeted reruns and metric-width experiments
 
 `time_series_metrics` extends the time-series benchmarks without changing the historical
-`tall`/`wide`/`large` workload. It has six tables: wide and dense EAV at each of 100,
-1,000 and 2,000 metrics. All have 20,160 one-minute timestamps (14 days), and the
+`tall`/`wide`/`large` workload. It has eight tables: wide and dense EAV at each of 100,
+1,000, 2,000 and 5,000 metrics. All have 20,160 one-minute timestamps (14 days), and the
 first N metric values are identical at every width. EAV retains null observations.
-Generation uses 480-timestamp batches; inputs total about 583 MB on this workload.
-The largest EAV table has 40.32 million rows. It measures populate and select only.
+Generation uses 480-timestamp batches and preserves inputs for existing widths.
+The largest EAV table has 100.8 million rows. It measures populate and select only.
 See [the workload definition](olap_benchmarks/suites/time_series_metrics/README.md).
 
 Run just this experiment, or just one database/suite, into a fresh revision:

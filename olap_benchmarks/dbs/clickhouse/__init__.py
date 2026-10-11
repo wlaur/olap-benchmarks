@@ -329,9 +329,16 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
 
 
 class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
+    QUERY_SETTINGS: ClassVar[dict[str, int]] = {
+        "cast_keep_nullable": 1,
+        "prefer_column_name_to_alias": 1,
+        "max_query_size": 1_048_576,
+        "max_ast_elements": 100_000,
+    }
+
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        settings: dict[str, int] = {"cast_keep_nullable": 1, "prefer_column_name_to_alias": 1}
+        settings = dict(self.QUERY_SETTINGS)
         if (threads := get_settings().benchmark_threads) is not None:
             settings["max_threads"] = threads
         return {"time_columns": ["time", "hr"], "settings": settings}
@@ -352,10 +359,12 @@ class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
                     sql_type = "LowCardinality(String)"
             columns.append(f"`{name}` {sql_type} {codec}")
         ordering = "metric_name, time" if table.startswith("eav") else "time"
-        self.db.run_sql(
+        sql = (
             f"CREATE TABLE {table} ({', '.join(columns)}) ENGINE = MergeTree "
             f"ORDER BY ({ordering}) SETTINGS old_parts_lifetime = 5"
         )
+        with self.db.record_query_execution(sql):
+            cast(Any, self.db.get_client()).command(sql, settings=self.QUERY_SETTINGS)
         super().populate_table(table, path)
 
 
@@ -366,6 +375,13 @@ class Clickhouse(Database):
     connection_string: str = Field(default_factory=_clickhouse_connection_string)
 
     _clickhouse_client: clickhouse_connect.driver.client.Client | None = None
+
+    @property
+    def benchmark_settings(self) -> Mapping[str, object]:
+        settings = dict(super().benchmark_settings)
+        if self._current_suite == "time_series_metrics":
+            settings["time_series_metrics_query_settings"] = dict(ClickhouseTimeSeriesMetrics.QUERY_SETTINGS)
+        return settings
 
     @property
     def start(self) -> str:

@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -8,6 +9,8 @@ import pytest
 
 from ..dbs.polars.time_series_metrics import execute_time_series_metrics_query
 from ..results.hashing import build_answer_metadata
+from ..settings import get_settings
+from ..suites.time_series_metrics import config
 from ..suites.time_series_metrics.config import (
     METRIC_COUNTS,
     QUERIES_DIRECTORY,
@@ -63,3 +66,20 @@ def test_generation_keeps_null_rows_and_identical_metric_prefixes(tmp_path: Path
         expected = wide.select("time", *[metric_name(index) for index in range(1, count + 1)])
         assert restored.select(expected.columns).equals(expected)
     assert not list(tmp_path.glob("*.part"))
+
+
+def test_expanding_metric_counts_preserves_existing_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    directory = tmp_path / "time_series_metrics"
+    write_datasets(directory, rows=480, counts=(10,))
+    existing = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in directory.glob("*.parquet")}
+    settings = get_settings().model_copy(update={"input_data_directory": tmp_path})
+    monkeypatch.setattr(config, "get_settings", lambda: settings)
+    monkeypatch.setattr(config, "METRIC_COUNTS", (10, 20))
+    monkeypatch.setattr(config, "write_datasets", partial(write_datasets, rows=480))
+
+    config.prepare_data()
+
+    for path, original in existing.items():
+        assert (path.read_bytes(), path.stat().st_mtime_ns) == original
+    assert pl.scan_parquet(directory / "wide20.parquet").select(pl.len()).collect().item() == 480
+    assert pl.scan_parquet(directory / "eav20.parquet").select(pl.len()).collect().item() == 9_600

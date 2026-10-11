@@ -11,7 +11,7 @@ from ...dbs import Database
 from ...settings import REPO_ROOT, Operation, SuiteName, TableName, get_settings
 from .. import BenchmarkSuite
 
-METRIC_COUNTS = (100, 1_000, 2_000)
+METRIC_COUNTS = (100, 1_000, 2_000, 5_000)
 TIMESTAMP_COUNT = 14 * 24 * 60
 GENERATION_BATCH_ROWS = 480
 LAYOUTS = ("wide", "eav")
@@ -36,7 +36,9 @@ def input_files() -> dict[TableName, Path]:
     }
 
 
-def generate_batch(start: int, stop: int, *, rows: int = TIMESTAMP_COUNT, metrics: int = 2_000) -> pl.DataFrame:
+def generate_batch(
+    start: int, stop: int, *, rows: int = TIMESTAMP_COUNT, metrics: int = max(METRIC_COUNTS)
+) -> pl.DataFrame:
     positions = np.arange(start, stop)
     end = datetime(2025, 1, 1)
     beginning = end - timedelta(minutes=rows - 1)
@@ -93,9 +95,12 @@ def write_datasets(directory: Path, *, rows: int = TIMESTAMP_COUNT, counts: tupl
 
 def prepare_data() -> None:
     files = input_files()
-    if all(path.is_file() for path in files.values()):
+    missing_counts = tuple(
+        count for count in METRIC_COUNTS if any(not files[table_name(layout, count)].is_file() for layout in LAYOUTS)
+    )
+    if not missing_counts:
         return
-    write_datasets(next(iter(files.values())).parent)
+    write_datasets(next(iter(files.values())).parent, counts=missing_counts)
 
 
 class TimeSeriesMetrics[DBT: Database](BenchmarkSuite[DBT]):
