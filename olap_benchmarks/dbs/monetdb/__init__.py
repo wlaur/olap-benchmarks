@@ -22,6 +22,7 @@ from ...settings import (
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.time_series.config import TimeSeries
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
 from .. import Database, ParquetEpochColumns
 from ..utils import tracked_commit
 from .adbc import (
@@ -65,6 +66,12 @@ class MonetDBTimeSeries(TimeSeries["MonetDB"]):
         self.db.analyze_table(table_name, ["time"])
 
 
+class MonetDBTimeSeriesMetrics(TimeSeriesMetrics["MonetDB"]):
+    def finish_populate(self) -> None:
+        for table in self.expected_table_row_counts():
+            self.db.analyze_table(table, ["metric_name", "time"] if table.startswith("eav") else ["time"])
+
+
 class MonetDB(Database):
     name: DatabaseName = "monetdb"
     supports_arm64_containers: ClassVar[bool] = True
@@ -81,13 +88,14 @@ class MonetDB(Database):
     @property
     def run_options(self) -> Mapping[str, object]:
         return {
+            **super().run_options,
             "client_application": MONETDB_APPLICATION,
             "session_tracking": "client_application+clientpid",
         }
 
     @property
     def benchmark_settings(self) -> Mapping[str, object]:
-        return effective_settings(get_monetdb_settings())
+        return {**super().benchmark_settings, **effective_settings(get_monetdb_settings())}
 
     connection_string: str = Field(default_factory=_monetdb_connection_string)
 
@@ -301,5 +309,6 @@ class MonetDB(Database):
         return {
             **super().suite_registry(),
             "time_series": MonetDBTimeSeries,
+            "time_series_metrics": MonetDBTimeSeriesMetrics,
             "chat_threads": ChatThreads,
         }

@@ -1,0 +1,1 @@
+SELECT time, value, prev_value FROM (SELECT time, value, LAG(value) OVER (ORDER BY time) AS prev_value FROM (SELECT time, CAST(metric_0001 AS DOUBLE PRECISION) AS value FROM wide2000) s) p WHERE value IS NULL AND prev_value IS NOT NULL ORDER BY time

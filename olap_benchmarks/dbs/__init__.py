@@ -217,11 +217,16 @@ class Database(BaseModel, ABC):
 
     @property
     def benchmark_settings(self) -> Mapping[str, object]:
-        return {}
+        settings = get_settings()
+        return {
+            "OLAP_BENCHMARKS_BENCHMARK_THREADS": settings.benchmark_threads,
+            "OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB": settings.benchmark_memory_gb,
+            "POLARS_MAX_THREADS": pl.thread_pool_size(),
+        }
 
     @property
     def run_options(self) -> Mapping[str, object]:
-        return {}
+        return {"note": get_settings().run_note}
 
     @property
     def input_directory(self) -> Path:
@@ -319,6 +324,13 @@ class Database(BaseModel, ABC):
         resolved_platform = platform or self.container_platform or get_container_engine_platform()
         parts = ["docker run", "--platform", resolved_platform]
         parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
+        settings = get_settings()
+        if settings.benchmark_threads is not None:
+            parts.extend(["--cpus", str(settings.benchmark_threads)])
+        if settings.benchmark_memory_gb is not None:
+            parts.extend(
+                ["--memory", f"{settings.benchmark_memory_gb}g", "--memory-swap", f"{settings.benchmark_memory_gb}g"]
+            )
         if network is not None:
             parts.extend(["--network", network])
         if ip is not None:
@@ -828,6 +840,7 @@ class Database(BaseModel, ABC):
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
         from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
+        from ..suites.time_series_metrics.config import TimeSeriesMetrics
         from ..suites.tpc_ds.config import TpcDs
         from ..suites.tpc_h.config import TpcH
 
@@ -835,6 +848,7 @@ class Database(BaseModel, ABC):
             "rtabench": RTABench,
             "clickbench": Clickbench,
             "time_series": TimeSeries,
+            "time_series_metrics": TimeSeriesMetrics,
             "kaggle_airbnb": KaggleAirbnb,
             "tpc_h": TpcH,
             "tpc_ds": TpcDs,

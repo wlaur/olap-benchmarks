@@ -20,6 +20,7 @@ from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_files
 from ...suites.clickbench.config import Clickbench
 from ...suites.time_series.config import TimeSeries
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
 from .. import Database
 from ..utils import require_columns
 
@@ -161,6 +162,12 @@ class ArcClickbench(Clickbench["Arc"]):
             self.verify_populated_data()
 
         finish_populate(self, restart)
+
+
+class ArcTimeSeriesMetrics(TimeSeriesMetrics["Arc"]):
+    def finish_populate(self) -> None:
+        with self.db.phase_context("compact"):
+            self.db.compact()
 
 
 class ArcChatThreads(ChatThreads["Arc"]):
@@ -425,4 +432,9 @@ class Arc(Database):
         # - tpc_h, tpc_ds: the dimension tables have no timestamp column
         # - jsonbench: the loader keeps the row count by inserting `{}` for each repaired split
         #   record, and those rows have no time_us
-        return {"time_series": ArcTimeSeries, "clickbench": ArcClickbench, "chat_threads": ArcChatThreads}
+        return {
+            "time_series": ArcTimeSeries,
+            "time_series_metrics": ArcTimeSeriesMetrics,
+            "clickbench": ArcClickbench,
+            "chat_threads": ArcChatThreads,
+        }

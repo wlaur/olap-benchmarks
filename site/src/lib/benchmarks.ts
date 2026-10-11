@@ -2,6 +2,7 @@ import type { BenchmarkOperation } from "./types"
 
 export type BenchmarkSuiteId =
   | "time_series"
+  | "time_series_metrics"
   | "rtabench"
   | "clickbench"
   | "jsonbench"
@@ -45,6 +46,7 @@ interface SuitesManifest {
 
 const KNOWN_SUITE_IDS: readonly BenchmarkSuiteId[] = [
   "time_series",
+  "time_series_metrics",
   "rtabench",
   "clickbench",
   "jsonbench",

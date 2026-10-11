@@ -176,6 +176,17 @@ def test_publish_gate_accepts_a_complete_coherent_matrix(tmp_path: Path) -> None
     _validate(_results_db(tmp_path, _complete))
 
 
+def test_merge_gate_accepts_per_run_commits_but_still_requires_clean_trees(tmp_path: Path) -> None:
+    def add(session: Session) -> None:
+        for index, cell in enumerate(CELLS):
+            _add_run(session, cell, commit=f"c{index}")
+
+    path = _results_db(tmp_path, add)
+    validate_publishable_runs(path, CELLS, pins=PINS, drivers=DRIVERS, allow_mixed_commits=True)
+    with pytest.raises(PublishValidationError, match="exactly one repository commit"):
+        _validate(path)
+
+
 def test_publish_gate_lists_missing_and_failed_cells(tmp_path: Path) -> None:
     def add(session: Session) -> None:
         _add_run(session, CELLS[0])
@@ -365,6 +376,33 @@ def test_publish_refuses_an_incoherent_set_and_writes_nothing(monkeypatch: pytes
         results_module.publish(revision="candidate")
 
     assert list((tmp_path / "published").iterdir()) == []
+
+
+def test_publish_merge_replaces_only_one_cell_and_preserves_commits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    results_directory = _patch_publish(monkeypatch, tmp_path)
+    baseline_dir = tmp_path / "baseline"
+    baseline_dir.mkdir()
+    shutil.copy2(_results_db(baseline_dir, _complete), tmp_path / "published/results.db")
+
+    def add(session: Session) -> None:
+        _add_run(session, CELLS[1], commit="c2", started_at=datetime(2026, 10, 2))
+
+    shutil.move(_results_db(tmp_path, add), results_directory / "partial.db")
+    output_dir, stats = results_module.publish(revision="partial", merge=True)
+    assert stats is not None and stats.runs_replaced == 1 and stats.runs_added == 0
+    engine = get_results_engine(read_only=True, db_path=output_dir / "results.db")
+    try:
+        with Session(engine) as session:
+            runs = session.scalars(select(Run)).all()
+            assert len(runs) == len(CELLS)
+            for run in runs:
+                assert run.metadata_json is not None
+                expected_commit = "c2" if run.db == "duckdb" and run.operation == "select" else "c1"
+                assert run.metadata_json["repository"]["commit"] == expected_commit
+    finally:
+        engine.dispose()
 
 
 def test_upload_triggers_the_pages_workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

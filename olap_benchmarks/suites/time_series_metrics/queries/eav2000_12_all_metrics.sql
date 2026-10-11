@@ -1,0 +1,1 @@
+SELECT COUNT(value) AS cnt, SUM(CAST(value AS DOUBLE PRECISION)) AS total FROM eav2000

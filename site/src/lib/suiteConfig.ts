@@ -19,7 +19,7 @@ export interface SuiteConfig {
 }
 
 function parseTimeSeriesQueryName(queryName: string): ParsedQueryName {
-  const match = /^(?<table>[a-z]+)_(?<queryId>\d+)_(?<description>.+)$/.exec(queryName)
+  const match = /^(?<table>[a-z]+\d*)_(?<queryId>\d+)_(?<description>.+)$/.exec(queryName)
   if (!match?.groups) {
     return {
       queryId: "00",
@@ -40,6 +40,11 @@ function parseTimeSeriesQueryName(queryName: string): ParsedQueryName {
 }
 
 function formatTimeSeriesTableFamily(value: string): string {
+  const metrics = /^(wide|eav)(\d+)$/.exec(value)
+  if (metrics) {
+    const layout = metrics[1] === "eav" ? "EAV" : "Wide"
+    return `${layout} · ${Number(metrics[2]).toLocaleString()} metrics`
+  }
   if (value === "wide") return "Wide"
   if (value === "tall") return "Tall"
   if (value === "large") return "Large"

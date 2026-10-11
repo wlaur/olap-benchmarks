@@ -1,0 +1,1 @@
+SELECT date_trunc('hour', time) AS hr, AVG(value) AS value_1 FROM (SELECT time, CAST(value AS DOUBLE PRECISION) AS value FROM eav1000 WHERE metric_name = 'metric_0001') s GROUP BY date_trunc('hour', time) ORDER BY hr

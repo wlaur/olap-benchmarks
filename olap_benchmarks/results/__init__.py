@@ -238,7 +238,7 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
             _LOGGER.info(f"Left out {dropped} run(s) that are not the latest run of a published matrix cell")
 
         validate_results(db_path=staging_path, pins=pins, mark=True)
-        validate_publishable_runs(staging_path, cells, pins=pins, drivers=drivers)
+        validate_publishable_runs(staging_path, cells, pins=pins, drivers=drivers, allow_mixed_commits=merge)
         compact_results(db_path=staging_path)
         staging_path.replace(output_db_path)
     finally:

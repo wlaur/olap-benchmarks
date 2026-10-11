@@ -25,6 +25,18 @@
       "public_role": "benchmark"
     },
     {
+      "id": "time_series_metrics",
+      "title": "Time Series Metrics",
+      "nav_label": "Time Series Metrics",
+      "queries_key": "time_series_metrics",
+      "default_scale_factor": 1,
+      "supported_scale_factors": [1],
+      "scale_factor_supported": false,
+      "operations": ["populate", "select"],
+      "query_name_parser": "time_series",
+      "public_role": "benchmark"
+    },
+    {
       "id": "clickbench",
       "title": "ClickBench",
       "nav_label": "ClickBench",

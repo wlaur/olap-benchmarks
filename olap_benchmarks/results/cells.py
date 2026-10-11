@@ -87,14 +87,6 @@ def load_runs(path: Path, con: duckdb.DuckDBPyConnection | None = None) -> list[
     ]
 
 
-def newest_commit(runs: Iterable[StoredRun]) -> str | None:
-    newest: StoredRun | None = None
-    for run in runs:
-        if run.commit is not None and (newest is None or (run.started_at, run.id) > (newest.started_at, newest.id)):
-            newest = run
-    return newest.commit if newest is not None else None
-
-
 def latest_run_per_cell(
     runs: Iterable[StoredRun],
     cells: Iterable[MatrixCell],
@@ -122,7 +114,6 @@ def matrix_status(
     pins: Mapping[str, str],
     drivers: Mapping[str, str | None],
 ) -> list[CellStatus]:
-    commit = newest_commit(run for run in runs if run.system == system)
     statuses: list[CellStatus] = []
 
     for cell, run in latest_run_per_cell(runs, cells, system=system, drivers=drivers).items():
@@ -136,8 +127,8 @@ def matrix_status(
             )
         elif run.db_version != pins[cell.db]:
             statuses.append(CellStatus(cell, "stale", run, f"version {run.db_version}, pinned {pins[cell.db]}"))
-        elif run.commit != commit:
-            statuses.append(CellStatus(cell, "stale", run, f"commit {_short(run.commit)}, newest {_short(commit)}"))
+        elif run.commit is None or run.dirty is not False:
+            statuses.append(CellStatus(cell, "stale", run, "repository provenance is missing or the tree was dirty"))
         else:
             statuses.append(CellStatus(cell, "ok", run, ""))
 

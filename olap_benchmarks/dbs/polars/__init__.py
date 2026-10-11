@@ -17,10 +17,17 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
 from ...suites.tpc_h.config import TPCH_TABLES, TpcH
 from .. import Database
 from .clickbench import execute_clickbench_query
+from .time_series_metrics import execute_time_series_metrics_query
 from .tpc_h import execute_tpc_h_query
+
+
+class PolarsTimeSeriesMetrics(TimeSeriesMetrics["Polars"]):
+    def populate_table(self, table: str, path: Path) -> None:
+        self.db.register_table(table, path)
 
 
 class PolarsJSONBench(JSONBench["Polars"]):
@@ -153,6 +160,9 @@ class Polars(Database):
             raise RuntimeError("Polars query execution requires a current query name")
 
         match self.current_suite:
+            case "time_series_metrics":
+                table = self.current_query_name.split("_", 1)[0]
+                lf = execute_time_series_metrics_query(self._scan_table(table), self.current_query_name)
             case "jsonbench":
                 lf = self._execute_jsonbench_query(self.current_query_name)
             case "clickbench":
@@ -278,4 +288,9 @@ class Polars(Database):
         raise NotImplementedError("Polars does not support generic delete")
 
     def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
-        return {"clickbench": PolarsClickbench, "jsonbench": PolarsJSONBench, "tpc_h": PolarsTpcH}
+        return {
+            "clickbench": PolarsClickbench,
+            "jsonbench": PolarsJSONBench,
+            "tpc_h": PolarsTpcH,
+            "time_series_metrics": PolarsTimeSeriesMetrics,
+        }

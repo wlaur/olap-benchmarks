@@ -11,6 +11,7 @@ from olap_benchmarks.dbs.arc import (
     ArcChatThreads,
     ArcClickbench,
     ArcTimeSeries,
+    ArcTimeSeriesMetrics,
     build_key_predicate,
     decode_arrow_stream,
     encode_import_chunks,
@@ -109,6 +110,7 @@ def test_arc_registers_the_suites_it_can_store() -> None:
 
     assert dict(db.suite_registry()) == {
         "time_series": ArcTimeSeries,
+        "time_series_metrics": ArcTimeSeriesMetrics,
         "clickbench": ArcClickbench,
         "chat_threads": ArcChatThreads,
     }

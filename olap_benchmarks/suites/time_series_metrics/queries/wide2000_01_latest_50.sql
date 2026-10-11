@@ -1,0 +1,1 @@
+SELECT time, value FROM (SELECT time, CAST(metric_0001 AS DOUBLE PRECISION) AS value FROM wide2000) s ORDER BY time DESC LIMIT 50

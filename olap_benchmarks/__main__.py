@@ -457,14 +457,16 @@ def publish(revision: Revision = "default", merge: bool = False, upload: bool = 
 
     Only the latest run of each cell of the declared matrix (`olap matrix status`)
     is published. The set must be complete and coherent: every cell completed with answer hashes,
-    no wrong results after validation, current version pins only, one repository commit with a
-    clean tree, and one system snapshot. Otherwise nothing is written and the offending cells are
-    listed. The published file is compacted, and its SHA-256 and size go into manifest.json.
+    no wrong results after validation, current version pins only, recorded repository commits with
+    clean trees, and one system snapshot. A full replacement requires one commit. Otherwise nothing
+    is written and the offending cells are listed. The published file is compacted, and its SHA-256
+    and size go into manifest.json.
 
     With `--merge`, runs from the revision are merged into the already published
     results.db instead of replacing the whole file: runs of a cell (system, db, db_version,
     db_driver, suite, suite_scale_factor, operation) the revision contains replace the published
-    runs of that cell, and everything else in the published file is kept.
+    runs of that cell, and everything else in the published file is kept. Different commits are
+    accepted for a merge, with each run's original provenance preserved.
 
     With `--upload`, the published results.db is uploaded to the `data` GitHub release, which is
     where the site build fetches it from, and the Pages workflow is triggered so the site serves
@@ -786,27 +788,31 @@ def _matrix_statuses(cells: list[MatrixCell], revision: Revision) -> list[CellSt
     return matrix_status(runs, cells, system=get_settings().system, pins=current_pins(), drivers=current_drivers())
 
 
-def _matrix_cells(db: list[DatabaseName] | None, include_experimental: bool) -> list[MatrixCell]:
-    return expand_matrix(dbs=db, published_only=db is None and not include_experimental)
+def _matrix_cells(
+    db: list[DatabaseName] | None, include_experimental: bool, suites: list[SuiteName] | None = None
+) -> list[MatrixCell]:
+    cells = expand_matrix(dbs=db, published_only=db is None and not include_experimental)
+    return cells if suites is None else [cell for cell in cells if cell.suite in suites]
 
 
 @matrix_app.command(name="status")
 def matrix_status_cmd(
     db: list[DatabaseName] | None = None,
+    suite: list[SuiteName] | None = None,
     revision: Revision = "default",
     include_experimental: bool = False,
     check: bool = False,
 ) -> None:
     """Show each declared cell against its latest run in a revision.
 
-    A cell is `ok` when its latest run completed on the current version pin and the newest
-    repository commit in the revision, `stale` when it completed on another version or commit,
+    A cell is `ok` when its latest run completed on the current version pin with clean recorded
+    repository provenance, `stale` when its version, profile or provenance is invalid,
     `failed` when the latest run did not complete and `missing` without any run. The `unsupported`
     column counts the select queries the engine declares unsupported in query_registry. With
     `--check`, exits non-zero unless every cell is ok. Experimental (unpublished) engines are
     included when named with `--db` or with `--include-experimental`.
     """
-    statuses = _matrix_statuses(_matrix_cells(db, include_experimental), revision)
+    statuses = _matrix_statuses(_matrix_cells(db, include_experimental, suite), revision)
     print(format_matrix_status(statuses))
 
     counts: dict[str, int] = {}
@@ -821,6 +827,7 @@ def matrix_status_cmd(
 @matrix_app.command(name="run")
 def matrix_run(
     db: list[DatabaseName] | None = None,
+    suite: list[SuiteName] | None = None,
     revision: Revision = "default",
     missing_only: bool = False,
     keep_going: bool = False,
@@ -839,7 +846,7 @@ def matrix_run(
     container starts, as for `olap benchmark`. Experimental (unpublished) engines run only when
     named with `--db` or with `--include-experimental`.
     """
-    cells = _matrix_cells(db, include_experimental)
+    cells = _matrix_cells(db, include_experimental, suite)
     selected = cells
     if missing_only:
         pending = {

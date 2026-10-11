@@ -146,6 +146,11 @@ class DuckDB(Database):
         # the suites store naive timestamps and mean UTC by them; without this DuckDB would
         # interpret and render them in the host's local zone, making answers machine-dependent
         get_duckdb_connection(self._connection).execute("SET TimeZone='UTC'")
+        settings = get_settings()
+        if settings.benchmark_threads is not None:
+            get_duckdb_connection(self._connection).execute(f"SET threads={settings.benchmark_threads}")
+        if settings.benchmark_memory_gb is not None:
+            get_duckdb_connection(self._connection).execute(f"SET memory_limit='{settings.benchmark_memory_gb}GB'")
 
         return self._connection
 
