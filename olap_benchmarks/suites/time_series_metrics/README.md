@@ -70,6 +70,8 @@ wide and EAV and against the native Polars expressions at every metric count.
 Run this suite alone with `olap matrix run --suite time_series_metrics`; add `--db`
 to select an engine. Use a fresh `--revision` and `olap publish --merge` to preserve
 unrelated published results and each run's own repository provenance.
+Adding query names makes earlier select cells stale, so `--missing-only` includes
+an expanded suite. Retained published cells keep their original query manifests.
 
 See [the working measurements](WORKING_RESULTS.md) and
 [the Arc storage investigation](../../../issues/arc/wide-parquet-query-cost.md).

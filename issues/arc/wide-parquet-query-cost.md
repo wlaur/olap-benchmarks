@@ -7,7 +7,7 @@ concurrent laptop use on 2026-10-11.
 
 ## Connector and physical layout
 
-The harness uses typed Parquet imports and the native `/api/v1/query/arrow`
+The initial sweep used typed Parquet imports and the native `/api/v1/query/arrow`
 endpoint with `x-arc-database: olap`, materializing Arrow results into Polars.
 It waits for visibility, runs compaction, verifies row counts, and restarts the
 server before select. The final sweep uses two query threads; `current_setting`
@@ -85,3 +85,26 @@ union_by_name=true, hive_partitioning=false)`; use the analogous EAV directory.
 Set `threads=2`, `memory_limit='6GB'`, and `TimeZone='UTC'`. Preserve the existing
 metric/time filters. Stop only the benchmark container after inspection:
 `uv run olap docker arc time_series_metrics stop`.
+
+## Expansion to 5,000 metrics
+
+The subsequent working revision, `2026-10-timeseries-metrics-5000-working`, adds
+5,000 metrics and full per-metric/hourly aggregate outputs. It retains the same
+20,160 timestamps and extends the EAV sort-key configuration with
+`eav5000:metric_name`.
+
+With the original import sequence, querying the count of the newly imported
+5,000-column table exhausted the 6 GiB container limit while opening hundreds
+of raw Parquet schemas. Reducing flush workers and setting a Go heap target
+kept imports bounded but did not make that count safe. Compaction now completes
+before each table's count/visibility verification. The suite sets
+`ARC_INGEST_FLUSH_WORKERS=2` and `GOMEMLIMIT=1GiB`, recording both with the run.
+This does not increase the DuckDB or container memory limit.
+
+The completed eight-table populate peaked at 5,229 MiB server charge, including
+file cache, and 1,478 MiB engine-store disk. Compaction left a 1,023 MiB store.
+All 112 queries completed with matching answers. At 5,000 metrics, per-metric
+count/sum fetched in 2,520 ms wide versus 798 ms EAV; one-day hourly aggregates
+fetched in 2,016 ms wide versus 134 ms EAV. These use each layout's native output
+shape, with full fetch/materialization included. The wide per-metric answer
+has 10,000 columns despite using compact `COLUMNS` SQL below the API text limit.
