@@ -1,1 +1,1 @@
-SELECT SUM(list_count([*COLUMNS('metric_.*')])) AS cnt, SUM(list_sum(list_transform([*COLUMNS('metric_.*')], x -> CAST(x AS DOUBLE)))) AS total FROM wide2000
+SELECT list_sum([*COLUMNS('cnt_.*')]) AS cnt, list_sum([*COLUMNS('total_.*')]) AS total FROM (SELECT COUNT(COLUMNS('metric_.*')) AS "cnt_\0", SUM(CAST(COLUMNS('metric_.*') AS DOUBLE)) AS "total_\0" FROM wide2000)
