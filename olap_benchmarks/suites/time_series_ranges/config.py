@@ -26,7 +26,7 @@ QUERIES_DIRECTORY = REPO_ROOT / "olap_benchmarks/suites/time_series_ranges/queri
 class RangeQuery:
     days: int
     selected_metrics: int
-    operation: Literal["raw", "avg"]
+    operation: Literal["raw", "avg", "calc"]
 
     @property
     def suffix(self) -> str:
@@ -48,7 +48,7 @@ RANGE_QUERIES = tuple(
     for days in (1, 10, 100)
     for selected in (5, 10)
     for operation in ("raw", "avg")
-)
+) + tuple(RangeQuery(days, 10, "calc") for days in (1, 10, 100))
 QUERY_NAMES = tuple(
     f"{table_name(layout, count)}_{number:02d}_{query.suffix}"
     for layout in LAYOUTS
