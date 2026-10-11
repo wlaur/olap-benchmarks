@@ -7,21 +7,28 @@ datasets and mutation/concurrency workloads.
 | Property | Value |
 | --- | --- |
 | Layouts | Wide and dense EAV (`time`, `metric_name`, nullable Float32 `value`) |
-| Metric counts | 100, 1,000, 2,000 |
+| Metric counts | 100, 1,000, 2,000, 5,000 |
 | Timestamp count | 20,160 per table, one-minute intervals over 14 days ending 2025-01-01 |
-| EAV rows | 2,016,000 / 20,160,000 / 40,320,000 |
+| EAV rows | 2,016,000 / 20,160,000 / 40,320,000 / 100,800,000 |
 | Values | Deterministic smooth signals, metric-specific offsets and periodic null gaps |
 | Width control | First N metrics are identical at every width and in both layouts |
-| Generation | 480 timestamps per batch; EAV batches contain at most 960,000 rows |
+| Generation | 480 timestamps per batch; EAV batches contain at most 2,400,000 rows; existing widths are reused |
 | Iterations | Standard resident-hot profile: one warmup plus three measured iterations |
 | Operations | Populate and select |
 
-The same 12 logical queries run against all six tables: latest 50 observations,
+The same 14 logical queries run against all eight tables: latest 50 observations,
 one-day filtered aggregate, hourly aggregate of one metric and four metrics,
 full-history statistics of one metric, 1,000 raw observations, scalar four-metric
 lookup, filter one metric by another, 60-row moving average, first differences,
-null-gap detection, and count/sum across every metric. Queries return bounded
+null-gap detection, count/sum across every metric, full-history per-metric
+count/sum, and one-day hourly count/sum for every metric. Queries return bounded
 answers. Float32 measurements are promoted to Float64 for arithmetic in all engines.
+
+Queries 13 and 14 retain the schemas' native aggregate outputs: wide returns one
+count and sum column per metric, while EAV returns metric-keyed rows. Query 14
+returns 24 hourly rows in wide and 24 × metric-count rows in EAV. Materializing
+those outputs is included in the fetch timer. Tests reshape wide answers only
+for semantic comparison; benchmark results are not reshaped before timing.
 
 EAV retains a row for every observation, including nulls. Removing null rows would
 change window frames, gaps and timestamp domains, so this workload does not measure
@@ -30,11 +37,28 @@ and varying sparsity are separate workload dimensions.
 
 ClickHouse uses time ordering for wide tables and `(metric_name, time)` ordering
 with LowCardinality metric names for EAV, plus the existing time-series codecs.
+Its query/AST limits are raised to 1 MiB/100,000 elements for the 5,000-column
+table definition and aggregate SQL; the limits are recorded with each run.
+Wide grand totals use native row-array reductions before aggregation, avoiding
+thousands of aggregate states for an answer that only needs two. Expression and
+aggregate JIT are disabled for queries 12–14 in both layouts: compiling thousands
+of wide aggregates otherwise exceeds the 6 GB budget. These queries also cap
+blocks at 4,096 rows to bound intermediate wide arrays.
 Arc receives time-sorted input, sorts EAV storage by `(metric_name, time)` using its
 per-measurement ingest sort keys, and completes its compaction cycle before select.
+It compacts each table before verifying its row count, avoiding a count query
+over hundreds of raw wide-file schemas. This suite also sets two ingest flush
+workers and a 1 GiB Go heap target;
+these settings are recorded separately from Arc's internal DuckDB memory limit.
 MonetDB analyzes the timestamp and EAV metric-name columns after loading.
 DuckDB loads persistent tables; Polars scans the same Parquet inputs lazily.
 These compare supported storage paths, not identical physical indexes or ingestion.
+
+Query 12 returns one grand count and sum across all metrics. Wide computes separate
+column aggregates and combines them, while EAV computes two aggregates over its
+value column. This measures a whole-matrix reduction, not per-metric output, and
+can favor EAV even when selective queries strongly favor wide. The fixed 14-day
+history also gives very wide tables relatively little data per column.
 Arc promotes the imported Float32 measurements to Double in its Parquet storage.
 Its compact wide all-metric SQL aggregates each column before combining totals;
 the override stays below Arc's 10,000-character SQL limit.
@@ -46,6 +70,8 @@ wide and EAV and against the native Polars expressions at every metric count.
 Run this suite alone with `olap matrix run --suite time_series_metrics`; add `--db`
 to select an engine. Use a fresh `--revision` and `olap publish --merge` to preserve
 unrelated published results and each run's own repository provenance.
+Adding query names makes earlier select cells stale, so `--missing-only` includes
+an expanded suite. Retained published cells keep their original query manifests.
 
 See [the working measurements](WORKING_RESULTS.md) and
 [the Arc storage investigation](../../../issues/arc/wide-parquet-query-cost.md).

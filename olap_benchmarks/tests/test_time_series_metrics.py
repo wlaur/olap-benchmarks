@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -8,6 +9,8 @@ import pytest
 
 from ..dbs.polars.time_series_metrics import execute_time_series_metrics_query
 from ..results.hashing import build_answer_metadata
+from ..settings import get_settings
+from ..suites.time_series_metrics import config
 from ..suites.time_series_metrics.config import (
     METRIC_COUNTS,
     QUERIES_DIRECTORY,
@@ -17,6 +20,20 @@ from ..suites.time_series_metrics.config import (
     to_eav,
     write_datasets,
 )
+
+
+def _wide_grouped_answer(frame: pl.DataFrame) -> pl.DataFrame:
+    index = ["hr"] if "hr" in frame.columns else []
+    counts = frame.select(*index, pl.col("^cnt_metric_.*$")).unpivot(
+        index=index, variable_name="metric_name", value_name="cnt"
+    )
+    totals = frame.select(*index, pl.col("^total_metric_.*$")).unpivot(
+        index=index, variable_name="metric_name", value_name="total"
+    )
+    counts = counts.with_columns(pl.col("metric_name").str.strip_prefix("cnt_"))
+    totals = totals.with_columns(pl.col("metric_name").str.strip_prefix("total_"))
+    keys = [*index, "metric_name"]
+    return counts.join(totals, on=keys).select(*keys, "cnt", "total").sort(keys)
 
 
 @pytest.mark.parametrize("metrics", METRIC_COUNTS)
@@ -42,10 +59,30 @@ def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
             if override.is_file():
                 arc_result = con.execute(override.read_text()).pl()
                 assert build_answer_metadata(arc_result)["answer_hash"] == expected, wide_name
-            assert build_answer_metadata(eav_result)["answer_hash"] == expected, eav_name
+            clickhouse_override = QUERIES_DIRECTORY / "clickhouse" / f"{wide_name}.sql"
+            if wide_name.endswith("_12_all_metrics"):
+                first, body = clickhouse_override.read_text().split("\n", 1)
+                measurements = first.removeprefix("WITH ").removesuffix(" AS measurements")
+                sql = f"WITH source AS (SELECT {measurements} AS measurements FROM wide{metrics})\n" + body.replace(
+                    f"FROM wide{metrics}", "FROM source"
+                ).replace("arrayCount(x -> isNotNull(x), measurements)", "list_count(measurements)").replace(
+                    "arraySum(arrayMap(x -> ifNull(toFloat64(x), 0), measurements))",
+                    "list_sum(list_transform(measurements, x -> COALESCE(CAST(x AS DOUBLE), 0)))",
+                )
+                clickhouse_result = con.execute(sql).pl()
+                assert build_answer_metadata(clickhouse_result)["answer_hash"] == expected, wide_name
             for frame, name in ((wide, wide_name), (eav, eav_name)):
                 result = execute_time_series_metrics_query(frame.lazy(), name).collect()
-                assert build_answer_metadata(result)["answer_hash"] == expected, name
+                reference = wide_result if name == wide_name else eav_result
+                assert (
+                    build_answer_metadata(result)["answer_hash"] == build_answer_metadata(reference)["answer_hash"]
+                ), name
+            comparable = (
+                _wide_grouped_answer(wide_result) if wide_name.split("_", 2)[1] in ("13", "14") else wide_result
+            )
+            assert (
+                build_answer_metadata(eav_result)["answer_hash"] == build_answer_metadata(comparable)["answer_hash"]
+            ), eav_name
     finally:
         con.close()
 
@@ -63,3 +100,20 @@ def test_generation_keeps_null_rows_and_identical_metric_prefixes(tmp_path: Path
         expected = wide.select("time", *[metric_name(index) for index in range(1, count + 1)])
         assert restored.select(expected.columns).equals(expected)
     assert not list(tmp_path.glob("*.part"))
+
+
+def test_expanding_metric_counts_preserves_existing_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    directory = tmp_path / "time_series_metrics"
+    write_datasets(directory, rows=480, counts=(10,))
+    existing = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in directory.glob("*.parquet")}
+    settings = get_settings().model_copy(update={"input_data_directory": tmp_path})
+    monkeypatch.setattr(config, "get_settings", lambda: settings)
+    monkeypatch.setattr(config, "METRIC_COUNTS", (10, 20))
+    monkeypatch.setattr(config, "write_datasets", partial(write_datasets, rows=480))
+
+    config.prepare_data()
+
+    for path, original in existing.items():
+        assert (path.read_bytes(), path.stat().st_mtime_ns) == original
+    assert pl.scan_parquet(directory / "wide20.parquet").select(pl.len()).collect().item() == 480
+    assert pl.scan_parquet(directory / "eav20.parquet").select(pl.len()).collect().item() == 9_600

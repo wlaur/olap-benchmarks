@@ -1,0 +1,1 @@
+SELECT DATE_TRUNC('hour', time) AS hr, COUNT(COLUMNS('metric_.*')) AS "cnt_\0", SUM(CAST(COLUMNS('metric_.*') AS DOUBLE)) AS "total_\0" FROM wide2000 WHERE time >= TIMESTAMP '2024-12-29 00:00:00' AND time < TIMESTAMP '2024-12-30 00:00:00' GROUP BY DATE_TRUNC('hour', time) ORDER BY hr

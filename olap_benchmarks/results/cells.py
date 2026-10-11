@@ -30,6 +30,7 @@ class StoredRun:
     commit: str | None
     dirty: bool | None
     benchmark_profile: str
+    query_names: tuple[str, ...] = ()
 
     @property
     def label(self) -> str:
@@ -58,7 +59,8 @@ def load_runs(path: Path, con: duckdb.DuckDBPyConnection | None = None) -> list[
               id, system, db, db_version, db_driver, suite, suite_scale_factor, operation, status, started_at,
               json_extract_string("metadata", '$.repository.commit'),
               cast(json_extract("metadata", '$.repository.dirty') as boolean),
-              benchmark_profile
+              benchmark_profile,
+              cast(json_extract("metadata", '$.plan.query_names') as varchar[])
             from run
             order by started_at, id
             """
@@ -82,6 +84,7 @@ def load_runs(path: Path, con: duckdb.DuckDBPyConnection | None = None) -> list[
             commit=cast(str | None, row[10]),
             dirty=cast(bool | None, row[11]),
             benchmark_profile=str(row[12]),
+            query_names=tuple(cast(list[str], row[13] or [])),
         )
         for row in rows
     ]
@@ -113,6 +116,7 @@ def matrix_status(
     system: str,
     pins: Mapping[str, str],
     drivers: Mapping[str, str | None],
+    current_query_names: Mapping[MatrixCell, tuple[str, ...]] | None = None,
 ) -> list[CellStatus]:
     statuses: list[CellStatus] = []
 
@@ -129,6 +133,19 @@ def matrix_status(
             statuses.append(CellStatus(cell, "stale", run, f"version {run.db_version}, pinned {pins[cell.db]}"))
         elif run.commit is None or run.dirty is not False:
             statuses.append(CellStatus(cell, "stale", run, "repository provenance is missing or the tree was dirty"))
+        elif (
+            current_query_names is not None
+            and cell in current_query_names
+            and run.query_names != current_query_names[cell]
+        ):
+            statuses.append(
+                CellStatus(
+                    cell,
+                    "stale",
+                    run,
+                    f"query list changed: recorded {len(run.query_names)}, current {len(current_query_names[cell])}",
+                )
+            )
         else:
             statuses.append(CellStatus(cell, "ok", run, ""))
 

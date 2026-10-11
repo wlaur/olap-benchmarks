@@ -1,5 +1,7 @@
 import io
 import shlex
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import date, datetime
 
 import polars as pl
@@ -134,6 +136,9 @@ def test_metrics_sort_keys_and_resource_budgets_are_passed_as_single_arguments(
     assert arguments[arguments.index("--memory-swap") + 1] == "6g"
     assert f"ARC_INGEST_SORT_KEYS={db.metric_sort_keys}" in arguments
     assert db.benchmark_settings["ARC_INGEST_SORT_KEYS"] == db.metric_sort_keys
+    for key, value in Arc.METRICS_INGEST_ENV.items():
+        assert f"{key}={value}" in arguments
+        assert db.benchmark_settings[key] == value
     assert ArcChatThreads.supported_operations == ("populate", "select")
     assert ArcClickbench.supported_operations == ("populate", "select")
     assert not db.DISABLED_MUTATION_STEPS
@@ -142,6 +147,33 @@ def test_metrics_sort_keys_and_resource_budgets_are_passed_as_single_arguments(
 def test_arc_connect_is_not_a_sql_connection() -> None:
     with pytest.raises(NotImplementedError):
         Arc().connect()
+
+
+def test_metrics_import_compacts_before_reading_wide_file_metadata() -> None:
+    events: list[str] = []
+
+    class ImportedArc(Arc):
+        def get_table_names(self) -> set[str]:
+            return set()
+
+        def _write(self, df: pl.DataFrame | pl.LazyFrame, table: str) -> int:
+            events.append("import")
+            return 3
+
+        @contextmanager
+        def phase_context(self, phase_name: str, table_name: str | None = None) -> Generator[None]:
+            yield
+
+        def compact(self) -> None:
+            events.append("compact")
+
+        def wait_until_count(self, table: str, count: int) -> None:
+            events.append(f"count {count}")
+
+    db = ImportedArc()
+    db._current_suite = "time_series_metrics"
+    db.insert(_frame(3), "wide5000")
+    assert events == ["import", "compact", "count 3"]
 
 
 def test_encode_import_chunks_splits_batches_above_the_size_limit() -> None:

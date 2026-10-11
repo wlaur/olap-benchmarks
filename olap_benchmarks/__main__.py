@@ -785,7 +785,24 @@ def rename_database_cmd(old_name: str, new_name: str, revision: Revision = "defa
 def _matrix_statuses(cells: list[MatrixCell], revision: Revision) -> list[CellStatus]:
     db_path = get_results_db_path(revision)
     runs = load_runs(db_path) if db_path.is_file() else []
-    return matrix_status(runs, cells, system=get_settings().system, pins=current_pins(), drivers=current_drivers())
+    databases = get_databases()
+    query_names = {
+        cell: tuple(
+            databases[cell.db]
+            .suite_registry()[cell.suite](db=databases[cell.db], name=cell.suite, scale_factor=cell.scale_factor)
+            .planned_query_names()
+        )
+        for cell in cells
+        if cell.operation == "select"
+    }
+    return matrix_status(
+        runs,
+        cells,
+        system=get_settings().system,
+        pins=current_pins(),
+        drivers=current_drivers(),
+        current_query_names=query_names,
+    )
 
 
 def _matrix_cells(

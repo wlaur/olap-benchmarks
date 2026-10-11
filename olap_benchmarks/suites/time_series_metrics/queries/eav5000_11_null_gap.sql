@@ -1,0 +1,1 @@
+SELECT time, value, prev_value FROM (SELECT time, value, LAG(value) OVER (ORDER BY time) AS prev_value FROM (SELECT time, CAST(value AS DOUBLE PRECISION) AS value FROM eav5000 WHERE metric_name = 'metric_0001') s) p WHERE value IS NULL AND prev_value IS NOT NULL ORDER BY time
