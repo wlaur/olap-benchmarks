@@ -1,14 +1,16 @@
 {
-  "published_at": "2026-10-10T09:42:38.272144+00:00",
-  "revision": "default",
-  "source": "/Users/williamlauren/repos/olap-benchmarks/results/default.db",
+  "published_at": "2026-10-11T02:28:17.260277+00:00",
+  "revision": "2026-10",
+  "source": "/Users/williamlauren/repos/olap-benchmarks/results/2026-10.db",
   "merged": false,
-  "schema_revision": "b2d6f90c4a13",
+  "schema_revision": "f6d2b8c4e0a3",
+  "results_db_sha256": "11ccc00107017eae62afa12be673ce8e2dada4a6c1e06745100a035f6f7937e3",
+  "results_db_bytes": 18100224,
   "table_counts": {
-    "system_snapshot": 2,
-    "run": 57,
-    "run_step": 4744,
-    "run_metric": 22000,
-    "query_execution": 6695
+    "system_snapshot": 1,
+    "run": 70,
+    "run_step": 5559,
+    "run_metric": 34646,
+    "query_execution": 7235
   }
 }

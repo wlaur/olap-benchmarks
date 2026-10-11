@@ -1,25 +1,23 @@
-# Remaining project work - 2026-10-10
+# Remaining project work - 2026-10-11
 
 Only unfinished work. Remove items when they are done; history lives in git.
 
 ## Where things stand
 
-- Published: one system (`macbook-m4-pro`), three engines — ClickHouse, DuckDB, MonetDB (Dec2025-SP4, ADBC) —
-  across all eight suites at SF1 (TPC-H and JSONBench at SF10). MonetDB has no JSONBench queries; its published set
-  lacks `chat_threads` concurrent, which is registered again since it passed on SP4 and still needs a campaign run.
-  Answer hashes are `canonical-v10`; the published DB is at the Alembic head.
-- The intended matrix is declared in `olap_benchmarks/matrix.py` (Polars is declared published for TPC-H, JSONBench
-  and ClickBench but has no runs yet). `olap matrix status|run`, `olap results validate|prune` and the generalised
-  publish gate (one commit, clean tree, one snapshot, current pins, complete and validated cells) are in place.
-  RTABench queries gained deterministic tie-breakers, so their stored answer hashes are no longer comparable to new
-  runs.
+- Published (2026-10-11, revision `2026-10`): one system (`macbook-m4-pro`), one commit, one snapshot, profile
+  `resident-hot-v1`, 70 cells, all validated (row counts and answer hashes agree across engines and are stable
+  across iterations). Engines: ClickHouse 26.9.8.3, DuckDB 1.5.6 and MonetDB Dec2025-SP4 (ADBC) across all eight
+  suites (MonetDB has no JSONBench queries); Polars 2.0.0 on TPC-H, JSONBench and ClickBench; Arc 26.09.3 on
+  time_series, chat_threads and ClickBench (populate and select only). TPC-H and JSONBench run at SF10, the rest at
+  SF1.
+- The matrix is declared in `olap_benchmarks/matrix.py`; `olap matrix status|run`, `olap results validate|prune`
+  and the publish gate (one commit, clean tree, one snapshot, current pins and profile, complete and validated
+  cells, registry digests) are in place.
 - Experimental (unpublished) connectors: Postgres, TimescaleDB, QuestDB, StarRocks and Doris. `olap benchmark all`
-  and `olap matrix status|run` leave them out unless named or `--include-experimental` is passed; their code stays.
-  Polars and Arc are published but have no runs yet.
+  and `olap matrix status|run` leave them out unless named or `--include-experimental` is passed.
 - Unsupported queries are declared in one registry (`olap_benchmarks/query_registry.py`), which also holds the
-  answer-comparison exclusions; a missing SQL file is an error. SQL resolution lives in `BenchmarkSuite`, RTABench
-  has a shared base, suite metadata is one `SuiteSpec` per suite, settings load lazily from the repository's `.env`,
-  and `pytest -m live` smoke-tests each published engine (only DuckDB has been run so far).
+  answer-comparison exclusions; a missing SQL file is an error. `pytest -m live` smoke-tests each published engine
+  (only DuckDB has been run so far).
 - Higher scale factors (time_series/chat_threads SF10, TPC-H SF50) do not fit this machine's RAM and disk; they
   belong to the cloud campaign.
 
@@ -29,11 +27,6 @@ one-command path from "bump a version" to "published".
 
 ## 1. Release blockers
 
-- [ ] **Publish one coherent campaign.** The current set mixes five commits (one dirty tree), two OS snapshots and
-      three dates, predates `metadata.repository` and is `legacy-per-suite` rather than `resident-hot-v1`, so
-      `olap publish` now refuses it. Run
-      `olap matrix run` into a fresh revision from one clean commit (this adds Polars) and publish
-      it through the gate.
 - [ ] **No amd64 image for the MonetDB pin.** `monetdb/monetdb:Dec2025-SP4` does not exist on Docker Hub (newest
       tag: Dec2025-SP3), and `wlaur/monetdb-container` is arm64-only, so `olap versions --check` fails for the amd64
       variant and an amd64 host (the cloud campaign) cannot start MonetDB. Push an amd64 build of the wlaur image and
@@ -66,21 +59,6 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 ## 4. Engine coverage
 
-- [ ] **Arc** (published for populate/select, pending a campaign). `olap_benchmarks/dbs/arc/` pins
-      `basekicklabs/arc:26.09.3` and registers time_series, clickbench and chat_threads with populate and select only.
-      Mutate and concurrent are not measured: every row-targeted upsert or delete rewrites the immutable hourly
-      Parquet files it touches, so the time_series SF1 mutate run took 88 minutes (10k-row iterations up to ~6 minutes,
-      slowing as files fragment) and the concurrent run after it was OOM-killed within 40 s. Arc requires a non-null
-      `time` column, so `hits.EventTime` and both chat tables' `created_at` are imported as `time` and the
-      `queries/arc` overrides refer to it by that name; other timestamps are stored as BIGINT microseconds and dates as
-      midnight timestamps, converted back with `make_timestamp()` where a query returns one. Writes use the typed
-      Parquet import (the MessagePack path corrupts types and timestamps), split below Arc's 500 MiB import limit.
-      Populate sorts by time on the host and ends with Arc's manual compaction, which runs the hourly and daily tiers
-      (one file per day for this historical data). rtabench, kaggle_airbnb, tpc_h and tpc_ds have tables with no
-      timestamp and jsonbench has placeholder rows without one, so those stay unregistered (reasons in
-      `Arc.suite_registry`; defects in [`issues/arc/`](issues/arc/)). Close once a campaign has run each registered
-      suite and the answers match the other engines.
-- [ ] **Polars in the published matrix** for the suites it implements (ClickBench, JSONBench, TPC-H).
 - [ ] **MonetDB JSONBench**, or record why not: MonetDB does not register the suite at all, so nothing states why.
 - [ ] **Run the live smoke tests for the other published engines.** `pytest -m live` has only been run for DuckDB;
       run it for ClickHouse, MonetDB, Polars and Arc once and fix what it finds.
@@ -105,23 +83,21 @@ Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which
 
 ## 5. Resource reporting
 
-- [ ] **Show memory on the site.** Metric schema v7 now records the cgroup anon/file/shmem split and a data/WAL disk
-      split, and `olap results resources` labels DuckDB and Polars `client_only`. Publish runs recorded at v7 first
-      (older runs only carry the page-cache-inclusive charge), then show server memory (anon + shmem) for container
-      engines and client memory for in-process engines, labelled as such.
-- [ ] **Validate the v7 sampling on a live run.** The cgroup v2 parsing is unit-tested against Docker payloads but no
-      benchmark has run with it yet; check that one ClickHouse and one PostgreSQL run record plausible anon, shmem
-      and WAL figures.
+- [ ] **Show memory on the site.** The published `2026-10` runs carry metric schema v7 (cgroup anon/file/shmem
+      split, data/WAL disk split). Show server memory (anon + shmem) for container engines and client memory for
+      in-process engines (DuckDB, Polars), labelled as such.
+- [ ] **Validate the v7 sampling on PostgreSQL.** ClickHouse, MonetDB and Arc recorded plausible anon/shmem figures in
+      the 2026-10 campaign; PostgreSQL (shared_buffers counted as shmem) and its `pg_wal` split have not run since.
 
 ## 6. Deferred
 
 - [ ] **Cloud campaign** on one x86-64 Linux `i4i` host per `CLOUD.md`, including the higher scale factors this
       machine cannot run. Do it after section 1 so the campaign is a single `olap matrix run`.
-- [ ] **JOB**, after `resident-hot-v1` has been exercised by a public run.
+- [ ] **JOB**, now that `resident-hot-v1` has been exercised by a public run.
 - [ ] **TSBS and InfluxDB 3**, only as a complete time-series expansion (Arc first).
 
 ## Suggested order
 
-1. Section 1: a fresh campaign published through the new gate.
-2. Section 3 (site), independent of the harness work.
-3. The cloud campaign under `resident-hot-v1`; sections 4-5 fit around these.
+1. Section 1: an amd64 MonetDB image, so the cloud campaign can run every published engine.
+2. The cloud campaign under `resident-hot-v1`.
+3. Sections 3-5 around these.
