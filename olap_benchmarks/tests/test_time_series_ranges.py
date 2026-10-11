@@ -8,8 +8,15 @@ import pytest
 
 from ..dbs.polars.time_series_ranges import execute_time_series_ranges_query
 from ..results.hashing import build_answer_metadata
-from ..suites.time_series_metrics.config import METRIC_COUNTS, generate_batch, to_eav, write_datasets
-from ..suites.time_series_ranges.config import END, INTERVAL_MINUTES, QUERIES_DIRECTORY, QUERY_NAMES, RANGE_QUERIES
+from ..suites.time_series_metrics.config import generate_batch, to_eav, write_datasets
+from ..suites.time_series_ranges.config import (
+    END,
+    INTERVAL_MINUTES,
+    METRIC_COUNTS,
+    QUERIES_DIRECTORY,
+    QUERY_NAMES,
+    RANGE_QUERIES,
+)
 
 
 @pytest.mark.parametrize("metrics", METRIC_COUNTS)
@@ -110,3 +117,15 @@ def test_calculation_preserves_nulls_alignment_and_both_branches() -> None:
                 assert build_answer_metadata(result)["answer_hash"] == build_answer_metadata(expected)["answer_hash"]
     finally:
         con.close()
+
+
+def test_largest_width_fits_tdengine_and_query_files_match_the_plan() -> None:
+    assert max(METRIC_COUNTS) + 2 == 4096
+    assert set(QUERY_NAMES) == {path.stem for path in QUERIES_DIRECTORY.glob("*.sql")}
+    assert set(QUERY_NAMES) == {path.stem for path in (QUERIES_DIRECTORY / "tdengine").glob("*.sql")}
+
+
+def test_tdengine_registers_only_the_requested_suite() -> None:
+    from ..dbs.tdengine import TDengine
+
+    assert set(TDengine().suite_registry()) == {"time_series_ranges"}

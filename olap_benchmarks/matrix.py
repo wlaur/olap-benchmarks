@@ -97,6 +97,7 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
         published=False,
         suites=_default_scale("rtabench", "jsonbench", "clickbench"),
     ),
+    "tdengine": EnginePlan(published=True, suites=_default_scale("time_series_ranges")),
 }
 
 

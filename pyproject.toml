@@ -37,6 +37,7 @@ dependencies = [
     "sqlalchemy>=2.0.42",
     "adbc-driver-monetdb==0.12.10",
     "sqlalchemy-monetdb-adbc==0.3.10",
+    "taos-ws-py==0.7.0",
 ]
 
 [project.scripts]

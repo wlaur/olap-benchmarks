@@ -1037,6 +1037,7 @@ def get_databases() -> dict[DatabaseName, Database]:
     from .postgres import Postgres
     from .questdb import QuestDB
     from .starrocks import StarRocks
+    from .tdengine import TDengine
     from .timescaledb import TimescaleDB
 
     databases: dict[DatabaseName, Database] = {
@@ -1050,6 +1051,7 @@ def get_databases() -> dict[DatabaseName, Database]:
         "starrocks": StarRocks(),
         "doris": Doris(),
         "arc": Arc(),
+        "tdengine": TDengine(),
     }
 
     assert set(databases) == set(get_args(DatabaseName))

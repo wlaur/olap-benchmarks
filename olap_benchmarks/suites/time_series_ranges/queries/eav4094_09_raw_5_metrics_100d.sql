@@ -1,0 +1,1 @@
+SELECT time, metric_name, CAST(value AS DOUBLE PRECISION) AS value FROM eav4094 WHERE time >= '2024-09-23' AND time < '2025-01-01' AND metric_name IN ('metric_0001', 'metric_1024', 'metric_2047', 'metric_3070', 'metric_4094') ORDER BY time, metric_name

@@ -24,6 +24,7 @@ SMOKE_SUITES: dict[DatabaseName, tuple[SuiteName, int]] = {
     "monetdb": ("kaggle_airbnb", 1),
     "polars": ("clickbench", 1),
     "arc": ("time_series", 1),
+    "tdengine": ("time_series_ranges", 1),
 }
 
 REVISION = "live-smoke"

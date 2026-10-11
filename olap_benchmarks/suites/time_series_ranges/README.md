@@ -2,13 +2,15 @@
 
 Fetch five or ten selected metrics over the last 1, 10 or 100 days, or average
 each selected metric over that same range. Each operation is paired between
-wide and dense EAV at 100, 1,000, 2,000 and 5,000 stored metrics. Another 24
+wide and dense EAV at 100, 1,000, 2,000 and 4,094 stored metrics. Another 24
 queries calculate a derived signal from ten aligned metrics and summarize it
-hourly over the same three ranges: 120 queries in total.
+hourly over the same three ranges: 120 queries in total. The largest width reserves two of TDengine's 4,096
+columns for a timestamp and a device tag. The historical `time_series_metrics`
+suite retains its existing widths and is not rerun by this campaign.
 
 The dataset holds exactly 100 days at ten-minute intervals, ending immediately
 before 2025-01-01: 14,400 timestamps per wide table. The largest EAV table has
-72 million rows. This sampling interval keeps the input and engine-store budget
+58,953,600 rows. This sampling interval keeps the input and engine-store budget
 similar to the existing 14-day, one-minute `time_series_metrics` suite. It does
 not represent 100 days of one-minute data. Existing suites and inputs are kept.
 
@@ -53,6 +55,13 @@ ClickHouse wide queries put the timestamp range in an explicit `PREWHERE`.
 This retains early filtering and primary-index pruning while avoiding the
 automatic WHERE-to-PREWHERE selection cost on thousands of columns. MergeTree,
 time ordering, adaptive granules and the time-series codecs stay the same.
+
+TDengine uses native wide FLOAT columns and an EAV supertable with one
+timestamp/value subtable per metric and `metric_name` as a tag. The EAV
+observations are generated from the identical wide Parquet in bounded batches,
+including null rows. Both layouts use the WebSocket connector, two vgroups,
+32 MiB write buffers per vgroup and a long retention period for the fixed
+historical fixture. Population flushes the database before restart.
 
 Run only this suite with `olap matrix run --suite time_series_ranges --revision
 UNIQUE_NAME`; add `--db ENGINE` for one database. Publish with `olap publish

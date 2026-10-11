@@ -23,6 +23,7 @@ DatabaseName = Literal[
     "starrocks",
     "doris",
     "arc",
+    "tdengine",
 ]
 
 SuiteName = Literal[
@@ -205,6 +206,7 @@ DEFAULT_HOST_PORTS: dict[str, int] = {
     "starrocks_fe_http": 8030,
     "starrocks_be_http": 8040,
     "arc": 8000,
+    "tdengine_ws": 16041,
 }
 
 
