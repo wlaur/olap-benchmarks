@@ -331,7 +331,7 @@ class ClickhouseTimeseries(TimeSeries["Clickhouse"]):
 class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
-        settings: dict[str, int] = {"cast_keep_nullable": 1}
+        settings: dict[str, int] = {"cast_keep_nullable": 1, "prefer_column_name_to_alias": 1}
         if (threads := get_settings().benchmark_threads) is not None:
             settings["max_threads"] = threads
         return {"time_columns": ["time", "hr"], "settings": settings}
