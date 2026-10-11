@@ -1,0 +1,1 @@
+SELECT metric_name, AVG(CAST(value AS DOUBLE PRECISION)) AS avg_value FROM eav5000 WHERE time >= '2024-12-22' AND time < '2025-01-01' AND metric_name IN ('metric_0001', 'metric_0556', 'metric_1111', 'metric_1667', 'metric_2222', 'metric_2778', 'metric_3333', 'metric_3889', 'metric_4444', 'metric_5000') GROUP BY metric_name ORDER BY metric_name

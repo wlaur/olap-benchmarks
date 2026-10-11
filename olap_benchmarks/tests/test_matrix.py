@@ -32,6 +32,7 @@ def test_published_matrix_content() -> None:
         ("jsonbench", 10),
         ("clickbench", 1),
         ("time_series_metrics", 1),
+        ("time_series_ranges", 1),
     }
     assert {cell.operation for cell in cells if cell.suite == "clickbench"} == {"populate", "select"}
 

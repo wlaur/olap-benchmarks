@@ -29,6 +29,7 @@ SuiteName = Literal[
     "rtabench",
     "time_series",
     "time_series_metrics",
+    "time_series_ranges",
     "clickbench",
     "jsonbench",
     "chat_threads",
@@ -87,6 +88,13 @@ SUITE_SPECS: dict[SuiteName, SuiteSpec] = {
     ),
     "time_series_metrics": SuiteSpec(
         "Time Series Metrics",
+        scale_factors=(1,),
+        default_scale_factor=1,
+        scalable=False,
+        query_name_parser="time_series",
+    ),
+    "time_series_ranges": SuiteSpec(
+        "Time Series Ranges",
         scale_factors=(1,),
         default_scale_factor=1,
         scalable=False,

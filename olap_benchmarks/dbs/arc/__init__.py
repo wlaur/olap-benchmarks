@@ -21,6 +21,7 @@ from ...suites.chat_threads.config import ChatThreads, get_chat_threads_input_fi
 from ...suites.clickbench.config import Clickbench
 from ...suites.time_series.config import TimeSeries
 from ...suites.time_series_metrics.config import METRIC_COUNTS, TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
 from ..utils import require_columns
 
@@ -205,7 +206,7 @@ class Arc(Database):
             "ARC_TELEMETRY_ENABLED": "false",
             "ARC_DELETE_ENABLED": "true",
         }
-        if self.current_suite == "time_series_metrics":
+        if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             env["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
             env.update(self.METRICS_INGEST_ENV)
         return self.docker_run_command(
@@ -222,7 +223,7 @@ class Arc(Database):
     @property
     def benchmark_settings(self) -> Mapping[str, object]:
         settings = dict(super().benchmark_settings)
-        if self.current_suite == "time_series_metrics":
+        if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             settings["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
             settings.update(self.METRICS_INGEST_ENV)
         return settings
@@ -379,7 +380,7 @@ class Arc(Database):
         _ = primary_key, not_null
         initial_count = self.get_count(table) if table in self.get_table_names() else 0
         rows = self._write(df, table)
-        if self.current_suite == "time_series_metrics":
+        if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             with self.phase_context("compact", table_name=table):
                 self.compact()
         self.wait_until_count(table, initial_count + rows)
@@ -456,6 +457,7 @@ class Arc(Database):
         return {
             "time_series": ArcTimeSeries,
             "time_series_metrics": ArcTimeSeriesMetrics,
+            "time_series_ranges": TimeSeriesRanges,
             "clickbench": ArcClickbench,
             "chat_threads": ArcChatThreads,
         }

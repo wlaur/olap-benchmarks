@@ -24,6 +24,7 @@ from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, wri
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from ...suites.tpc_ds.config import TpcDs
 from ...suites.tpc_h.config import TpcH
 from .. import Database
@@ -379,6 +380,12 @@ class ClickhouseTimeSeriesMetrics(TimeSeriesMetrics["Clickhouse"]):
         super().populate_table(table, path)
 
 
+class ClickhouseTimeSeriesRanges(TimeSeriesRanges["Clickhouse"], ClickhouseTimeSeriesMetrics):
+    def query_fetch_kwargs(self, query_name: str) -> Mapping[str, Any]:
+        _ = query_name
+        return self.fetch_kwargs
+
+
 class Clickhouse(Database):
     name: DatabaseName = "clickhouse"
     supports_arm64_containers: ClassVar[bool] = True
@@ -390,8 +397,9 @@ class Clickhouse(Database):
     @property
     def benchmark_settings(self) -> Mapping[str, object]:
         settings = dict(super().benchmark_settings)
+        if self._current_suite in ("time_series_metrics", "time_series_ranges"):
+            settings[f"{self._current_suite}_query_settings"] = dict(ClickhouseTimeSeriesMetrics.QUERY_SETTINGS)
         if self._current_suite == "time_series_metrics":
-            settings["time_series_metrics_query_settings"] = dict(ClickhouseTimeSeriesMetrics.QUERY_SETTINGS)
             settings["time_series_metrics_all_metric_settings"] = dict(ClickhouseTimeSeriesMetrics.ALL_METRIC_SETTINGS)
         return settings
 
@@ -785,6 +793,7 @@ class Clickhouse(Database):
             "chat_threads": ChatThreads,
             "time_series": ClickhouseTimeseries,
             "time_series_metrics": ClickhouseTimeSeriesMetrics,
+            "time_series_ranges": ClickhouseTimeSeriesRanges,
             "tpc_h": ClickhouseTpcH,
             "tpc_ds": ClickhouseTpcDs,
         }

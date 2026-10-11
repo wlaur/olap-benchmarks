@@ -23,6 +23,7 @@ from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.time_series.config import TimeSeries
 from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database, ParquetEpochColumns
 from ..utils import tracked_commit
 from .adbc import (
@@ -70,6 +71,10 @@ class MonetDBTimeSeriesMetrics(TimeSeriesMetrics["MonetDB"]):
     def finish_populate(self) -> None:
         for table in self.expected_table_row_counts():
             self.db.analyze_table(table, ["metric_name", "time"] if table.startswith("eav") else ["time"])
+
+
+class MonetDBTimeSeriesRanges(TimeSeriesRanges["MonetDB"], MonetDBTimeSeriesMetrics):
+    pass
 
 
 class MonetDB(Database):
@@ -310,5 +315,6 @@ class MonetDB(Database):
             **super().suite_registry(),
             "time_series": MonetDBTimeSeries,
             "time_series_metrics": MonetDBTimeSeriesMetrics,
+            "time_series_ranges": MonetDBTimeSeriesRanges,
             "chat_threads": ChatThreads,
         }
