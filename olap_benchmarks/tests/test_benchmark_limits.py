@@ -145,6 +145,19 @@ def test_disabled_query_deadline_does_not_change_an_existing_alarm() -> None:
         signal.setitimer(signal.ITIMER_REAL, 0)
 
 
+def test_query_watchdog_expires_only_an_active_overdue_query(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "query.json"
+    monkeypatch.setattr(limits, "monotonic", lambda: 100.0)
+    assert limits.expired_query(path, 1) is None
+    limits.start_query_watchdog(path, "slow")
+    assert limits.expired_query(path, 1) is None
+    monkeypatch.setattr(limits, "monotonic", lambda: 101.1)
+    assert limits.expired_query(path, 1) == "slow"
+    assert limits.expired_query(path, None) is None
+    path.unlink()
+    assert limits.expired_query(path, 1) is None
+
+
 def test_query_timeout_records_failure_and_clears_active_step(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -261,9 +274,9 @@ class _MemoryProcess:
         return _MemoryInfo(3 * 1024**3)
 
 
-@pytest.mark.parametrize("resource", ["time", "memory", "disk"])
+@pytest.mark.parametrize("resource", ["time", "memory", "disk", "query"])
 def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
-    settings: Settings, monkeypatch: pytest.MonkeyPatch, resource: Literal["time", "memory", "disk"]
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, resource: Literal["time", "memory", "disk", "query"]
 ) -> None:
     settings.operation_timeout_seconds = 10 if resource == "time" else None
     settings.client_memory_limit_gb = 2 if resource == "memory" else None
@@ -284,16 +297,21 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
         if disk_checks > 1 and resource == "disk":
             raise OSError("Disk reserve reached during operation")
 
+    def query_expired(_path: Path, _timeout: int | None) -> str | None:
+        return "slow" if resource == "query" else None
+
     monkeypatch.setattr(operation_runner, "Process", new_process)
     monkeypatch.setattr(operation_runner, "monotonic", lambda: next(clock))
     monkeypatch.setattr(operation_runner, "check_disk_space", disk_space)
     monkeypatch.setattr(operation_runner, "configure_polars_spill", lambda: None)
+    monkeypatch.setattr(operation_runner, "expired_query", query_expired)
     monkeypatch.setattr(operation_runner.os, "kill", send_signal)
     monkeypatch.setattr(operation_runner.psutil, "Process", _MemoryProcess)
     expected_error, message = {
         "time": (TimeoutError, "exceeded operation time budget"),
         "memory": (MemoryError, "client exceeded 2 GiB RSS"),
         "disk": (OSError, "Disk reserve reached during operation"),
+        "query": (TimeoutError, "Query slow exceeded"),
     }[resource]
 
     with pytest.raises(expected_error, match=message):

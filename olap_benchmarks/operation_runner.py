@@ -17,12 +17,13 @@ import os
 import shutil
 import signal
 from multiprocessing import Process, Queue
+from pathlib import Path
 from time import monotonic
 
 import psutil
 
 from .dbs import Database, get_databases
-from .limits import check_disk_space
+from .limits import check_disk_space, expired_query
 from .metrics.storage import WriterMessage
 from .settings import DatabaseName, Operation, SuiteName, get_settings
 
@@ -54,12 +55,15 @@ def _operation_entrypoint(
     result_queue: "Queue[object]",
     start_command: str | None,
     page_cache_dropped: bool,
+    query_watchdog_path: Path,
 ) -> None:
     db_instance = get_databases()[db_name]
     db_instance._current_suite = suite
     db_instance._current_suite_scale_factor = scale_factor
     db_instance._last_start_command = start_command
     db_instance._page_cache_dropped = page_cache_dropped
+    if operation == "select":
+        db_instance._query_watchdog_path = query_watchdog_path
     db_instance.set_queues(queue, result_queue)
     db_instance.benchmark(suite, operation, scale_factor=scale_factor)
 
@@ -74,6 +78,9 @@ def run_operation(
 ) -> None:
     check_disk_space()
     configure_polars_spill()
+    settings = get_settings()
+    query_watchdog_path = settings.temporary_directory / f"query-watchdog-{os.getpid()}.json"
+    query_watchdog_path.unlink(missing_ok=True)
     process = Process(
         target=_operation_entrypoint,
         args=(
@@ -85,12 +92,12 @@ def run_operation(
             result_queue,
             db_instance._last_start_command,
             db_instance._page_cache_dropped,
+            query_watchdog_path,
         ),
         name=f"olap-{db_instance.name}-{suite}-{operation}",
         daemon=False,
     )
     process.start()
-    settings = get_settings()
     deadline = (
         monotonic() + settings.operation_timeout_seconds if settings.operation_timeout_seconds is not None else None
     )
@@ -100,6 +107,9 @@ def run_operation(
             if not process.is_alive():
                 break
             check_disk_space()
+            query_name = expired_query(query_watchdog_path, settings.query_timeout_seconds)
+            if query_name is not None:
+                raise TimeoutError(f"Query {query_name} exceeded {settings.query_timeout_seconds} seconds")
             if deadline is not None and monotonic() > deadline:
                 raise TimeoutError(f"{operation} on {db_instance.name}/{suite} exceeded operation time budget")
             if settings.client_memory_limit_gb is not None and process.pid is not None:
@@ -117,6 +127,8 @@ def run_operation(
                 process.kill()
                 process.join(timeout=5)
         raise
+    finally:
+        query_watchdog_path.unlink(missing_ok=True)
 
     if process.exitcode == 0:
         return

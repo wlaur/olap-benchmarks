@@ -331,9 +331,9 @@ def run_benchmark_groups(
             if failed_runs:
                 _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
         elif any(outcome.error is not None for outcome in outcomes):
-            mark_running_runs_failed(
-                revision=revision, error_type="RuntimeError", error_message="Benchmark operation process failed"
-            )
+            error = next(outcome.error for outcome in reversed(outcomes) if outcome.error is not None)
+            error_type, _, error_message = error.partition(": ")
+            mark_running_runs_failed(revision=revision, error_type=error_type, error_message=error_message)
 
     return outcomes
 

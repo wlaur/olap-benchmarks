@@ -20,7 +20,7 @@ from sqlalchemy import Connection, text
 
 from ..container_platform import get_container_engine_platform
 from ..images import ResolvedImage, resolve_images
-from ..limits import query_deadline
+from ..limits import query_deadline, start_query_watchdog
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..profile import BENCHMARK_PROFILE, BenchmarkProfile
@@ -121,6 +121,7 @@ class Database(BaseModel, ABC):
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
     _writer_process: Process | None = None
+    _query_watchdog_path: Path | None = None
     _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
     _query_hashes: dict[str, str] = PrivateAttr(default_factory=_new_query_hashes)
     _started_query_steps: set[tuple[str, int]] = PrivateAttr(default_factory=_new_started_query_steps)
@@ -660,6 +661,7 @@ class Database(BaseModel, ABC):
 
         kwargs = dict(fetch_kwargs or {})
         self._query_hashes[query_name] = sha256_text(query)
+        start_query_watchdog(self._query_watchdog_path, query_name)
 
         try:
             t0 = perf_counter()
@@ -676,6 +678,8 @@ class Database(BaseModel, ABC):
             )
             raise
         finally:
+            if self._query_watchdog_path is not None:
+                self._query_watchdog_path.unlink(missing_ok=True)
             self._pop_active_step(step_id)
 
         self._finish_timed_step(

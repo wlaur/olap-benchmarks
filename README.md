@@ -37,7 +37,7 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_RUN_NOTE` | Run context recorded in `metadata.options.note` |
 | `OLAP_BENCHMARKS_MINIMUM_FREE_DISK_GB` | Disk reserve in GiB (default 40), checked before container startup and once per second during operations |
 | `OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS` | Optional wall-clock limit per operation; terminates an unresponsive benchmark process |
-| `OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS` | Optional select-query iteration deadline; native drivers may defer Python signal handling, so also set an operation limit |
+| `OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS` | Optional select-query iteration deadline; a process watchdog also terminates native drivers that defer Python signal handling |
 | `OLAP_BENCHMARKS_CLIENT_MEMORY_LIMIT_GB` | Optional benchmark-process RSS safety limit in GiB; distinct from container memory limits |
 | `OLAP_BENCHMARKS_QUERY_INCLUDE` / `OLAP_BENCHMARKS_QUERY_EXCLUDE` | JSON arrays of query-name glob patterns for partial select suites; omitted queries remain in the recorded plan as skipped steps |
 | `OLAP_BENCHMARKS_TABLES` | JSON array of table-name glob patterns for partial metrics/ranges populate and select runs; inputs retain their original size and values |
