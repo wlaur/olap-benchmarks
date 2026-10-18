@@ -191,7 +191,7 @@ class ArcChatThreads(ChatThreads["Arc"]):
 class Arc(Database):
     name: DatabaseName = "arc"
     supports_arm64_containers: ClassVar[bool] = True
-    METRICS_INGEST_ENV: ClassVar[dict[str, str]] = {
+    BOUNDED_INGEST_ENV: ClassVar[dict[str, str]] = {
         "ARC_INGEST_FLUSH_WORKERS": "2",
         "GOMEMLIMIT": "1GiB",
     }
@@ -209,7 +209,8 @@ class Arc(Database):
         }
         if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             env["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
-            env.update(self.METRICS_INGEST_ENV)
+        if self.current_suite in ("time_series", "time_series_metrics", "time_series_ranges"):
+            env.update(self.BOUNDED_INGEST_ENV)
         return self.docker_run_command(
             self.container_images["server"],
             ports={str(host_port("arc")): "8000"},
@@ -227,7 +228,8 @@ class Arc(Database):
         settings = dict(super().benchmark_settings)
         if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             settings["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
-            settings.update(self.METRICS_INGEST_ENV)
+        if self.current_suite in ("time_series", "time_series_metrics", "time_series_ranges"):
+            settings.update(self.BOUNDED_INGEST_ENV)
         return settings
 
     @property
@@ -382,7 +384,7 @@ class Arc(Database):
         _ = primary_key, not_null
         initial_count = self.get_count(table) if table in self.get_table_names() else 0
         rows = self._write(df, table)
-        if self.current_suite in ("time_series_metrics", "time_series_ranges"):
+        if self.current_suite in ("time_series", "time_series_metrics", "time_series_ranges"):
             with self.phase_context("compact", table_name=table):
                 self.compact()
         self.wait_until_count(table, initial_count + rows)
