@@ -8,6 +8,7 @@ from setproctitle import setproctitle
 
 from .dbs import get_databases
 from .inputs import drop_page_cache, fingerprint_input_directory
+from .limits import check_disk_space
 from .matrix import MatrixCell, current_drivers, current_pins, expand_matrix, published_databases
 from .metrics.storage import WriterProcessHandle, start_writer_process
 from .operation_runner import run_operation
@@ -85,6 +86,7 @@ app.command(matrix_app)
 
 
 def _start_db(db_instance: "Database") -> None:
+    check_disk_space()
     commands = db_instance.start_commands
     db_instance._last_start_command = "\n".join(commands) if commands else None
     if not commands:
@@ -328,6 +330,10 @@ def run_benchmark_groups(
             failed_runs = mark_running_runs_failed(revision=revision)
             if failed_runs:
                 _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
+        elif any(outcome.error is not None for outcome in outcomes):
+            mark_running_runs_failed(
+                revision=revision, error_type="RuntimeError", error_message="Benchmark operation process failed"
+            )
 
     return outcomes
 

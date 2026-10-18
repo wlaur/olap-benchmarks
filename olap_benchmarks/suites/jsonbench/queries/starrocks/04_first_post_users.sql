@@ -7,5 +7,5 @@ WHERE
   AND get_json_string(data, 'commit.operation') = 'create'
   AND get_json_string(data, 'commit.collection') = 'app.bsky.feed.post'
 GROUP BY user_id
-ORDER BY min(get_json_int(data, 'time_us')) ASC
+ORDER BY min(get_json_int(data, 'time_us')) ASC, user_id ASC NULLS LAST
 LIMIT 3;

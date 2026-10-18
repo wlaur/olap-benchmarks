@@ -15,9 +15,14 @@ the operation's own process rather than the orchestrating one.
 import logging
 import os
 import shutil
+import signal
 from multiprocessing import Process, Queue
+from time import monotonic
+
+import psutil
 
 from .dbs import Database, get_databases
+from .limits import check_disk_space
 from .metrics.storage import WriterMessage
 from .settings import DatabaseName, Operation, SuiteName, get_settings
 
@@ -34,7 +39,10 @@ def configure_polars_spill() -> None:
     free_mb = shutil.disk_usage(spill_directory).free // (1024 * 1024)
     os.environ["POLARS_TEMP_DIR"] = spill_directory.as_posix()
     os.environ["POLARS_OOC_SPILL_DIR"] = spill_directory.as_posix()
-    os.environ["POLARS_OOC_DISK_BUDGET_MB"] = str(max(free_mb - POLARS_SPILL_HEADROOM_MB, 1024))
+    reserve_mb = max(POLARS_SPILL_HEADROOM_MB, get_settings().minimum_free_disk_gb * 1024)
+    if free_mb <= reserve_mb:
+        raise OSError(f"Not enough free disk for Polars spill: {free_mb} MiB free, reserve {reserve_mb} MiB")
+    os.environ["POLARS_OOC_DISK_BUDGET_MB"] = str(free_mb - reserve_mb)
 
 
 def _operation_entrypoint(
@@ -64,6 +72,7 @@ def run_operation(
     queue: "Queue[WriterMessage]",
     result_queue: "Queue[object]",
 ) -> None:
+    check_disk_space()
     configure_polars_spill()
     process = Process(
         target=_operation_entrypoint,
@@ -81,7 +90,33 @@ def run_operation(
         daemon=False,
     )
     process.start()
-    process.join()
+    settings = get_settings()
+    deadline = (
+        monotonic() + settings.operation_timeout_seconds if settings.operation_timeout_seconds is not None else None
+    )
+    try:
+        while process.is_alive():
+            process.join(timeout=1)
+            if not process.is_alive():
+                break
+            check_disk_space()
+            if deadline is not None and monotonic() > deadline:
+                raise TimeoutError(f"{operation} on {db_instance.name}/{suite} exceeded operation time budget")
+            if settings.client_memory_limit_gb is not None and process.pid is not None:
+                try:
+                    rss = psutil.Process(process.pid).memory_info().rss
+                except psutil.NoSuchProcess:
+                    continue
+                if rss > settings.client_memory_limit_gb * 1024**3:
+                    raise MemoryError(f"{operation} client exceeded {settings.client_memory_limit_gb} GiB RSS")
+    except BaseException:
+        if process.pid is not None and process.is_alive():
+            os.kill(process.pid, signal.SIGINT)
+            process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
+        raise
 
     if process.exitcode == 0:
         return

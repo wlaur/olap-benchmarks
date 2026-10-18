@@ -7,4 +7,4 @@ WHERE
   data ->> 'kind' = 'commit'
   AND data -> 'commit' ->> 'operation' = 'create'
 GROUP BY event
-ORDER BY count DESC;
+ORDER BY count DESC, event ASC NULLS LAST;

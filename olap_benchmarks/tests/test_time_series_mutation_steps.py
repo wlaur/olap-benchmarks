@@ -11,6 +11,7 @@ from sqlalchemy import Connection
 
 from ..dbs import Database
 from ..settings import DatabaseName, TableName
+from ..suites.chat_threads.config import ChatMutateStep, ChatThreads
 from ..suites.time_series.config import MutateStep, TimeSeries
 
 
@@ -57,7 +58,7 @@ class FakeMutationDB(Database):
         raise NotImplementedError
 
     def is_mutation_step_enabled(self, suite: str, step_name: str) -> bool:
-        assert suite == "time_series"
+        assert suite in ("time_series", "chat_threads")
         return step_name not in self.disabled_steps
 
     @contextmanager
@@ -224,7 +225,8 @@ def test_time_series_mutate_records_remaining_iterations_after_failure(monkeypat
 
     monkeypatch.setattr(TimeSeries, "_apply_insert", fail_insert)
 
-    suite.mutate()
+    with pytest.raises(RuntimeError, match="1 of 2 time_series mutation steps failed"):
+        suite.mutate()
 
     assert db.executed_steps == [
         (failed_step.name, 1, "data_large"),
@@ -241,6 +243,77 @@ def test_time_series_mutate_records_remaining_iterations_after_failure(monkeypat
     ]
     assert db.deleted_tables == ["data_tall", "data_tall"]
     assert db.rollback_calls == 1
+
+
+def test_chat_threads_mutate_preserves_partial_results_and_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeMutationDB()
+    suite = cast(ChatThreads[FakeMutationDB], ChatThreads.model_construct(db=db, name="chat_threads", scale_factor=1))
+    failed_step = ChatMutateStep(action="append_message", table="chat_messages", row_count=1)
+    succeeding_step = ChatMutateStep(action="touch_thread", table="chat_threads", row_count=1)
+    monkeypatch.setattr(
+        "olap_benchmarks.suites.chat_threads.config.CHAT_THREADS_MUTATE_STEPS", [failed_step, succeeding_step]
+    )
+    monkeypatch.setattr("olap_benchmarks.suites.chat_threads.config.MUTATE_ITERATIONS", 2)
+
+    def apply_step(self: ChatThreads[Any], step: ChatMutateStep, seed: int) -> None:
+        _ = self, seed
+        if step == failed_step:
+            raise RuntimeError("append failed")
+
+    monkeypatch.setattr(ChatThreads, "_apply_step", apply_step)
+
+    with pytest.raises(RuntimeError, match="1 of 2 chat_threads mutation steps failed"):
+        suite.mutate()
+
+    assert db.executed_steps == [
+        (failed_step.name, 1, failed_step.table),
+        (succeeding_step.name, 1, succeeding_step.table),
+        (succeeding_step.name, 2, succeeding_step.table),
+    ]
+    assert db.skipped_steps == [
+        (failed_step.name, 2, failed_step.table, "mutation aborted after RuntimeError: append failed")
+    ]
+    assert db.rollback_calls == 1
+
+
+def test_time_series_mutation_seed_survives_disabled_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    first = MutateStep(action="insert", table="data_large", row_count=1)
+    second = MutateStep(action="insert", table="data_wide", row_count=1)
+    db = FakeMutationDB(disabled_steps={first.name})
+    suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
+    seeds: list[int] = []
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.TIME_SERIES_MUTATE_STEPS", [first, second])
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.MUTATE_ITERATIONS", 2)
+
+    def generate(self: TimeSeries[Any], step: MutateStep, seed: int) -> pl.DataFrame:
+        seeds.append(seed)
+        return _fake_insert_data(self, step, seed)
+
+    monkeypatch.setattr(TimeSeries, "_generate_insert_data", generate)
+
+    suite.mutate()
+
+    assert seeds == [1_001, 1_002]
+
+
+def test_chat_threads_mutation_seed_survives_disabled_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    first = ChatMutateStep(action="append_message", table="chat_messages", row_count=1)
+    second = ChatMutateStep(action="touch_thread", table="chat_threads", row_count=1)
+    db = FakeMutationDB(disabled_steps={first.name})
+    suite = cast(ChatThreads[FakeMutationDB], ChatThreads.model_construct(db=db, name="chat_threads", scale_factor=1))
+    seeds: list[int] = []
+    monkeypatch.setattr("olap_benchmarks.suites.chat_threads.config.CHAT_THREADS_MUTATE_STEPS", [first, second])
+    monkeypatch.setattr("olap_benchmarks.suites.chat_threads.config.MUTATE_ITERATIONS", 2)
+
+    def apply(self: ChatThreads[Any], step: ChatMutateStep, seed: int) -> None:
+        _ = self, step
+        seeds.append(seed)
+
+    monkeypatch.setattr(ChatThreads, "_apply_step", apply)
+
+    suite.mutate()
+
+    assert seeds == [1_001, 1_002]
 
 
 def test_time_series_concurrent_skips_disabled_writer(monkeypatch: pytest.MonkeyPatch) -> None:

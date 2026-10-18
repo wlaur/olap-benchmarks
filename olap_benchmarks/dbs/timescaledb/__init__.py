@@ -340,43 +340,20 @@ class TimescaleDB(Postgres):
         for junk in self.database_directory.glob("._*"):
             junk.unlink(missing_ok=True)
 
-        parts = [
-            (
-                f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
-                f"--rm -d -p {host_port('timescaledb')}:5432"
-            ),
-            f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
-            "-e POSTGRES_PASSWORD=password",
-            "-e PGDATA=/var/lib/postgresql/data/",
-            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
-            # naive Polars datetimes round-trip without offset surprises.
-            "-e TZ=UTC",
-            "-e PGTZ=UTC",
+        values = dict(self.server_settings)
+        values.update(bgwriter_lru_maxpages="1000", bgwriter_delay="10ms")
+        return self.docker_run_command(
             self.container_images["server"],
-            # Postgres settings tuned for the EAV bulk-load + columnstore
-            # compression workload. shared_buffers / parallelism are already
-            # auto-tuned by the Timescale image (timescaledb-tune); the rest
-            # relax checkpoint / WAL pressure for the multi-billion-row insert
-            # and let compress_chunk() sort 130 M-row chunks in memory instead
-            # of spilling to BufFile temp files (the original bottleneck on
-            # data_large -- per-chunk compress jumped from ~50 s to >300 s
-            # once sorts spilled).
-            "-c max_wal_size=16GB",
-            "-c min_wal_size=2GB",
-            # WAL compression saves disk but the CPU cost of zstd on every
-            # WALInsert dominates under heavy concurrent COPY traffic; leaving
-            # it off let the COPY workers spend less time waiting on the
-            # WALInsert LWLock.
-            "-c wal_compression=off",
-            "-c synchronous_commit=off",
-            "-c checkpoint_timeout=30min",
-            "-c work_mem=4GB",
-            "-c max_parallel_maintenance_workers=4",
-            "-c bgwriter_lru_maxpages=1000",
-            "-c bgwriter_delay=10ms",
-        ]
-
-        return " ".join(parts)
+            ports={str(host_port("timescaledb")): "5432"},
+            mounts={self.database_directory.as_posix(): "/var/lib/postgresql/data"},
+            env={
+                "POSTGRES_PASSWORD": "password",
+                "PGDATA": "/var/lib/postgresql/data",
+                "TZ": "UTC",
+                "PGTZ": "UTC",
+            },
+            args=tuple(part for name, value in values.items() for part in ("-c", f"{name}={value}")),
+        )
 
     def get_runtime_version(self) -> str:
         df = self.fetch(

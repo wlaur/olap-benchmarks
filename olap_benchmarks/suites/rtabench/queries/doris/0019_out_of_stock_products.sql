@@ -18,4 +18,5 @@ WHERE
             AND oe.order_id = oi.order_id)
 GROUP BY
     p.product_id, p.name, p.stock
-HAVING (sum(oi.amount) < p.stock);
+HAVING (sum(oi.amount) < p.stock)
+ORDER BY p.product_id;

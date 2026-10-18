@@ -757,12 +757,13 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             _LOGGER.info(f"No mutation steps enabled for {self.name} on {self.db.name}")
             return
 
+        step_indices = {step.name: index for index, step in enumerate(TIME_SERIES_MUTATE_STEPS)}
         for step_idx, step in enumerate(steps):
             failed_iteration: int | None = None
             try:
                 for iteration in range(1, MUTATE_ITERATIONS + 1):
                     failed_iteration = iteration
-                    seed = step_idx * 1000 + iteration
+                    seed = step_indices[step.name] * 1000 + iteration
 
                     with self.db.mutation_context(
                         query_name=step.name,
@@ -799,9 +800,9 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 )
 
         if failed_steps:
-            _LOGGER.warning(
-                f"Time-series mutate completed on {self.db.name} with {failed_steps:_} failed "
-                f"{'steps' if failed_steps != 1 else 'step'}"
+            raise RuntimeError(
+                f"{failed_steps:_} of {len(steps):_} time_series mutation steps failed on {self.db.name}; "
+                "see the logged traceback(s) above"
             )
 
         _LOGGER.info(f"Executed {len(steps):_} mutation steps (with repetitions) in {perf_counter() - t0:_.2f} seconds")

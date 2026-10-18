@@ -58,6 +58,7 @@ def test_queries_manifest_includes_registered_suites() -> None:
         "doris",
         "postgres",
         "starrocks",
+        "timescaledb",
     }
 
 

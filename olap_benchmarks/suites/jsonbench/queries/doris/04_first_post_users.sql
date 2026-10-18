@@ -10,5 +10,5 @@ WHERE
   AND json_extract_string(data, '$.commit.operation') = 'create'
   AND json_extract_string(data, '$.commit.collection') = 'app.bsky.feed.post'
 GROUP BY user_id
-ORDER BY min(json_extract_bigint(data, '$.time_us')) ASC
+ORDER BY min(json_extract_bigint(data, '$.time_us')) ASC, user_id ASC NULLS LAST
 LIMIT 3;

@@ -11,27 +11,31 @@ interface ExplorerDataState {
   error: string | null
 }
 
+const EMPTY_STATE: ExplorerDataState = {
+  metrics: [],
+  queriesManifest: {},
+  loading: true,
+  error: null,
+}
+
 export function useExplorerData(suite: BenchmarkSuiteId): ExplorerDataState {
-  const [state, setState] = useState<ExplorerDataState>({
-    metrics: [],
-    queriesManifest: {},
-    loading: true,
-    error: null,
-  })
+  const [state, setState] = useState<{
+    suite: BenchmarkSuiteId
+    data: ExplorerDataState
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    setState({ metrics: [], queriesManifest: {}, loading: true, error: null })
 
     void Promise.all([fetchExplorerQueryMetrics(suite), fetchQueriesManifest()])
       .then(([metrics, queriesManifest]) => {
         if (!cancelled) {
-          setState({ metrics, queriesManifest, loading: false, error: null })
+          setState({ suite, data: { metrics, queriesManifest, loading: false, error: null } })
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setState({ metrics: [], queriesManifest: {}, loading: false, error: String(error) })
+          setState({ suite, data: { ...EMPTY_STATE, loading: false, error: String(error) } })
         }
       })
 
@@ -40,5 +44,5 @@ export function useExplorerData(suite: BenchmarkSuiteId): ExplorerDataState {
     }
   }, [suite])
 
-  return state
+  return state?.suite === suite ? state.data : EMPTY_STATE
 }

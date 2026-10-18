@@ -20,6 +20,7 @@ from sqlalchemy import Connection, text
 
 from ..container_platform import get_container_engine_platform
 from ..images import ResolvedImage, resolve_images
+from ..limits import query_deadline
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..profile import BENCHMARK_PROFILE, BenchmarkProfile
@@ -223,6 +224,13 @@ class Database(BaseModel, ABC):
             "OLAP_BENCHMARKS_BENCHMARK_THREADS": settings.benchmark_threads,
             "OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB": settings.benchmark_memory_gb,
             "POLARS_MAX_THREADS": pl.thread_pool_size(),
+            "OLAP_BENCHMARKS_MINIMUM_FREE_DISK_GB": settings.minimum_free_disk_gb,
+            "OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS": settings.operation_timeout_seconds,
+            "OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS": settings.query_timeout_seconds,
+            "OLAP_BENCHMARKS_CLIENT_MEMORY_LIMIT_GB": settings.client_memory_limit_gb,
+            "OLAP_BENCHMARKS_QUERY_INCLUDE": settings.query_include,
+            "OLAP_BENCHMARKS_QUERY_EXCLUDE": settings.query_exclude,
+            "OLAP_BENCHMARKS_TABLES": settings.tables,
         }
 
     @property
@@ -655,7 +663,8 @@ class Database(BaseModel, ABC):
 
         try:
             t0 = perf_counter()
-            df = self.fetch(query, **kwargs)
+            with query_deadline(get_settings().query_timeout_seconds if self._current_operation == "select" else None):
+                df = self.fetch(query, **kwargs)
             duration_seconds = perf_counter() - t0
         except BaseException as exc:
             self._finish_timed_step(

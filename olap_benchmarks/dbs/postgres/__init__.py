@@ -510,42 +510,63 @@ class Postgres(Database):
     }
 
     @property
+    def server_settings(self) -> Mapping[str, str]:
+        settings = get_settings()
+        values = {
+            "shared_buffers": "8GB",
+            "effective_cache_size": "24GB",
+            "work_mem": "4GB",
+            "maintenance_work_mem": "4GB",
+            "max_wal_size": "16GB",
+            "min_wal_size": "2GB",
+            "wal_compression": "off",
+            "synchronous_commit": "off",
+            "checkpoint_timeout": "30min",
+            "max_parallel_maintenance_workers": "4",
+            "max_parallel_workers_per_gather": "4",
+            "max_parallel_workers": "8",
+        }
+        threads = settings.benchmark_threads
+        if threads is not None:
+            values.update(
+                max_parallel_maintenance_workers=str(min(4, threads)),
+                max_parallel_workers_per_gather=str(max(0, threads - 1)),
+                max_parallel_workers=str(threads),
+                max_worker_processes=str(max(8, threads + 4)),
+            )
+        if settings.benchmark_memory_gb is not None:
+            memory_mb = settings.benchmark_memory_gb * 1024
+            parallel_workers = threads or 8
+            values.update(
+                shared_buffers=f"{max(128, memory_mb // 4)}MB",
+                effective_cache_size=f"{memory_mb * 3 // 4}MB",
+                work_mem=f"{max(16, min(256, memory_mb // (16 * (parallel_workers + 1))))}MB",
+                maintenance_work_mem=f"{max(64, min(4096, memory_mb // 4))}MB",
+            )
+        return values
+
+    @property
+    def parallel_copy_workers(self) -> int:
+        return min(12, get_settings().benchmark_threads or 12)
+
+    @property
     def start(self) -> str:
         host_pgdata = self.database_directory / "pgdata"
         host_pgdata.mkdir(parents=True, exist_ok=True)
         host_pgdata.chmod(0o777)  # macOS bind-friendly
 
-        parts = [
-            "docker run",
-            f"--platform {self.container_platform}",
-            f"--name {self.name}-benchmark",
-            f"--rm -d -p {host_port('postgres')}:5432",
-            "--user 0:0",
-            f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
-            "-e PGDATA=/var/lib/postgresql/pgdata",
-            "-e POSTGRES_PASSWORD=password",
-            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
-            # naive Polars datetimes round-trip without offset surprises.
-            "-e TZ=UTC",
-            "-e PGTZ=UTC",
+        return self.docker_run_command(
             self.container_images["server"],
-            # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
-            # with shared_buffers=128MB and max_wal_size=1GB, which forces a
-            # checkpoint storm during multi-hundred-million-row inserts.
-            "-c shared_buffers=8GB",
-            "-c effective_cache_size=24GB",
-            "-c work_mem=4GB",
-            "-c maintenance_work_mem=4GB",
-            "-c max_wal_size=16GB",
-            "-c min_wal_size=2GB",
-            "-c wal_compression=off",
-            "-c synchronous_commit=off",
-            "-c checkpoint_timeout=30min",
-            "-c max_parallel_maintenance_workers=4",
-            "-c max_parallel_workers_per_gather=4",
-            "-c max_parallel_workers=8",
-        ]
-        return " ".join(parts)
+            ports={str(host_port("postgres")): "5432"},
+            mounts={host_pgdata.as_posix(): "/var/lib/postgresql/pgdata"},
+            env={
+                "PGDATA": "/var/lib/postgresql/pgdata",
+                "POSTGRES_PASSWORD": "password",
+                "TZ": "UTC",
+                "PGTZ": "UTC",
+            },
+            args=tuple(part for name, value in self.server_settings.items() for part in ("-c", f"{name}={value}")),
+        )
 
     def get_runtime_version(self) -> str:
         df = self.fetch("select current_setting('server_version') as version", schema={"version": pl.String})
@@ -691,8 +712,7 @@ class Postgres(Database):
             "--file",
             temp_file_str,
             "--workers",
-            # possible that using more workers could speed things up, but this is not linear
-            "12",
+            str(self.parallel_copy_workers),
             "--batch-size",
             "50000",
             "--skip-header",

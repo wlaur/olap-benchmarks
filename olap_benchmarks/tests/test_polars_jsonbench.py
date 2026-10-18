@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
+import duckdb
 import polars as pl
 import pytest
 
 from olap_benchmarks.dbs.polars import Polars
-from olap_benchmarks.settings import get_settings
+from olap_benchmarks.settings import REPO_ROOT, get_settings
 
 
 @pytest.fixture
@@ -66,3 +68,32 @@ def test_polars_jsonbench_first_post_uses_utc_milliseconds(polars_jsonbench_db: 
     df = polars_jsonbench_db.fetch("")
 
     assert df.to_dicts() == [{"user_id": "u1", "first_post_ts": datetime(2023, 11, 14, 22, 13, 20)}]
+
+
+@pytest.mark.parametrize(
+    "query_name",
+    ["01_events_by_collection", "02_create_events_by_collection", "04_first_post_users", "05_longest_post_activity"],
+)
+def test_polars_jsonbench_matches_sql_for_tied_results(polars_jsonbench_db: Polars, query_name: str) -> None:
+    first_times = [1_700_000_000_000_900, 1_700_000_000_000_100, 1_700_000_000_000_100, 1_700_000_000_000_200]
+    frame = pl.DataFrame(
+        {
+            "did": ["u_z", "u_a", "u_b", "u_c"] * 4,
+            "kind": ["commit"] * 16,
+            "time_us": first_times + [value + 1_000_000 for value in first_times] + first_times * 2,
+            "commit": [
+                {"operation": "create", "collection": collection}
+                for collection in ["app.bsky.feed.post"] * 8 + ["app.bsky.feed.like"] * 4 + [None] * 4
+            ],
+        }
+    )
+    frame.write_parquet(polars_jsonbench_db.table_path("bluesky"))
+    polars_jsonbench_db.current_query_name = query_name
+    sql = (REPO_ROOT / "olap_benchmarks/suites/jsonbench/queries" / f"{query_name}.sql").read_text()
+
+    with duckdb.connect() as connection:
+        connection.execute("CREATE TABLE bluesky (j JSON)")
+        connection.executemany("INSERT INTO bluesky VALUES (?)", [(json.dumps(row),) for row in frame.to_dicts()])
+        expected = connection.execute(sql).pl()
+
+    assert polars_jsonbench_db.fetch("").equals(expected)

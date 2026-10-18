@@ -8,5 +8,5 @@ WHERE
   AND data -> 'commit' ->> 'operation' = 'create'
   AND data -> 'commit' ->> 'collection' = 'app.bsky.feed.post'
 GROUP BY user_id
-ORDER BY min((data ->> 'time_us')::BIGINT) ASC
+ORDER BY min((data ->> 'time_us')::BIGINT) ASC, user_id ASC NULLS LAST
 LIMIT 3;

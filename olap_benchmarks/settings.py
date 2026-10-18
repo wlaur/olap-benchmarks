@@ -221,6 +221,13 @@ class Settings(BaseSettings):
     benchmark_threads: PositiveInt | None = None
     benchmark_memory_gb: PositiveInt | None = None
     run_note: str | None = None
+    minimum_free_disk_gb: PositiveInt = 40
+    operation_timeout_seconds: PositiveInt | None = None
+    query_timeout_seconds: PositiveInt | None = None
+    client_memory_limit_gb: PositiveInt | None = None
+    query_include: tuple[str, ...] = ()
+    query_exclude: tuple[str, ...] = ()
+    tables: tuple[str, ...] = ()
 
     host_ports: dict[str, int] = {}
 

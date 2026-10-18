@@ -89,10 +89,11 @@ class TimeSeriesRanges[DBT: Database](TimeSeriesMetrics[DBT]):
             table_name(layout, count): TIMESTAMP_COUNT * (count if layout == "eav" else 1)
             for layout in LAYOUTS
             for count in METRIC_COUNTS
+            if self.table_selected(table_name(layout, count))
         }
 
     def planned_query_names(self) -> tuple[str, ...]:
         return QUERY_NAMES
 
     def dataset_files(self) -> Mapping[TableName, Path]:
-        return input_files()
+        return {table: path for table, path in input_files().items() if self.table_selected(table)}

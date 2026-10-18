@@ -8,5 +8,5 @@ WHERE
   AND (j ->> '$.commit.operation') = 'create'
   AND (j ->> '$.commit.collection') = 'app.bsky.feed.post'
 GROUP BY user_id
-ORDER BY activity_span DESC
+ORDER BY activity_span DESC, user_id ASC NULLS LAST
 LIMIT 3;
