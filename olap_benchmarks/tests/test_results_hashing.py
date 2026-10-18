@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 import polars as pl
@@ -18,7 +19,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
     assert left["answer_cells"] == 4
-    assert left["answer_hash_version"] == "canonical-v10"
+    assert left["answer_hash_version"] == "canonical-v11"
     assert left["answer_hash"] == right["answer_hash"]
     assert left["answer_hash"] != changed["answer_hash"]
 
@@ -71,15 +72,96 @@ def test_answer_metadata_keeps_array_element_order_significant() -> None:
     assert hashing.build_answer_metadata(left)["answer_hash"] != hashing.build_answer_metadata(right)["answer_hash"]
 
 
-def test_answer_metadata_canonicalizes_an_all_null_array_to_null() -> None:
+@pytest.mark.parametrize("values", [None, [None], [None, None]])
+def test_answer_metadata_canonicalizes_an_all_null_array_to_null(values: list[int | None] | None) -> None:
     # array_agg() over an unmatched outer join yields [NULL]; MonetDB's group_concat over no rows
     # yields NULL, and concatenating that into brackets stays NULL
-    null_element = pl.DataFrame({"ids": pl.Series([[None]], dtype=pl.List(pl.Int64))})
+    null_element = pl.DataFrame({"ids": pl.Series([values], dtype=pl.List(pl.Int64))})
     null_value = pl.DataFrame({"ids": pl.Series([None], dtype=pl.String)})
 
     assert (
         hashing.build_answer_metadata(null_element)["answer_hash"]
         == hashing.build_answer_metadata(null_value)["answer_hash"]
+    )
+
+
+def test_answer_metadata_keeps_empty_arrays_distinct_from_null() -> None:
+    empty = pl.DataFrame({"ids": pl.Series([[]], dtype=pl.List(pl.Int64))})
+    empty_text = pl.DataFrame({"ids": ["[]"]})
+    null = pl.DataFrame({"ids": pl.Series([None], dtype=pl.List(pl.Int64))})
+    all_null = pl.DataFrame({"ids": pl.Series([[None]], dtype=pl.List(pl.Int64))})
+
+    empty_hash = hashing.build_answer_metadata(empty)["answer_hash"]
+    assert empty_hash == hashing.build_answer_metadata(empty_text)["answer_hash"]
+    assert empty_hash != hashing.build_answer_metadata(null)["answer_hash"]
+    assert empty_hash != hashing.build_answer_metadata(all_null)["answer_hash"]
+
+
+@pytest.mark.parametrize(
+    ("left_values", "right_values"),
+    [
+        ([1, None, 2], [9, None, 8]),
+        ([1, None, 2], [1, 2, None]),
+        ([1, None], None),
+        ([1, None], [None]),
+        ([9007199254740992, None], [9007199254740993, None]),
+    ],
+)
+def test_answer_metadata_preserves_mixed_null_numeric_arrays(
+    left_values: list[int | None] | None, right_values: list[int | None] | None
+) -> None:
+    left = pl.DataFrame({"ids": pl.Series([left_values], dtype=pl.List(pl.Int64))})
+    right = pl.DataFrame({"ids": pl.Series([right_values], dtype=pl.List(pl.Int64))})
+
+    assert hashing.build_answer_metadata(left)["answer_hash"] != hashing.build_answer_metadata(right)["answer_hash"]
+
+
+@pytest.mark.parametrize(
+    ("left_values", "right_values"),
+    [
+        ([None, "null"], ["null", None]),
+        ([None, "null"], [None, None]),
+        ([None, "a,b"], [None, "a", "b"]),
+        ([None, "café"], [None, "cafe"]),
+    ],
+)
+def test_answer_metadata_preserves_mixed_null_string_arrays(
+    left_values: list[str | None], right_values: list[str | None]
+) -> None:
+    left = pl.DataFrame({"values": pl.Series([left_values], dtype=pl.List(pl.String))})
+    right = pl.DataFrame({"values": pl.Series([right_values], dtype=pl.List(pl.String))})
+
+    assert hashing.build_answer_metadata(left)["answer_hash"] != hashing.build_answer_metadata(right)["answer_hash"]
+
+
+def test_answer_metadata_matches_mixed_null_arrays_to_json_strings() -> None:
+    integers = [[1, None, 2], [9007199254740993, None, -9007199254740993], []]
+    floats = [[1.5, None, 2.5], [], [None, 0.0]]
+    text = [[None, "null", 'café🙂"\\\n', "[,]"], [], ["tail", None]]
+    arrays = pl.DataFrame(
+        {
+            "ids": pl.Series(integers, dtype=pl.List(pl.Int64)),
+            "measurements": pl.Series(floats, dtype=pl.List(pl.Float64)),
+            "values": pl.Series(text, dtype=pl.List(pl.String)),
+        }
+    )
+    strings = pl.DataFrame(
+        {
+            "ids": [json.dumps(values) for values in integers],
+            "measurements": [json.dumps(values) for values in floats],
+            "values": [json.dumps(values) for values in text],
+        }
+    )
+
+    assert hashing.build_answer_metadata(arrays)["answer_hash"] == hashing.build_answer_metadata(strings)["answer_hash"]
+
+
+def test_answer_metadata_keeps_array_element_types_significant() -> None:
+    numbers = pl.DataFrame({"values": pl.Series([[None, 1]], dtype=pl.List(pl.Int64))})
+    strings = pl.DataFrame({"values": pl.Series([[None, "1"]], dtype=pl.List(pl.String))})
+
+    assert (
+        hashing.build_answer_metadata(numbers)["answer_hash"] != hashing.build_answer_metadata(strings)["answer_hash"]
     )
 
 
