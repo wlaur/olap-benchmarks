@@ -182,6 +182,7 @@ class Doris(Database):
         return {
             **super().run_options,
             "container_budget_policy": "combined-v1",
+            "container_shutdown_policy": "native-grace-v1",
             "container_limits": {
                 name: {"cpu_limit": cpu_limits[name], "memory_limit_mb": memory_limit_mb}
                 for name in self.metric_container_names
@@ -194,6 +195,7 @@ class Doris(Database):
 
     @property
     def start_commands(self) -> tuple[str, ...]:
+        entrypoint = Path(__file__).with_name("container-entrypoint.sh")
         meta_dir = self.database_directory / "fe-meta"
         fe_log_dir = self.database_directory / "fe-log"
         storage_dir = self.database_directory / "be-storage"
@@ -217,10 +219,13 @@ class Doris(Database):
                 mounts={
                     meta_dir.as_posix(): "/opt/apache-doris/fe/doris-meta",
                     fe_log_dir.as_posix(): "/opt/apache-doris/fe/log",
+                    entrypoint.as_posix(): "/benchmark-entrypoint.sh:ro",
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "FE_ID": "1"},
                 cpu_limit=cpu_limits[DORIS_FE_CONTAINER],
                 memory_limit_mb=memory_limit_mb,
+                entrypoint="/bin/bash",
+                args=("/benchmark-entrypoint.sh", "fe", "/usr/local/bin/init_fe.sh"),
             ),
             self.docker_run_command(
                 images["be"],
@@ -231,10 +236,13 @@ class Doris(Database):
                 mounts={
                     storage_dir.as_posix(): "/opt/apache-doris/be/storage",
                     be_log_dir.as_posix(): "/opt/apache-doris/be/log",
+                    entrypoint.as_posix(): "/benchmark-entrypoint.sh:ro",
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "BE_ADDR": f"{DORIS_BE_IP}:9050"},
                 cpu_limit=cpu_limits[DORIS_BE_CONTAINER],
                 memory_limit_mb=memory_limit_mb,
+                entrypoint="/bin/bash",
+                args=("/benchmark-entrypoint.sh", "be", "/usr/local/bin/entry_point.sh"),
             ),
         )
 
@@ -249,8 +257,9 @@ class Doris(Database):
     @property
     def restart_commands(self) -> tuple[str, ...]:
         return (
+            f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_BE_CONTAINER}",
             f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_FE_CONTAINER}",
-            f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_BE_CONTAINER}",
+            self.start_commands[-1],
         )
 
     @property

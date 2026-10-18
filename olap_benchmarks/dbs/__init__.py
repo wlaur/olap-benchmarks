@@ -339,6 +339,7 @@ class Database(BaseModel, ABC):
         network: str | None = None,
         ip: str | None = None,
         init: bool = False,
+        entrypoint: str | None = None,
         cpu_limit: float | None = None,
         memory_limit_mb: int | None = None,
     ) -> str:
@@ -347,6 +348,8 @@ class Database(BaseModel, ABC):
         parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
         if init:
             parts.append("--init")
+        if entrypoint is not None:
+            parts.extend(["--entrypoint", quote(entrypoint)])
         settings = get_settings()
         resolved_cpu_limit = cpu_limit if cpu_limit is not None else settings.benchmark_threads
         if resolved_cpu_limit is not None:
