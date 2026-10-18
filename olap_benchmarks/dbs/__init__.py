@@ -331,10 +331,13 @@ class Database(BaseModel, ABC):
         name: str | None = None,
         network: str | None = None,
         ip: str | None = None,
+        init: bool = False,
     ) -> str:
         resolved_platform = platform or self.container_platform or get_container_engine_platform()
         parts = ["docker run", "--platform", resolved_platform]
         parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
+        if init:
+            parts.append("--init")
         settings = get_settings()
         if settings.benchmark_threads is not None:
             parts.extend(["--cpus", str(settings.benchmark_threads)])

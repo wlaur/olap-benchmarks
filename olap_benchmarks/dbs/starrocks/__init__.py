@@ -24,6 +24,8 @@ from ...suites.clickbench.config import (
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database, ParquetEpochColumns
 from ..utils import normalize_columns, require_columns
 
@@ -178,6 +180,15 @@ class StarRocksTimeSeries(TimeSeries["StarRocks"]):
     # with subqueries, which the mutate path relies on.
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         return "time"
+
+
+class StarRocksTimeSeriesMetrics(TimeSeriesMetrics["StarRocks"]):
+    def load_query(self, query_name: str) -> str:
+        return super().load_query(query_name).replace("DOUBLE PRECISION", "DOUBLE")
+
+
+class StarRocksTimeSeriesRanges(TimeSeriesRanges["StarRocks"], StarRocksTimeSeriesMetrics):
+    pass
 
 
 class StarRocksJSONBench(JSONBench["StarRocks"]):
@@ -558,6 +569,8 @@ class StarRocks(Database):
         return {
             **super().suite_registry(),
             "time_series": StarRocksTimeSeries,
+            "time_series_metrics": StarRocksTimeSeriesMetrics,
+            "time_series_ranges": StarRocksTimeSeriesRanges,
             "clickbench": StarRocksClickbench,
             "jsonbench": StarRocksJSONBench,
             "kaggle_airbnb": StarRocksKaggleAirbnb,

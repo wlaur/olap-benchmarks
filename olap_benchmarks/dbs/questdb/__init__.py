@@ -144,6 +144,7 @@ class QuestDB(Database):
                 f"{get_settings().temporary_directory.as_posix()}/questdb/data": "/import",
             },
             env={"QDB_CAIRO_SQL_COPY_ROOT": "/import"},
+            init=True,
         )
 
     def connect(self, reconnect: bool = False) -> Connection:
