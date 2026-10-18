@@ -53,6 +53,10 @@ For 10 CPUs and 24 GiB, this is FE 1 CPU / 12 GiB and BE 9 CPUs / 12 GiB.
 The allocation is recorded in run options, and swap is capped at the same memory
 limit for each container.
 
+Container stop and restart commands allow 120 seconds for normal shutdown so large
+loads can flush their write-ahead logs. The grace period is recorded in run options;
+operation and query deadlines still apply.
+
 The effective `OLAP_BENCHMARKS_MONETDB_*` values are recorded on every MonetDB run under
 `metadata.settings`.
 

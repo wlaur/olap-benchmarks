@@ -161,14 +161,6 @@ class QuestDB(Database):
             init=True,
         )
 
-    @property
-    def stop(self) -> str:
-        return f"docker stop --timeout 120 {self.name}-benchmark"
-
-    @property
-    def restart(self) -> str:
-        return f"docker restart --timeout 120 {self.name}-benchmark"
-
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
             self.close_connection()

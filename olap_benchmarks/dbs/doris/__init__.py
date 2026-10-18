@@ -241,14 +241,17 @@ class Doris(Database):
     @property
     def stop_commands(self) -> tuple[str, ...]:
         return (
-            f"docker stop {DORIS_BE_CONTAINER}",
-            f"docker stop {DORIS_FE_CONTAINER}",
+            f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_BE_CONTAINER}",
+            f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_FE_CONTAINER}",
             f"docker network rm {DORIS_NETWORK}",
         )
 
     @property
     def restart_commands(self) -> tuple[str, ...]:
-        return (f"docker restart {DORIS_FE_CONTAINER}", f"docker restart {DORIS_BE_CONTAINER}")
+        return (
+            f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_FE_CONTAINER}",
+            f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_BE_CONTAINER}",
+        )
 
     @property
     def staging_directory(self) -> Path:

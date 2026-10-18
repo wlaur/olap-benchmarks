@@ -104,6 +104,7 @@ class Database(BaseModel, ABC):
 
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
+    CONTAINER_SHUTDOWN_TIMEOUT_SECONDS: ClassVar[int] = 120
     supports_arm64_containers: ClassVar[bool] = False
     # glob patterns, relative to database_directory, for the engine's write-ahead log
     wal_path_patterns: ClassVar[tuple[str, ...]] = ()
@@ -237,7 +238,10 @@ class Database(BaseModel, ABC):
 
     @property
     def run_options(self) -> Mapping[str, object]:
-        return {"note": get_settings().run_note}
+        options: dict[str, object] = {"note": get_settings().run_note}
+        if self.pin.is_container:
+            options["container_shutdown_timeout_seconds"] = self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS
+        return options
 
     @property
     def input_directory(self) -> Path:
@@ -369,11 +373,11 @@ class Database(BaseModel, ABC):
 
     @property
     def stop(self) -> str | None:
-        return f"docker stop {self.name}-benchmark"
+        return f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {self.name}-benchmark"
 
     @property
     def restart(self) -> str | None:
-        return f"docker restart {self.name}-benchmark"
+        return f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {self.name}-benchmark"
 
     def _start_step(
         self,
