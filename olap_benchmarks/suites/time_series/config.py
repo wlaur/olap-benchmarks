@@ -14,6 +14,7 @@ import numpy as np
 import polars as pl
 
 from ...dbs import Database
+from ...run_metadata import StepResultStatus
 from ...settings import (
     REPO_ROOT,
     SuiteName,
@@ -473,11 +474,12 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
     name: SuiteName = "time_series"
 
     def get_mutate_steps(self) -> tuple[list[MutateStep], list[MutateStep]]:
+        self.dataset_files()
         enabled_steps: list[MutateStep] = []
         skipped_steps: list[MutateStep] = []
 
         for step in TIME_SERIES_MUTATE_STEPS:
-            if self.db.is_mutation_step_enabled(self.name, step.name):
+            if self.table_selected(step.table) and self.db.is_mutation_step_enabled(self.name, step.name):
                 enabled_steps.append(step)
             else:
                 skipped_steps.append(step)
@@ -485,7 +487,22 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return enabled_steps, skipped_steps
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
-        return get_time_series_expected_row_counts(self.scale_factor)
+        selected = self.dataset_files()
+        return {
+            table: rows
+            for table, rows in get_time_series_expected_row_counts(self.scale_factor).items()
+            if table in selected
+        }
+
+    def dataset_files(self) -> Mapping[TableName, Path]:
+        files = {
+            table: path
+            for table, path in get_time_series_input_files(self.scale_factor).items()
+            if self.table_selected(table)
+        }
+        if not files:
+            raise ValueError("Campaign tables selection matches no time_series tables")
+        return files
 
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         # do not use primary key for time series data (e.g. Clickhouse does not enforce unique primary key)
@@ -514,7 +531,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
 
         self.db.initialize_schema("time_series")
 
-        for table_name, fpath in get_time_series_input_files(self.scale_factor).items():
+        for table_name, fpath in self.dataset_files().items():
             primary_key = self.get_primary_key(table_name)
             not_null = self.get_not_null(table_name)
 
@@ -529,7 +546,7 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
                 self.finish_parquet_table(table_name)
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
-        _LOGGER.info(f"Inserted all time_series tables for {self.name}")
+        _LOGGER.info(f"Inserted selected time_series tables for {self.name}")
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
@@ -544,7 +561,17 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
         return {}
 
     def planned_query_names(self) -> tuple[str, ...]:
+        self.dataset_files()
         return TIME_SERIES_QUERY_NAMES
+
+    def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        skip = super().query_skip(query_name)
+        if skip is not None:
+            return skip
+        table = f"data_{query_name.split('_', 1)[0]}"
+        if not self.table_selected(table):
+            return ("skipped", "table excluded by campaign tables")
+        return None
 
     def _get_mutate_primary_key(self, table_name: TableName) -> str | list[str]:
         _ = table_name
@@ -714,6 +741,8 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             suite.db.close_connection()
 
     def concurrent(self) -> None:
+        if "data_large" not in self.dataset_files():
+            raise ValueError("time_series concurrent requires data_large; excluded by campaign tables")
         t0 = perf_counter()
         worker_count = CONCURRENT_READER_CLIENTS + 1
         start_barrier = Barrier(worker_count)
@@ -745,12 +774,17 @@ class TimeSeries[DBT: Database](BenchmarkSuite[DBT]):
             skipped_names = ", ".join(step.name for step in skipped_steps)
             _LOGGER.info(f"Skipping {len(skipped_steps):_} mutation steps for {self.db.name}: {skipped_names}")
             for step in skipped_steps:
+                reason = (
+                    f"{self.db.name} disables this mutation step"
+                    if self.table_selected(step.table)
+                    else "table excluded by campaign tables"
+                )
                 for iteration in range(1, MUTATE_ITERATIONS + 1):
                     self.db.record_skipped_mutation_step(
                         query_name=step.name,
                         iteration=iteration,
                         table_name=step.table,
-                        reason=f"{self.db.name} disables this mutation step",
+                        reason=reason,
                     )
 
         if not steps:

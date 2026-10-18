@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import Connection
 
 from ..dbs import Database
-from ..settings import DatabaseName, TableName
+from ..settings import DatabaseName, TableName, get_settings
 from ..suites.chat_threads.config import ChatMutateStep, ChatThreads
 from ..suites.time_series.config import MutateStep, TimeSeries
 
@@ -276,14 +276,16 @@ def test_chat_threads_mutate_preserves_partial_results_and_fails(monkeypatch: py
     assert db.rollback_calls == 1
 
 
-def test_time_series_mutation_seed_survives_disabled_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("table_filter", [False, True])
+def test_time_series_mutation_seed_survives_skipped_steps(monkeypatch: pytest.MonkeyPatch, table_filter: bool) -> None:
     first = MutateStep(action="insert", table="data_large", row_count=1)
     second = MutateStep(action="insert", table="data_wide", row_count=1)
-    db = FakeMutationDB(disabled_steps={first.name})
+    db = FakeMutationDB(disabled_steps=set() if table_filter else {first.name}, skipped_steps=[])
     suite = cast(TimeSeries[FakeMutationDB], TimeSeries.model_construct(db=db, name="time_series", scale_factor=1))
     seeds: list[int] = []
     monkeypatch.setattr("olap_benchmarks.suites.time_series.config.TIME_SERIES_MUTATE_STEPS", [first, second])
     monkeypatch.setattr("olap_benchmarks.suites.time_series.config.MUTATE_ITERATIONS", 2)
+    monkeypatch.setattr(get_settings(), "tables", ("data_wide",) if table_filter else ())
 
     def generate(self: TimeSeries[Any], step: MutateStep, seed: int) -> pl.DataFrame:
         seeds.append(seed)
@@ -294,6 +296,11 @@ def test_time_series_mutation_seed_survives_disabled_steps(monkeypatch: pytest.M
     suite.mutate()
 
     assert seeds == [1_001, 1_002]
+    if table_filter:
+        assert db.skipped_steps == [
+            (first.name, 1, "data_large", "table excluded by campaign tables"),
+            (first.name, 2, "data_large", "table excluded by campaign tables"),
+        ]
 
 
 def test_chat_threads_mutation_seed_survives_disabled_steps(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -342,3 +349,24 @@ def test_time_series_concurrent_skips_disabled_writer(monkeypatch: pytest.Monkey
         "concurrent_insert_data_large_1",
         "concurrent_insert_data_large_1",
     ]
+
+
+def test_time_series_concurrent_rejects_excluded_large_table_before_starting_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeMutationDB(executed_steps=[], inserted_tables=[], query_iterations=[])
+    suite = TimeSeries[FakeMutationDB].model_construct(db=db, name="time_series", scale_factor=1)
+    monkeypatch.setattr(get_settings(), "tables", ("data_tall",))
+
+    def unexpected_executor(**kwargs: object) -> None:
+        _ = kwargs
+        pytest.fail("Concurrent threads must not start when data_large is excluded")
+
+    monkeypatch.setattr("olap_benchmarks.suites.time_series.config.ThreadPoolExecutor", unexpected_executor)
+
+    with pytest.raises(ValueError, match="concurrent requires data_large"):
+        suite.concurrent()
+
+    assert db.executed_steps == []
+    assert db.inserted_tables == []
+    assert db.query_iterations == []

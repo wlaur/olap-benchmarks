@@ -21,7 +21,6 @@ from ...suites.time_series.config import (
     MutateStep,
     TimeSeries,
     get_time_series_dataset_sizes,
-    get_time_series_input_files,
     get_time_series_table_name,
 )
 from .. import Database
@@ -304,24 +303,17 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
     # for them. Tall (10 cols) stays wide.
     EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
 
-    # data_large EAV is ≈ 6 billion rows × ~50 bytes ≈ 300 GB heap on plain
-    # Postgres (no columnar compression) plus a ~70 GB (metric_name, time)
-    # btree index, so the populate would not fit into the per-(db, suite) disk
-    # budget on this host. Skipping it here also disables the corresponding
-    # large_* select queries and *_data_large_* mutation steps. The EAV insert
-    # code path is still wired up so re-enabling is just emptying this set.
-    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
-
     # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
     # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch. Each
     # flush stages ~5 GB of CSV before it's COPYed into the heap.
     PARQUET_STREAM_BATCH_ROWS: ClassVar[int] = 100_000
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
+        selected = self.dataset_files()
         counts: dict[TableName, int] = {}
         for size, (n_rows, n_cols) in get_time_series_dataset_sizes(self.scale_factor).items():
             table_name = get_time_series_table_name(size)
-            if table_name in self.SKIP_TABLES:
+            if table_name not in selected:
                 continue
             counts[table_name] = n_rows * n_cols if table_name in self.EAV_TABLES else n_rows
         return counts
@@ -336,9 +328,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
         return "time"
 
     def index_tables(self) -> None:
-        for table_name in get_time_series_input_files(self.scale_factor):
-            if table_name in self.SKIP_TABLES:
-                continue
+        for table_name in self.dataset_files():
             if table_name in self.EAV_TABLES:
                 statement = f'CREATE INDEX {table_name}_metric_time_index ON "{table_name}" ("metric_name", "time")'
             else:
@@ -386,10 +376,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
 
         self.db.initialize_schema("time_series")
 
-        for table_name, fpath in get_time_series_input_files(self.scale_factor).items():
-            if table_name in self.SKIP_TABLES:
-                _LOGGER.info(f"Skipping {table_name} for {self.name} (would not fit in disk budget)")
-                continue
+        for table_name, fpath in self.dataset_files().items():
             if table_name in self.EAV_TABLES:
                 with self.db.phase_context("create_eav_table", table_name=table_name):
                     self._eav_create_table(table_name)
@@ -499,15 +486,6 @@ class Postgres(Database):
     wal_path_patterns: ClassVar[tuple[str, ...]] = ("pgdata/pg_wal",)
 
     connection_string: str = Field(default_factory=_postgres_connection_string)
-
-    # Mirrors PostgresTimeSeries.SKIP_TABLES: data_large EAV does not fit in
-    # the per-(db, suite) disk budget on plain Postgres, so its mutate steps
-    # have to be disabled too.
-    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
-        "time_series": frozenset(
-            f"{action}_data_large_{count}" for action in ("insert", "upsert", "delete") for count in (1, 100, 10_000)
-        )
-    }
 
     @property
     def server_settings(self) -> Mapping[str, str]:

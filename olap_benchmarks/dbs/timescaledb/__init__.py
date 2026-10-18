@@ -15,10 +15,7 @@ from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import (
-    MutateStep,
-    get_time_series_input_files,
-)
+from ...suites.time_series.config import MutateStep
 from ..postgres import Postgres, PostgresTimeSeries
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
@@ -111,10 +108,6 @@ class TimescaleChatThreads(ChatThreads["TimescaleDB"]):
 
 
 class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
-    # Unlike plain Postgres, the columnstore compression makes data_large fit
-    # the disk budget, so nothing is skipped.
-    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset()
-
     PRE_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
         "data_tall": "tall_pre_insert.sql",
         "data_wide": "wide_pre_insert.sql",
@@ -257,7 +250,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
         # insert path; the call below is a no-op for those (if_not_compressed
         # => true). data_tall is still loaded as one big batch and is
         # compressed here.
-        for table_name in get_time_series_input_files(self.scale_factor):
+        for table_name in self.dataset_files():
             self.db.execute(
                 f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i",
                 reconnect=True,
@@ -272,7 +265,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
             if not self.should_populate():
                 return
 
-        input_files = get_time_series_input_files(self.scale_factor)
+        input_files = self.dataset_files()
 
         # 1. Create empty tables (regular wide for tall, EAV for wide/large).
         for table_name, fpath in input_files.items():
@@ -284,7 +277,8 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
 
         # 2. Convert each table to a hypertable + columnstore config (empty
         #    table → no migrate_data needed, much faster than retro-conversion).
-        for table_name, sql_file in self.PRE_INSERT_SCHEMA_FILES.items():
+        for table_name in input_files:
+            sql_file = self.PRE_INSERT_SCHEMA_FILES[table_name]
             with self.db.phase_context("create_hypertable", table_name=table_name):
                 self.db.execute_schema_file(
                     REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / sql_file
@@ -329,10 +323,6 @@ class TimescaleDB(Postgres):
     wal_path_patterns: ClassVar[tuple[str, ...]] = ("pg_wal",)
 
     connection_string: str = Field(default_factory=_timescaledb_connection_string)
-
-    # Plain Postgres disables the data_large mutation steps because the table
-    # is never populated there; with columnstore compression it is.
-    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
 
     @property
     def start(self) -> str:

@@ -17,6 +17,8 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,6 +105,15 @@ class QuestDBKaggleAirbnb(KaggleAirbnb["QuestDB"]):
         if query_name == "05_join_three_tables_row_number":
             return {"schema": {"max_date": pl.Date}}
         return {}
+
+
+class QuestDBTimeSeriesMetrics(TimeSeriesMetrics["QuestDB"]):
+    def load_query(self, query_name: str) -> str:
+        return super().load_query(query_name).replace("DOUBLE PRECISION", "DOUBLE")
+
+
+class QuestDBTimeSeriesRanges(TimeSeriesRanges["QuestDB"], QuestDBTimeSeriesMetrics):
+    pass
 
 
 class QuestDB(Database):
@@ -369,6 +380,8 @@ class QuestDB(Database):
             **super().suite_registry(),
             "clickbench": QuestDBClickbench,
             "kaggle_airbnb": QuestDBKaggleAirbnb,
+            "time_series_metrics": QuestDBTimeSeriesMetrics,
+            "time_series_ranges": QuestDBTimeSeriesRanges,
         }
 
         # TPC-H and TPC-DS need correlated subqueries and EXISTS/NOT EXISTS

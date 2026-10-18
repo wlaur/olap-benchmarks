@@ -10,11 +10,6 @@ _MONETDB_ROLLING_AVG_WINDOW_BUG = (
     "is not measured rather than publishing a runtime for a wrong answer."
 )
 
-_POSTGRES_NO_DATA_LARGE = (
-    "data_large is not populated on PostgreSQL: stored as EAV it needs about 300 GB of heap plus a 70 GB "
-    "(metric_name, time) index, beyond the per-(db, suite) disk budget (PostgresTimeSeries.SKIP_TABLES)"
-)
-
 _EAV_BATCH_EXPORT = "query requires wide-row export shape, but this database stores data_large as EAV"
 
 _RTABENCH_INCREMENTAL_VIEWS = (
@@ -36,10 +31,6 @@ _RTABENCH_INCREMENTAL_VIEW_QUERIES = (
 )
 
 
-def _time_series_queries(prefix: str) -> list[str]:
-    return sorted(path.stem for path in (SUITES_DIRECTORY / "time_series/queries").glob(f"{prefix}*.sql"))
-
-
 # Queries an engine does not run, mapped to why. The select loop records every planned query listed
 # here as `unsupported` with this reason instead of executing it. A query that is not listed must
 # resolve to SQL (an engine override or the shared file); a missing file is an error, not a
@@ -54,7 +45,7 @@ UNSUPPORTED_QUERIES: dict[tuple[SuiteName, DatabaseName, str], str] = {
         ("time_series", "monetdb", query): _MONETDB_ROLLING_AVG_WINDOW_BUG
         for query in ("large_13_rolling_avg", "tall_13_rolling_avg", "wide_13_rolling_avg")
     },
-    **{("time_series", "postgres", query): _POSTGRES_NO_DATA_LARGE for query in _time_series_queries("large_")},
+    ("time_series", "postgres", "large_23_batch_export"): _EAV_BATCH_EXPORT,
     ("time_series", "timescaledb", "large_23_batch_export"): _EAV_BATCH_EXPORT,
     **{
         ("rtabench", db, query): _RTABENCH_INCREMENTAL_VIEWS
