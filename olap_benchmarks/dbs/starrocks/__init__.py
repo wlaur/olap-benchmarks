@@ -176,6 +176,9 @@ def insert_source_parquet_via_files(db: "StarRocks", source: Path, table_name: T
 
 
 class StarRocksTimeSeries(TimeSeries["StarRocks"]):
+    def load_query(self, query_name: str) -> str:
+        return re.sub(r"\bstddev\s*\(", "stddev_samp(", super().load_query(query_name), flags=re.IGNORECASE)
+
     # Use PRIMARY KEY tables so the mutate phase (UPDATE/DELETE/UPSERT) works.
     # DUPLICATE KEY tables (the default for read-only suites) reject DELETE
     # with subqueries, which the mutate path relies on.
