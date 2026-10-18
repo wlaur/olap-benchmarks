@@ -163,6 +163,32 @@ class Doris(Database):
         return (DORIS_FE_CONTAINER, DORIS_BE_CONTAINER)
 
     @property
+    def container_cpu_limits(self) -> Mapping[str, float | None]:
+        threads = get_settings().benchmark_threads
+        if threads is None:
+            return {DORIS_FE_CONTAINER: None, DORIS_BE_CONTAINER: None}
+        frontend = threads / 10
+        return {DORIS_FE_CONTAINER: frontend, DORIS_BE_CONTAINER: threads - frontend}
+
+    @property
+    def container_memory_limit_mb(self) -> int | None:
+        memory_gb = get_settings().benchmark_memory_gb
+        return memory_gb * 1024 // 2 if memory_gb is not None else None
+
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        cpu_limits = self.container_cpu_limits
+        memory_limit_mb = self.container_memory_limit_mb
+        return {
+            **super().run_options,
+            "container_budget_policy": "combined-v1",
+            "container_limits": {
+                name: {"cpu_limit": cpu_limits[name], "memory_limit_mb": memory_limit_mb}
+                for name in self.metric_container_names
+            },
+        }
+
+    @property
     def start(self) -> str | None:
         return None
 
@@ -174,6 +200,8 @@ class Doris(Database):
         be_log_dir = self.database_directory / "be-log"
         self.staging_directory.mkdir(parents=True, exist_ok=True)
         images = self.container_images
+        cpu_limits = self.container_cpu_limits
+        memory_limit_mb = self.container_memory_limit_mb
 
         for directory in (meta_dir, fe_log_dir, storage_dir, be_log_dir):
             directory.mkdir(parents=True, exist_ok=True)
@@ -191,6 +219,8 @@ class Doris(Database):
                     fe_log_dir.as_posix(): "/opt/apache-doris/fe/log",
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "FE_ID": "1"},
+                cpu_limit=cpu_limits[DORIS_FE_CONTAINER],
+                memory_limit_mb=memory_limit_mb,
             ),
             self.docker_run_command(
                 images["be"],
@@ -203,6 +233,8 @@ class Doris(Database):
                     be_log_dir.as_posix(): "/opt/apache-doris/be/log",
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "BE_ADDR": f"{DORIS_BE_IP}:9050"},
+                cpu_limit=cpu_limits[DORIS_BE_CONTAINER],
+                memory_limit_mb=memory_limit_mb,
             ),
         )
 

@@ -335,6 +335,8 @@ class Database(BaseModel, ABC):
         network: str | None = None,
         ip: str | None = None,
         init: bool = False,
+        cpu_limit: float | None = None,
+        memory_limit_mb: int | None = None,
     ) -> str:
         resolved_platform = platform or self.container_platform or get_container_engine_platform()
         parts = ["docker run", "--platform", resolved_platform]
@@ -342,12 +344,18 @@ class Database(BaseModel, ABC):
         if init:
             parts.append("--init")
         settings = get_settings()
-        if settings.benchmark_threads is not None:
-            parts.extend(["--cpus", str(settings.benchmark_threads)])
-        if settings.benchmark_memory_gb is not None:
-            parts.extend(
-                ["--memory", f"{settings.benchmark_memory_gb}g", "--memory-swap", f"{settings.benchmark_memory_gb}g"]
-            )
+        resolved_cpu_limit = cpu_limit if cpu_limit is not None else settings.benchmark_threads
+        if resolved_cpu_limit is not None:
+            parts.extend(["--cpus", str(resolved_cpu_limit)])
+        resolved_memory_limit = (
+            f"{memory_limit_mb}m"
+            if memory_limit_mb is not None
+            else f"{settings.benchmark_memory_gb}g"
+            if settings.benchmark_memory_gb is not None
+            else None
+        )
+        if resolved_memory_limit is not None:
+            parts.extend(["--memory", resolved_memory_limit, "--memory-swap", resolved_memory_limit])
         if network is not None:
             parts.extend(["--network", network])
         if ip is not None:

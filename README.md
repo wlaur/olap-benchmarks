@@ -33,7 +33,7 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY` | Scratch space used during populate                  |
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_BENCHMARK_THREADS` | Optional CPU budget for containers, DuckDB threads and metrics-suite ClickHouse queries; set `POLARS_MAX_THREADS` before Python starts to bound client threads |
-| `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GB |
+| `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GiB |
 | `OLAP_BENCHMARKS_RUN_NOTE` | Run context recorded in `metadata.options.note` |
 | `OLAP_BENCHMARKS_MINIMUM_FREE_DISK_GB` | Disk reserve in GiB (default 40), checked before container startup and once per second during operations |
 | `OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS` | Optional wall-clock limit per operation; terminates an unresponsive benchmark process |
@@ -46,6 +46,12 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
+
+Doris shares the configured budget between its two containers: the frontend gets
+10% of the CPU allowance and the backend gets 90%; each gets half the memory.
+For 10 CPUs and 24 GiB, this is FE 1 CPU / 12 GiB and BE 9 CPUs / 12 GiB.
+The allocation is recorded in run options, and swap is capped at the same memory
+limit for each container.
 
 The effective `OLAP_BENCHMARKS_MONETDB_*` values are recorded on every MonetDB run under
 `metadata.settings`.

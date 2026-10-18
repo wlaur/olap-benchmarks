@@ -115,6 +115,14 @@ class DuckDB(Database):
 
     connection_string: str = ""
 
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        memory_gb = get_settings().benchmark_memory_gb
+        return {
+            **super().run_options,
+            "memory_limit_bytes": memory_gb * 1024**3 if memory_gb is not None else None,
+        }
+
     # in-process, no docker commands necessary
     @property
     def start(self) -> None:
@@ -150,7 +158,7 @@ class DuckDB(Database):
         if settings.benchmark_threads is not None:
             get_duckdb_connection(self._connection).execute(f"SET threads={settings.benchmark_threads}")
         if settings.benchmark_memory_gb is not None:
-            get_duckdb_connection(self._connection).execute(f"SET memory_limit='{settings.benchmark_memory_gb}GB'")
+            get_duckdb_connection(self._connection).execute(f"SET memory_limit='{settings.benchmark_memory_gb}GiB'")
 
         return self._connection
 
