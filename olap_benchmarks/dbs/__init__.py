@@ -252,6 +252,9 @@ class Database(BaseModel, ABC):
     def after_benchmark_operation(self) -> None:
         pass
 
+    def finalize_populate(self) -> None:
+        pass
+
     @property
     def pin(self) -> EnginePin:
         return engine_pin(self.name)
@@ -996,6 +999,8 @@ class Database(BaseModel, ABC):
                 self.before_benchmark_operation()
                 with self.phase_context(operation):
                     benchmark_func()
+                    if operation == "populate":
+                        self.finalize_populate()
             except BaseException as exc:
                 operation_error = exc
 

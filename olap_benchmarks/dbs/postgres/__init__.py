@@ -536,6 +536,12 @@ class Postgres(Database):
             )
         return values
 
+    def finalize_populate(self) -> None:
+        for table_name in sorted(self.get_table_names()):
+            quoted_table = table_name.replace('"', '""')
+            with self.phase_context("analyze", table_name=table_name):
+                self.execute(f'ANALYZE public."{quoted_table}"')
+
     @property
     def parallel_copy_workers(self) -> int:
         return min(12, get_settings().benchmark_threads or 12)
