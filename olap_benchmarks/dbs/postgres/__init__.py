@@ -594,8 +594,18 @@ class Postgres(Database):
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
         sql = query.strip().removesuffix(";")
+        timeout = get_settings().query_timeout_seconds if self._current_operation == "select" else None
+        connection_string = self.connection_string
+        if timeout is not None:
+            url = make_url(connection_string)
+            options = url.query.get("options", "")
+            if isinstance(options, tuple):
+                options = " ".join(options)
+            url = url.update_query_dict({"options": f"{options} -cstatement_timeout={timeout * 1000}".strip()})
+            prefix, _, parameters = url.render_as_string(hide_password=False).partition("?")
+            connection_string = f"{prefix}?{parameters.replace('+', '%20')}"
         with self.record_query_execution(sql):
-            df = pl.read_database_uri(sql, self.connection_string)
+            df = pl.read_database_uri(sql, connection_string)
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))

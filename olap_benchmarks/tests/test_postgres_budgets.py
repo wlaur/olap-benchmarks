@@ -1,12 +1,14 @@
 from pathlib import Path
 from shlex import split
+from urllib.parse import parse_qs, urlsplit
 
+import polars as pl
 import pytest
 
 from .. import dbs
 from ..dbs.postgres import Postgres
 from ..dbs.timescaledb import TimescaleDB
-from ..settings import get_settings
+from ..settings import Operation, get_settings
 
 
 @pytest.mark.parametrize("database_type", [Postgres, TimescaleDB])
@@ -52,3 +54,54 @@ def test_postgres_parallel_copy_keeps_its_worker_cap(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(get_settings(), "benchmark_threads", 32)
 
     assert Postgres().parallel_copy_workers == 12
+
+
+@pytest.mark.parametrize("database_type", [Postgres, TimescaleDB])
+@pytest.mark.parametrize(
+    ("operation", "seconds", "expected"),
+    [("select", 45, "-cstatement_timeout=45000"), ("select", None, None), ("populate", 45, None)],
+)
+def test_postgres_connectorx_bounds_select_statements_only(
+    database_type: type[Postgres],
+    operation: Operation,
+    seconds: int | None,
+    expected: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "query_timeout_seconds", seconds)
+    database = database_type()
+    database._current_operation = operation
+    statements: list[str | None] = []
+
+    def read(query: str, uri: str) -> pl.DataFrame:
+        assert query == "SELECT 1"
+        parsed = urlsplit(uri)
+        assert parsed.netloc == urlsplit(database.connection_string).netloc
+        options = parse_qs(parsed.query).get("options", [None])[0]
+        statements.append(options)
+        assert "+" not in parsed.query
+        return pl.DataFrame({"value": [1]})
+
+    monkeypatch.setattr(pl, "read_database_uri", read)
+
+    assert database.fetch_connectorx("SELECT 1;").item() == 1
+    assert statements == [expected]
+
+
+def test_postgres_statement_timeout_preserves_connection_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(get_settings(), "query_timeout_seconds", 45)
+    database = Postgres(connection_string="postgresql://user:pass+word@localhost/postgres?options=-cwork_mem%3D64MB")
+    database._current_operation = "select"
+    uris: list[str] = []
+
+    def read(_query: str, uri: str) -> pl.DataFrame:
+        uris.append(uri)
+        return pl.DataFrame({"value": [1]})
+
+    monkeypatch.setattr(pl, "read_database_uri", read)
+
+    database.fetch_connectorx("SELECT 1")
+
+    assert uris == [
+        "postgresql://user:pass+word@localhost/postgres?options=-cwork_mem%3D64MB%20-cstatement_timeout%3D45000"
+    ]

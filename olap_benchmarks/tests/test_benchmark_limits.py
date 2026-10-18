@@ -5,6 +5,7 @@ import signal
 from collections.abc import Mapping
 from contextlib import suppress
 from multiprocessing import Queue, get_context
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from time import sleep
 from types import SimpleNamespace
@@ -466,3 +467,151 @@ def test_abrupt_exit_cleanup_stops_a_spawned_helper_and_preserves_the_writer(
                 process.kill()
             process.join(timeout=5)
         writer.close()
+
+
+@pytest.mark.parametrize("denied_signal", [0, signal.SIGTERM, signal.SIGKILL])
+def test_operation_cleanup_permission_errors_still_kill_and_join_the_child(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, denied_signal: int
+) -> None:
+    process = _StuckProcess()
+    process.start()
+    group_signals: list[tuple[int, int]] = []
+    clock = iter((0.0, 0.0, 4.0))
+
+    def send_group_signal(pgid: int, signum: int) -> None:
+        group_signals.append((pgid, signum))
+        if signum == denied_signal:
+            raise PermissionError("group permission denied")
+
+    def ignore_signal(_pid: int, _signum: int) -> None:
+        pass
+
+    monkeypatch.setattr(operation_runner.os, "kill", ignore_signal)
+    monkeypatch.setattr(operation_runner.os, "killpg", send_group_signal)
+    monkeypatch.setattr(operation_runner, "monotonic", lambda: next(clock))
+
+    def ignore_sleep(_seconds: float) -> None:
+        pass
+
+    monkeypatch.setattr(operation_runner, "sleep", ignore_sleep)
+
+    operation_runner._stop_operation(cast(BaseProcess, process))
+
+    assert group_signals[0] == (process.pid, signal.SIGTERM)
+    assert group_signals[-1] == (process.pid, signal.SIGKILL)
+    assert process.killed
+    assert process.joined[-1] == 5
+    assert "Permission denied" in caplog.text
+
+
+def test_operation_cleanup_does_not_confuse_an_unprobeable_zombie_group_with_success(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    process = _StuckProcess()
+    process.started = True
+    process.killed = True
+    process.exitcode = 17
+    group_signals: list[tuple[int, int]] = []
+
+    def send_group_signal(pgid: int, signum: int) -> None:
+        group_signals.append((pgid, signum))
+        if signum in (0, signal.SIGKILL):
+            raise PermissionError("zombie-only group cannot be signalled")
+
+    monkeypatch.setattr(operation_runner.os, "killpg", send_group_signal)
+    monkeypatch.setattr(operation_runner, "monotonic", lambda: 0.0)
+
+    operation_runner._stop_operation(cast(BaseProcess, process))
+
+    assert group_signals == [(process.pid, signal.SIGTERM), (process.pid, 0), (process.pid, signal.SIGKILL)]
+    assert process.joined == [0, 5]
+    assert "probing operation process group" in caplog.text
+    assert "killing operation process group" in caplog.text
+    assert "cleanup is unconfirmed" in caplog.text
+
+
+def test_operation_cleanup_always_joins_after_an_unexpected_group_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    process = _StuckProcess()
+    process.start()
+
+    def fail_group_signal(_pgid: int, _signum: int) -> None:
+        raise RuntimeError("unexpected group failure")
+
+    def ignore_signal(_pid: int, _signum: int) -> None:
+        pass
+
+    monkeypatch.setattr(operation_runner.os, "kill", ignore_signal)
+    monkeypatch.setattr(operation_runner.os, "killpg", fail_group_signal)
+
+    with pytest.raises(RuntimeError, match="unexpected group failure"):
+        operation_runner._stop_operation(cast(BaseProcess, process))
+
+    assert process.killed
+    assert process.joined == [5, 5]
+
+
+def test_operation_cleanup_always_joins_and_reports_a_child_it_cannot_kill(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    class UnkillableProcess(_StuckProcess):
+        def kill(self) -> None:
+            raise PermissionError("child permission denied")
+
+    process = UnkillableProcess()
+    process.start()
+
+    def missing_group(_pgid: int, _signum: int) -> None:
+        raise ProcessLookupError("group already gone")
+
+    def ignore_signal(_pid: int, _signum: int) -> None:
+        pass
+
+    monkeypatch.setattr(operation_runner.os, "kill", ignore_signal)
+    monkeypatch.setattr(operation_runner.os, "killpg", missing_group)
+
+    operation_runner._stop_operation(cast(BaseProcess, process))
+
+    assert process.joined == [5, 5]
+    assert "Permission denied killing operation process" in caplog.text
+    assert "remains alive after cleanup" in caplog.text
+
+
+def test_operation_preserves_its_original_failure_when_cleanup_raises(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    process = _StuckProcess()
+    settings.operation_timeout_seconds = None
+    settings.client_memory_limit_gb = None
+
+    def new_process(**_kwargs: object) -> _StuckProcess:
+        return process
+
+    def context(method: str) -> SimpleNamespace:
+        assert method == "spawn"
+        return SimpleNamespace(Process=new_process)
+
+    def fail_cleanup(_process: BaseProcess) -> None:
+        raise RuntimeError("unexpected cleanup failure")
+
+    monkeypatch.setattr(operation_runner, "get_context", context)
+    monkeypatch.setattr(operation_runner, "check_disk_space", lambda: None)
+    monkeypatch.setattr(operation_runner, "configure_polars_spill", lambda: None)
+
+    def query_expired(_path: Path, _timeout: int | None) -> str:
+        return "slow"
+
+    monkeypatch.setattr(operation_runner, "expired_query", query_expired)
+    monkeypatch.setattr(operation_runner, "_stop_operation", fail_cleanup)
+
+    with pytest.raises(TimeoutError, match="Query slow exceeded"):
+        operation_runner.run_operation(
+            DuckDB(),
+            "clickbench",
+            "select",
+            1,
+            cast("Queue[WriterMessage]", object()),
+            cast("Queue[object]", object()),
+        )
+
+    assert "Failed to clean up benchmark operation process" in caplog.text
+    assert "unexpected cleanup failure" in caplog.text

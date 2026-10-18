@@ -12,7 +12,6 @@ The child also runs the metric sampler, so `client_mem_mb` and `client_uss_mb` a
 the operation's own process rather than the orchestrating one.
 """
 
-import contextlib
 import logging
 import os
 import shutil
@@ -72,33 +71,62 @@ def _operation_entrypoint(
 
 
 def _stop_operation(process: BaseProcess) -> None:
-    if process.pid is None:
+    pid = process.pid
+    if pid is None:
         return
-    if process.is_alive():
-        with contextlib.suppress(ProcessLookupError):
-            os.kill(process.pid, signal.SIGINT)
-        process.join(timeout=5)
-
     try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    else:
-        deadline = monotonic() + 3
-        while monotonic() < deadline:
-            process.join(timeout=0)
+        if process.is_alive():
             try:
-                os.killpg(process.pid, 0)
+                os.kill(pid, signal.SIGINT)
             except ProcessLookupError:
-                break
-            sleep(0.05)
-        else:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
+                pass
+            except PermissionError:
+                _LOGGER.warning("Permission denied interrupting operation process %s", pid, exc_info=True)
+            process.join(timeout=5)
 
-    if process.is_alive():
-        process.kill()
-    process.join(timeout=5)
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            _LOGGER.warning("Permission denied terminating operation process group %s", pid, exc_info=True)
+        else:
+            deadline = monotonic() + 3
+            while monotonic() < deadline:
+                process.join(timeout=0)
+                try:
+                    os.killpg(pid, 0)
+                except ProcessLookupError:
+                    return
+                except PermissionError:
+                    _LOGGER.warning(
+                        "Permission denied probing operation process group %s; cleanup is unconfirmed",
+                        pid,
+                        exc_info=True,
+                    )
+                    break
+                sleep(0.05)
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            _LOGGER.warning(
+                "Permission denied killing operation process group %s; cleanup is unconfirmed", pid, exc_info=True
+            )
+    finally:
+        try:
+            if process.is_alive():
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    _LOGGER.warning("Permission denied killing operation process %s", pid, exc_info=True)
+        finally:
+            process.join(timeout=5)
+            if process.is_alive():
+                _LOGGER.error("Operation process %s remains alive after cleanup", pid)
 
 
 def run_operation(
@@ -158,7 +186,10 @@ def run_operation(
                 f"failed in its benchmark process (exit code {process.exitcode})"
             )
     except BaseException:
-        _stop_operation(process)
+        try:
+            _stop_operation(process)
+        except BaseException:
+            _LOGGER.exception("Failed to clean up benchmark operation process %s", process.pid)
         raise
     finally:
         query_watchdog_path.unlink(missing_ok=True)
