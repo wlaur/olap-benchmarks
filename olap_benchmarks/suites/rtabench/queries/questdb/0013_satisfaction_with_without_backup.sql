@@ -2,7 +2,7 @@ SELECT
     date_trunc('month', event_created) AS "month",
     count(
         CASE
-            WHEN backup_processor <> '' THEN 1
+            WHEN backup_processor IS NOT NULL AND backup_processor <> '' THEN 1
             ELSE NULL
         END
     ) AS count_with_backup,
@@ -14,7 +14,7 @@ SELECT
     ) AS count_without_backup,
     avg(
         CASE
-            WHEN backup_processor <> '' THEN satisfaction
+            WHEN backup_processor IS NOT NULL AND backup_processor <> '' THEN satisfaction
             ELSE NULL
         END
     ) AS avg_satisfaction_with_backup,

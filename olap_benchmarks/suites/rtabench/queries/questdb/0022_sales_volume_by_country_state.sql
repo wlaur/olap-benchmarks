@@ -11,7 +11,7 @@ FROM (
         SELECT
             NULL as country,
             NULL as state,
-            sum(amount * price) as total_amount
+            sum(amount * CAST(round(price * 100, 0) AS LONG)) / 100.0 as total_amount
         FROM
             customers c
             INNER JOIN orders o ON o.customer_id = c.customer_id
@@ -24,7 +24,7 @@ FROM (
         SELECT
             c.country,
             NULL as state,
-            sum(amount * price) as total_amount
+            sum(amount * CAST(round(price * 100, 0) AS LONG)) / 100.0 as total_amount
         FROM
             customers c
             INNER JOIN orders o ON o.customer_id = c.customer_id
@@ -39,7 +39,7 @@ FROM (
         SELECT
             c.country,
             c.state,
-            sum(amount * price) as total_amount
+            sum(amount * CAST(round(price * 100, 0) AS LONG)) / 100.0 as total_amount
         FROM
             customers c
             INNER JOIN orders o ON o.customer_id = c.customer_id

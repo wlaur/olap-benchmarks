@@ -1,7 +1,7 @@
 SELECT
     c.customer_id,
     c.name,
-    sum(oi.amount * p.price) AS total_sales
+    sum(oi.amount * CAST(round(p.price * 100, 0) AS LONG)) / 100.0 AS total_sales
 FROM
     customers c
     INNER JOIN orders o ON c.customer_id = o.customer_id
