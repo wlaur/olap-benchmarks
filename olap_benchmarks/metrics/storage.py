@@ -246,7 +246,9 @@ class WriterProcessHandle:
             self.process.join(timeout=timeout_seconds)
 
         self.queue.close()
+        self.queue.cancel_join_thread()
         self.result_queue.close()
+        self.result_queue.cancel_join_thread()
 
         self._closed = True
 

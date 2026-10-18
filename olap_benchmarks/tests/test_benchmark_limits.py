@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal, NamedTuple, cast
 
 import polars as pl
+import psutil
 import pytest
 from pydantic import ValidationError
 
@@ -273,6 +274,20 @@ class _MemoryProcess:
     def memory_info(self) -> _MemoryInfo:
         return _MemoryInfo(3 * 1024**3)
 
+    def children(self, recursive: bool = False) -> list[psutil.Process]:
+        return []
+
+
+class _Descendant:
+    terminated: bool = False
+    killed: bool = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
 
 @pytest.mark.parametrize("resource", ["time", "memory", "disk", "query"])
 def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
@@ -284,6 +299,7 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
     signals: list[tuple[int, int]] = []
     clock = iter((0.0, 11.0))
     disk_checks = 0
+    descendant = _Descendant()
 
     def new_process(**_kwargs: object) -> _StuckProcess:
         return process
@@ -300,6 +316,15 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
     def query_expired(_path: Path, _timeout: int | None) -> str | None:
         return "slow" if resource == "query" else None
 
+    def children(_self: _MemoryProcess, recursive: bool = False) -> list[psutil.Process]:
+        return [cast(psutil.Process, descendant)]
+
+    def wait_descendants(
+        processes: list[psutil.Process], timeout: float
+    ) -> tuple[list[psutil.Process], list[psutil.Process]]:
+        assert processes == [descendant]
+        return [], processes
+
     monkeypatch.setattr(operation_runner, "Process", new_process)
     monkeypatch.setattr(operation_runner, "monotonic", lambda: next(clock))
     monkeypatch.setattr(operation_runner, "check_disk_space", disk_space)
@@ -307,6 +332,8 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
     monkeypatch.setattr(operation_runner, "expired_query", query_expired)
     monkeypatch.setattr(operation_runner.os, "kill", send_signal)
     monkeypatch.setattr(operation_runner.psutil, "Process", _MemoryProcess)
+    monkeypatch.setattr(_MemoryProcess, "children", children)
+    monkeypatch.setattr(operation_runner.psutil, "wait_procs", wait_descendants)
     expected_error, message = {
         "time": (TimeoutError, "exceeded operation time budget"),
         "memory": (MemoryError, "client exceeded 2 GiB RSS"),
@@ -328,3 +355,5 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
     assert process.killed
     assert not process.is_alive()
     assert process.joined == [1, 5, 5]
+    assert descendant.terminated
+    assert descendant.killed

@@ -12,6 +12,7 @@ The child also runs the metric sampler, so `client_mem_mb` and `client_uss_mb` a
 the operation's own process rather than the orchestrating one.
 """
 
+import contextlib
 import logging
 import os
 import shutil
@@ -121,11 +122,22 @@ def run_operation(
                     raise MemoryError(f"{operation} client exceeded {settings.client_memory_limit_gb} GiB RSS")
     except BaseException:
         if process.pid is not None and process.is_alive():
+            try:
+                descendants = psutil.Process(process.pid).children(recursive=True)
+            except psutil.NoSuchProcess:
+                descendants = []
             os.kill(process.pid, signal.SIGINT)
             process.join(timeout=5)
             if process.is_alive():
                 process.kill()
                 process.join(timeout=5)
+            for descendant in descendants:
+                with contextlib.suppress(psutil.NoSuchProcess):
+                    descendant.terminate()
+            _, alive = psutil.wait_procs(descendants, timeout=3)
+            for descendant in alive:
+                with contextlib.suppress(psutil.NoSuchProcess):
+                    descendant.kill()
         raise
     finally:
         query_watchdog_path.unlink(missing_ok=True)
