@@ -11,6 +11,7 @@ itself belong in [`../REVIEW.md`](../REVIEW.md).
 | [`clickhouse/`](clickhouse/) | [`FixedString` deserialization failure under `parallel_hash`](clickhouse/fixedstring-too-large-under-parallel-hash.md); [Automatic PREWHERE preparation cost on wide tables](clickhouse/wide-range-prewhere-planning.md) |
 | [`monetdb/`](monetdb/) | [Planning thousands of wide aggregates](monetdb/wide-many-aggregate-planning.md) |
 | [`questdb/`](questdb/) | [DOUBLE PRECISION casts fail inside CASE](questdb/double-precision-cast-inside-case.md) |
+| [`starrocks/`](starrocks/) | [Bucket-shuffle full join loses matching rows after analytic aggregation](starrocks/bucket-shuffle-full-join-loses-matches.md) |
 
 ## Conventions
 
