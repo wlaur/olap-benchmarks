@@ -24,6 +24,7 @@ from ...suites.time_series.config import (
     get_time_series_table_name,
 )
 from ...suites.time_series_metrics.config import TimeSeriesMetrics, metric_name
+from ...suites.tpc_ds.config import TpcDs
 from .. import Database
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
@@ -35,6 +36,8 @@ def _postgres_connection_string() -> str:
 
 
 PostgresFetchMethod = Literal["connectorx", "python"]
+
+CLICKBENCH_COPY_BATCH_ROWS = 1_000_000
 
 
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
@@ -287,6 +290,9 @@ class PostgresClickbench(Clickbench["Postgres"]):
         with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
 
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
         with self.db.phase_context("index"):
@@ -296,6 +302,19 @@ class PostgresClickbench(Clickbench["Postgres"]):
         # ensure that WAL is processed etc...
         if restart:
             self.db.restart_event()
+
+
+class PostgresTpcDs[DBT: "Postgres"](TpcDs[DBT]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+    def query_path(self, query_name: str) -> Path | None:
+        for db_name in (self.db.name, "postgres"):
+            override = self.queries_directory / db_name / f"{query_name}.sql"
+            if override.is_file():
+                return override
+        return super().query_path(query_name)
 
 
 class PostgresTimeSeriesMetrics[DBT: "Postgres"](TimeSeriesMetrics[DBT]):
@@ -501,6 +520,15 @@ class Postgres(Database):
     connection_string: str = Field(default_factory=_postgres_connection_string)
 
     @property
+    def run_options(self) -> Mapping[str, object]:
+        method = (
+            self.benchmarks[self.current_suite].fetch_kwargs.get("method", "connectorx")
+            if self._current_suite is not None
+            else "connectorx"
+        )
+        return {**super().run_options, "select_fetch_method": method}
+
+    @property
     def server_settings(self) -> Mapping[str, str]:
         settings = get_settings()
         values = {
@@ -569,6 +597,19 @@ class Postgres(Database):
         df = self.fetch("select current_setting('server_version') as version", schema={"version": pl.String})
         return str(df.item(0, 0))
 
+    def _query_connection_string(self) -> str:
+        timeout = get_settings().query_timeout_seconds if self._current_operation == "select" else None
+        connection_string = self.connection_string
+        if timeout is not None:
+            url = make_url(connection_string)
+            options = url.query.get("options", "")
+            if isinstance(options, tuple):
+                options = " ".join(options)
+            url = url.update_query_dict({"options": f"{options} -cstatement_timeout={timeout * 1000}".strip()})
+            prefix, _, parameters = url.render_as_string(hide_password=False).partition("?")
+            connection_string = f"{prefix}?{parameters.replace('+', '%20')}"
+        return connection_string
+
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
             self.close_connection()
@@ -576,7 +617,7 @@ class Postgres(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine(self.connection_string)
+        engine = create_engine(self._query_connection_string())
         self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
@@ -600,18 +641,8 @@ class Postgres(Database):
         schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
     ) -> pl.DataFrame:
         sql = query.strip().removesuffix(";")
-        timeout = get_settings().query_timeout_seconds if self._current_operation == "select" else None
-        connection_string = self.connection_string
-        if timeout is not None:
-            url = make_url(connection_string)
-            options = url.query.get("options", "")
-            if isinstance(options, tuple):
-                options = " ".join(options)
-            url = url.update_query_dict({"options": f"{options} -cstatement_timeout={timeout * 1000}".strip()})
-            prefix, _, parameters = url.render_as_string(hide_password=False).partition("?")
-            connection_string = f"{prefix}?{parameters.replace('+', '%20')}"
         with self.record_query_execution(sql):
-            df = pl.read_database_uri(sql, connection_string)
+            df = pl.read_database_uri(sql, self._query_connection_string())
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -691,17 +722,16 @@ class Postgres(Database):
         if not table_exists(con, table):
             self.create_table(schema, table, primary_key, not_null)
 
+        if isinstance(df, pl.LazyFrame) and self._current_suite == "clickbench":
+            for batch_index, batch in enumerate(
+                df.collect_batches(chunk_size=CLICKBENCH_COPY_BATCH_ROWS, maintain_order=True), start=1
+            ):
+                self.insert(batch, table, primary_key=primary_key, not_null=not_null)
+                _LOGGER.info(f"Inserted ClickBench batch {batch_index:_} with {batch.height:_} rows")
+            return
+
         temp_file = self._staging_directory / f"{table}_{uuid.uuid4().hex}.csv"
         temp_file_str = temp_file.resolve().as_posix()
-
-        if isinstance(df, pl.LazyFrame):
-            df.sink_csv(temp_file)
-            _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
-        else:
-            df.write_csv(temp_file)
-            _LOGGER.info(
-                f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
-            )
 
         url = make_url(self.connection_string)
         connection_string = (
@@ -727,10 +757,19 @@ class Postgres(Database):
         copy_sql = f"COPY {table} FROM '{temp_file_str}' WITH (FORMAT csv, HEADER true)"
 
         try:
+            if isinstance(df, pl.LazyFrame):
+                df.sink_csv(temp_file)
+                _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
+            else:
+                df.write_csv(temp_file)
+                _LOGGER.info(
+                    f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
+                )
+
             with self.record_query_execution(copy_sql):
                 subprocess.run(command, capture_output=True, text=True, check=True)
         finally:
-            temp_file.unlink()
+            temp_file.unlink(missing_ok=True)
 
     def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path, columns: list[str]) -> None:
         raw_conn = con.connection.dbapi_connection
@@ -801,5 +840,6 @@ class Postgres(Database):
             "jsonbench": PostgresJSONBench,
             "time_series": PostgresTimeSeries,
             "time_series_metrics": PostgresTimeSeriesMetrics,
+            "tpc_ds": PostgresTpcDs,
             "chat_threads": ChatThreads,
         }

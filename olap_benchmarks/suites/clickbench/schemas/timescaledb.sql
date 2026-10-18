@@ -115,8 +115,6 @@ ALTER TABLE hits SET (timescaledb.compress, timescaledb.compress_segmentby = '',
 
 ALTER DATABASE postgres SET timescaledb.enable_chunk_skipping to ON;
 
-ALTER DATABASE postgres SET work_mem TO '1GB';
-
 ALTER DATABASE postgres SET min_parallel_table_scan_size TO '0';
 
 SELECT enable_chunk_skipping('hits', 'counterid');
