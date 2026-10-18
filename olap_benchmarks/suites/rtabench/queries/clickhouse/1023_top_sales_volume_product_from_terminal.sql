@@ -5,8 +5,7 @@ SELECT
 FROM
     top_sales_volume_product
 WHERE
-    event_created >= '2024-07-01'
-    AND event_created < '2024-12-25'
+    event_created = '2024-07-01'
     and terminal = 'Berlin'
 GROUP BY
     product_id,

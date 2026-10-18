@@ -1,6 +1,6 @@
 SELECT
     day,
-    count(delayed_orders) as delayed_orders
+    sum(delayed_orders) as delayed_orders
 FROM
     order_events_q4
 WHERE

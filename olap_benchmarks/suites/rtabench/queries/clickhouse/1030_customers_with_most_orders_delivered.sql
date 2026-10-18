@@ -1,7 +1,7 @@
 SELECT
     customer_id,
     customer_name,
-    count(customer_orders)
+    sum(customer_orders)
 FROM
     customers_with_most_orders_delivered
 WHERE
@@ -11,7 +11,7 @@ GROUP BY
     customer_id,
     customer_name
 ORDER BY
-    count(customer_orders) DESC,
+    sum(customer_orders) DESC,
     customer_id
 LIMIT
     10;

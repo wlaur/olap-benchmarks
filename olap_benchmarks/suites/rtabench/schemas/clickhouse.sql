@@ -70,6 +70,7 @@ DROP TABLE IF EXISTS order_events_per_terminal_per_hour;
 DROP TABLE IF EXISTS country_category_monthly_performance;
 DROP TABLE IF EXISTS top_selling_month_product_q17;
 DROP TABLE IF EXISTS top_sales_volume_product;
+DROP TABLE IF EXISTS top_sales_volume_category_weekly;
 DROP TABLE IF EXISTS customers_with_most_orders_delivered;
 
 DROP VIEW IF EXISTS mv_order_events_q4;
@@ -80,6 +81,7 @@ DROP VIEW IF EXISTS mv_order_events_per_terminal_per_hour;
 DROP VIEW IF EXISTS mv_country_category_monthly_performance;
 DROP VIEW IF EXISTS mv_top_selling_month_product_q17;
 DROP VIEW IF EXISTS mv_top_sales_volume_product;
+DROP VIEW IF EXISTS mv_top_sales_volume_category_weekly;
 DROP VIEW IF EXISTS mv_customers_with_most_orders_delivered;
 
 CREATE TABLE order_events_q4
@@ -130,7 +132,7 @@ ENGINE = MergeTree
 ORDER BY (week, order_id);
 
 CREATE MATERIALIZED VIEW mv_order_events_q12 TO order_events_q12 AS
-SELECT toStartOfWeek(event_created) as week,
+SELECT toStartOfWeek(event_created, 1) as week,
        order_id,
        maxSimpleState(satisfaction) AS satisfaction
 FROM order_events
@@ -141,10 +143,12 @@ CREATE TABLE order_events_q13
 (
     month timestamp,
     order_id integer,
-    count_with_backup integer,
-    count_without_backup integer,
-    avg_satisfaction_with_backup Float32,
-    avg_satisfaction_without_backup Float32
+    count_with_backup Int64,
+    count_without_backup Int64,
+    satisfaction_sum_with_backup Float64,
+    satisfaction_sum_without_backup Float64,
+    satisfaction_count_with_backup Int64,
+    satisfaction_count_without_backup Int64
 )
 ENGINE = MergeTree
 ORDER BY (month, order_id);
@@ -152,20 +156,21 @@ ORDER BY (month, order_id);
 CREATE MATERIALIZED VIEW mv_order_events_q13 TO order_events_q13 AS
 SELECT toStartOfMonth(event_created) as month,
        order_id,
-       count() FILTER (WHERE backup_processor is not null) as count_with_backup,
-       count() FILTER (WHERE backup_processor is null) as count_without_backup,
-       avg(satisfaction) FILTER (WHERE backup_processor is not null) as avg_satisfaction_with_backup,
-       avg(satisfaction) FILTER (WHERE backup_processor is null) as avg_satisfaction_without_backup
+       countIf(backup_processor != '') AS count_with_backup,
+       countIf(isNull(backup_processor)) AS count_without_backup,
+       sumIf(toFloat64(satisfaction), backup_processor != '') AS satisfaction_sum_with_backup,
+       sumIf(toFloat64(satisfaction), isNull(backup_processor)) AS satisfaction_sum_without_backup,
+       countIf(backup_processor != '' AND isNotNull(satisfaction)) AS satisfaction_count_with_backup,
+       countIf(isNull(backup_processor) AND isNotNull(satisfaction)) AS satisfaction_count_without_backup
 FROM order_events
-GROUP BY month, order_id
-;
+GROUP BY month, order_id;
 
 CREATE TABLE order_events_per_terminal_per_hour
 (
     hour timestamp,
     terminal text,
-    event_count integer,
-    unique_orders integer
+    event_count Int64,
+    unique_orders AggregateFunction(uniqExact, Nullable(String))
 )
 ENGINE = MergeTree
 ORDER BY (hour, terminal);
@@ -175,7 +180,8 @@ SELECT
     toStartOfHour(event_created) as hour,
     JSONExtractString(event_payload, 'terminal') as terminal,
     count(*) as event_count,
-    count(DISTINCT JSONExtractString(event_payload, 'order_id')) as unique_orders
+    uniqExactState(if(JSONHas(event_payload, 'order_id') AND JSONType(event_payload, 'order_id') != 'Null',
+                      JSON_VALUE(event_payload, '$.order_id'), NULL)) AS unique_orders
 FROM order_events
 WHERE
     event_type IN ('Created', 'Departed', 'Delivered')
@@ -187,7 +193,7 @@ CREATE TABLE country_category_monthly_performance
     event_created timestamp,
     country text,
     product_category text,
-    revenue Float32
+    revenue Decimal(38,2)
 )
 ENGINE = MergeTree
 ORDER BY (event_created, country, product_category);
@@ -197,7 +203,7 @@ SELECT
     toStartOfMonth(oe.event_created) as event_created,
 	c.country,
     p.category as product_category,
-    sum(p.price * oi.amount) as revenue
+    sum(toDecimal128(p.price, 2) * oi.amount) as revenue
 FROM
     products p
     INNER JOIN order_items oi USING (product_id)
@@ -215,7 +221,7 @@ CREATE TABLE top_selling_month_product_q17
     event_created timestamp,
     product_id integer,
     product_name text,
-    amount integer
+    amount Int64
 )
 ENGINE = MergeTree
 ORDER BY (event_created, product_id, product_name);
@@ -242,40 +248,57 @@ CREATE TABLE top_sales_volume_product
     event_created timestamp,
     product_id integer,
     product_name text,
-    volume Decimal(10,2),
-    category text,
+    volume Decimal(38,2),
     terminal text
 )
 ENGINE = MergeTree
 ORDER BY (event_created, product_id, product_name, terminal);
 
 CREATE MATERIALIZED VIEW mv_top_sales_volume_product TO top_sales_volume_product AS
+WITH event_counts AS (
+    SELECT order_id,
+           toStartOfInterval(event_created, INTERVAL 6 MONTH) AS semester,
+           JSONExtractString(event_payload, 'terminal') AS terminal,
+           count() AS event_count
+    FROM order_events
+    GROUP BY order_id, semester, terminal
+)
 SELECT
-    toStartOfMonth(event_created) AS event_created,
-    product_id,
-    p.name as product_name,
-    sum(oi.amount * p.price) AS volume,
-    p.category,
-    JSONExtractString(event_payload, 'terminal') as terminal
-FROM
-    products p
-    INNER JOIN order_items oi USING (product_id)
-    INNER JOIN order_events oe ON oe.order_id = oi.order_id
-WHERE
-    event_type = 'Delivered'
-GROUP BY
-    event_created,
-    product_id,
-    product_name,
-    category,
-    terminal;
+    ec.semester AS event_created,
+    p.product_id AS product_id,
+    p.name AS product_name,
+    sum(toDecimal128(p.price, 2) * oi.amount * ec.event_count) AS volume,
+    ec.terminal AS terminal
+FROM products p
+INNER JOIN order_items oi USING (product_id)
+INNER JOIN event_counts ec ON ec.order_id = oi.order_id
+GROUP BY ec.semester, p.product_id, p.name, ec.terminal;
+
+CREATE TABLE top_sales_volume_category_weekly
+(
+    event_created timestamp,
+    category text,
+    volume Decimal(38,2)
+)
+ENGINE = MergeTree
+ORDER BY (event_created, category);
+
+CREATE MATERIALIZED VIEW mv_top_sales_volume_category_weekly TO top_sales_volume_category_weekly AS
+SELECT toStartOfWeek(oe.event_created, 1) AS event_created,
+       p.category,
+       sum(toDecimal128(p.price, 2) * oi.amount) AS volume
+FROM products p
+INNER JOIN order_items oi USING (product_id)
+INNER JOIN order_events oe ON oe.order_id = oi.order_id
+WHERE oe.event_type = 'Delivered'
+GROUP BY toStartOfWeek(oe.event_created, 1), p.category;
 
 CREATE TABLE customers_with_most_orders_delivered
 (
     event_created timestamp,
     customer_id integer,
     customer_name text,
-    customer_orders integer
+    customer_orders Int64
 )
 ENGINE = MergeTree
 ORDER BY (event_created, customer_id, customer_name);

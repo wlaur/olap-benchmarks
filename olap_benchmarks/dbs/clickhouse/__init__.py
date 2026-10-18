@@ -110,7 +110,7 @@ class ClickHouseRTABench(RTABench["Clickhouse"]):
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         return {
-            "time_columns": ["hour", "day", "month", "event_created", "created_at"],
+            "time_columns": ["hour", "day", "week", "month", "event_created", "created_at"],
             # standard-SQL NULL semantics for the GROUPING SETS rollup rows in 0022
             "settings": {"group_by_use_nulls": 1},
         }
