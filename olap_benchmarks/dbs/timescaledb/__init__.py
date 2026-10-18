@@ -27,6 +27,32 @@ def _timescaledb_connection_string() -> str:
 
 
 class TimescaleRTABench(RTABench["TimescaleDB"]):
+    CONTINUOUS_AGGREGATES: ClassVar[Mapping[str, str]] = {
+        "1004_count_delayed_orders_per_day": "cagg_order_events_0004",
+        "1008_most_week_delayed_order": "cagg_order_events_0008",
+        "1012_max_satisfaction_for_order_per_week": "cagg_order_events_q12",
+        "1013_satisfaction_with_without_backup": "cagg_order_events_q13",
+        "1025_product_category_performance": "cagg_top_sales_volume_category_weekly",
+        "1023_top_sales_volume_product_from_terminal": "cagg_top_selling_product_semester",
+        "1017_top_selling_month_product": "cagg_top_selling_month_product_q17",
+        "1030_customers_with_most_orders_delivered": "cagg_customers_with_most_orders_delivered",
+        "1000_terminal_hourly_stats": "cagg_order_events_per_terminal_per_hour",
+        "1027_country_category_performance": "cagg_country_category_monthly_performance",
+    }
+
+    def prepare_continuous_aggregates(self) -> None:
+        for query_name, view_name in self.CONTINUOUS_AGGREGATES.items():
+            skipped = self.query_skip(query_name)
+            if skipped is not None:
+                _LOGGER.info("Skipping continuous aggregate %s: %s", view_name, skipped[1])
+                continue
+            with self.db.phase_context("continuous_aggregates", table_name=view_name):
+                self.db.execute_schema_file(
+                    REPO_ROOT / "olap_benchmarks/suites/rtabench/schemas/timescaledb" / f"{view_name}.sql",
+                    autocommit=True,
+                )
+            _LOGGER.info("Prepared continuous aggregate %s for %s", view_name, query_name)
+
     def compress_tables(self) -> None:
         conn = self.db.connect()
 
@@ -55,10 +81,7 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
         with self.db.phase_context("compress"):
             self.compress_tables()
 
-        with self.db.phase_context("continuous_aggregates"):
-            self.db.execute_schema_file(
-                REPO_ROOT / "olap_benchmarks/suites/rtabench/schemas/timescaledb_caggs.sql", autocommit=True
-            )
+        self.prepare_continuous_aggregates()
 
         if restart:
             self.db.restart_event()

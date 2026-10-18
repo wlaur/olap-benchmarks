@@ -57,6 +57,11 @@ Container stop and restart commands allow 120 seconds for normal shutdown so lar
 loads can flush their write-ahead logs. The grace period is recorded in run options;
 operation and query deadlines still apply.
 
+TimescaleDB RTABench prepares continuous aggregates only for selected queries.
+For a partial run, use the same query selection for populate and select; all input
+tables retain their full size. Aggregate DDL and preparation phases are recorded
+separately for each selected view.
+
 The effective `OLAP_BENCHMARKS_MONETDB_*` values are recorded on every MonetDB run under
 `metadata.settings`.
 
