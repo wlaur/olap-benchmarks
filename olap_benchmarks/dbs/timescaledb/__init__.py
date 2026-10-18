@@ -88,6 +88,10 @@ class TimescaleChatThreads(ChatThreads["TimescaleDB"]):
     chat_thread is left as a rowstore table because the mutate workload updates it in place.
     """
 
+    @property
+    def message_upsert_key(self) -> list[str]:
+        return ["message_id", "created_at"]
+
     def compress_tables(self) -> None:
         self.db.execute(
             "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('chat_message') i",

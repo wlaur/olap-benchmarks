@@ -725,11 +725,12 @@ class Postgres(Database):
         finally:
             temp_file.unlink()
 
-    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path) -> None:
+    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path, columns: list[str]) -> None:
         raw_conn = con.connection.dbapi_connection
         assert raw_conn is not None
         cursor = raw_conn.cursor()
-        copy_sql = f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)"
+        column_sql = ", ".join(f'"{column}"' for column in columns)
+        copy_sql = f"COPY {table} ({column_sql}) FROM STDIN WITH (FORMAT csv, HEADER true)"
         with open(csv_path) as f, self.record_query_execution(copy_sql):
             cursor.copy_expert(copy_sql, f)
 
@@ -738,7 +739,7 @@ class Postgres(Database):
 
         try:
             df.write_csv(temp_file)
-            self._copy_csv_to_table(con, table, temp_file)
+            self._copy_csv_to_table(con, table, temp_file, df.columns)
         finally:
             temp_file.unlink(missing_ok=True)
 
