@@ -9,7 +9,7 @@ FROM
 WHERE
     o.created_at > '2024-12-01'
     AND o.created_at < '2024-12-07'
-    AND oi.order_id NOT IN (
+    AND order_id NOT IN (
         SELECT
             oe.order_id
         FROM

@@ -16,6 +16,6 @@ GROUP BY
 ORDER BY
     sum(amount),
     p.name DESC,
-    p.product_id
+    product_id
 LIMIT
     10;
