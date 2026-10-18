@@ -1,14 +1,14 @@
 import logging
-import subprocess
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from pydantic import Field
-from sqlalchemy import Connection, create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.engine import make_url
 
 from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
@@ -38,7 +38,8 @@ def _postgres_connection_string() -> str:
 
 PostgresFetchMethod = Literal["connectorx", "python"]
 
-CLICKBENCH_COPY_BATCH_ROWS = 1_000_000
+COPY_BATCH_ROWS = 1_000_000
+COPY_BATCH_MAX_CELLS = 64_000_000
 
 
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
@@ -533,7 +534,14 @@ class Postgres(Database):
             if self._current_suite is not None
             else "connectorx"
         )
-        return {**super().run_options, "select_fetch_method": method}
+        return {
+            **super().run_options,
+            "select_fetch_method": method,
+            "generic_insert_method": "native-csv-copy-v1",
+            "copy_workers": self.parallel_copy_workers,
+            "copy_batch_rows": COPY_BATCH_ROWS,
+            "copy_batch_max_cells": COPY_BATCH_MAX_CELLS,
+        }
 
     @property
     def server_settings(self) -> Mapping[str, str]:
@@ -721,78 +729,61 @@ class Postgres(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
-        # timescale-parallel-copy also works with normal postgres, and should be faster than \copy or similar
         con = self.connect()
-
         schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
-
         if not table_exists(con, table):
             self.create_table(schema, table, primary_key, not_null)
 
-        if isinstance(df, pl.LazyFrame) and self._current_suite == "clickbench":
-            for batch_index, batch in enumerate(
-                df.collect_batches(chunk_size=CLICKBENCH_COPY_BATCH_ROWS, maintain_order=True), start=1
-            ):
-                self.insert(batch, table, primary_key=primary_key, not_null=not_null)
-                _LOGGER.info(f"Inserted ClickBench batch {batch_index:_} with {batch.height:_} rows")
-            return
-
-        temp_file = self._staging_directory / f"{table}_{uuid.uuid4().hex}.csv"
-        temp_file_str = temp_file.resolve().as_posix()
-
-        url = make_url(self.connection_string)
-        connection_string = (
-            f"host={url.host} port={url.port} dbname={url.database} user={url.username} password={url.password}"
+        batch_rows = min(COPY_BATCH_ROWS, max(1, COPY_BATCH_MAX_CELLS // max(1, len(schema))))
+        batches = (
+            df.collect_batches(chunk_size=batch_rows, maintain_order=True)
+            if isinstance(df, pl.LazyFrame)
+            else df.iter_slices(batch_rows)
         )
+        parent_step = self.active_step_id
+        with ThreadPoolExecutor(max_workers=self.parallel_copy_workers) as workers:
+            for batch_index, batch in enumerate(batches, start=1):
+                partition_rows = max(1, (batch.height + self.parallel_copy_workers - 1) // self.parallel_copy_workers)
+                futures = [
+                    workers.submit(self._copy_insert_partition, con.engine, table, partition, parent_step)
+                    for partition in batch.iter_slices(partition_rows)
+                ]
+                for future in futures:
+                    future.result()
+                _LOGGER.info(f"Inserted native COPY batch {batch_index:_} into {table} with {batch.height:_} rows")
 
-        # install timescaledb-parallel-copy first
-        # on macos: brew tap timescale/tap && brew install timescaledb-tools
-        command = [
-            "timescaledb-parallel-copy",
-            "--connection",
-            connection_string,
-            "--table",
-            table,
-            "--file",
-            temp_file_str,
-            "--workers",
-            str(self.parallel_copy_workers),
-            "--batch-size",
-            "50000",
-            "--skip-header",
-        ]
-        copy_sql = f"COPY {table} FROM '{temp_file_str}' WITH (FORMAT csv, HEADER true)"
-
+    def _copy_insert_partition(
+        self, engine: Engine, table: TableName, frame: pl.DataFrame, parent_step: int | None
+    ) -> None:
+        if parent_step is not None:
+            self._push_active_step(parent_step)
         try:
-            if isinstance(df, pl.LazyFrame):
-                df.sink_csv(temp_file)
-                _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
-            else:
-                df.write_csv(temp_file)
-                _LOGGER.info(
-                    f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
-                )
-
-            with self.record_query_execution(copy_sql):
-                subprocess.run(command, capture_output=True, text=True, check=True)
+            with engine.connect() as connection:
+                self.bind_query_recorder(connection)
+                connection.begin()
+                self._copy_dataframe(connection, table, frame, table, columns=None)
+                tracked_commit(connection)
         finally:
-            temp_file.unlink(missing_ok=True)
+            if parent_step is not None:
+                self._pop_active_step(parent_step)
 
-    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path, columns: list[str]) -> None:
+    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path, columns: list[str] | None) -> None:
         raw_conn = con.connection.dbapi_connection
         assert raw_conn is not None
         cursor = raw_conn.cursor()
-        column_sql = ", ".join(f'"{column}"' for column in columns)
-        copy_sql = f"COPY {table} ({column_sql}) FROM STDIN WITH (FORMAT csv, HEADER true)"
-        with open(csv_path) as f, self.record_query_execution(copy_sql):
+        column_sql = " (" + ", ".join(f'"{column}"' for column in columns) + ")" if columns is not None else ""
+        copy_sql = f"COPY {table}{column_sql} FROM STDIN WITH (FORMAT csv, HEADER true)"
+        with open(csv_path, encoding="utf-8", newline="") as f, self.record_query_execution(copy_sql):
             cursor.copy_expert(copy_sql, f)
 
-    def _copy_dataframe(self, con: Connection, table: str, df: pl.DataFrame, label: str) -> None:
+    def _copy_dataframe(
+        self, con: Connection, table: str, df: pl.DataFrame, label: str, *, columns: list[str] | None
+    ) -> None:
         temp_file = self._staging_directory / f"{label}_{uuid.uuid4().hex}.csv"
 
         try:
             df.write_csv(temp_file)
-            self._copy_csv_to_table(con, table, temp_file, df.columns)
+            self._copy_csv_to_table(con, table, temp_file, columns)
         finally:
             temp_file.unlink(missing_ok=True)
 
@@ -808,7 +799,7 @@ class Postgres(Database):
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
         self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
-        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert", columns=df.columns)
         self._dml_session_setup(con)
 
         self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
@@ -830,7 +821,7 @@ class Postgres(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         self.execute(f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false", commit=False)
-        self._copy_dataframe(con, staging_table, keys.select(primary_keys), f"{table}_delete")
+        self._copy_dataframe(con, staging_table, keys.select(primary_keys), f"{table}_delete", columns=primary_keys)
         self._dml_session_setup(con)
 
         self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)

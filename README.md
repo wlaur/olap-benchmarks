@@ -57,6 +57,13 @@ Container stop and restart commands allow 120 seconds for normal shutdown so lar
 loads can flush their write-ahead logs. The grace period is recorded in run options;
 operation and query deadlines still apply.
 
+PostgreSQL-family generic inserts use native psycopg2 CSV COPY workers. Each
+partition contains complete records, preserving quoted newlines, carriage returns,
+nulls, and empty strings. Batches contain at most one million rows or 64 million
+cells, with at most twelve workers within the configured CPU budget. Workers use
+separate connections and commits; parallel loading does not guarantee physical
+row order. The loader and limits are recorded in run options.
+
 TimescaleDB RTABench prepares continuous aggregates only for selected queries.
 For a partial run, use the same query selection for populate and select; all input
 tables retain their full size. Aggregate DDL and preparation phases are recorded

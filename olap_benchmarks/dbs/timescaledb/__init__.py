@@ -396,7 +396,7 @@ class TimescaleDB(Postgres):
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
         self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
-        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert", columns=df.columns)
         self._dml_session_setup(con)
 
         all_columns = ", ".join(f'"{col}"' for col in df.columns)
