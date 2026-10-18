@@ -8,14 +8,15 @@ import pytest
 from sqlalchemy import Connection
 
 from ..dbs import postgres as postgres_module
-from ..dbs.postgres import Postgres, PostgresTpcDs
+from ..dbs.postgres import Postgres, PostgresTpcDs, PostgresTpcH
 from ..dbs.timescaledb import TimescaleDB
 from ..settings import Operation, get_settings
 from ..suites.tpc_ds.config import TPCDS_QUERY_NAMES
+from ..suites.tpc_h.config import TPCH_QUERY_NAMES
 
 
 @pytest.mark.parametrize("database_type", [Postgres, TimescaleDB])
-def test_postgres_family_tpcds_selects_faithful_python_fetch_and_records_it(database_type: type[Postgres]) -> None:
+def test_postgres_family_tpc_suites_select_faithful_python_fetch_and_record_it(database_type: type[Postgres]) -> None:
     database = database_type()
     database._current_suite = "tpc_ds"
     database._current_suite_scale_factor = 1
@@ -30,7 +31,16 @@ def test_postgres_family_tpcds_selects_faithful_python_fetch_and_records_it(data
 
     database._current_suite = "tpc_h"
     database._current_suite_scale_factor = 10
-    assert database.benchmarks["tpc_h"].fetch_kwargs == {}
+    tpc_h = database.benchmarks["tpc_h"]
+    assert isinstance(tpc_h, PostgresTpcH)
+    assert tpc_h.planned_query_names() == TPCH_QUERY_NAMES
+    assert tpc_h.fetch_kwargs == {"method": "python"}
+    assert all(tpc_h.query_fetch_kwargs(query) == {"method": "python"} for query in TPCH_QUERY_NAMES)
+    assert database.run_options["select_fetch_method"] == "python"
+    assert database.db_driver is None
+
+    database._current_suite = "kaggle_airbnb"
+    database._current_suite_scale_factor = 1
     assert database.run_options["select_fetch_method"] == "connectorx"
 
 

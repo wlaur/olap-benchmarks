@@ -25,6 +25,7 @@ from ...suites.time_series.config import (
 )
 from ...suites.time_series_metrics.config import TimeSeriesMetrics, metric_name
 from ...suites.tpc_ds.config import TpcDs
+from ...suites.tpc_h.config import TpcH
 from .. import Database
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
@@ -302,6 +303,12 @@ class PostgresClickbench(Clickbench["Postgres"]):
         # ensure that WAL is processed etc...
         if restart:
             self.db.restart_event()
+
+
+class PostgresTpcH[DBT: "Postgres"](TpcH[DBT]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
 
 
 class PostgresTpcDs[DBT: "Postgres"](TpcDs[DBT]):
@@ -841,5 +848,6 @@ class Postgres(Database):
             "time_series": PostgresTimeSeries,
             "time_series_metrics": PostgresTimeSeriesMetrics,
             "tpc_ds": PostgresTpcDs,
+            "tpc_h": PostgresTpcH,
             "chat_threads": ChatThreads,
         }
