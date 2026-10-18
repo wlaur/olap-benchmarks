@@ -10,6 +10,7 @@ from urllib.request import urlopen
 
 import polars as pl
 from pydantic import Field
+from pymysql.constants import FIELD_TYPE
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -335,14 +336,19 @@ class Doris(Database):
             result = self.connect().execute(text(sql))
 
         columns = list(result.keys())
+        cursor = result.cursor
+        if cursor is None:
+            raise RuntimeError("Doris query did not return column metadata")
+        float_columns = {
+            column: pl.Float32
+            for column, description in zip(columns, cursor.description, strict=True)
+            if description[1] == FIELD_TYPE.FLOAT
+        }
         rows = result.fetchall()
 
-        if not rows:
-            if schema:
-                return pl.DataFrame(schema=cast(pl.Schema, schema))
-            return pl.DataFrame({col: [] for col in columns})
-
-        df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
+        df = pl.DataFrame(
+            {col: [row[idx] for row in rows] for idx, col in enumerate(columns)}, schema_overrides=float_columns
+        )
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))

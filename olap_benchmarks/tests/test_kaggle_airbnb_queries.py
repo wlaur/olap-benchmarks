@@ -1,3 +1,4 @@
+import json
 from typing import Any, cast
 
 import duckdb
@@ -8,7 +9,7 @@ from ..settings import REPO_ROOT
 QUERIES = REPO_ROOT / "olap_benchmarks/suites/kaggle_airbnb/queries"
 
 
-@pytest.mark.parametrize("engine", ["postgres", "timescaledb"])
+@pytest.mark.parametrize("engine", ["postgres", "timescaledb", "questdb"])
 @pytest.mark.parametrize("query", ["04_join_three_tables_array_agg", "05_join_three_tables_row_number"])
 def test_preaggregated_airbnb_joins_preserve_duplicates_nulls_and_missing_dimensions(engine: str, query: str) -> None:
     con = cast(duckdb.DuckDBPyConnection, cast(Any, duckdb).connect(":memory:"))
@@ -33,10 +34,13 @@ def test_preaggregated_airbnb_joins_preserve_duplicates_nulls_and_missing_dimens
                 (2, 'source', 'house', 'room', false, 0, 0, 0, 0);
             create table reviews_detailed (id bigint, listing_id bigint, reviewer_id bigint, comments varchar);
             insert into reviews_detailed values (10, 1, 20, 'hello'), (11, 1, 20, 'longer comment'),
-                (11, 1, 30, null), (12, 1, null, 'åäö'), (13, 2, null, null), (14, 3, 99, 'orphan');
+                (11, 1, 30, null), (12, 1, null, 'åäö'), (13, 2, null, null), (14, 3, 99, 'orphan'),
+                (15, 1, 9007199254740993, 'precise');
         """)
         expected = con.execute((QUERIES / f"{query}.sql").read_text()).fetchall()
         actual = con.execute((QUERIES / engine / f"{query}.sql").read_text()).fetchall()
+        if engine == "questdb" and query.startswith("04_"):
+            actual = [(*row[:-1], json.loads(row[-1]) if row[-1] is not None else [None]) for row in actual]
     finally:
         con.close()
 

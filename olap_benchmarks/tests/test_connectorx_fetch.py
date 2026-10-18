@@ -6,6 +6,7 @@ from typing import cast
 
 import polars as pl
 import pytest
+from pymysql.constants import FIELD_TYPE
 from sqlalchemy import Connection
 
 from ..dbs.doris import Doris
@@ -92,3 +93,46 @@ def test_doris_fetch_uses_connectorx_mysql_uri(monkeypatch: pytest.MonkeyPatch) 
     assert df.to_dict(as_series=False) == {"one": [1]}
     assert calls == [("select 1 as one", "mysql://root@localhost:9030/benchmark")]
     assert recorded_queries == ["select 1 as one"]
+
+
+@pytest.mark.parametrize("value", [0.1, None])
+@pytest.mark.parametrize("empty", [False, True])
+@pytest.mark.parametrize("override", [False, True])
+def test_doris_python_fetch_recovers_float32_before_the_cursor_closes(
+    monkeypatch: pytest.MonkeyPatch, value: float | None, empty: bool, override: bool
+) -> None:
+    class FakeCursor:
+        description: tuple[tuple[str, int], ...] = (
+            ("single", FIELD_TYPE.FLOAT),
+            ("double", FIELD_TYPE.DOUBLE),
+            ("count", FIELD_TYPE.LONGLONG),
+        )
+
+    class FakeResult:
+        cursor: FakeCursor | None = FakeCursor()
+
+        def keys(self) -> list[str]:
+            return ["single", "double", "count"]
+
+        def fetchall(self) -> list[tuple[float | None, float, int]]:
+            self.cursor = None
+            return [] if empty else [(value, 0.1, 7)]
+
+    class FakeConnection:
+        def execute(self, _query: object) -> FakeResult:
+            return FakeResult()
+
+    def connect(_self: Doris, reconnect: bool = False) -> Connection:
+        return cast(Connection, FakeConnection())
+
+    monkeypatch.setattr(Doris, "connect", connect)
+
+    df = Doris().fetch_python("select single, double, count", schema={"single": pl.Float64} if override else None)
+
+    assert df.columns == ["single", "double", "count"]
+    assert df.schema["single"] == (pl.Float64 if override else pl.Float32)
+    assert df.height == (0 if empty else 1)
+    if not empty:
+        assert df["single"].item() == (None if value is None else 0.10000000149011612)
+        assert df["double"].item() == 0.1
+        assert df["count"].item() == 7

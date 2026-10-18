@@ -5,6 +5,8 @@ FROM
 WHERE
     backup_processor <> ''
 ORDER BY
-    event_created
+    event_created,
+    order_id,
+    counter
 LIMIT
     10;

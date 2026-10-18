@@ -16,6 +16,7 @@ from ...suites.clickbench.config import (
     CLICKBENCH_TIMESTAMP_COLUMNS,
     Clickbench,
 )
+from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from .. import Database
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,6 +96,13 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 
         if restart:
             self.db.restart_event()
+
+
+class QuestDBKaggleAirbnb(KaggleAirbnb["QuestDB"]):
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name == "05_join_three_tables_row_number":
+            return {"schema": {"max_date": pl.Date}}
+        return {}
 
 
 class QuestDB(Database):
@@ -359,6 +367,7 @@ class QuestDB(Database):
         registry: dict[SuiteName, type[BenchmarkSuite[Any]]] = {
             **super().suite_registry(),
             "clickbench": QuestDBClickbench,
+            "kaggle_airbnb": QuestDBKaggleAirbnb,
         }
 
         # TPC-H and TPC-DS need correlated subqueries and EXISTS/NOT EXISTS
