@@ -10,6 +10,10 @@ _MONETDB_ROLLING_AVG_WINDOW_BUG = (
     "is not measured rather than publishing a runtime for a wrong answer."
 )
 
+_POSTGRES_METRIC_OUTPUT_WIDTH = (
+    "native wide output has 2000 or 2001 columns, exceeding PostgreSQL's 1664 result-column limit"
+)
+
 _EAV_BATCH_EXPORT = "query requires wide-row export shape, but this database stores data_large as EAV"
 
 _RTABENCH_INCREMENTAL_VIEWS = (
@@ -36,6 +40,11 @@ _RTABENCH_INCREMENTAL_VIEW_QUERIES = (
 # resolve to SQL (an engine override or the shared file); a missing file is an error, not a
 # declaration.
 UNSUPPORTED_QUERIES: dict[tuple[SuiteName, DatabaseName, str], str] = {
+    **{
+        ("time_series_metrics", db, query): _POSTGRES_METRIC_OUTPUT_WIDTH
+        for db in ("postgres", "timescaledb")
+        for query in ("wide1000_13_per_metric", "wide1000_14_hourly_all_metrics")
+    },
     **{
         ("time_series_metrics", "monetdb", f"{layout}{metrics}_09_rolling_avg"): _MONETDB_ROLLING_AVG_WINDOW_BUG
         for layout in ("wide", "eav")

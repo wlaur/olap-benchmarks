@@ -146,6 +146,9 @@ class QuestDB(Database):
     @property
     def start(self) -> str:
         (get_settings().temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
+        environment = {"QDB_CAIRO_SQL_COPY_ROOT": "/import"}
+        if self.current_suite == "time_series_metrics":
+            environment["QDB_CAIRO_SQL_SMALL_MAP_PAGE_SIZE"] = "128K"
 
         return self.docker_run_command(
             self.container_images["server"],
@@ -154,7 +157,7 @@ class QuestDB(Database):
                 self.database_directory.as_posix(): "/var/lib/questdb",
                 f"{get_settings().temporary_directory.as_posix()}/questdb/data": "/import",
             },
-            env={"QDB_CAIRO_SQL_COPY_ROOT": "/import"},
+            env=environment,
             init=True,
         )
 

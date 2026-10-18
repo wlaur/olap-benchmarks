@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from ..dbs.questdb import QuestDB, QuestDBTimeSeriesMetrics, QuestDBTimeSeriesRanges
@@ -33,7 +35,10 @@ def test_time_series_queries_use_supported_double_type(
         loaded = suite.load_query(query_name)
 
         assert "DOUBLE PRECISION" not in loaded, query_name
-        assert loaded == original.replace("DOUBLE PRECISION", "DOUBLE"), query_name
+        expected = original.replace("DOUBLE PRECISION", "DOUBLE")
+        if db_type is StarRocks:
+            expected = re.sub(r"\bTIMESTAMP\s+('[^']*')", r"CAST(\1 AS DATETIME)", expected)
+        assert loaded == expected, query_name
         if "DOUBLE PRECISION" in original:
             assert loaded != original
             transformed_queries += 1

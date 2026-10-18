@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -184,7 +185,8 @@ class StarRocksTimeSeries(TimeSeries["StarRocks"]):
 
 class StarRocksTimeSeriesMetrics(TimeSeriesMetrics["StarRocks"]):
     def load_query(self, query_name: str) -> str:
-        return super().load_query(query_name).replace("DOUBLE PRECISION", "DOUBLE")
+        query = super().load_query(query_name).replace("DOUBLE PRECISION", "DOUBLE")
+        return re.sub(r"\bTIMESTAMP\s+('[^']*')", r"CAST(\1 AS DATETIME)", query)
 
 
 class StarRocksTimeSeriesRanges(TimeSeriesRanges["StarRocks"], StarRocksTimeSeriesMetrics):

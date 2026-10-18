@@ -23,6 +23,7 @@ from ...suites.time_series.config import (
     get_time_series_dataset_sizes,
     get_time_series_table_name,
 )
+from ...suites.time_series_metrics.config import TimeSeriesMetrics, metric_name
 from .. import Database
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
@@ -295,6 +296,18 @@ class PostgresClickbench(Clickbench["Postgres"]):
         # ensure that WAL is processed etc...
         if restart:
             self.db.restart_event()
+
+
+class PostgresTimeSeriesMetrics[DBT: "Postgres"](TimeSeriesMetrics[DBT]):
+    def load_query(self, query_name: str) -> str:
+        if query_name != "wide1000_12_all_metrics":
+            return super().load_query(query_name)
+        values = ", ".join(f"CAST({metric_name(index)} AS DOUBLE PRECISION)" for index in range(1, 1001))
+        return (
+            "SELECT COUNT(v) AS cnt, COALESCE(SUM(v), 0.0) AS total\n"
+            "FROM wide1000\n"
+            f"CROSS JOIN LATERAL UNNEST(ARRAY[{values}]) AS m(v)\n"
+        )
 
 
 class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
@@ -771,5 +784,6 @@ class Postgres(Database):
             "clickbench": PostgresClickbench,
             "jsonbench": PostgresJSONBench,
             "time_series": PostgresTimeSeries,
+            "time_series_metrics": PostgresTimeSeriesMetrics,
             "chat_threads": ChatThreads,
         }
