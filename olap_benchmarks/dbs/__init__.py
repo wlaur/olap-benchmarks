@@ -7,7 +7,8 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import lru_cache
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from shlex import quote
 from threading import get_ident
@@ -120,7 +121,7 @@ class Database(BaseModel, ABC):
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
-    _writer_process: Process | None = None
+    _writer_process: BaseProcess | None = None
     _query_watchdog_path: Path | None = None
     _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
     _query_hashes: dict[str, str] = PrivateAttr(default_factory=_new_query_hashes)
@@ -167,7 +168,7 @@ class Database(BaseModel, ABC):
         self,
         queue: Queue[WriterMessage],
         result_queue: Queue[object],
-        writer_process: Process | None = None,
+        writer_process: BaseProcess | None = None,
     ) -> None:
         self._queue = queue
         self._result_queue = result_queue

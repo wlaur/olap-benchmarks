@@ -5,7 +5,8 @@ import logging
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from multiprocessing import Process, Queue
+from multiprocessing import Queue, get_context
+from multiprocessing.process import BaseProcess
 from queue import Empty
 from threading import Lock
 from time import monotonic
@@ -224,7 +225,7 @@ def writer_loop(queue: Queue[WriterMessage], result_queue: Queue[object], revisi
 
 @dataclass
 class WriterProcessHandle:
-    process: Process
+    process: BaseProcess
     queue: Queue[WriterMessage]
     result_queue: Queue[object]
     _closed: bool = False
@@ -254,10 +255,11 @@ class WriterProcessHandle:
 
 
 def start_writer_process(revision: Revision = "default") -> WriterProcessHandle:
-    queue: Queue[WriterMessage] = Queue()
-    result_queue: Queue[object] = Queue()
+    context = get_context("spawn")
+    queue: Queue[WriterMessage] = context.Queue()
+    result_queue: Queue[object] = context.Queue()
 
-    writer_process = Process(target=writer_loop, args=(queue, result_queue, revision), daemon=False)
+    writer_process = context.Process(target=writer_loop, args=(queue, result_queue, revision), daemon=False)
     writer_process.start()
 
     return WriterProcessHandle(process=writer_process, queue=queue, result_queue=result_queue)
@@ -268,7 +270,7 @@ class Storage:
         self,
         queue: Queue[WriterMessage],
         result_queue: Queue[object],
-        process: Process | None = None,
+        process: BaseProcess | None = None,
         response_timeout_seconds: float = 30.0,
     ) -> None:
         self.queue = queue

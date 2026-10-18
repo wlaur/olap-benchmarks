@@ -17,9 +17,10 @@ import logging
 import os
 import shutil
 import signal
-from multiprocessing import Process, Queue
+from multiprocessing import Queue, get_context
+from multiprocessing.process import BaseProcess
 from pathlib import Path
-from time import monotonic
+from time import monotonic, sleep
 
 import psutil
 
@@ -58,6 +59,7 @@ def _operation_entrypoint(
     page_cache_dropped: bool,
     query_watchdog_path: Path,
 ) -> None:
+    os.setsid()
     db_instance = get_databases()[db_name]
     db_instance._current_suite = suite
     db_instance._current_suite_scale_factor = scale_factor
@@ -67,6 +69,36 @@ def _operation_entrypoint(
         db_instance._query_watchdog_path = query_watchdog_path
     db_instance.set_queues(queue, result_queue)
     db_instance.benchmark(suite, operation, scale_factor=scale_factor)
+
+
+def _stop_operation(process: BaseProcess) -> None:
+    if process.pid is None:
+        return
+    if process.is_alive():
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(process.pid, signal.SIGINT)
+        process.join(timeout=5)
+
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    else:
+        deadline = monotonic() + 3
+        while monotonic() < deadline:
+            process.join(timeout=0)
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                break
+            sleep(0.05)
+        else:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+
+    if process.is_alive():
+        process.kill()
+    process.join(timeout=5)
 
 
 def run_operation(
@@ -82,7 +114,7 @@ def run_operation(
     settings = get_settings()
     query_watchdog_path = settings.temporary_directory / f"query-watchdog-{os.getpid()}.json"
     query_watchdog_path.unlink(missing_ok=True)
-    process = Process(
+    process = get_context("spawn").Process(
         target=_operation_entrypoint,
         args=(
             db_instance.name,
@@ -120,34 +152,13 @@ def run_operation(
                     continue
                 if rss > settings.client_memory_limit_gb * 1024**3:
                     raise MemoryError(f"{operation} client exceeded {settings.client_memory_limit_gb} GiB RSS")
+        if process.exitcode != 0:
+            raise RuntimeError(
+                f"{operation} on {db_instance.name}/{suite} (scale factor {scale_factor}) "
+                f"failed in its benchmark process (exit code {process.exitcode})"
+            )
     except BaseException:
-        if process.pid is not None and process.is_alive():
-            try:
-                descendants = psutil.Process(process.pid).children(recursive=True)
-            except psutil.NoSuchProcess:
-                descendants = []
-            os.kill(process.pid, signal.SIGINT)
-            process.join(timeout=5)
-            if process.is_alive():
-                process.kill()
-                process.join(timeout=5)
-            for descendant in descendants:
-                with contextlib.suppress(psutil.NoSuchProcess):
-                    descendant.terminate()
-            _, alive = psutil.wait_procs(descendants, timeout=3)
-            for descendant in alive:
-                with contextlib.suppress(psutil.NoSuchProcess):
-                    descendant.kill()
+        _stop_operation(process)
         raise
     finally:
         query_watchdog_path.unlink(missing_ok=True)
-
-    if process.exitcode == 0:
-        return
-
-    # the child already recorded the failure and logged the traceback; surface it so a multi
-    # operation run stops here exactly as an in-process exception used to
-    raise RuntimeError(
-        f"{operation} on {db_instance.name}/{suite} (scale factor {scale_factor}) "
-        f"failed in its benchmark process (exit code {process.exitcode})"
-    )

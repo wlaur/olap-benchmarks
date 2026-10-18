@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 import signal
 from collections.abc import Mapping
-from multiprocessing import Queue
+from contextlib import suppress
+from multiprocessing import Queue, get_context
 from pathlib import Path
+from time import sleep
+from types import SimpleNamespace
 from typing import Literal, NamedTuple, cast
 
 import polars as pl
@@ -16,7 +19,7 @@ from .. import dbs as dbs_module
 from .. import limits, operation_runner
 from .. import suites as suites_module
 from ..dbs.duckdb import DuckDB
-from ..metrics.storage import Storage, WriterMessage
+from ..metrics.storage import Storage, WriterMessage, start_writer_process
 from ..settings import Settings
 from ..suites.time_series_metrics import config as metrics_config
 from ..suites.time_series_ranges import config as ranges_config
@@ -274,38 +277,33 @@ class _MemoryProcess:
     def memory_info(self) -> _MemoryInfo:
         return _MemoryInfo(3 * 1024**3)
 
-    def children(self, recursive: bool = False) -> list[psutil.Process]:
-        return []
-
-
-class _Descendant:
-    terminated: bool = False
-    killed: bool = False
-
-    def terminate(self) -> None:
-        self.terminated = True
-
-    def kill(self) -> None:
-        self.killed = True
-
 
 @pytest.mark.parametrize("resource", ["time", "memory", "disk", "query"])
-def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
+def test_operation_resource_limit_escalates_after_interrupt_and_kills_its_process_group(
     settings: Settings, monkeypatch: pytest.MonkeyPatch, resource: Literal["time", "memory", "disk", "query"]
 ) -> None:
     settings.operation_timeout_seconds = 10 if resource == "time" else None
     settings.client_memory_limit_gb = 2 if resource == "memory" else None
     process = _StuckProcess()
     signals: list[tuple[int, int]] = []
-    clock = iter((0.0, 11.0))
+    group_signals: list[tuple[int, int]] = []
+    clock = iter((0.0, 11.0, 22.0, 33.0))
     disk_checks = 0
-    descendant = _Descendant()
 
     def new_process(**_kwargs: object) -> _StuckProcess:
         return process
 
+    def context(method: str) -> SimpleNamespace:
+        assert method == "spawn"
+        return SimpleNamespace(Process=new_process)
+
     def send_signal(pid: int, signum: int) -> None:
         signals.append((pid, signum))
+
+    def send_group_signal(pgid: int, signum: int) -> None:
+        group_signals.append((pgid, signum))
+        if signum == signal.SIGKILL:
+            process.kill()
 
     def disk_space() -> None:
         nonlocal disk_checks
@@ -316,24 +314,14 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
     def query_expired(_path: Path, _timeout: int | None) -> str | None:
         return "slow" if resource == "query" else None
 
-    def children(_self: _MemoryProcess, recursive: bool = False) -> list[psutil.Process]:
-        return [cast(psutil.Process, descendant)]
-
-    def wait_descendants(
-        processes: list[psutil.Process], timeout: float
-    ) -> tuple[list[psutil.Process], list[psutil.Process]]:
-        assert processes == [descendant]
-        return [], processes
-
-    monkeypatch.setattr(operation_runner, "Process", new_process)
+    monkeypatch.setattr(operation_runner, "get_context", context)
     monkeypatch.setattr(operation_runner, "monotonic", lambda: next(clock))
     monkeypatch.setattr(operation_runner, "check_disk_space", disk_space)
     monkeypatch.setattr(operation_runner, "configure_polars_spill", lambda: None)
     monkeypatch.setattr(operation_runner, "expired_query", query_expired)
     monkeypatch.setattr(operation_runner.os, "kill", send_signal)
+    monkeypatch.setattr(operation_runner.os, "killpg", send_group_signal)
     monkeypatch.setattr(operation_runner.psutil, "Process", _MemoryProcess)
-    monkeypatch.setattr(_MemoryProcess, "children", children)
-    monkeypatch.setattr(operation_runner.psutil, "wait_procs", wait_descendants)
     expected_error, message = {
         "time": (TimeoutError, "exceeded operation time budget"),
         "memory": (MemoryError, "client exceeded 2 GiB RSS"),
@@ -352,8 +340,129 @@ def test_operation_resource_limit_escalates_after_interrupt_and_reaps_the_child(
         )
 
     assert signals == [(process.pid, signal.SIGINT)]
+    assert group_signals == [(process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)]
     assert process.killed
     assert not process.is_alive()
     assert process.joined == [1, 5, 5]
-    assert descendant.terminated
-    assert descendant.killed
+
+
+@pytest.mark.parametrize("before_first_poll", [False, True])
+def test_abrupt_operation_exit_still_kills_the_process_group(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, before_first_poll: bool
+) -> None:
+    class CrashedProcess(_StuckProcess):
+        def start(self) -> None:
+            super().start()
+            if before_first_poll:
+                self.killed = True
+                self.exitcode = -signal.SIGSEGV
+
+        def join(self, timeout: float | None = None) -> None:
+            super().join(timeout)
+            self.killed = True
+            self.exitcode = -signal.SIGSEGV
+
+    process = CrashedProcess()
+    group_signals: list[tuple[int, int]] = []
+    clock = iter((0.0, 11.0))
+
+    def new_process(**_kwargs: object) -> CrashedProcess:
+        return process
+
+    def context(method: str) -> SimpleNamespace:
+        assert method == "spawn"
+        return SimpleNamespace(Process=new_process)
+
+    def send_group_signal(pgid: int, signum: int) -> None:
+        group_signals.append((pgid, signum))
+
+    monkeypatch.setattr(operation_runner, "get_context", context)
+    monkeypatch.setattr(operation_runner, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(operation_runner, "check_disk_space", lambda: None)
+    monkeypatch.setattr(operation_runner, "configure_polars_spill", lambda: None)
+    monkeypatch.setattr(operation_runner.os, "killpg", send_group_signal)
+    settings.operation_timeout_seconds = None
+
+    with pytest.raises(RuntimeError, match="exit code -11"):
+        operation_runner.run_operation(
+            DuckDB(),
+            "clickbench",
+            "select",
+            1,
+            cast("Queue[WriterMessage]", object()),
+            cast("Queue[object]", object()),
+        )
+
+    assert group_signals == [(process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)]
+    assert process.joined == ([5] if before_first_poll else [1, 5])
+
+
+def test_operation_creates_its_session_before_database_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+    database = ProfileDatabase()
+
+    def databases() -> dict[str, ProfileDatabase]:
+        events.append("database")
+        return {"duckdb": database}
+
+    def benchmark(_self: ProfileDatabase, _suite: str, _operation: str, *, scale_factor: int) -> None:
+        events.append("benchmark")
+
+    monkeypatch.setattr(operation_runner.os, "setsid", lambda: events.append("session"))
+    monkeypatch.setattr(operation_runner, "get_databases", databases)
+    monkeypatch.setattr(ProfileDatabase, "benchmark", benchmark)
+
+    operation_runner._operation_entrypoint(
+        "duckdb",
+        "clickbench",
+        "select",
+        1,
+        cast("Queue[WriterMessage]", object()),
+        cast("Queue[object]", object()),
+        None,
+        False,
+        tmp_path / "watchdog.json",
+    )
+
+    assert events == ["session", "database", "benchmark"]
+
+
+def _crash_with_orphaned_helper(path: Path) -> None:
+    os.setsid()
+    helper = get_context("spawn").Process(target=sleep, args=(60,))
+    helper.start()
+    path.write_text(str(helper.pid))
+    os._exit(17)
+
+
+def test_abrupt_exit_cleanup_stops_a_spawned_helper_and_preserves_the_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results_directory = tmp_path / "results"
+    results_directory.mkdir()
+    monkeypatch.setenv("OLAP_BENCHMARKS_RESULTS_DIRECTORY", str(results_directory))
+    writer = start_writer_process(revision="operation-cleanup")
+    storage = Storage(writer.queue, writer.result_queue, process=writer.process)
+    helper_path = tmp_path / "helper.pid"
+    process = get_context("spawn").Process(target=_crash_with_orphaned_helper, args=(helper_path,))
+
+    try:
+        assert storage.debug("before cleanup") > 0
+        process.start()
+        process.join(timeout=15)
+        assert process.exitcode == 17
+        helper = psutil.Process(int(helper_path.read_text()))
+
+        operation_runner._stop_operation(process)
+
+        helper.wait(timeout=5)
+        assert writer.process.is_alive()
+        assert storage.debug("after cleanup") > 0
+    finally:
+        if process.pid is not None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            if process.is_alive():
+                process.kill()
+            process.join(timeout=5)
+        writer.close()
