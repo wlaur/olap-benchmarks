@@ -95,3 +95,50 @@ def test_clickbench_raw_rows_preserve_canonical_column_order(db_type: type[Postg
             for index, name in enumerate(canonical)
         )
         assert result.fetchall() == [expected]
+
+
+@pytest.mark.parametrize("db_type", [Postgres, TimescaleDB])
+def test_clickbench_phrase_order_uses_byte_order(db_type: type[Postgres] | type[TimescaleDB]) -> None:
+    query = db_type().benchmarks["clickbench"].load_query("Q25")
+    assert 'ORDER BY SearchPhrase COLLATE "C"' in query
+    with duckdb.connect() as connection:
+        connection.execute(
+            "CREATE TABLE hits AS SELECT * FROM (VALUES ('alpha'), ('Zebra'), (''), ('Ärger')) AS t(SearchPhrase)"
+        )
+        assert connection.execute(query).fetchall() == [("Zebra",), ("alpha",), ("Ärger",)]
+
+
+@pytest.mark.parametrize("db_type", [Postgres, TimescaleDB])
+@pytest.mark.parametrize(("query_name", "column"), [("Q27", "URL"), ("Q28", "Referer")])
+def test_clickbench_average_lengths_count_bytes(
+    db_type: type[Postgres] | type[TimescaleDB], query_name: str, column: str
+) -> None:
+    query = db_type().benchmarks["clickbench"].load_query(query_name)
+    assert f"AVG(octet_length({column}))" in query and "AVG(length(" not in query
+    if query_name == "Q27":
+        with duckdb.connect() as connection:
+            connection.execute(
+                "CREATE TABLE hits AS SELECT 7 AS CounterID, 'жж' AS URL FROM range(100001)"
+                " UNION ALL SELECT 8, 'ab' FROM range(100001)"
+            )
+            rows = connection.execute(query.replace("octet_length(", "strlen(")).fetchall()
+            assert rows == [(7, 4.0, 100001), (8, 2.0, 100001)]
+
+
+@pytest.mark.parametrize("db_type", [Postgres, TimescaleDB])
+@pytest.mark.parametrize("query_name", ["Q38", "Q39"])
+def test_clickbench_offset_ties_use_byte_order(db_type: type[Postgres] | type[TimescaleDB], query_name: str) -> None:
+    query = db_type().benchmarks["clickbench"].load_query(query_name)
+    keys = ["URL"] if query_name == "Q38" else ["Src", "Dst"]
+    assert all(f'{key} COLLATE "C" ASC' in query for key in keys)
+    with duckdb.connect() as connection:
+        connection.execute("""
+            CREATE TABLE hits AS
+            SELECT
+                62 AS CounterID, DATE '2013-07-15' AS EventDate, 0 AS IsRefresh, 1 AS IsLink, 0 AS IsDownload,
+                0 AS TraficSourceID, 0 AS SearchEngineID, 0 AS AdvEngineID, '' AS Referer,
+                CASE WHEN i % 2 = 0 THEN 'a' ELSE 'B' END || lpad(i::VARCHAR, 4, '0') AS URL
+            FROM range(1004) AS t(i)
+        """)
+        urls = [row[-2] for row in connection.execute(query).fetchall()]
+        assert urls == ["a0996", "a0998", "a1000", "a1002"]
