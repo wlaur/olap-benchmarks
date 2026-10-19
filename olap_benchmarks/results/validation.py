@@ -147,6 +147,7 @@ class _Scope:
           from run r
           where r.operation = 'select'
             and r.status = 'completed'
+            and json_extract(r.metadata, '$.invalidation') is null
             and r.finished_at is not null
             and {where_sql}
             and {pin_sql}

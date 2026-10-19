@@ -93,6 +93,26 @@ def test_answer_hash_validation_accepts_matching_latest_runs(tmp_path: Path) -> 
     assert validate_results(db_path=db_path).ok
 
 
+def test_validation_excludes_explicitly_invalidated_experiments(tmp_path: Path) -> None:
+    db_path = tmp_path / "results.db"
+    _create_results_db(db_path)
+    _insert_select_run(db_path, "duckdb", 10, answer_hash="hash-a")
+    _insert_select_run(db_path, "clickhouse", 10, answer_hash="hash-a")
+    _insert_select_run(db_path, "postgres", 12, answer_hash="incomplete-input")
+    assert not validate_results(db_path=db_path).ok
+
+    engine = get_results_engine(read_only=False, db_path=db_path)
+    try:
+        with Session(engine) as session:
+            run = session.query(Run).filter(Run.db == "postgres").one()
+            run.metadata_json = {"invalidation": {"reason": "Required input table was incomplete"}}
+            session.commit()
+    finally:
+        engine.dispose()
+
+    assert validate_results(db_path=db_path, mark=True).ok
+
+
 def test_answer_hash_validation_ignores_row_count_mismatches(tmp_path: Path) -> None:
     db_path = tmp_path / "results.db"
     _create_results_db(db_path)

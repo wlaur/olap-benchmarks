@@ -498,6 +498,57 @@ def delete_runs(run_ids: list[int], revision: Revision = "default", db_path: Pat
         engine.dispose()
 
 
+def invalidate_runs(
+    run_ids: list[int],
+    reason: str,
+    revision: Revision = "default",
+    db_path: Path | None = None,
+) -> int:
+    if not run_ids:
+        raise ValueError("Specify at least one run ID to invalidate.")
+    if not reason.strip():
+        raise ValueError("An invalidation reason is required.")
+
+    path = db_path or _require_revision(revision)
+    if not path.is_file():
+        raise FileNotFoundError(f"Results database does not exist: {path}")
+    engine = get_results_engine(read_only=False, db_path=path)
+
+    try:
+        with Session(engine) as session:
+            selected_ids = set(run_ids)
+            runs = list(session.scalars(select(Run).where(Run.id.in_(selected_ids))).all())
+            missing = selected_ids - {run.id for run in runs}
+            if missing:
+                raise ValueError(f"Run IDs not found: {', '.join(map(str, sorted(missing)))}")
+            unfinished = sorted(run.id for run in runs if run.status == "running" or run.finished_at is None)
+            if unfinished:
+                raise ValueError(f"Only finished runs can be invalidated: {', '.join(map(str, unfinished))}")
+
+            invalidated_at = datetime.now(UTC).isoformat()
+            for run in runs:
+                metadata = dict(run.metadata_json or {})
+                metadata.setdefault(
+                    "invalidation",
+                    {
+                        "reason": reason,
+                        "time": invalidated_at,
+                        "original_status": run.status,
+                        "error_type": run.error_type,
+                        "error_message": run.error_message,
+                    },
+                )
+                run.metadata_json = metadata
+                if run.status == "completed":
+                    run.status = "failed"
+                    run.error_type = "InvalidBenchmark"
+                    run.error_message = reason
+            session.commit()
+            return len(runs)
+    finally:
+        engine.dispose()
+
+
 def delete_runs_by_status(status: str, revision: Revision = "default", db_path: Path | None = None) -> int:
     db_path = db_path or _require_revision(revision)
     engine = get_results_engine(read_only=False, db_path=db_path)
