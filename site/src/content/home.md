@@ -1,8 +1,8 @@
 ## Suites
 
 - **Time Series** — time-series ingestion and analytical queries across wide, tall, and large table shapes. [Results](#/explorer/time_series)
-- **Time Series Metrics** — paired wide/EAV layouts at 100, 1,000, 2,000 and 5,000 metrics over the same 14 days. These are working measurements collected while the laptop was in use, with a two-thread benchmark budget. [Results](#/explorer/time_series_metrics)
-- **Time Series Ranges** — fetch five or ten selected metrics, average each metric, or calculate a derived signal from ten aligned metrics and summarize it hourly over the last 1, 10 or 100 days. Paired wide/EAV layouts cover 100, 1,000, 2,000 and 4,094 stored metrics across six engines, including TDengine, with ten-minute samples to bound disk and RAM. These are working measurements. [Results](#/explorer/time_series_ranges)
+- **Time Series Metrics** — paired wide/EAV layouts at 100, 1,000, 2,000 and 5,000 metrics over the same 14 days. [Results](#/explorer/time_series_metrics)
+- **Time Series Ranges** — fetch five or ten selected metrics, average each metric, or calculate a derived signal from ten aligned metrics and summarize it hourly over the last 1, 10 or 100 days. Paired wide/EAV layouts cover 100, 1,000, 2,000 and 4,094 stored metrics, including TDengine measurements, with ten-minute samples to bound disk and RAM. [Results](#/explorer/time_series_ranges)
 - **RTABench** — group-bys, distinct counts, and filtered aggregations over a normalized order-tracking schema. Based on [RTABench](https://github.com/timescale/rtabench) by Timescale. [Results](#/explorer/rtabench)
 - **ClickBench** — full-table scans, filters, and aggregations over a single wide table. Based on [ClickBench](https://github.com/ClickHouse/ClickBench) by ClickHouse. [Results](#/explorer/clickbench)
 - **JSONBench** — analytical queries over semi-structured Bluesky event JSON. Based on [JSONBench](https://github.com/ClickHouse/JSONBench) by ClickHouse. [Results](#/explorer/jsonbench)
@@ -44,7 +44,7 @@ Vendor-recommended settings, storage layout, and per-suite physical design are a
 - **Polars** runs in process over Parquet files, using its LazyFrame API instead of SQL, for the suites it implements.
 - **TDengine** uses OSS 3.4.2.8 through the official WebSocket connector. The range suite uses typed wide FLOAT columns and an EAV supertable with one timestamp/value child table per metric. Both layouts retain null observations; results are materialized from Python rows into Polars. Standard Parquet export and restore were verified with `taosdump -Fparquet`.
 - **Arc** queries compacted, time-partitioned Parquet through its Arrow HTTP endpoint. The metric-width experiment sorts EAV by `(metric_name, time)` and wide data by time. Its embedded DuckDB reads these files, while the DuckDB connector queries loaded persistent tables.
-- Other connectors in the repository (PostgreSQL, TimescaleDB, QuestDB, StarRocks, Doris) appear only once they have published runs.
+- **PostgreSQL, TimescaleDB, QuestDB, StarRocks and Doris** use suite-specific schemas and SQL. Resource limits, partial workloads and engine-specific adjustments are documented in the published campaign report.
 
 ## Explorer
 

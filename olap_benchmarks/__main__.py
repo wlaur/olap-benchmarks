@@ -458,7 +458,13 @@ def docker(
 
 
 @app.command
-def publish(revision: Revision = "default", merge: bool = False, upload: bool = False) -> None:
+def publish(
+    revision: Revision = "default",
+    merge: bool = False,
+    upload: bool = False,
+    campaign: bool = False,
+    report_url: str | None = None,
+) -> None:
     """Publish a results revision to site/public/data for the webpage, with a manifest.
 
     Only the latest run of each cell of the declared matrix (`olap matrix status`)
@@ -474,13 +480,22 @@ def publish(revision: Revision = "default", merge: bool = False, upload: bool = 
     runs of that cell, and everything else in the published file is kept. Different commits are
     accepted for a merge, with each run's original provenance preserved.
 
+    With `--campaign --report-url URL`, replace the dataset with all registered engine/suite/scale
+    combinations. Every combination must have a nonempty completed select cohort with one warmup
+    and three measured iterations. Explicitly skipped queries and failed or missing non-select
+    operations are allowed and disclosed. Measurements may span clean commits; their original
+    provenance is retained. Invalid diagnostics are excluded. The linked report must explain
+    methodology, corrections and resource limits. This mode cannot be combined with `--merge`.
+
     With `--upload`, the published results.db is uploaded to the `data` GitHub release, which is
     where the site build fetches it from, and the Pages workflow is triggered so the site serves
     the new file. The database is not committed to the repository.
     """
     try:
-        output_dir, merge_stats = publish_results(revision=revision, merge=merge)
-    except PublishValidationError as exc:
+        output_dir, merge_stats = publish_results(
+            revision=revision, merge=merge, campaign=campaign, report_url=report_url
+        )
+    except (PublishValidationError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
     if merge_stats is not None:

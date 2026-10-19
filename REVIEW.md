@@ -1,11 +1,12 @@
 # Remaining project work — 2026-10-19
 
-The [expanded local campaign](docs/campaigns/2026-10-expanded.md) is complete:
+The [expanded campaign](docs/campaigns/2026-10-expanded.md) is complete:
 99 combinations, 75 full supported groups and 24 measured partials. It fixed and
 replayed the earlier StarRocks TPC-DS, Doris RTABench, Timescale mutation reporting,
 planner-statistics and resource-budget issues. Larger scales now have measured
 local coverage; specific resource exclusions replace the former blanket claim
-that they cannot run here. The published site asset remains unchanged.
+that they cannot run here. Its replacement publication includes all 99 completed
+select cohorts, with explicit partial coverage and original provenance.
 
 ## Release and distribution
 
@@ -13,11 +14,10 @@ that they cannot run here. The published site asset remains unchanged.
       11.55.9, but `monetdb/monetdb:Dec2025-SP4` is not published for amd64. Build
       and distribute an appropriate amd64 image, or wait for upstream, before a
       complete amd64 cloud campaign.
-- [ ] **A new publishable campaign, when requested.** The local expansion spans
-      multiple clean commits and snapshots and contains deliberate partials.
-      Select and rerun a release cohort under one commit, snapshot and profile,
-      then pass the existing validation/publication gates. Local completion does
-      not authorize publishing these files.
+- [x] **Publish the expanded campaign.** The authorized replacement uses the
+      explicit campaign publication mode: completed four-iteration select
+      cohorts, deliberate partial operations and multiple clean source commits.
+      Strict matrix publication retains its original completeness requirements.
 
 ## Coverage follow-ups
 

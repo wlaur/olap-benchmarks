@@ -361,7 +361,19 @@ def test_publish_writes_the_selected_compacted_set_with_its_checksum(
     assert manifest["results_db_sha256"] == hashlib.sha256(output_db.read_bytes()).hexdigest()
     assert manifest["results_db_bytes"] == output_db.stat().st_size
     assert manifest["table_counts"]["run"] == len(CELLS)
+    assert manifest["publication"] == {"kind": "matrix"}
     assert not (output_dir / "results.db.staging").exists()
+
+
+@pytest.mark.parametrize(
+    ("campaign", "merge", "report_url"),
+    [(True, False, None), (True, True, "https://example.com/report"), (False, False, "https://example.com/report")],
+)
+def test_campaign_publication_requires_a_report_and_replaces_the_dataset(
+    campaign: bool, merge: bool, report_url: str | None
+) -> None:
+    with pytest.raises(ValueError, match="--campaign"):
+        results_module.publish(revision="missing", campaign=campaign, merge=merge, report_url=report_url)
 
 
 def test_publish_refuses_an_incoherent_set_and_writes_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -386,6 +398,7 @@ def test_publish_merge_replaces_only_one_cell_and_preserves_commits(
     baseline_dir = tmp_path / "baseline"
     baseline_dir.mkdir()
     shutil.copy2(_results_db(baseline_dir, _complete), tmp_path / "published/results.db")
+    (tmp_path / "published/manifest.json").write_text(json.dumps({"publication": {"kind": "matrix"}}))
 
     def add(session: Session) -> None:
         _add_run(session, CELLS[1], commit="c2", started_at=datetime(2026, 10, 2))
@@ -404,6 +417,25 @@ def test_publish_merge_replaces_only_one_cell_and_preserves_commits(
                 assert run.metadata_json["repository"]["commit"] == expected_commit
     finally:
         engine.dispose()
+
+
+def test_matrix_merge_refuses_to_discard_campaign_inventory_or_disclosures(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    results_directory = _patch_publish(monkeypatch, tmp_path)
+    source = _results_db(tmp_path, _complete)
+    shutil.copy2(source, results_directory / "candidate.db")
+    published = tmp_path / "published/results.db"
+    shutil.copy2(source, published)
+    manifest = tmp_path / "published/manifest.json"
+    manifest.write_text(json.dumps({"publication": {"kind": "campaign"}}))
+    before = hashlib.sha256(published.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="cannot preserve a campaign"):
+        results_module.publish(revision="candidate", merge=True)
+
+    assert hashlib.sha256(published.read_bytes()).hexdigest() == before
+    assert json.loads(manifest.read_text())["publication"]["kind"] == "campaign"
 
 
 def test_upload_triggers_the_pages_workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -4,8 +4,8 @@
 
 [Results](https://wlaur.github.io/olap-benchmarks/)
 
-[October 2026 expanded local campaign](docs/campaigns/2026-10-expanded.md): methodology audit,
-99 measured combinations, partial coverage, validation and local evidence.
+[October 2026 expanded campaign](docs/campaigns/2026-10-expanded.md): methodology audit,
+99 measured combinations, partial coverage, validation and publication evidence.
 
 ## Requirements
 
@@ -460,7 +460,7 @@ that cell that started before it; later failed attempts and running runs stay.
 
 All `results` commands accept `--revision` (default `default`).
 
-### `olap publish [--revision NAME] [--merge] [--upload]`
+### `olap publish [--revision NAME] [--merge] [--campaign --report-url URL] [--upload]`
 
 Publishes the latest run of every published cell of the declared matrix from
 `results/<revision>.db` to `site/public/data/results.db`, along with
@@ -481,6 +481,27 @@ every published run of the same cell (system, db, db_version, db_driver, suite,
 suite_scale_factor, operation), and everything else is kept. A merge accepts different
 repository commits and preserves each run's original provenance; a full replacement
 requires one commit.
+
+With `--campaign --report-url URL`, publication replaces the entire dataset using
+all registered engine/suite/scale combinations, including the experimental engines
+and additional supported scales. Every combination needs a nonempty completed
+select cohort with the full recorded query plan, one warmup and three measured
+iterations. Its skipped/unsupported queries must be explicit. The latest completed
+select is selected even if a later exploration failed; invalidated diagnostics are
+excluded. Latest attempted non-select operations may be failed or absent. This mode
+accepts multiple clean commits, preserves their provenance, and retains the same
+answer, image, profile, system-snapshot and completed MonetDB session checks.
+Failed non-select MonetDB operations may lack a clean final session baseline.
+The manifest and site disclose partial query coverage and source commits, and link
+the required methodology/coverage report. `--campaign` cannot be combined with
+`--merge`. A later ordinary matrix merge is refused when the current publication
+is a campaign, so it cannot silently discard the expanded inventory or coverage
+disclosures. Publish another complete campaign replacement instead. For this campaign:
+
+```bash
+uv run olap publish --revision 2026-10-expanded --campaign \
+  --report-url https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md
+```
 
 **`results.db` is not committed.** It is large and rewritten on every publish, so
 git would keep every version forever. It ships as the `results.db` asset on the

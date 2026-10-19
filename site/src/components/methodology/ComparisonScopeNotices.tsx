@@ -1,5 +1,37 @@
 import { useProfileScope } from "../../hooks/useProfileScope"
+import { usePublication } from "../../hooks/usePublication"
 import { NoticeStrip } from "../layout/Panel"
+
+export function CampaignNotice({ className }: { className?: string }) {
+  const { publication, error } = usePublication()
+  if (error) {
+    return (
+      <NoticeStrip tone="warning" className={className}>
+        Failed to load publication context: {error}
+      </NoticeStrip>
+    )
+  }
+  if (publication?.kind !== "campaign") return null
+
+  return (
+    <NoticeStrip tone="warning" className={className}>
+      <span className="font-semibold text-slate-100">{publication.title}</span>:{" "}
+      {publication.select_cohorts} completed SELECT cohorts; {publication.partial_select_cohorts}{" "}
+      have unsupported, skipped or unmeasured queries. Missing queries are penalized. Populate,
+      mutation and concurrency coverage may also be partial. Measurements span{" "}
+      {publication.source_commits.length} source commits.{" "}
+      <a
+        href={publication.report_url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-accent-300 underline underline-offset-2 hover:text-accent-200"
+      >
+        Campaign report
+      </a>{" "}
+      with coverage, exclusions and provenance.
+    </NoticeStrip>
+  )
+}
 
 export function ProfileScopeNotice({ className }: { className?: string }) {
   const scope = useProfileScope()

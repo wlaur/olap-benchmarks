@@ -7,7 +7,11 @@ import { getDatabaseColors } from "../../lib/databaseColors"
 import { formatLatencyMs } from "../../lib/format"
 import { formatScore, geometricMean } from "../../lib/score"
 import { useAppStore } from "../../stores/useAppStore"
-import { ProfileScopeNotice, SnapshotSpanWarning } from "../methodology/ComparisonScopeNotices"
+import {
+  CampaignNotice,
+  ProfileScopeNotice,
+  SnapshotSpanWarning,
+} from "../methodology/ComparisonScopeNotices"
 import { Skeleton } from "../Skeleton"
 import { BodyText, CaptionText, NumericText, SectionTitle } from "../Typography"
 
@@ -69,7 +73,8 @@ export function HomeScoreTable() {
             compare them between databases with the same completed count.
           </p>
         </details>
-        <ProfileScopeNotice className="mt-3" />
+        <CampaignNotice className="mt-3" />
+        <ProfileScopeNotice className="mt-2" />
         <SnapshotSpanWarning snapshotCount={overview.snapshotCount} className="mt-2" />
       </div>
 

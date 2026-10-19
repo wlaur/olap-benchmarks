@@ -1,4 +1,4 @@
-# October 2026 expanded local campaign
+# October 2026 expanded campaign
 
 Completed on 2026-10-19, branch `t3/expand-suite-db-benchmarks`, local revision
 `2026-10-expanded`: **99 combinations, 75 full supported operation groups and 24
@@ -33,9 +33,23 @@ not an engine-capability conclusion.
 | ClickBench | 6 | 4 | 10 |
 | **Total** | **75** | **24** | **99** |
 
-Results and proofs are local, not published or committed. The site data was not
-replaced. Measurements span multiple clean commits and snapshots, so the whole
-collection does not satisfy the single-commit publication gate as one release.
+The replacement site dataset selects **99 completed select cohorts and 244 total
+operation records** from this campaign. It replaces the earlier published results
+without merging them. Ten failed non-select operations remain visible (five
+populate, four mutation and one concurrency); superseded attempts and invalid
+diagnostics are excluded. The full 496-record revision is separately distributed
+as [`2026-10-expanded.db`](https://github.com/wlaur/olap-benchmarks/releases/download/runs/2026-10-expanded.db).
+Database files are release assets, never committed.
+
+Publication uses the explicit campaign mode with original provenance across 24
+clean source commits and one system snapshot. It retains the answer, image,
+profile and completed MonetDB session gates. All 99 select cohorts contain the
+full query plan, one warmup and three measured iterations; 32 include explicit
+skipped or unsupported queries. This differs from the 24 partial operation groups
+above, which exclude registry-unsupported work but include failed operations.
+The site scores only measured completed selects and penalizes missing queries;
+the additional fully observed queries in failed explorations remain evidence in
+the raw revision, not substitute primary timings.
 
 ## Method and material corrections
 
@@ -167,12 +181,12 @@ dialect's transitive constraint; stable DuckDB-WASM is 1.32.0. The verified nati
 ARM MonetDB image works here; the absent official amd64 SP4 image remains a cloud
 distribution blocker.
 
-Final Python checks at `2a1af7d`: Ruff/format and strict Pyright pass;
-**853 pytest tests pass, one is skipped, six live tests are deselected**.
-Controller/filter/checkpoint regression checks and ignored-helper lint/type checks
-pass. After the dependency refresh, frontend `bun run verify`, five E2E tests,
-manifest/data verification and generated-schema checks passed; frontend code is
-unchanged since those checks.
+Publication checks: Ruff/format and strict Pyright pass; **885 pytest tests pass,
+one is skipped and six live tests are deselected**. Controller/filter/checkpoint
+regression checks and ignored-helper lint/type checks passed at campaign completion.
+Frontend `bun run verify`, all six E2E tests, manifest/data verification and
+generated-schema checks pass against the replacement dataset. The site displays
+the campaign scope and penalizes missing queries in the full suite workload.
 
 Local evidence is intentionally ignored by git:
 
@@ -185,11 +199,16 @@ Local evidence is intentionally ignored by git:
   `*-resource-stop.json`, per-cell logs and raw Docker lifecycle events there.
 - Replay journals: `native-copy-baseline-refresh.json`,
   `shutdown-baseline-refresh.json`, `duckdb-memory-refresh.json`.
-- Local operational helpers: `data/serial_campaign.py`,
-  `data/audit_observed_answers.py`, `data/check_campaign_checkpoint.py`.
+- Local operational helpers originally under `data/`, including
+  `serial_campaign.py`, `audit_observed_answers.py` and
+  `check_campaign_checkpoint.py`, preserved after cleanup under
+  `results/expanded-campaign/local-helpers/` in the main checkout.
 
 Inspect results through
 `./.venv/bin/olap results query --revision 2026-10-expanded "<SQL>"`.
 Owned engine containers and populated stores are cleaned; immutable inputs,
 proofs and results remain. Final free disk space is approximately **150 GiB**.
-No PR, upload, deployment, release publication or site-data replacement was made.
+The published manifest pins the replacement asset's byte count and SHA-256;
+Pages verifies both before building. Local cleanup preserves the raw revision,
+campaign proofs and operational helpers in the main checkout's ignored results
+directory before removing the feature worktree. Shared immutable inputs remain.
