@@ -48,6 +48,18 @@ def _build_clickbench_insert(
 
 
 class QuestDBClickbench(Clickbench["QuestDB"]):
+    # EventDate is stored as a midnight timestamp; answers return it as the suite's DATE.
+    EVENT_DATE_SCHEMAS: ClassVar[Mapping[str, Mapping[str, type[pl.DataType]]]] = {
+        "Q6": {"MIN(EventDate)": pl.Date, "MAX(EventDate)": pl.Date},
+        "Q23": {"EventDate": pl.Date},
+        "Q40": {"EventDate": pl.Date},
+    }
+
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name in self.EVENT_DATE_SCHEMAS:
+            return {"schema": self.EVENT_DATE_SCHEMAS[query_name]}
+        return {}
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
