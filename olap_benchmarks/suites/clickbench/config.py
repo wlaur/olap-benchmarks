@@ -35,12 +35,14 @@ class Clickbench[DBT: Database](BenchmarkSuite[DBT]):
         return {"hits": self.parquet_row_count(get_settings().input_data_directory / "clickbench/hits.parquet")}
 
     def load_dataset(self) -> pl.LazyFrame:
+        return self.cast_dataset(pl.scan_parquet(get_settings().input_data_directory / "clickbench/hits.parquet"))
+
+    @staticmethod
+    def cast_dataset(source: pl.LazyFrame) -> pl.LazyFrame:
         # parquet file stores these as integers, the schema expects correct dtypes
-        return (
-            pl.scan_parquet(get_settings().input_data_directory / "clickbench/hits.parquet")
-            .with_columns(pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in CLICKBENCH_TIMESTAMP_COLUMNS)
-            .with_columns(pl.col(n).cast(pl.Date).alias(n) for n in CLICKBENCH_DATE_COLUMNS)
-        )
+        return source.with_columns(
+            pl.from_epoch(n, "s").cast(pl.Datetime("ms")).alias(n) for n in CLICKBENCH_TIMESTAMP_COLUMNS
+        ).with_columns(pl.col(n).cast(pl.Date).alias(n) for n in CLICKBENCH_DATE_COLUMNS)
 
     @property
     def populate_kwargs(self) -> dict[str, Any]:

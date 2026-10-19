@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from pathlib import Path
 
-from ..dbs.utils import tracked_commit
+import polars as pl
+import pytest
+
+from ..dbs.utils import sort_parquet_file, tracked_commit
+from ..settings import get_settings
 
 
 class FakeRecorderContext(AbstractContextManager[None]):
@@ -56,3 +61,27 @@ def test_tracked_commit_records_commit_for_raw_dbapi_connection() -> None:
     assert recorder_connection.recorded_queries == ["COMMIT"]
     assert recorder_connection.events == ["enter", "exit"]
     assert raw_connection.commit_calls == 1
+
+
+def test_sort_parquet_file_preserves_types_and_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "client_memory_limit_gb", 2)
+    monkeypatch.setattr(settings, "benchmark_threads", 2)
+    source = tmp_path / "source.parquet"
+    target = tmp_path / "sorted.parquet"
+    frame = pl.DataFrame(
+        {
+            "EventTime": pl.Series([3, 1, 2, 1, 2**53 + 1], dtype=pl.Int64),
+            "EventDate": pl.Series([15900, 15901, None, 15902, 15903], dtype=pl.UInt16),
+            "Small": pl.Series([-1, 2, 3, None, 5], dtype=pl.Int16),
+            "Medium": pl.Series([7, None, 9, 10, 11], dtype=pl.Int32),
+            "URL": ["c\r\nline", "", None, "ä", "b'quote"],
+        }
+    )
+    frame.write_parquet(source)
+    sort_parquet_file(source, target, "EventTime")
+    result = pl.read_parquet(target)
+    assert result.schema == frame.schema
+    assert result["EventTime"].to_list() == [1, 1, 2, 3, 2**53 + 1]
+    assert result.sort(["EventTime", "EventDate"]).equals(frame.sort(["EventTime", "EventDate"]))
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["sorted.parquet", "source.parquet"]

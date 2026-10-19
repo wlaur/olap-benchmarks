@@ -20,6 +20,7 @@ from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series_metrics.config import TimeSeriesMetrics
 from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
+from ..utils import sort_parquet_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
             fpath.unlink()
 
         with self.db.phase_context("sort_input", table_name="hits"):
-            pl.scan_parquet(input_fpath).sort("EventTime").sink_parquet(fpath)
+            sort_parquet_file(input_fpath, fpath, "EventTime")
 
         # 99997497 rows
         count: int = pl.scan_parquet(fpath).select(pl.len()).collect().item(0, 0)

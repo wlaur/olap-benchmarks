@@ -24,7 +24,7 @@ from ...suites.time_series_metrics.config import METRIC_COUNTS, TimeSeriesMetric
 from ...suites.time_series_ranges.config import METRIC_COUNTS as RANGE_METRIC_COUNTS
 from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
-from ..utils import require_columns
+from ..utils import require_columns, sort_parquet_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -158,7 +158,16 @@ class ArcClickbench(Clickbench["Arc"]):
             if not self.should_populate():
                 return
 
-        self.db.insert_sorted(self.load_dataset(), "hits")
+        source = get_settings().input_data_directory / "clickbench/hits.parquet"
+        staged = get_settings().temporary_directory / "arc" / f"hits_{uuid.uuid4().hex}.parquet"
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self.db.phase_context("sort_input", table_name="hits"):
+                sort_parquet_file(source, staged, "EventTime")
+            with self.db.phase_context("insert", table_name="hits"):
+                self.db.insert(self.cast_dataset(pl.scan_parquet(staged)), "hits")
+        finally:
+            staged.unlink(missing_ok=True)
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
