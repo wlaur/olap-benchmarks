@@ -129,7 +129,7 @@ def test_clickbench_average_lengths_count_bytes(
 @pytest.mark.parametrize("query_name", ["Q38", "Q39"])
 def test_clickbench_offset_ties_use_byte_order(db_type: type[Postgres] | type[TimescaleDB], query_name: str) -> None:
     query = db_type().benchmarks["clickbench"].load_query(query_name)
-    keys = ["URL"] if query_name == "Q38" else ["Src", "Dst"]
+    keys = ["URL"] if query_name == "Q38" else ["END", "URL"]
     assert all(f'{key} COLLATE "C" ASC' in query for key in keys)
     with duckdb.connect() as connection:
         connection.execute("""
