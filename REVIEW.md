@@ -1,103 +1,53 @@
-# Remaining project work - 2026-10-11
+# Remaining project work — 2026-10-19
 
-Only unfinished work. Remove items when they are done; history lives in git.
+The [expanded local campaign](docs/campaigns/2026-10-expanded.md) is complete:
+99 combinations, 75 full supported groups and 24 measured partials. It fixed and
+replayed the earlier StarRocks TPC-DS, Doris RTABench, Timescale mutation reporting,
+planner-statistics and resource-budget issues. Larger scales now have measured
+local coverage; specific resource exclusions replace the former blanket claim
+that they cannot run here. The published site asset remains unchanged.
 
-## Where things stand
+## Release and distribution
 
-- Published (2026-10-11, revision `2026-10`): one system (`macbook-m4-pro`), one commit, one snapshot, profile
-  `resident-hot-v1`, 70 cells, all validated (row counts and answer hashes agree across engines and are stable
-  across iterations). Engines: ClickHouse 26.9.8.3, DuckDB 1.5.6 and MonetDB Dec2025-SP4 (ADBC) across all eight
-  suites (MonetDB has no JSONBench queries); Polars 2.0.0 on TPC-H, JSONBench and ClickBench; Arc 26.09.3 on
-  time_series, chat_threads and ClickBench (populate and select only). TPC-H and JSONBench run at SF10, the rest at
-  SF1.
-- The matrix is declared in `olap_benchmarks/matrix.py`; `olap matrix status|run`, `olap results validate|prune`
-  and the publish gate (one commit, clean tree, one snapshot, current pins and profile, complete and validated
-  cells, registry digests) are in place.
-- Experimental (unpublished) connectors: Postgres, TimescaleDB, QuestDB, StarRocks and Doris. `olap benchmark all`
-  and `olap matrix status|run` leave them out unless named or `--include-experimental` is passed.
-- Unsupported queries are declared in one registry (`olap_benchmarks/query_registry.py`), which also holds the
-  answer-comparison exclusions; a missing SQL file is an error. `pytest -m live` smoke-tests each published engine
-  (only DuckDB has been run so far).
-- Higher scale factors (time_series/chat_threads SF10, TPC-H SF50) do not fit this machine's RAM and disk; they
-  belong to the cloud campaign.
+- [ ] **MonetDB amd64 SP4 image.** The verified native ARM64 override runs runtime
+      11.55.9, but `monetdb/monetdb:Dec2025-SP4` is not published for amd64. Build
+      and distribute an appropriate amd64 image, or wait for upstream, before a
+      complete amd64 cloud campaign.
+- [ ] **A new publishable campaign, when requested.** The local expansion spans
+      multiple clean commits and snapshots and contains deliberate partials.
+      Select and rerun a release cohort under one commit, snapshot and profile,
+      then pass the existing validation/publication gates. Local completion does
+      not authorize publishing these files.
 
-**Releasable** means: a published set produced by one commit, one system snapshot and one benchmark profile; every
-published cell validated; a site that loads fast and states exactly what is being compared; and a repeatable
-one-command path from "bump a version" to "published".
+## Coverage follow-ups
 
-## 1. Release blockers
+- [ ] **Larger-budget follow-ups, if useful.** The report records exact partial
+      cohorts and resource evidence. In particular, Timescale ClickBench Q35–Q42
+      and sixteen MonetDB chat SF10 tail queries lack complete four-iteration
+      observations. Existing bounded partials remain valid; these are optional
+      additions, not unfinished campaign combinations.
+- [ ] **MonetDB JSONBench.** No suite is registered. Implement a complete adapter
+      or document a demonstrated limitation; absence of implementation alone is
+      not evidence that the engine cannot support it.
+- [ ] **MonetDB rolling AVG.** Recheck the documented ROWS-frame correctness
+      defect on a fixed engine, then retire the existing core/metrics registry
+      exclusions only after equivalent answers are demonstrated.
+- [ ] **Cloud campaign** per `CLOUD.md`, after the amd64 image issue is resolved.
+      More resources can extend the documented local partials.
+- [ ] **Timescale SQL duplication** (optional): consider a PostgreSQL fallback
+      only if it preserves explicit Timescale-specific behavior and query hashes.
 
-- [ ] **No amd64 image for the MonetDB pin.** `monetdb/monetdb:Dec2025-SP4` does not exist on Docker Hub (newest
-      tag: Dec2025-SP3), and `wlaur/monetdb-container` is arm64-only, so `olap versions --check` fails for the amd64
-      variant and an amd64 host (the cloud campaign) cannot start MonetDB. Push an amd64 build of the wlaur image and
-      point `images.server` at it, or wait for the upstream tag.
+## Site and optional methodology
 
-## 2. Methodology
+- [ ] **Show resource measurements.** Label container memory as server anon plus
+      shmem and embedded-engine memory as client memory. PostgreSQL sampling has
+      now been exercised; no blanket untested-sampling claim remains.
+- [ ] **Arbitrary-query UI** over DuckDB-WASM, with the schema documented.
+- [ ] **Engine-internal timings** as separate metrics, if wanted. End-to-end
+      materialized client latency remains the benchmark measure.
+- [ ] **Cold-cache profile** with a separate profile identifier and explicit cache
+      treatment before each measured iteration.
+- [ ] **JOB**, and **TSBS/InfluxDB 3** as complete future suite expansions.
 
-The `resident-hot-v1` profile, query/schema hashes, decoupled input hashing and planned-step accounting are in
-place (README "Benchmark profile"). Remaining, all optional:
-
-- [ ] **Engine-internal timing** (optional). Latency is end-to-end client latency only. If engine execution time is
-      wanted, record it as a separate, clearly labelled step metric (e.g. ClickHouse `query_log`, DuckDB profiling,
-      MonetDB `sys.queue`), never in place of `duration_ms`.
-- [ ] **Cold-cache profile** (optional). `resident-hot-v1` never drops the page cache between operations;
-      `--drop-caches` only covers populate on Linux. A cold profile would need a drop (or container restart with
-      dropped caches) before every measured iteration and its own profile id.
-
-## 3. Site
-
-Decision (2026-10-10): keep DuckDB-WASM. An arbitrary-query UI is planned, which needs an in-browser engine, and a
-~12-15 MB first load is acceptable. The six fixed views stay as SQL over `run`/`run_step`.
-
-- [ ] **Keep the typed query layer in step with migrations.** `bun run codegen` introspects the published file, so a
-      schema change reaches the site only when someone regenerates; run codegen from `olap publish` (or check in CI
-      that `generated/db.ts` matches the current schema).
-- [ ] **Explorer e2e expects an overflowing latency list.** `tests/e2e/explorer.spec.ts` asserts that the per-query
-      latency bars overflow their frame, which three engines do not; it fails on the current data independent of
-      any change. Make the assertion conditional on the row count or drop it.
-- [ ] **Arbitrary-query UI** (later): a SQL editor page over the same DuckDB instance, with the schema documented.
-
-## 4. Engine coverage
-
-- [ ] **MonetDB JSONBench**, or record why not: MonetDB does not register the suite at all, so nothing states why.
-- [ ] **Run the live smoke tests for the other published engines.** `pytest -m live` has only been run for DuckDB;
-      run it for ClickHouse, MonetDB, Polars and Arc once and fix what it finds.
-- [ ] **Experimental engines: publish or keep parked.** They are excluded from `all` (README "olap benchmark"). Known
-      state after the 2026-10-10 version bump:
-      - StarRocks 4.1.6 runs all 99 TPC-DS queries at SF1 (49, 70 and 86 have StarRocks variants that match
-        DuckDB), but 11 answers still differ from DuckDB (09, 18, 27, 31, 51, 58, 59, 66, 78, 83, 98) and 51 is
-        non-deterministic across iterations. Not investigated.
-      - Doris 4.1.4.1 RTABench populate and select complete (stream loads go to the BE's published port; the FE
-        redirect points at a Docker-internal address). Seven answers differ from DuckDB/Postgres/TimescaleDB
-        (0005, 0006, 0010, 0011, 0012, 0017, 0022). Doris registers no time_series.
-      - Postgres 18.6 and TimescaleDB 2.30.2 RTABench complete and agree with DuckDB. TimescaleDB now creates the
-        upstream continuous aggregates its 1000-series queries read and sorts 0008 like the others; the 0028 age
-        bucketing fix it shares with Postgres was verified on Postgres only. In the 2026-10 time_series smoke run
-        the TimescaleDB server went away at `upsert_data_large_1` and every later mutation failed, yet the mutate
-        run is recorded as completed and concurrent never ran; not investigated.
-      - QuestDB 10.0.1 runs all time_series operations at SF1 and agrees with DuckDB (version check reads
-        `build()`; top-N hourly has a QuestDB variant). RTABench, ClickBench and Kaggle are untested on 10.x.
-      - TimescaleDB's SQL is mostly a byte copy of Postgres's (all 23 chat_threads and 29 time_series overrides). An
-        engine-level SQL fallback (timescaledb -> postgres) would remove ~54 files but needs a few new TimescaleDB
-        copies where it deliberately runs the shared SQL (e.g. JSONBench); worth doing only if they stay.
-
-## 5. Resource reporting
-
-- [ ] **Show memory on the site.** The published `2026-10` runs carry metric schema v7 (cgroup anon/file/shmem
-      split, data/WAL disk split). Show server memory (anon + shmem) for container engines and client memory for
-      in-process engines (DuckDB, Polars), labelled as such.
-- [ ] **Validate the v7 sampling on PostgreSQL.** ClickHouse, MonetDB and Arc recorded plausible anon/shmem figures in
-      the 2026-10 campaign; PostgreSQL (shared_buffers counted as shmem) and its `pg_wal` split have not run since.
-
-## 6. Deferred
-
-- [ ] **Cloud campaign** on one x86-64 Linux `i4i` host per `CLOUD.md`, including the higher scale factors this
-      machine cannot run. Do it after section 1 so the campaign is a single `olap matrix run`.
-- [ ] **JOB**, now that `resident-hot-v1` has been exercised by a public run.
-- [ ] **TSBS and InfluxDB 3**, only as a complete time-series expansion (Arc first).
-
-## Suggested order
-
-1. Section 1: an amd64 MonetDB image, so the cloud campaign can run every published engine.
-2. The cloud campaign under `resident-hot-v1`.
-3. Sections 3-5 around these.
+Generated schema types are already checked in Pages CI, and the Explorer overflow
+E2E assertion was corrected during the dependency refresh.

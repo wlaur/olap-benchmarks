@@ -4,6 +4,9 @@
 
 [Results](https://wlaur.github.io/olap-benchmarks/)
 
+[October 2026 expanded local campaign](docs/campaigns/2026-10-expanded.md): methodology audit,
+99 measured combinations, partial coverage, validation and local evidence.
+
 ## Requirements
 
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)
@@ -40,7 +43,7 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS` | Optional select-query iteration deadline; a process watchdog also terminates native drivers that defer Python signal handling |
 | `OLAP_BENCHMARKS_CLIENT_MEMORY_LIMIT_GB` | Optional benchmark-process RSS safety limit in GiB; distinct from container memory limits |
 | `OLAP_BENCHMARKS_QUERY_INCLUDE` / `OLAP_BENCHMARKS_QUERY_EXCLUDE` | JSON arrays of query-name glob patterns for partial select suites; omitted queries remain in the recorded plan as skipped steps |
-| `OLAP_BENCHMARKS_TABLES` | JSON array of table-name glob patterns for partial metrics/ranges populate and select runs; inputs retain their original size and values |
+| `OLAP_BENCHMARKS_TABLES` | JSON array of table-name glob patterns for partial core time-series, metrics and ranges operations; selected inputs retain their original size and values |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
 | `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http`, `arc`, `tdengine_ws` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
@@ -601,13 +604,13 @@ engine:
 
 ```toml
 [clickhouse]
-version = "26.9.8.3"
-images.server = "clickhouse:26.9.8.3-jammy"
+version = "26.9.19.9"
+images.server = "clickhouse:26.9.19.9-jammy"
 
 [doris]                                   # one image per container role
-version = "4.1.4.1"
-images.fe = "apache/doris:fe-4.1.4.1"
-images.be = "apache/doris:be-4.1.4.1"
+version = "4.1.5"
+images.fe = "apache/doris:fe-4.1.5"
+images.be = "apache/doris:be-4.1.5"
 
 [monetdb]                                 # ARM64 hosts use a separate image
 version = "Dec2025-SP4"
