@@ -19,7 +19,7 @@ MAX_ANSWER_HASH_CELLS = 5_000_000
 # float32 values differs between DuckDB and ClickHouse in the twelfth. Ten rather than eleven
 # because that noise grows with row count and the largest suites run at ten times this scale.
 FLOAT_SIGNIFICANT_DIGITS = 10
-ANSWER_HASH_VERSION = "canonical-v10"
+ANSWER_HASH_VERSION = "canonical-v11"
 
 
 def _normalize_json_text(value: str | None) -> str | None:
@@ -95,11 +95,16 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
         # what array_agg() returns for an unmatched outer join, canonicalises to null like
         # MonetDB's group_concat over no rows.
         elif isinstance(dtype, pl.List):
-            expression = pl.concat_str(
-                pl.lit("["),
-                expression.cast(pl.List(pl.String)).list.join(",", ignore_nulls=False),
-                pl.lit("]"),
+            null_list = expression.is_null() | (
+                (expression.list.len() > 0) & (expression.list.drop_nulls().list.len() == 0)
             )
+            json_list = (
+                pl.struct(expression.alias("value"))
+                .struct.json_encode()
+                .str.strip_prefix('{"value":')
+                .str.strip_suffix("}")
+            )
+            expression = pl.when(null_list).then(pl.lit(None, dtype=pl.String)).otherwise(json_list)
 
         expressions.append(expression.alias(name))
 

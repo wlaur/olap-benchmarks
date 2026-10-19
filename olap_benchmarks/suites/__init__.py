@@ -2,6 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from pathlib import Path
 from time import perf_counter
 from typing import Any, ClassVar
@@ -163,10 +164,23 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
         return ()
 
     def query_skip(self, query_name: str) -> tuple[StepResultStatus, str] | None:
+        settings = get_settings()
+        if settings.query_include and not any(fnmatchcase(query_name, pattern) for pattern in settings.query_include):
+            return ("skipped", "excluded by campaign query_include")
+        if any(fnmatchcase(query_name, pattern) for pattern in settings.query_exclude):
+            return ("skipped", "excluded by campaign query_exclude")
+        if self.name in ("time_series_metrics", "time_series_ranges") and not self.table_selected(
+            query_name.split("_", 1)[0]
+        ):
+            return ("skipped", "table excluded by campaign tables")
         reason = unsupported_reason(self.name, self.db.name, query_name)
         if reason is None:
             return None
         return ("unsupported", reason)
+
+    def table_selected(self, table: str) -> bool:
+        patterns = get_settings().tables
+        return not patterns or any(fnmatchcase(table, pattern) for pattern in patterns)
 
     @property
     def queries_directory(self) -> Path:

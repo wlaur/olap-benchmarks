@@ -1,9 +1,9 @@
 select
   o_year,
-  sum(case
+  cast(sum(case
     when nation = 'BRAZIL' then volume
     else 0
-  end) / sum(volume) as mkt_share
+  end) as double) / sum(volume) as mkt_share
 from
   (
     select

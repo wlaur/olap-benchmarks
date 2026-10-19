@@ -22,6 +22,7 @@ from olap_benchmarks.dbs.arc import (
     iter_write_batches,
     to_arc_arrow,
 )
+from olap_benchmarks.settings import SuiteName
 from olap_benchmarks.suites.time_series_ranges.config import TimeSeriesRanges
 
 
@@ -122,23 +123,29 @@ def test_arc_registers_the_suites_it_can_store() -> None:
     assert ArcTimeSeries.supported_operations == ("populate", "select")
 
 
-def test_metrics_sort_keys_and_resource_budgets_are_passed_as_single_arguments(
+@pytest.mark.parametrize("suite_name", ["time_series", "time_series_metrics", "time_series_ranges"])
+def test_time_series_sort_keys_and_resource_budgets_are_passed_as_single_arguments(
     monkeypatch: pytest.MonkeyPatch,
+    suite_name: SuiteName,
 ) -> None:
     from ..settings import get_settings
 
     monkeypatch.setattr(get_settings(), "benchmark_threads", 2)
     monkeypatch.setattr(get_settings(), "benchmark_memory_gb", 6)
     db = Arc()
-    db._current_suite = "time_series_metrics"
+    db._current_suite = suite_name
     db._current_suite_scale_factor = 1
     arguments = shlex.split(db.start)
     assert arguments[arguments.index("--cpus") + 1] == "2"
     assert arguments[arguments.index("--memory") + 1] == "6g"
     assert arguments[arguments.index("--memory-swap") + 1] == "6g"
-    assert f"ARC_INGEST_SORT_KEYS={db.metric_sort_keys}" in arguments
-    assert db.benchmark_settings["ARC_INGEST_SORT_KEYS"] == db.metric_sort_keys
-    for key, value in Arc.METRICS_INGEST_ENV.items():
+    if suite_name in ("time_series_metrics", "time_series_ranges"):
+        assert f"ARC_INGEST_SORT_KEYS={db.metric_sort_keys}" in arguments
+        assert db.benchmark_settings["ARC_INGEST_SORT_KEYS"] == db.metric_sort_keys
+    else:
+        assert not any(argument.startswith("ARC_INGEST_SORT_KEYS=") for argument in arguments)
+        assert "ARC_INGEST_SORT_KEYS" not in db.benchmark_settings
+    for key, value in Arc.BOUNDED_INGEST_ENV.items():
         assert f"{key}={value}" in arguments
         assert db.benchmark_settings[key] == value
     assert ArcChatThreads.supported_operations == ("populate", "select")
@@ -151,7 +158,8 @@ def test_arc_connect_is_not_a_sql_connection() -> None:
         Arc().connect()
 
 
-def test_metrics_import_compacts_before_reading_wide_file_metadata() -> None:
+@pytest.mark.parametrize("suite_name", ["time_series", "time_series_metrics", "time_series_ranges"])
+def test_time_series_import_compacts_before_reading_wide_file_metadata(suite_name: SuiteName) -> None:
     events: list[str] = []
 
     class ImportedArc(Arc):
@@ -173,7 +181,7 @@ def test_metrics_import_compacts_before_reading_wide_file_metadata() -> None:
             events.append(f"count {count}")
 
     db = ImportedArc()
-    db._current_suite = "time_series_metrics"
+    db._current_suite = suite_name
     db.insert(_frame(3), "wide5000")
     assert events == ["import", "compact", "count 3"]
 

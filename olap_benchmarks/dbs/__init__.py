@@ -7,7 +7,8 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import lru_cache
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from shlex import quote
 from threading import get_ident
@@ -20,6 +21,7 @@ from sqlalchemy import Connection, text
 
 from ..container_platform import get_container_engine_platform
 from ..images import ResolvedImage, resolve_images
+from ..limits import query_deadline, start_query_watchdog
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..profile import BENCHMARK_PROFILE, BenchmarkProfile
@@ -102,6 +104,7 @@ class Database(BaseModel, ABC):
 
     connection_string: str
     DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
+    CONTAINER_SHUTDOWN_TIMEOUT_SECONDS: ClassVar[int] = 120
     supports_arm64_containers: ClassVar[bool] = False
     # glob patterns, relative to database_directory, for the engine's write-ahead log
     wal_path_patterns: ClassVar[tuple[str, ...]] = ()
@@ -119,7 +122,8 @@ class Database(BaseModel, ABC):
 
     _queue: Queue[WriterMessage] | None = None
     _result_queue: Queue[object] | None = None
-    _writer_process: Process | None = None
+    _writer_process: BaseProcess | None = None
+    _query_watchdog_path: Path | None = None
     _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
     _query_hashes: dict[str, str] = PrivateAttr(default_factory=_new_query_hashes)
     _started_query_steps: set[tuple[str, int]] = PrivateAttr(default_factory=_new_started_query_steps)
@@ -165,7 +169,7 @@ class Database(BaseModel, ABC):
         self,
         queue: Queue[WriterMessage],
         result_queue: Queue[object],
-        writer_process: Process | None = None,
+        writer_process: BaseProcess | None = None,
     ) -> None:
         self._queue = queue
         self._result_queue = result_queue
@@ -223,11 +227,21 @@ class Database(BaseModel, ABC):
             "OLAP_BENCHMARKS_BENCHMARK_THREADS": settings.benchmark_threads,
             "OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB": settings.benchmark_memory_gb,
             "POLARS_MAX_THREADS": pl.thread_pool_size(),
+            "OLAP_BENCHMARKS_MINIMUM_FREE_DISK_GB": settings.minimum_free_disk_gb,
+            "OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS": settings.operation_timeout_seconds,
+            "OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS": settings.query_timeout_seconds,
+            "OLAP_BENCHMARKS_CLIENT_MEMORY_LIMIT_GB": settings.client_memory_limit_gb,
+            "OLAP_BENCHMARKS_QUERY_INCLUDE": settings.query_include,
+            "OLAP_BENCHMARKS_QUERY_EXCLUDE": settings.query_exclude,
+            "OLAP_BENCHMARKS_TABLES": settings.tables,
         }
 
     @property
     def run_options(self) -> Mapping[str, object]:
-        return {"note": get_settings().run_note}
+        options: dict[str, object] = {"note": get_settings().run_note}
+        if self.pin.is_container:
+            options["container_shutdown_timeout_seconds"] = self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS
+        return options
 
     @property
     def input_directory(self) -> Path:
@@ -240,6 +254,9 @@ class Database(BaseModel, ABC):
         pass
 
     def after_benchmark_operation(self) -> None:
+        pass
+
+    def finalize_populate(self) -> None:
         pass
 
     @property
@@ -321,17 +338,31 @@ class Database(BaseModel, ABC):
         name: str | None = None,
         network: str | None = None,
         ip: str | None = None,
+        init: bool = False,
+        entrypoint: str | None = None,
+        cpu_limit: float | None = None,
+        memory_limit_mb: int | None = None,
     ) -> str:
         resolved_platform = platform or self.container_platform or get_container_engine_platform()
         parts = ["docker run", "--platform", resolved_platform]
         parts.append(f"--name {name or f'{self.name}-benchmark'} --rm -d")
+        if init:
+            parts.append("--init")
+        if entrypoint is not None:
+            parts.extend(["--entrypoint", quote(entrypoint)])
         settings = get_settings()
-        if settings.benchmark_threads is not None:
-            parts.extend(["--cpus", str(settings.benchmark_threads)])
-        if settings.benchmark_memory_gb is not None:
-            parts.extend(
-                ["--memory", f"{settings.benchmark_memory_gb}g", "--memory-swap", f"{settings.benchmark_memory_gb}g"]
-            )
+        resolved_cpu_limit = cpu_limit if cpu_limit is not None else settings.benchmark_threads
+        if resolved_cpu_limit is not None:
+            parts.extend(["--cpus", str(resolved_cpu_limit)])
+        resolved_memory_limit = (
+            f"{memory_limit_mb}m"
+            if memory_limit_mb is not None
+            else f"{settings.benchmark_memory_gb}g"
+            if settings.benchmark_memory_gb is not None
+            else None
+        )
+        if resolved_memory_limit is not None:
+            parts.extend(["--memory", resolved_memory_limit, "--memory-swap", resolved_memory_limit])
         if network is not None:
             parts.extend(["--network", network])
         if ip is not None:
@@ -345,11 +376,11 @@ class Database(BaseModel, ABC):
 
     @property
     def stop(self) -> str | None:
-        return f"docker stop {self.name}-benchmark"
+        return f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {self.name}-benchmark"
 
     @property
     def restart(self) -> str | None:
-        return f"docker restart {self.name}-benchmark"
+        return f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {self.name}-benchmark"
 
     def _start_step(
         self,
@@ -652,10 +683,12 @@ class Database(BaseModel, ABC):
 
         kwargs = dict(fetch_kwargs or {})
         self._query_hashes[query_name] = sha256_text(query)
+        start_query_watchdog(self._query_watchdog_path, query_name)
 
         try:
             t0 = perf_counter()
-            df = self.fetch(query, **kwargs)
+            with query_deadline(get_settings().query_timeout_seconds if self._current_operation == "select" else None):
+                df = self.fetch(query, **kwargs)
             duration_seconds = perf_counter() - t0
         except BaseException as exc:
             self._finish_timed_step(
@@ -667,6 +700,8 @@ class Database(BaseModel, ABC):
             )
             raise
         finally:
+            if self._query_watchdog_path is not None:
+                self._query_watchdog_path.unlink(missing_ok=True)
             self._pop_active_step(step_id)
 
         self._finish_timed_step(
@@ -979,6 +1014,8 @@ class Database(BaseModel, ABC):
                 self.before_benchmark_operation()
                 with self.phase_context(operation):
                     benchmark_func()
+                    if operation == "populate":
+                        self.finalize_populate()
             except BaseException as exc:
                 operation_error = exc
 

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -11,6 +12,7 @@ from typing import Any, ClassVar, cast
 
 import polars as pl
 from pydantic import Field
+from pymysql.constants import FIELD_TYPE
 from sqlalchemy import Connection, create_engine, text
 
 from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
@@ -21,16 +23,15 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
+from ...suites.kaggle_airbnb.config import KaggleAirbnb
 from ...suites.time_series.config import TimeSeries
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database, ParquetEpochColumns
 from ..utils import normalize_columns, require_columns
 
 _LOGGER = logging.getLogger(__name__)
 
-# Pinned to 4.0.9 because the 4.1.0 BE binary segfaults on startup on
-# Apple Silicon -- fe-ubuntu/be-ubuntu split images crash the same way.
-# 4.0.9 is the latest 4.0.x patch (2026-04-20) and is one week older than
-# 4.1.0; the LTS-style 4.0 line is fine for benchmarking.
 STARROCKS_HOST = "localhost"
 STARROCKS_USER = "root"
 STARROCKS_PASSWORD = ""
@@ -71,6 +72,13 @@ def get_starrocks_type(dtype: pl.DataType | type[pl.DataType]) -> str:
     if sql_type is None:
         raise ValueError(f"Unsupported Polars dtype for StarRocks: {dtype}")
     return sql_type
+
+
+class StarRocksKaggleAirbnb(KaggleAirbnb["StarRocks"]):
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name == "04_join_three_tables_array_agg":
+            return {"schema": {"reviewer_ids": pl.List(pl.Int64)}}
+        return {}
 
 
 class StarRocksClickbench(Clickbench["StarRocks"]):
@@ -168,11 +176,24 @@ def insert_source_parquet_via_files(db: "StarRocks", source: Path, table_name: T
 
 
 class StarRocksTimeSeries(TimeSeries["StarRocks"]):
+    def load_query(self, query_name: str) -> str:
+        return re.sub(r"\bstddev\s*\(", "stddev_samp(", super().load_query(query_name), flags=re.IGNORECASE)
+
     # Use PRIMARY KEY tables so the mutate phase (UPDATE/DELETE/UPSERT) works.
     # DUPLICATE KEY tables (the default for read-only suites) reject DELETE
     # with subqueries, which the mutate path relies on.
     def get_primary_key(self, table_name: TableName) -> str | list[str] | None:
         return "time"
+
+
+class StarRocksTimeSeriesMetrics(TimeSeriesMetrics["StarRocks"]):
+    def load_query(self, query_name: str) -> str:
+        query = super().load_query(query_name).replace("DOUBLE PRECISION", "DOUBLE")
+        return re.sub(r"\bTIMESTAMP\s+('[^']*')", r"CAST(\1 AS DATETIME)", query)
+
+
+class StarRocksTimeSeriesRanges(TimeSeriesRanges["StarRocks"], StarRocksTimeSeriesMetrics):
+    pass
 
 
 class StarRocksJSONBench(JSONBench["StarRocks"]):
@@ -366,16 +387,24 @@ class StarRocks(Database):
             result = self.connect().execute(text(sql))
 
         columns = list(result.keys())
+        cursor = result.cursor
+        if cursor is None:
+            raise RuntimeError("StarRocks query did not return column metadata")
+        wire_schema: dict[str, pl.DataType | type[pl.DataType]] = {
+            column: pl.Float32
+            for column, description in zip(columns, cursor.description, strict=True)
+            if description[1] == FIELD_TYPE.FLOAT
+        }
+        list_columns = {name: dtype for name, dtype in (schema or {}).items() if isinstance(dtype, pl.List)}
+        wire_schema.update(dict.fromkeys(list_columns, pl.String))
         rows = result.fetchall()
 
-        if not rows:
-            if schema:
-                return pl.DataFrame(schema=cast(pl.Schema, schema))
-            return pl.DataFrame({col: [] for col in columns})
-
-        df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
+        df = pl.DataFrame(
+            {col: [row[idx] for row in rows] for idx, col in enumerate(columns)}, schema_overrides=wire_schema
+        )
 
         if schema is not None:
+            df = df.with_columns(pl.col(name).str.json_decode(dtype) for name, dtype in list_columns.items())
             df = df.cast(cast(pl.Schema, schema))
 
         return df
@@ -545,6 +574,9 @@ class StarRocks(Database):
         return {
             **super().suite_registry(),
             "time_series": StarRocksTimeSeries,
+            "time_series_metrics": StarRocksTimeSeriesMetrics,
+            "time_series_ranges": StarRocksTimeSeriesRanges,
             "clickbench": StarRocksClickbench,
             "jsonbench": StarRocksJSONBench,
+            "kaggle_airbnb": StarRocksKaggleAirbnb,
         }

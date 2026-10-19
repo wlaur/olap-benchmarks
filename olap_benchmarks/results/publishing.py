@@ -134,7 +134,7 @@ def _query_step_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
     return problems
 
 
-def _monetdb_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
+def _monetdb_problems(con: duckdb.DuckDBPyConnection, *, campaign: bool = False) -> list[str]:
     problems: list[str] = []
     drivers = sorted(
         {
@@ -148,11 +148,12 @@ def _monetdb_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
 
     missing_baselines = _fetch_ints(
         con,
-        """
+        f"""
         select r.id
         from run r
         where r.db = 'monetdb'
           and r.status in ('completed', 'failed')
+          and not ({str(campaign).lower()} and r.status = 'failed' and r.operation <> 'select')
           and (
             (
               select count(*)
@@ -225,6 +226,7 @@ def validate_publishable_runs(
     pins: Mapping[str, str],
     drivers: Mapping[str, str | None],
     allow_mixed_commits: bool = False,
+    campaign: bool = False,
 ) -> None:
     problems: list[str] = []
     con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
@@ -234,11 +236,17 @@ def validate_publishable_runs(
         system = single_system(runs)
         latest = latest_run_per_cell(runs, cells, system=system, drivers=drivers)
 
-        missing = [cell.label for cell, run in latest.items() if run is None]
+        missing = [
+            cell.label for cell, run in latest.items() if run is None and (not campaign or cell.operation == "select")
+        ]
         if missing:
             problems.append(_listing("Declared cells without a run", missing))
 
-        not_completed = [run.label for run in latest.values() if run is not None and run.status != "completed"]
+        not_completed = [
+            run.label
+            for cell, run in latest.items()
+            if run is not None and run.status != "completed" and (not campaign or cell.operation == "select")
+        ]
         if not_completed:
             problems.append(_listing("Declared cells whose latest run did not complete", not_completed))
 
@@ -286,9 +294,14 @@ def validate_publishable_runs(
 
         problems.extend(_image_digest_problems(con))
         problems.extend(_query_step_problems(con))
-        problems.extend(_monetdb_problems(con))
+        problems.extend(_monetdb_problems(con, campaign=campaign))
     finally:
         con.close()
+
+    if campaign:
+        from .campaign import validate_campaign_runs
+
+        validate_campaign_runs(db_path, cells, pins=pins, drivers=drivers)
 
     report = validate_results(db_path=db_path, pins=pins)
     if not report.ok:

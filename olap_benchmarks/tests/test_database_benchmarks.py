@@ -12,6 +12,7 @@ from .. import dbs as dbs_module
 from ..dbs import Database, apply_parquet_epoch_columns, get_databases
 from ..dbs.monetdb import MonetDB, MonetDBTimeSeries
 from ..dbs.monetdb.settings import get_monetdb_settings
+from ..dbs.questdb import QuestDB
 from ..images import ImageDigestError, ResolvedImage
 from ..settings import (
     DatabaseName,
@@ -355,6 +356,14 @@ def test_docker_run_command_allows_explicit_platform_override() -> None:
     command = DummyDatabase().docker_run_command("example:latest", platform="linux/amd64")
 
     assert command.startswith("docker run --platform linux/amd64")
+
+
+def test_questdb_runs_with_an_init_process_to_reap_exited_children() -> None:
+    db = QuestDB()
+    db._current_suite = "time_series_ranges"
+    db._current_suite_scale_factor = 1
+    assert "--init" in db.start.split()
+    assert "--init" not in DummyDatabase().docker_run_command("example:latest").split()
 
 
 def test_monetdb_selects_image_for_engine_platform(monkeypatch: pytest.MonkeyPatch) -> None:

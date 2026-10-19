@@ -16,7 +16,11 @@ from ...suites.clickbench.config import (
     CLICKBENCH_TIMESTAMP_COLUMNS,
     Clickbench,
 )
+from ...suites.kaggle_airbnb.config import KaggleAirbnb
+from ...suites.time_series_metrics.config import TimeSeriesMetrics
+from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
+from ..utils import sort_parquet_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +48,18 @@ def _build_clickbench_insert(
 
 
 class QuestDBClickbench(Clickbench["QuestDB"]):
+    # EventDate is stored as a midnight timestamp; answers return it as the suite's DATE.
+    EVENT_DATE_SCHEMAS: ClassVar[Mapping[str, Mapping[str, type[pl.DataType]]]] = {
+        "Q6": {"MIN(EventDate)": pl.Date, "MAX(EventDate)": pl.Date},
+        "Q23": {"EventDate": pl.Date},
+        "Q40": {"EventDate": pl.Date},
+    }
+
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name in self.EVENT_DATE_SCHEMAS:
+            return {"schema": self.EVENT_DATE_SCHEMAS[query_name]}
+        return {}
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -73,7 +89,7 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
             fpath.unlink()
 
         with self.db.phase_context("sort_input", table_name="hits"):
-            pl.scan_parquet(input_fpath).sort("EventTime").sink_parquet(fpath)
+            sort_parquet_file(input_fpath, fpath, "EventTime")
 
         # 99997497 rows
         count: int = pl.scan_parquet(fpath).select(pl.len()).collect().item(0, 0)
@@ -95,6 +111,22 @@ class QuestDBClickbench(Clickbench["QuestDB"]):
 
         if restart:
             self.db.restart_event()
+
+
+class QuestDBKaggleAirbnb(KaggleAirbnb["QuestDB"]):
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if query_name == "05_join_three_tables_row_number":
+            return {"schema": {"max_date": pl.Date}}
+        return {}
+
+
+class QuestDBTimeSeriesMetrics(TimeSeriesMetrics["QuestDB"]):
+    def load_query(self, query_name: str) -> str:
+        return super().load_query(query_name).replace("DOUBLE PRECISION", "DOUBLE")
+
+
+class QuestDBTimeSeriesRanges(TimeSeriesRanges["QuestDB"], QuestDBTimeSeriesMetrics):
+    pass
 
 
 class QuestDB(Database):
@@ -127,6 +159,9 @@ class QuestDB(Database):
     @property
     def start(self) -> str:
         (get_settings().temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
+        environment = {"QDB_CAIRO_SQL_COPY_ROOT": "/import"}
+        if self.current_suite == "time_series_metrics":
+            environment["QDB_CAIRO_SQL_SMALL_MAP_PAGE_SIZE"] = "128K"
 
         return self.docker_run_command(
             self.container_images["server"],
@@ -135,7 +170,8 @@ class QuestDB(Database):
                 self.database_directory.as_posix(): "/var/lib/questdb",
                 f"{get_settings().temporary_directory.as_posix()}/questdb/data": "/import",
             },
-            env={"QDB_CAIRO_SQL_COPY_ROOT": "/import"},
+            env=environment,
+            init=True,
         )
 
     def connect(self, reconnect: bool = False) -> Connection:
@@ -359,6 +395,9 @@ class QuestDB(Database):
         registry: dict[SuiteName, type[BenchmarkSuite[Any]]] = {
             **super().suite_registry(),
             "clickbench": QuestDBClickbench,
+            "kaggle_airbnb": QuestDBKaggleAirbnb,
+            "time_series_metrics": QuestDBTimeSeriesMetrics,
+            "time_series_ranges": QuestDBTimeSeriesRanges,
         }
 
         # TPC-H and TPC-DS need correlated subqueries and EXISTS/NOT EXISTS

@@ -4,6 +4,9 @@
 
 [Results](https://wlaur.github.io/olap-benchmarks/)
 
+[October 2026 expanded campaign](docs/campaigns/2026-10-expanded.md): methodology audit,
+99 measured combinations, partial coverage, validation and publication evidence.
+
 ## Requirements
 
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)
@@ -33,13 +36,41 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_TEMPORARY_DIRECTORY` | Scratch space used during populate                  |
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_BENCHMARK_THREADS` | Optional CPU budget for containers, DuckDB threads and metrics-suite ClickHouse queries; set `POLARS_MAX_THREADS` before Python starts to bound client threads |
-| `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GB |
+| `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GiB |
 | `OLAP_BENCHMARKS_RUN_NOTE` | Run context recorded in `metadata.options.note` |
+| `OLAP_BENCHMARKS_MINIMUM_FREE_DISK_GB` | Disk reserve in GiB (default 40), checked before container startup and once per second during operations |
+| `OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS` | Optional wall-clock limit per operation; terminates an unresponsive benchmark process |
+| `OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS` | Optional select-query iteration deadline; a process watchdog also terminates native drivers that defer Python signal handling |
+| `OLAP_BENCHMARKS_CLIENT_MEMORY_LIMIT_GB` | Optional benchmark-process RSS safety limit in GiB; distinct from container memory limits |
+| `OLAP_BENCHMARKS_QUERY_INCLUDE` / `OLAP_BENCHMARKS_QUERY_EXCLUDE` | JSON arrays of query-name glob patterns for partial select suites; omitted queries remain in the recorded plan as skipped steps |
+| `OLAP_BENCHMARKS_TABLES` | JSON array of table-name glob patterns for partial core time-series, metrics and ranges operations; selected inputs retain their original size and values |
 | `OLAP_BENCHMARKS_SYSTEM`             | System label stored on every run (e.g. `macbook-m4-pro`); results from different systems are not comparable |
 | `OLAP_BENCHMARKS_HOST_PORTS`         | JSON object remapping the host ports the benchmark containers bind, e.g. `{"monetdb": 50010}`, to avoid colliding with other local containers. Only the listed names are overridden; unknown names are rejected. Container-side ports are fixed by the images. Names: `monetdb`, `clickhouse_http`, `clickhouse_native`, `postgres`, `timescaledb`, `questdb_http`, `questdb_pg`, `doris_fe_mysql`, `doris_fe_http`, `doris_be_http`, `starrocks_fe_mysql`, `starrocks_fe_http`, `starrocks_be_http`, `arc`, `tdengine_ws` |
 | `OLAP_BENCHMARKS_MONETDB_WRITE_WINDOW_BYTES` | Optional ADBC COPY window byte budget; unset uses the driver's latency- and width-adaptive default |
 | `OLAP_BENCHMARKS_MONETDB_WIRE_COMPRESSION` | ADBC upload compression: sampled `auto` (default), client-only `none`, or forced `lz4` |
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
+
+Doris shares the configured budget between its two containers: the frontend gets
+10% of the CPU allowance and the backend gets 90%; each gets half the memory.
+For 10 CPUs and 24 GiB, this is FE 1 CPU / 12 GiB and BE 9 CPUs / 12 GiB.
+The allocation is recorded in run options, and swap is capped at the same memory
+limit for each container.
+
+Container stop and restart commands allow 120 seconds for normal shutdown so large
+loads can flush their write-ahead logs. The grace period is recorded in run options;
+operation and query deadlines still apply.
+
+PostgreSQL-family generic inserts use native psycopg2 CSV COPY workers. Each
+partition contains complete records, preserving quoted newlines, carriage returns,
+nulls, and empty strings. Batches contain at most one million rows or 64 million
+cells, with at most twelve workers within the configured CPU budget. Workers use
+separate connections and commits; parallel loading does not guarantee physical
+row order. The loader and limits are recorded in run options.
+
+TimescaleDB RTABench prepares continuous aggregates only for selected queries.
+For a partial run, use the same query selection for populate and select; all input
+tables retain their full size. Aggregate DDL and preparation phases are recorded
+separately for each selected view.
 
 The effective `OLAP_BENCHMARKS_MONETDB_*` values are recorded on every MonetDB run under
 `metadata.settings`.
@@ -429,7 +460,7 @@ that cell that started before it; later failed attempts and running runs stay.
 
 All `results` commands accept `--revision` (default `default`).
 
-### `olap publish [--revision NAME] [--merge] [--upload]`
+### `olap publish [--revision NAME] [--merge] [--campaign --report-url URL] [--upload]`
 
 Publishes the latest run of every published cell of the declared matrix from
 `results/<revision>.db` to `site/public/data/results.db`, along with
@@ -450,6 +481,27 @@ every published run of the same cell (system, db, db_version, db_driver, suite,
 suite_scale_factor, operation), and everything else is kept. A merge accepts different
 repository commits and preserves each run's original provenance; a full replacement
 requires one commit.
+
+With `--campaign --report-url URL`, publication replaces the entire dataset using
+all registered engine/suite/scale combinations, including the experimental engines
+and additional supported scales. Every combination needs a nonempty completed
+select cohort with the full recorded query plan, one warmup and three measured
+iterations. Its skipped/unsupported queries must be explicit. The latest completed
+select is selected even if a later exploration failed; invalidated diagnostics are
+excluded. Latest attempted non-select operations may be failed or absent. This mode
+accepts multiple clean commits, preserves their provenance, and retains the same
+answer, image, profile, system-snapshot and completed MonetDB session checks.
+Failed non-select MonetDB operations may lack a clean final session baseline.
+The manifest and site disclose partial query coverage and source commits, and link
+the required methodology/coverage report. `--campaign` cannot be combined with
+`--merge`. A later ordinary matrix merge is refused when the current publication
+is a campaign, so it cannot silently discard the expanded inventory or coverage
+disclosures. Publish another complete campaign replacement instead. For this campaign:
+
+```bash
+uv run olap publish --revision 2026-10-expanded --campaign \
+  --report-url https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md
+```
 
 **`results.db` is not committed.** It is large and rewritten on every publish, so
 git would keep every version forever. It ships as the `results.db` asset on the
@@ -573,13 +625,13 @@ engine:
 
 ```toml
 [clickhouse]
-version = "26.9.8.3"
-images.server = "clickhouse:26.9.8.3-jammy"
+version = "26.9.19.9"
+images.server = "clickhouse:26.9.19.9-jammy"
 
 [doris]                                   # one image per container role
-version = "4.1.4.1"
-images.fe = "apache/doris:fe-4.1.4.1"
-images.be = "apache/doris:be-4.1.4.1"
+version = "4.1.5"
+images.fe = "apache/doris:fe-4.1.5"
+images.be = "apache/doris:be-4.1.5"
 
 [monetdb]                                 # ARM64 hosts use a separate image
 version = "Dec2025-SP4"

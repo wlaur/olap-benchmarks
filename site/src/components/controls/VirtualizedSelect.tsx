@@ -63,6 +63,23 @@ export function VirtualizedSelect({
       `${option.label} ${option.value}`.toLocaleLowerCase().includes(normalizedFilter),
     )
   }, [filter, options])
+  const [previousSelection, setPreviousSelection] = useState({ open, value, filteredOptions })
+  if (
+    previousSelection.open !== open ||
+    previousSelection.value !== value ||
+    previousSelection.filteredOptions !== filteredOptions
+  ) {
+    setPreviousSelection({ open, value, filteredOptions })
+    if (open) {
+      setActiveIndex(
+        Math.max(
+          0,
+          filteredOptions.findIndex((option) => option.value === value),
+        ),
+      )
+      setScrollTop(0)
+    }
+  }
   const listHeight = Math.min(MAX_LIST_HEIGHT, Math.max(ITEM_HEIGHT * filteredOptions.length, 88))
   const visibleStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - OVERSCAN)
   const visibleEnd = Math.min(
@@ -73,9 +90,6 @@ export function VirtualizedSelect({
 
   useEffect(() => {
     if (!open) return
-    const selectedIndex = filteredOptions.findIndex((option) => option.value === value)
-    setActiveIndex(Math.max(0, selectedIndex))
-    setScrollTop(0)
     if (listRef.current) listRef.current.scrollTop = 0
   }, [filter, open, value, filteredOptions])
 

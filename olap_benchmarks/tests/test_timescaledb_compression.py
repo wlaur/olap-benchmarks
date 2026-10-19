@@ -68,7 +68,7 @@ def test_timescaledb_time_series_compresses_all_tables(
         }
 
     monkeypatch.setattr(
-        "olap_benchmarks.dbs.timescaledb.get_time_series_input_files",
+        "olap_benchmarks.suites.time_series.config.get_time_series_input_files",
         fake_time_series_input_files,
     )
 

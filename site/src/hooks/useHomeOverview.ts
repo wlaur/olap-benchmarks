@@ -51,16 +51,19 @@ export function useHomeOverview(
   system: string | null,
   benchmarkDefinitions: readonly BenchmarkDefinition[],
 ): HomeOverview {
-  const [overview, setOverview] = useState<HomeOverview>(EMPTY_OVERVIEW)
+  const [state, setState] = useState<{
+    system: string
+    benchmarkDefinitions: readonly BenchmarkDefinition[]
+    overview: HomeOverview
+  } | null>(null)
 
   useEffect(() => {
-    if (system === null || benchmarkDefinitions.length === 0) {
-      setOverview({ ...EMPTY_OVERVIEW, loading: false })
-      return
-    }
+    if (system === null || benchmarkDefinitions.length === 0) return
 
     let cancelled = false
-    setOverview({ ...EMPTY_OVERVIEW, loading: true })
+    const setOverview = (overview: HomeOverview) => {
+      setState({ system, benchmarkDefinitions, overview })
+    }
 
     Promise.all([fetchQueriesManifest(), fetchSystemSuiteScaleFactors(system)])
       .then(async ([queriesManifest, availableScaleFactors]) => {
@@ -180,7 +183,13 @@ export function useHomeOverview(
     }
   }, [system, benchmarkDefinitions])
 
-  return overview
+  if (system === null || benchmarkDefinitions.length === 0) {
+    return { ...EMPTY_OVERVIEW, loading: false }
+  }
+
+  return state?.system === system && state.benchmarkDefinitions === benchmarkDefinitions
+    ? state.overview
+    : EMPTY_OVERVIEW
 }
 
 interface SuiteColumn {

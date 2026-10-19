@@ -15,10 +15,7 @@ from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
-from ...suites.time_series.config import (
-    MutateStep,
-    get_time_series_input_files,
-)
+from ...suites.time_series.config import MutateStep
 from ..postgres import Postgres, PostgresTimeSeries
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
@@ -30,6 +27,32 @@ def _timescaledb_connection_string() -> str:
 
 
 class TimescaleRTABench(RTABench["TimescaleDB"]):
+    CONTINUOUS_AGGREGATES: ClassVar[Mapping[str, str]] = {
+        "1004_count_delayed_orders_per_day": "cagg_order_events_0004",
+        "1008_most_week_delayed_order": "cagg_order_events_0008",
+        "1012_max_satisfaction_for_order_per_week": "cagg_order_events_q12",
+        "1013_satisfaction_with_without_backup": "cagg_order_events_q13",
+        "1025_product_category_performance": "cagg_top_sales_volume_category_weekly",
+        "1023_top_sales_volume_product_from_terminal": "cagg_top_selling_product_semester",
+        "1017_top_selling_month_product": "cagg_top_selling_month_product_q17",
+        "1030_customers_with_most_orders_delivered": "cagg_customers_with_most_orders_delivered",
+        "1000_terminal_hourly_stats": "cagg_order_events_per_terminal_per_hour",
+        "1027_country_category_performance": "cagg_country_category_monthly_performance",
+    }
+
+    def prepare_continuous_aggregates(self) -> None:
+        for query_name, view_name in self.CONTINUOUS_AGGREGATES.items():
+            skipped = self.query_skip(query_name)
+            if skipped is not None:
+                _LOGGER.info("Skipping continuous aggregate %s: %s", view_name, skipped[1])
+                continue
+            with self.db.phase_context("continuous_aggregates", table_name=view_name):
+                self.db.execute_schema_file(
+                    REPO_ROOT / "olap_benchmarks/suites/rtabench/schemas/timescaledb" / f"{view_name}.sql",
+                    autocommit=True,
+                )
+            _LOGGER.info("Prepared continuous aggregate %s for %s", view_name, query_name)
+
     def compress_tables(self) -> None:
         conn = self.db.connect()
 
@@ -58,10 +81,7 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
         with self.db.phase_context("compress"):
             self.compress_tables()
 
-        with self.db.phase_context("continuous_aggregates"):
-            self.db.execute_schema_file(
-                REPO_ROOT / "olap_benchmarks/suites/rtabench/schemas/timescaledb_caggs.sql", autocommit=True
-            )
+        self.prepare_continuous_aggregates()
 
         if restart:
             self.db.restart_event()
@@ -88,6 +108,10 @@ class TimescaleChatThreads(ChatThreads["TimescaleDB"]):
     chat_thread is left as a rowstore table because the mutate workload updates it in place.
     """
 
+    @property
+    def message_upsert_key(self) -> list[str]:
+        return ["message_id", "created_at"]
+
     def compress_tables(self) -> None:
         self.db.execute(
             "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('chat_message') i",
@@ -107,10 +131,6 @@ class TimescaleChatThreads(ChatThreads["TimescaleDB"]):
 
 
 class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
-    # Unlike plain Postgres, the columnstore compression makes data_large fit
-    # the disk budget, so nothing is skipped.
-    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset()
-
     PRE_INSERT_SCHEMA_FILES: ClassVar[dict[str, str]] = {
         "data_tall": "tall_pre_insert.sql",
         "data_wide": "wide_pre_insert.sql",
@@ -253,7 +273,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
         # insert path; the call below is a no-op for those (if_not_compressed
         # => true). data_tall is still loaded as one big batch and is
         # compressed here.
-        for table_name in get_time_series_input_files(self.scale_factor):
+        for table_name in self.dataset_files():
             self.db.execute(
                 f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table_name}') i",
                 reconnect=True,
@@ -268,7 +288,7 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
             if not self.should_populate():
                 return
 
-        input_files = get_time_series_input_files(self.scale_factor)
+        input_files = self.dataset_files()
 
         # 1. Create empty tables (regular wide for tall, EAV for wide/large).
         for table_name, fpath in input_files.items():
@@ -280,7 +300,8 @@ class TimescaleTimeSeries(PostgresTimeSeries["TimescaleDB"]):
 
         # 2. Convert each table to a hypertable + columnstore config (empty
         #    table → no migrate_data needed, much faster than retro-conversion).
-        for table_name, sql_file in self.PRE_INSERT_SCHEMA_FILES.items():
+        for table_name in input_files:
+            sql_file = self.PRE_INSERT_SCHEMA_FILES[table_name]
             with self.db.phase_context("create_hypertable", table_name=table_name):
                 self.db.execute_schema_file(
                     REPO_ROOT / "olap_benchmarks/suites/time_series/schemas/timescaledb" / sql_file
@@ -326,10 +347,6 @@ class TimescaleDB(Postgres):
 
     connection_string: str = Field(default_factory=_timescaledb_connection_string)
 
-    # Plain Postgres disables the data_large mutation steps because the table
-    # is never populated there; with columnstore compression it is.
-    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {}
-
     @property
     def start(self) -> str:
         # macOS Finder writes .DS_Store into bind-mounted dirs as soon as it's
@@ -340,43 +357,20 @@ class TimescaleDB(Postgres):
         for junk in self.database_directory.glob("._*"):
             junk.unlink(missing_ok=True)
 
-        parts = [
-            (
-                f"docker run --platform {self.container_platform} --name {self.name}-benchmark "
-                f"--rm -d -p {host_port('timescaledb')}:5432"
-            ),
-            f"-v {self.database_directory.as_posix()}:/var/lib/postgresql/data/",
-            "-e POSTGRES_PASSWORD=password",
-            "-e PGDATA=/var/lib/postgresql/data/",
-            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
-            # naive Polars datetimes round-trip without offset surprises.
-            "-e TZ=UTC",
-            "-e PGTZ=UTC",
+        values = dict(self.server_settings)
+        values.update(bgwriter_lru_maxpages="1000", bgwriter_delay="10ms")
+        return self.docker_run_command(
             self.container_images["server"],
-            # Postgres settings tuned for the EAV bulk-load + columnstore
-            # compression workload. shared_buffers / parallelism are already
-            # auto-tuned by the Timescale image (timescaledb-tune); the rest
-            # relax checkpoint / WAL pressure for the multi-billion-row insert
-            # and let compress_chunk() sort 130 M-row chunks in memory instead
-            # of spilling to BufFile temp files (the original bottleneck on
-            # data_large -- per-chunk compress jumped from ~50 s to >300 s
-            # once sorts spilled).
-            "-c max_wal_size=16GB",
-            "-c min_wal_size=2GB",
-            # WAL compression saves disk but the CPU cost of zstd on every
-            # WALInsert dominates under heavy concurrent COPY traffic; leaving
-            # it off let the COPY workers spend less time waiting on the
-            # WALInsert LWLock.
-            "-c wal_compression=off",
-            "-c synchronous_commit=off",
-            "-c checkpoint_timeout=30min",
-            "-c work_mem=4GB",
-            "-c max_parallel_maintenance_workers=4",
-            "-c bgwriter_lru_maxpages=1000",
-            "-c bgwriter_delay=10ms",
-        ]
-
-        return " ".join(parts)
+            ports={str(host_port("timescaledb")): "5432"},
+            mounts={self.database_directory.as_posix(): "/var/lib/postgresql/data"},
+            env={
+                "POSTGRES_PASSWORD": "password",
+                "PGDATA": "/var/lib/postgresql/data",
+                "TZ": "UTC",
+                "PGTZ": "UTC",
+            },
+            args=tuple(part for name, value in values.items() for part in ("-c", f"{name}={value}")),
+        )
 
     def get_runtime_version(self) -> str:
         df = self.fetch(
@@ -402,7 +396,7 @@ class TimescaleDB(Postgres):
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
         self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
-        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert", columns=df.columns)
         self._dml_session_setup(con)
 
         all_columns = ", ".join(f'"{col}"' for col in df.columns)

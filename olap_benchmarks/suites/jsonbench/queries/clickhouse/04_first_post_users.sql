@@ -7,5 +7,5 @@ WHERE
   AND data.commit.operation = 'create'
   AND data.commit.collection = 'app.bsky.feed.post'
 GROUP BY user_id
-ORDER BY min(data.time_us) ASC
+ORDER BY min(data.time_us) ASC, user_id ASC NULLS LAST
 LIMIT 3;

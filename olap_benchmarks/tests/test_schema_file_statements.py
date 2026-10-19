@@ -49,7 +49,7 @@ def test_commented_out_statement_is_not_executed(tmp_path: Path) -> None:
     assert statements == ["CREATE TABLE t (a integer)"]
 
 
-@pytest.mark.parametrize("suite_schema", sorted((REPO_ROOT / "olap_benchmarks/suites").glob("*/schemas/*.sql")))
+@pytest.mark.parametrize("suite_schema", sorted((REPO_ROOT / "olap_benchmarks/suites").glob("*/schemas/**/*.sql")))
 def test_shipped_schemas_have_balanced_parentheses_per_statement(suite_schema: Path, tmp_path: Path) -> None:
     for stmt in _split(tmp_path, suite_schema.read_text()):
         assert stmt.count("(") == stmt.count(")"), f"unbalanced parentheses in {suite_schema}:\n{stmt}"

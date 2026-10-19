@@ -15,9 +15,16 @@ the operation's own process rather than the orchestrating one.
 import logging
 import os
 import shutil
-from multiprocessing import Process, Queue
+import signal
+from multiprocessing import Queue, get_context
+from multiprocessing.process import BaseProcess
+from pathlib import Path
+from time import monotonic, sleep
+
+import psutil
 
 from .dbs import Database, get_databases
+from .limits import check_disk_space, expired_query
 from .metrics.storage import WriterMessage
 from .settings import DatabaseName, Operation, SuiteName, get_settings
 
@@ -34,7 +41,10 @@ def configure_polars_spill() -> None:
     free_mb = shutil.disk_usage(spill_directory).free // (1024 * 1024)
     os.environ["POLARS_TEMP_DIR"] = spill_directory.as_posix()
     os.environ["POLARS_OOC_SPILL_DIR"] = spill_directory.as_posix()
-    os.environ["POLARS_OOC_DISK_BUDGET_MB"] = str(max(free_mb - POLARS_SPILL_HEADROOM_MB, 1024))
+    reserve_mb = max(POLARS_SPILL_HEADROOM_MB, get_settings().minimum_free_disk_gb * 1024)
+    if free_mb <= reserve_mb:
+        raise OSError(f"Not enough free disk for Polars spill: {free_mb} MiB free, reserve {reserve_mb} MiB")
+    os.environ["POLARS_OOC_DISK_BUDGET_MB"] = str(free_mb - reserve_mb)
 
 
 def _operation_entrypoint(
@@ -46,14 +56,77 @@ def _operation_entrypoint(
     result_queue: "Queue[object]",
     start_command: str | None,
     page_cache_dropped: bool,
+    query_watchdog_path: Path,
 ) -> None:
+    os.setsid()
     db_instance = get_databases()[db_name]
     db_instance._current_suite = suite
     db_instance._current_suite_scale_factor = scale_factor
     db_instance._last_start_command = start_command
     db_instance._page_cache_dropped = page_cache_dropped
+    if operation == "select":
+        db_instance._query_watchdog_path = query_watchdog_path
     db_instance.set_queues(queue, result_queue)
     db_instance.benchmark(suite, operation, scale_factor=scale_factor)
+
+
+def _stop_operation(process: BaseProcess) -> None:
+    pid = process.pid
+    if pid is None:
+        return
+    try:
+        if process.is_alive():
+            try:
+                os.kill(pid, signal.SIGINT)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                _LOGGER.warning("Permission denied interrupting operation process %s", pid, exc_info=True)
+            process.join(timeout=5)
+
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            _LOGGER.warning("Permission denied terminating operation process group %s", pid, exc_info=True)
+        else:
+            deadline = monotonic() + 3
+            while monotonic() < deadline:
+                process.join(timeout=0)
+                try:
+                    os.killpg(pid, 0)
+                except ProcessLookupError:
+                    return
+                except PermissionError:
+                    _LOGGER.warning(
+                        "Permission denied probing operation process group %s; cleanup is unconfirmed",
+                        pid,
+                        exc_info=True,
+                    )
+                    break
+                sleep(0.05)
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            _LOGGER.warning(
+                "Permission denied killing operation process group %s; cleanup is unconfirmed", pid, exc_info=True
+            )
+    finally:
+        try:
+            if process.is_alive():
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    _LOGGER.warning("Permission denied killing operation process %s", pid, exc_info=True)
+        finally:
+            process.join(timeout=5)
+            if process.is_alive():
+                _LOGGER.error("Operation process %s remains alive after cleanup", pid)
 
 
 def run_operation(
@@ -64,8 +137,12 @@ def run_operation(
     queue: "Queue[WriterMessage]",
     result_queue: "Queue[object]",
 ) -> None:
+    check_disk_space()
     configure_polars_spill()
-    process = Process(
+    settings = get_settings()
+    query_watchdog_path = settings.temporary_directory / f"query-watchdog-{os.getpid()}.json"
+    query_watchdog_path.unlink(missing_ok=True)
+    process = get_context("spawn").Process(
         target=_operation_entrypoint,
         args=(
             db_instance.name,
@@ -76,19 +153,43 @@ def run_operation(
             result_queue,
             db_instance._last_start_command,
             db_instance._page_cache_dropped,
+            query_watchdog_path,
         ),
         name=f"olap-{db_instance.name}-{suite}-{operation}",
         daemon=False,
     )
     process.start()
-    process.join()
-
-    if process.exitcode == 0:
-        return
-
-    # the child already recorded the failure and logged the traceback; surface it so a multi
-    # operation run stops here exactly as an in-process exception used to
-    raise RuntimeError(
-        f"{operation} on {db_instance.name}/{suite} (scale factor {scale_factor}) "
-        f"failed in its benchmark process (exit code {process.exitcode})"
+    deadline = (
+        monotonic() + settings.operation_timeout_seconds if settings.operation_timeout_seconds is not None else None
     )
+    try:
+        while process.is_alive():
+            process.join(timeout=1)
+            if not process.is_alive():
+                break
+            check_disk_space()
+            query_name = expired_query(query_watchdog_path, settings.query_timeout_seconds)
+            if query_name is not None:
+                raise TimeoutError(f"Query {query_name} exceeded {settings.query_timeout_seconds} seconds")
+            if deadline is not None and monotonic() > deadline:
+                raise TimeoutError(f"{operation} on {db_instance.name}/{suite} exceeded operation time budget")
+            if settings.client_memory_limit_gb is not None and process.pid is not None:
+                try:
+                    rss = psutil.Process(process.pid).memory_info().rss
+                except psutil.NoSuchProcess:
+                    continue
+                if rss > settings.client_memory_limit_gb * 1024**3:
+                    raise MemoryError(f"{operation} client exceeded {settings.client_memory_limit_gb} GiB RSS")
+        if process.exitcode != 0:
+            raise RuntimeError(
+                f"{operation} on {db_instance.name}/{suite} (scale factor {scale_factor}) "
+                f"failed in its benchmark process (exit code {process.exitcode})"
+            )
+    except BaseException:
+        try:
+            _stop_operation(process)
+        except BaseException:
+            _LOGGER.exception("Failed to clean up benchmark operation process %s", process.pid)
+        raise
+    finally:
+        query_watchdog_path.unlink(missing_ok=True)

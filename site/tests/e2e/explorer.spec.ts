@@ -57,30 +57,34 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
 
   await page.getByRole("combobox", { name: "Query" }).click()
   await expect(page.getByRole("option")).toHaveCount(10)
-  await page.getByRole("searchbox", { name: "Filter queries" }).fill("Q22")
-  await expect(page.getByRole("option", { name: "Q22", exact: true }).locator("mark")).toHaveText(
-    "Q22",
+  await page.getByRole("searchbox", { name: "Filter queries" }).fill("Q3")
+  await expect(page.getByRole("option", { name: "Q3", exact: true }).locator("mark")).toHaveText(
+    "Q3",
   )
-  await page.getByRole("option", { name: "Q22", exact: true }).click()
-  await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q22")
-  await expect(page).toHaveURL(/query=Q22/)
-  const questDbSqlButton = page.locator("button[data-sql-variant]").filter({ hasText: /^QuestDB$/ })
+  await page.getByRole("option", { name: "Q3", exact: true }).click()
+  await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q3")
+  await expect(page).toHaveURL(/query=Q3/)
+  const clickHouseSqlButton = page
+    .locator("button[data-sql-variant]")
+    .filter({ hasText: /^ClickHouse$/ })
   const duckDbSqlButton = page.locator("button[data-sql-variant]").filter({ hasText: /^DuckDB$/ })
-  await expect(questDbSqlButton).toHaveAttribute("data-sql-variant", "different")
+  await expect(clickHouseSqlButton).toHaveAttribute("data-sql-variant", "different")
   await expect(duckDbSqlButton).toHaveAttribute("data-sql-variant", "default")
   await expect(page.getByText("Differs from default SQL")).toBeVisible()
 
-  await questDbSqlButton.scrollIntoViewIfNeeded()
-  const sqlTabsTop = await questDbSqlButton.evaluate((button) => button.getBoundingClientRect().top)
-  await questDbSqlButton.click()
-  await expect(questDbSqlButton).toHaveAttribute("aria-pressed", "true")
-  expect(await questDbSqlButton.evaluate((button) => button.getBoundingClientRect().top)).toBe(
+  await clickHouseSqlButton.scrollIntoViewIfNeeded()
+  const sqlTabsTop = await clickHouseSqlButton.evaluate(
+    (button) => button.getBoundingClientRect().top,
+  )
+  await clickHouseSqlButton.click()
+  await expect(clickHouseSqlButton).toHaveAttribute("aria-pressed", "true")
+  expect(await clickHouseSqlButton.evaluate((button) => button.getBoundingClientRect().top)).toBe(
     sqlTabsTop,
   )
 
   await page.getByRole("button", { name: "Show all 43 query results" }).click()
-  const queryNameCell = page.locator('button[data-query-name="Q22"]')
-  const firstHeatCell = page.locator('[data-query="Q22"]').first()
+  const queryNameCell = page.locator('button[data-query-name="Q3"]')
+  const firstHeatCell = page.locator('[data-query="Q3"]').first()
   const [queryNameBox, heatCellBox] = await Promise.all([
     queryNameCell.boundingBox(),
     firstHeatCell.boundingBox(),
@@ -121,7 +125,7 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await page.getByRole("button", { name: /^Versions/ }).click()
   await expect(page.getByRole("heading", { name: /version comparison/i })).toBeVisible()
   await expect(page).toHaveURL(/mode=version/)
-  await expect(page).toHaveURL(/query=Q22/)
+  await expect(page).toHaveURL(/query=Q3/)
   await expectNoHorizontalPageOverflow(page)
 
   await page.setViewportSize({ width: 390, height: 844 })

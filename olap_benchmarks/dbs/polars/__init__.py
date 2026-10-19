@@ -216,7 +216,7 @@ class Polars(Database):
                     lf.select(self._commit_collection().alias("event"))
                     .group_by("event")
                     .agg(pl.len().cast(pl.Int64).alias("count"))
-                    .sort("count", descending=True)
+                    .sort("count", "event", descending=[True, False], nulls_last=True)
                 )
             case "02_create_events_by_collection":
                 return (
@@ -227,7 +227,7 @@ class Polars(Database):
                         pl.len().cast(pl.Int64).alias("count"),
                         pl.col("did").n_unique().cast(pl.Int64).alias("users"),
                     )
-                    .sort("count", descending=True)
+                    .sort("count", "event", descending=[True, False], nulls_last=True)
                 )
             case "03_create_events_by_hour":
                 return (
@@ -251,14 +251,14 @@ class Polars(Database):
                     lf.filter(self._create_post_filter())
                     .group_by("did")
                     .agg(pl.col("time_us").min().alias("first_post_us"))
+                    .sort("first_post_us", "did", nulls_last=True)
+                    .limit(3)
                     .select(
                         pl.col("did").alias("user_id"),
                         pl.from_epoch((pl.col("first_post_us") // 1000) * 1000, time_unit="us")
                         .cast(pl.Datetime("ms"))
                         .alias("first_post_ts"),
                     )
-                    .sort("first_post_ts")
-                    .limit(3)
                 )
             case "05_longest_post_activity":
                 return (
@@ -266,7 +266,7 @@ class Polars(Database):
                     .group_by("did")
                     .agg(((pl.col("time_us").max() // 1000) - (pl.col("time_us").min() // 1000)).alias("activity_span"))
                     .select(pl.col("did").alias("user_id"), pl.col("activity_span").cast(pl.Int64))
-                    .sort("activity_span", descending=True)
+                    .sort("activity_span", "user_id", descending=[True, False], nulls_last=True)
                     .limit(3)
                 )
             case _:

@@ -7,8 +7,8 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from multiprocessing import Event as create_event
-from multiprocessing import Process, Queue, Value
+from multiprocessing import Queue, get_context
+from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue as ProcessQueue
 from multiprocessing.synchronize import Event
 from pathlib import Path
@@ -266,7 +266,7 @@ def sampling_loop(
 
 @dataclass(frozen=True, slots=True)
 class MetricSampler:
-    process: Process
+    process: BaseProcess
     stop_event: Event
     final_sample_time_queue: ProcessQueue[datetime]
     memory_thread: Thread
@@ -289,10 +289,11 @@ def start_metric_sampler(
     resource_interval_seconds: float = RESOURCE_SAMPLE_SECONDS,
     disk_interval_seconds: float = DISK_SAMPLE_SECONDS,
 ) -> MetricSampler:
-    stop_event = create_event()
-    final_sample_time_queue: ProcessQueue[datetime] = Queue(maxsize=1)
-    client_rss_peak = cast(_SharedInteger, Value("q", 0))
-    client_uss_peak = cast(_SharedInteger, Value("q", 0))
+    context = get_context("spawn")
+    stop_event = context.Event()
+    final_sample_time_queue: ProcessQueue[datetime] = context.Queue(maxsize=1)
+    client_rss_peak = cast(_SharedInteger, context.Value("q", 0))
+    client_uss_peak = cast(_SharedInteger, context.Value("q", 0))
     memory_stop_event = ThreadEvent()
     memory_thread = Thread(
         target=sample_client_memory,
@@ -301,7 +302,7 @@ def start_metric_sampler(
         daemon=True,
     )
 
-    process = Process(
+    process = context.Process(
         target=sampling_loop,
         args=(
             os.getpid(),

@@ -3,4 +3,4 @@ SELECT
   count(*) AS count
 FROM bluesky
 GROUP BY event
-ORDER BY count DESC;
+ORDER BY count DESC, event ASC NULLS LAST;

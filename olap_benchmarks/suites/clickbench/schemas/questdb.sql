@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS hits (
     Title varchar,
     GoodEvent byte,
     EventTime timestamp,
-    Eventdate timestamp,
+    EventDate timestamp,
     CounterID int,
     ClientIP int,
     RegionID int,

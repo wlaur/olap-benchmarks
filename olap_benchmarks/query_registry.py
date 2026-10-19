@@ -10,9 +10,8 @@ _MONETDB_ROLLING_AVG_WINDOW_BUG = (
     "is not measured rather than publishing a runtime for a wrong answer."
 )
 
-_POSTGRES_NO_DATA_LARGE = (
-    "data_large is not populated on PostgreSQL: stored as EAV it needs about 300 GB of heap plus a 70 GB "
-    "(metric_name, time) index, beyond the per-(db, suite) disk budget (PostgresTimeSeries.SKIP_TABLES)"
+_POSTGRES_METRIC_OUTPUT_WIDTH = (
+    "native wide output has 2000 or 2001 columns, exceeding PostgreSQL's 1664 result-column limit"
 )
 
 _EAV_BATCH_EXPORT = "query requires wide-row export shape, but this database stores data_large as EAV"
@@ -36,15 +35,16 @@ _RTABENCH_INCREMENTAL_VIEW_QUERIES = (
 )
 
 
-def _time_series_queries(prefix: str) -> list[str]:
-    return sorted(path.stem for path in (SUITES_DIRECTORY / "time_series/queries").glob(f"{prefix}*.sql"))
-
-
 # Queries an engine does not run, mapped to why. The select loop records every planned query listed
 # here as `unsupported` with this reason instead of executing it. A query that is not listed must
 # resolve to SQL (an engine override or the shared file); a missing file is an error, not a
 # declaration.
 UNSUPPORTED_QUERIES: dict[tuple[SuiteName, DatabaseName, str], str] = {
+    **{
+        ("time_series_metrics", db, query): _POSTGRES_METRIC_OUTPUT_WIDTH
+        for db in ("postgres", "timescaledb")
+        for query in ("wide1000_13_per_metric", "wide1000_14_hourly_all_metrics")
+    },
     **{
         ("time_series_metrics", "monetdb", f"{layout}{metrics}_09_rolling_avg"): _MONETDB_ROLLING_AVG_WINDOW_BUG
         for layout in ("wide", "eav")
@@ -54,7 +54,7 @@ UNSUPPORTED_QUERIES: dict[tuple[SuiteName, DatabaseName, str], str] = {
         ("time_series", "monetdb", query): _MONETDB_ROLLING_AVG_WINDOW_BUG
         for query in ("large_13_rolling_avg", "tall_13_rolling_avg", "wide_13_rolling_avg")
     },
-    **{("time_series", "postgres", query): _POSTGRES_NO_DATA_LARGE for query in _time_series_queries("large_")},
+    ("time_series", "postgres", "large_23_batch_export"): _EAV_BATCH_EXPORT,
     ("time_series", "timescaledb", "large_23_batch_export"): _EAV_BATCH_EXPORT,
     **{
         ("rtabench", db, query): _RTABENCH_INCREMENTAL_VIEWS

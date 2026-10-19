@@ -20,7 +20,8 @@ CREATE TABLE chat_message (
     seq        integer   NOT NULL,
     parent_id  char(36),
     created_at timestamp NOT NULL,
-    content    jsonb     NOT NULL
+    content    jsonb     NOT NULL,
+    UNIQUE (message_id, created_at)
 );
 
 -- 30-day chunks put ~11k messages per chunk at SF1 and ~110k at SF10, so a thread
@@ -39,7 +40,4 @@ ALTER TABLE chat_message SET (
 CREATE INDEX idx_chat_message_user_thread ON chat_message (user_id, thread_id, seq);
 CREATE INDEX idx_chat_message_created ON chat_message (created_at);
 
--- No unique constraint on chat_message: a hypertable's unique index must include the
--- partitioning column, so ON CONFLICT (message_id) is not expressible. stream_update_message
--- therefore fails on TimescaleDB by construction, which is itself a result worth recording.
 CREATE INDEX idx_chat_thread_user ON chat_thread (user_id, updated_at DESC);

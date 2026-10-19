@@ -264,6 +264,10 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {}
 
+    @property
+    def message_upsert_key(self) -> str | list[str]:
+        return "message_id"
+
     def planned_query_names(self) -> tuple[str, ...]:
         return CHAT_THREADS_QUERY_NAMES
 
@@ -345,11 +349,24 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
         spec = self.spec
         thread_index = self._sacrificial_thread_index(seed * 31)
         _thread, messages = generate_thread(spec, ANCHOR_USER_COUNT + thread_index % 97, thread_index, 0)
-        source = messages[-1]
-        document = cast(dict[str, Any], json.loads(source.content))
-        parts = cast(list[dict[str, Any]], document["parts"])
-        text_index = next((idx for idx, part in enumerate(parts) if part.get("type") == "text"), 0)
-        full_text = str(parts[text_index].get("text", ""))
+        for source in reversed(messages):
+            document = cast(dict[str, Any], json.loads(source.content))
+            if document.get("role") != "assistant":
+                continue
+            parts = cast(list[dict[str, Any]], document["parts"])
+            text_index = next(
+                (
+                    idx
+                    for idx, part in enumerate(parts)
+                    if part.get("type") == "text" and isinstance(part.get("text"), str) and part["text"]
+                ),
+                None,
+            )
+            if text_index is not None:
+                break
+        else:
+            raise ValueError("Cannot stream a chat update: thread has no assistant message with nonempty text")
+        full_text = cast(str, parts[text_index]["text"])
 
         for rewrite in range(1, STREAM_UPDATE_REWRITES + 1):
             fraction = rewrite / STREAM_UPDATE_REWRITES
@@ -363,7 +380,7 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
                 created_at=source.created_at,
                 content=json.dumps(document, separators=(",", ":"), ensure_ascii=False),
             )
-            self.db.upsert(_message_frame([grown]), MESSAGE_TABLE, primary_key="message_id")
+            self.db.upsert(_message_frame([grown]), MESSAGE_TABLE, primary_key=self.message_upsert_key)
 
     def _apply_step(self, step: ChatMutateStep, seed: int) -> None:
         match step.action:
@@ -399,12 +416,13 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
             _LOGGER.info(f"No mutation steps enabled for {self.name} on {self.db.name}")
             return
 
+        step_indices = {step.name: index for index, step in enumerate(CHAT_THREADS_MUTATE_STEPS)}
         for step_idx, step in enumerate(steps):
             failed_iteration: int | None = None
             try:
                 for iteration in range(1, MUTATE_ITERATIONS + 1):
                     failed_iteration = iteration
-                    seed = step_idx * 1_000 + iteration
+                    seed = step_indices[step.name] * 1_000 + iteration
 
                     with self.db.mutation_context(
                         query_name=step.name,
@@ -435,9 +453,9 @@ class ChatThreads[DBT: Database](BenchmarkSuite[DBT]):
                 )
 
         if failed_steps:
-            _LOGGER.warning(
-                f"Chat-threads mutate completed on {self.db.name} with {failed_steps:_} failed "
-                f"{'steps' if failed_steps != 1 else 'step'}"
+            raise RuntimeError(
+                f"{failed_steps:_} of {len(steps):_} chat_threads mutation steps failed on {self.db.name}; "
+                "see the logged traceback(s) above"
             )
 
         _LOGGER.info(f"Executed {len(steps):_} mutation steps (with repetitions) in {perf_counter() - t0:_.2f} seconds")

@@ -22,6 +22,7 @@ import { ControlSelect } from "../components/controls/ControlSelect"
 import { VirtualizedSelect } from "../components/controls/VirtualizedSelect"
 import { ChartFrame, PanelCard, PanelHeader } from "../components/layout/Panel"
 import {
+  CampaignNotice,
   ProfileScopeNotice,
   SnapshotSpanWarning,
 } from "../components/methodology/ComparisonScopeNotices"
@@ -658,6 +659,7 @@ export function ExplorerPage({
           </div>
         </PanelHeader>
 
+        <CampaignNotice />
         <ProfileScopeNotice />
         {mode !== "system" ? (
           <SnapshotSpanWarning

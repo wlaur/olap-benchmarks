@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 from ..dbs import get_databases
-from ..dbs.postgres import PostgresTimeSeries
 from ..matrix import MatrixCell
 from ..query_registry import (
     ANSWER_COMPARISON_EXCLUSIONS,
@@ -69,11 +68,10 @@ def test_no_override_is_identical_to_its_shared_file() -> None:
                 assert override.read_bytes() != shared.read_bytes(), f"{override} duplicates {shared}"
 
 
-def test_postgres_declares_every_query_of_the_tables_it_skips() -> None:
-    skipped_sizes = {table.removeprefix("data_") for table in PostgresTimeSeries.SKIP_TABLES}
+def test_postgres_only_excludes_the_eav_batch_export_shape() -> None:
     declared = {query for suite, db, query in UNSUPPORTED_QUERIES if (suite, db) == ("time_series", "postgres")}
 
-    assert declared == {query for query in PLANNED["time_series", "postgres"] if query.split("_")[0] in skipped_sizes}
+    assert declared == {"large_23_batch_export"}
 
 
 def test_every_declaration_states_a_reason() -> None:

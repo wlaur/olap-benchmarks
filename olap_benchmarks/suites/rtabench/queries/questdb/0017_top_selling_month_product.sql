@@ -15,6 +15,7 @@ GROUP BY
     p.name
 ORDER BY
     total_amount,
-    p.name DESC
+    p.name DESC,
+    p.product_id
 LIMIT
     10;

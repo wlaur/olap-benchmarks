@@ -1,14 +1,14 @@
 import logging
-import subprocess
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
 
 import polars as pl
 from pydantic import Field
-from sqlalchemy import Connection, create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.engine import make_url
 
 from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
@@ -21,9 +21,11 @@ from ...suites.time_series.config import (
     MutateStep,
     TimeSeries,
     get_time_series_dataset_sizes,
-    get_time_series_input_files,
     get_time_series_table_name,
 )
+from ...suites.time_series_metrics.config import TimeSeriesMetrics, metric_name
+from ...suites.tpc_ds.config import TpcDs
+from ...suites.tpc_h.config import TpcH
 from .. import Database
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
@@ -35,6 +37,9 @@ def _postgres_connection_string() -> str:
 
 
 PostgresFetchMethod = Literal["connectorx", "python"]
+
+COPY_BATCH_ROWS = 1_000_000
+COPY_BATCH_MAX_CELLS = 64_000_000
 
 
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
@@ -287,6 +292,9 @@ class PostgresClickbench(Clickbench["Postgres"]):
         with self.db.phase_context("insert", table_name="hits"):
             self.db.insert(df, "hits", **self.populate_kwargs)
 
+        with self.db.phase_context("verify_populate"):
+            self.verify_populated_data()
+
         _LOGGER.info(f"Inserted clickbench table for {self.name}")
 
         with self.db.phase_context("index"):
@@ -298,19 +306,42 @@ class PostgresClickbench(Clickbench["Postgres"]):
             self.db.restart_event()
 
 
+class PostgresTpcH[DBT: "Postgres"](TpcH[DBT]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+
+class PostgresTpcDs[DBT: "Postgres"](TpcDs[DBT]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+    def query_path(self, query_name: str) -> Path | None:
+        for db_name in (self.db.name, "postgres"):
+            override = self.queries_directory / db_name / f"{query_name}.sql"
+            if override.is_file():
+                return override
+        return super().query_path(query_name)
+
+
+class PostgresTimeSeriesMetrics[DBT: "Postgres"](TimeSeriesMetrics[DBT]):
+    def load_query(self, query_name: str) -> str:
+        if query_name != "wide1000_12_all_metrics":
+            return super().load_query(query_name)
+        values = ", ".join(f"CAST({metric_name(index)} AS DOUBLE PRECISION)" for index in range(1, 1001))
+        return (
+            "SELECT COUNT(v) AS cnt, COALESCE(SUM(v), 0.0) AS total\n"
+            "FROM wide1000\n"
+            f"CROSS JOIN LATERAL UNNEST(ARRAY[{values}]) AS m(v)\n"
+        )
+
+
 class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
     # Wide telemetry tables (1500+ cols) blow past PG's 8160-byte tuple limit, so
     # the row-store engines (Postgres, TimescaleDB) use the idiomatic EAV layout
     # for them. Tall (10 cols) stays wide.
     EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
-
-    # data_large EAV is ≈ 6 billion rows × ~50 bytes ≈ 300 GB heap on plain
-    # Postgres (no columnar compression) plus a ~70 GB (metric_name, time)
-    # btree index, so the populate would not fit into the per-(db, suite) disk
-    # budget on this host. Skipping it here also disables the corresponding
-    # large_* select queries and *_data_large_* mutation steps. The EAV insert
-    # code path is still wired up so re-enabling is just emptying this set.
-    SKIP_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_large"})
 
     # pyarrow row-batch size for the single-pass parquet stream. 100 k wide
     # rows × 1500 cols × 4 bytes ≈ 600 MB peak Arrow buffer per batch. Each
@@ -318,10 +349,11 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
     PARQUET_STREAM_BATCH_ROWS: ClassVar[int] = 100_000
 
     def expected_table_row_counts(self) -> Mapping[TableName, int]:
+        selected = self.dataset_files()
         counts: dict[TableName, int] = {}
         for size, (n_rows, n_cols) in get_time_series_dataset_sizes(self.scale_factor).items():
             table_name = get_time_series_table_name(size)
-            if table_name in self.SKIP_TABLES:
+            if table_name not in selected:
                 continue
             counts[table_name] = n_rows * n_cols if table_name in self.EAV_TABLES else n_rows
         return counts
@@ -336,9 +368,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
         return "time"
 
     def index_tables(self) -> None:
-        for table_name in get_time_series_input_files(self.scale_factor):
-            if table_name in self.SKIP_TABLES:
-                continue
+        for table_name in self.dataset_files():
             if table_name in self.EAV_TABLES:
                 statement = f'CREATE INDEX {table_name}_metric_time_index ON "{table_name}" ("metric_name", "time")'
             else:
@@ -386,10 +416,7 @@ class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
 
         self.db.initialize_schema("time_series")
 
-        for table_name, fpath in get_time_series_input_files(self.scale_factor).items():
-            if table_name in self.SKIP_TABLES:
-                _LOGGER.info(f"Skipping {table_name} for {self.name} (would not fit in disk budget)")
-                continue
+        for table_name, fpath in self.dataset_files().items():
             if table_name in self.EAV_TABLES:
                 with self.db.phase_context("create_eav_table", table_name=table_name):
                     self._eav_create_table(table_name)
@@ -500,14 +527,67 @@ class Postgres(Database):
 
     connection_string: str = Field(default_factory=_postgres_connection_string)
 
-    # Mirrors PostgresTimeSeries.SKIP_TABLES: data_large EAV does not fit in
-    # the per-(db, suite) disk budget on plain Postgres, so its mutate steps
-    # have to be disabled too.
-    DISABLED_MUTATION_STEPS: ClassVar[Mapping[SuiteName, frozenset[str]]] = {
-        "time_series": frozenset(
-            f"{action}_data_large_{count}" for action in ("insert", "upsert", "delete") for count in (1, 100, 10_000)
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        method = (
+            self.benchmarks[self.current_suite].fetch_kwargs.get("method", "connectorx")
+            if self._current_suite is not None
+            else "connectorx"
         )
-    }
+        return {
+            **super().run_options,
+            "select_fetch_method": method,
+            "generic_insert_method": "native-csv-copy-v1",
+            "copy_workers": self.parallel_copy_workers,
+            "copy_batch_rows": COPY_BATCH_ROWS,
+            "copy_batch_max_cells": COPY_BATCH_MAX_CELLS,
+        }
+
+    @property
+    def server_settings(self) -> Mapping[str, str]:
+        settings = get_settings()
+        values = {
+            "shared_buffers": "8GB",
+            "effective_cache_size": "24GB",
+            "work_mem": "4GB",
+            "maintenance_work_mem": "4GB",
+            "max_wal_size": "16GB",
+            "min_wal_size": "2GB",
+            "wal_compression": "off",
+            "synchronous_commit": "off",
+            "checkpoint_timeout": "30min",
+            "max_parallel_maintenance_workers": "4",
+            "max_parallel_workers_per_gather": "4",
+            "max_parallel_workers": "8",
+        }
+        threads = settings.benchmark_threads
+        if threads is not None:
+            values.update(
+                max_parallel_maintenance_workers=str(min(4, threads)),
+                max_parallel_workers_per_gather=str(max(0, threads - 1)),
+                max_parallel_workers=str(threads),
+                max_worker_processes=str(max(8, threads + 4)),
+            )
+        if settings.benchmark_memory_gb is not None:
+            memory_mb = settings.benchmark_memory_gb * 1024
+            parallel_workers = threads or 8
+            values.update(
+                shared_buffers=f"{max(128, memory_mb // 4)}MB",
+                effective_cache_size=f"{memory_mb * 3 // 4}MB",
+                work_mem=f"{max(16, min(256, memory_mb // (16 * (parallel_workers + 1))))}MB",
+                maintenance_work_mem=f"{max(64, min(4096, memory_mb // 4))}MB",
+            )
+        return values
+
+    def finalize_populate(self) -> None:
+        for table_name in sorted(self.get_table_names()):
+            quoted_table = table_name.replace('"', '""')
+            with self.phase_context("analyze", table_name=table_name):
+                self.execute(f'ANALYZE public."{quoted_table}"')
+
+    @property
+    def parallel_copy_workers(self) -> int:
+        return min(12, get_settings().benchmark_threads or 12)
 
     @property
     def start(self) -> str:
@@ -515,41 +595,35 @@ class Postgres(Database):
         host_pgdata.mkdir(parents=True, exist_ok=True)
         host_pgdata.chmod(0o777)  # macOS bind-friendly
 
-        parts = [
-            "docker run",
-            f"--platform {self.container_platform}",
-            f"--name {self.name}-benchmark",
-            f"--rm -d -p {host_port('postgres')}:5432",
-            "--user 0:0",
-            f"--mount type=bind,src={host_pgdata.as_posix()},dst=/var/lib/postgresql/pgdata",
-            "-e PGDATA=/var/lib/postgresql/pgdata",
-            "-e POSTGRES_PASSWORD=password",
-            # Pin cluster timezone to UTC so TIMESTAMPTZ values written from
-            # naive Polars datetimes round-trip without offset surprises.
-            "-e TZ=UTC",
-            "-e PGTZ=UTC",
+        return self.docker_run_command(
             self.container_images["server"],
-            # Settings tuned for the EAV bulk-load workload. Stock PG18 ships
-            # with shared_buffers=128MB and max_wal_size=1GB, which forces a
-            # checkpoint storm during multi-hundred-million-row inserts.
-            "-c shared_buffers=8GB",
-            "-c effective_cache_size=24GB",
-            "-c work_mem=4GB",
-            "-c maintenance_work_mem=4GB",
-            "-c max_wal_size=16GB",
-            "-c min_wal_size=2GB",
-            "-c wal_compression=off",
-            "-c synchronous_commit=off",
-            "-c checkpoint_timeout=30min",
-            "-c max_parallel_maintenance_workers=4",
-            "-c max_parallel_workers_per_gather=4",
-            "-c max_parallel_workers=8",
-        ]
-        return " ".join(parts)
+            ports={str(host_port("postgres")): "5432"},
+            mounts={host_pgdata.as_posix(): "/var/lib/postgresql/pgdata"},
+            env={
+                "PGDATA": "/var/lib/postgresql/pgdata",
+                "POSTGRES_PASSWORD": "password",
+                "TZ": "UTC",
+                "PGTZ": "UTC",
+            },
+            args=tuple(part for name, value in self.server_settings.items() for part in ("-c", f"{name}={value}")),
+        )
 
     def get_runtime_version(self) -> str:
         df = self.fetch("select current_setting('server_version') as version", schema={"version": pl.String})
         return str(df.item(0, 0))
+
+    def _query_connection_string(self) -> str:
+        timeout = get_settings().query_timeout_seconds if self._current_operation == "select" else None
+        connection_string = self.connection_string
+        if timeout is not None:
+            url = make_url(connection_string)
+            options = url.query.get("options", "")
+            if isinstance(options, tuple):
+                options = " ".join(options)
+            url = url.update_query_dict({"options": f"{options} -cstatement_timeout={timeout * 1000}".strip()})
+            prefix, _, parameters = url.render_as_string(hide_password=False).partition("?")
+            connection_string = f"{prefix}?{parameters.replace('+', '%20')}"
+        return connection_string
 
     def connect(self, reconnect: bool = False) -> Connection:
         if reconnect:
@@ -558,7 +632,7 @@ class Postgres(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine(self.connection_string)
+        engine = create_engine(self._query_connection_string())
         self._connection = self.bind_query_recorder(engine.connect())
 
         return self._connection
@@ -583,7 +657,7 @@ class Postgres(Database):
     ) -> pl.DataFrame:
         sql = query.strip().removesuffix(";")
         with self.record_query_execution(sql):
-            df = pl.read_database_uri(sql, self.connection_string)
+            df = pl.read_database_uri(sql, self._query_connection_string())
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))
@@ -655,70 +729,61 @@ class Postgres(Database):
         primary_key: str | list[str] | None = None,
         not_null: str | list[str] | None = None,
     ) -> None:
-        # timescale-parallel-copy also works with normal postgres, and should be faster than \copy or similar
         con = self.connect()
-
         schema = df.schema if isinstance(df, pl.DataFrame) else df.collect_schema()
-
         if not table_exists(con, table):
             self.create_table(schema, table, primary_key, not_null)
 
-        temp_file = self._staging_directory / f"{table}_{uuid.uuid4().hex}.csv"
-        temp_file_str = temp_file.resolve().as_posix()
-
-        if isinstance(df, pl.LazyFrame):
-            df.sink_csv(temp_file)
-            _LOGGER.info("Inserting from staged CSV using timescaledb-parallel-copy")
-        else:
-            df.write_csv(temp_file)
-            _LOGGER.info(
-                f"Inserting dataset with shape ({df.shape[0]:_}, {df.shape[1]:_}) using timescaledb-parallel-copy"
-            )
-
-        url = make_url(self.connection_string)
-        connection_string = (
-            f"host={url.host} port={url.port} dbname={url.database} user={url.username} password={url.password}"
+        batch_rows = min(COPY_BATCH_ROWS, max(1, COPY_BATCH_MAX_CELLS // max(1, len(schema))))
+        batches = (
+            df.collect_batches(chunk_size=batch_rows, maintain_order=True)
+            if isinstance(df, pl.LazyFrame)
+            else df.iter_slices(batch_rows)
         )
+        parent_step = self.active_step_id
+        with ThreadPoolExecutor(max_workers=self.parallel_copy_workers) as workers:
+            for batch_index, batch in enumerate(batches, start=1):
+                partition_rows = max(1, (batch.height + self.parallel_copy_workers - 1) // self.parallel_copy_workers)
+                futures = [
+                    workers.submit(self._copy_insert_partition, con.engine, table, partition, parent_step)
+                    for partition in batch.iter_slices(partition_rows)
+                ]
+                for future in futures:
+                    future.result()
+                _LOGGER.info(f"Inserted native COPY batch {batch_index:_} into {table} with {batch.height:_} rows")
 
-        # install timescaledb-parallel-copy first
-        # on macos: brew tap timescale/tap && brew install timescaledb-tools
-        command = [
-            "timescaledb-parallel-copy",
-            "--connection",
-            connection_string,
-            "--table",
-            table,
-            "--file",
-            temp_file_str,
-            "--workers",
-            # possible that using more workers could speed things up, but this is not linear
-            "12",
-            "--batch-size",
-            "50000",
-            "--skip-header",
-        ]
-        copy_sql = f"COPY {table} FROM '{temp_file_str}' WITH (FORMAT csv, HEADER true)"
-
+    def _copy_insert_partition(
+        self, engine: Engine, table: TableName, frame: pl.DataFrame, parent_step: int | None
+    ) -> None:
+        if parent_step is not None:
+            self._push_active_step(parent_step)
         try:
-            with self.record_query_execution(copy_sql):
-                subprocess.run(command, capture_output=True, text=True, check=True)
+            with engine.connect() as connection:
+                self.bind_query_recorder(connection)
+                connection.begin()
+                self._copy_dataframe(connection, table, frame, table, columns=None)
+                tracked_commit(connection)
         finally:
-            temp_file.unlink()
+            if parent_step is not None:
+                self._pop_active_step(parent_step)
 
-    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path) -> None:
+    def _copy_csv_to_table(self, con: Connection, table: str, csv_path: Path, columns: list[str] | None) -> None:
         raw_conn = con.connection.dbapi_connection
         assert raw_conn is not None
         cursor = raw_conn.cursor()
-        copy_sql = f"COPY {table} FROM STDIN WITH (FORMAT csv, HEADER true)"
-        with open(csv_path) as f, self.record_query_execution(copy_sql):
+        column_sql = " (" + ", ".join(f'"{column}"' for column in columns) + ")" if columns is not None else ""
+        copy_sql = f"COPY {table}{column_sql} FROM STDIN WITH (FORMAT csv, HEADER true)"
+        with open(csv_path, encoding="utf-8", newline="") as f, self.record_query_execution(copy_sql):
             cursor.copy_expert(copy_sql, f)
 
-    def _copy_dataframe(self, con: Connection, table: str, df: pl.DataFrame, label: str) -> None:
+    def _copy_dataframe(
+        self, con: Connection, table: str, df: pl.DataFrame, label: str, *, columns: list[str] | None
+    ) -> None:
         temp_file = self._staging_directory / f"{label}_{uuid.uuid4().hex}.csv"
 
         try:
             df.write_csv(temp_file)
-            self._copy_csv_to_table(con, table, temp_file)
+            self._copy_csv_to_table(con, table, temp_file, columns)
         finally:
             temp_file.unlink(missing_ok=True)
 
@@ -734,7 +799,7 @@ class Postgres(Database):
 
         staging_table = f"_staging_{table}_{uuid.uuid4().hex[:8]}"
         self.execute(f"CREATE TEMP TABLE {staging_table} (LIKE {table} INCLUDING DEFAULTS)", commit=False)
-        self._copy_dataframe(con, staging_table, df, f"{table}_upsert")
+        self._copy_dataframe(con, staging_table, df, f"{table}_upsert", columns=df.columns)
         self._dml_session_setup(con)
 
         self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
@@ -756,7 +821,7 @@ class Postgres(Database):
         pk_cols = ", ".join(f'"{pk}"' for pk in primary_keys)
 
         self.execute(f"CREATE TEMP TABLE {staging_table} AS SELECT {pk_cols} FROM {table} WHERE false", commit=False)
-        self._copy_dataframe(con, staging_table, keys.select(primary_keys), f"{table}_delete")
+        self._copy_dataframe(con, staging_table, keys.select(primary_keys), f"{table}_delete", columns=primary_keys)
         self._dml_session_setup(con)
 
         self.execute(f"DELETE FROM {table} WHERE ({pk_cols}) IN (SELECT {pk_cols} FROM {staging_table})", commit=False)
@@ -772,5 +837,8 @@ class Postgres(Database):
             "clickbench": PostgresClickbench,
             "jsonbench": PostgresJSONBench,
             "time_series": PostgresTimeSeries,
+            "time_series_metrics": PostgresTimeSeriesMetrics,
+            "tpc_ds": PostgresTpcDs,
+            "tpc_h": PostgresTpcH,
             "chat_threads": ChatThreads,
         }

@@ -23,4 +23,5 @@ GROUP BY
     p.name,
     p.stock
 HAVING
-    (sum(oi.amount) < p.stock);
+    (sum(oi.amount) < p.stock)
+ORDER BY p.product_id;

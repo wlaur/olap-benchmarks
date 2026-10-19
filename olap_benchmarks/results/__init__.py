@@ -27,6 +27,7 @@ from ..settings import (
     Revision,
     get_settings,
 )
+from .campaign import campaign_cells, select_campaign_runs
 from .cells import StoredRun, load_runs, superseded_runs
 from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from .merge import MergeStats, merge_results
@@ -185,16 +186,61 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _restrict_to_publishable_runs(db_path: Path, cells: list[MatrixCell], drivers: Mapping[str, str | None]) -> int:
+def _restrict_to_publishable_runs(
+    db_path: Path,
+    cells: list[MatrixCell],
+    drivers: Mapping[str, str | None],
+    *,
+    pins: Mapping[str, str],
+    campaign: bool = False,
+) -> int:
     runs = load_runs(db_path)
-    keep = publishable_run_ids(runs, cells, system=single_system(runs), drivers=drivers)
+    keep = (
+        select_campaign_runs(db_path, cells, pins=pins, drivers=drivers)
+        if campaign
+        else publishable_run_ids(runs, cells, system=single_system(runs), drivers=drivers)
+    )
     dropped = [run.id for run in runs if run.id not in keep]
     if dropped:
         delete_runs(dropped, db_path=db_path)
     return len(dropped)
 
 
-def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, MergeStats | None]:
+def _publication_metadata(db_path: Path, revision: str, report_url: str | None) -> dict[str, object]:
+    if report_url is None:
+        return {"kind": "matrix"}
+    con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path), read_only=True)
+    try:
+        row = con.execute(
+            """
+            select count(*), count(*) filter (where exists (
+                select 1 from run_step s where s.run_id = r.id
+                  and s.step_type = 'query' and s.result_status <> 'ok'
+            ))
+            from run r where r.operation = 'select'
+            """
+        ).fetchone()
+        assert row is not None
+        commits = sorted({run.commit for run in load_runs(db_path, con) if run.commit is not None})
+        return {
+            "kind": "campaign",
+            "title": f"Benchmark campaign: {revision}",
+            "report_url": report_url,
+            "select_cohorts": int(row[0]),
+            "partial_select_cohorts": int(row[1]),
+            "source_commits": commits,
+        }
+    finally:
+        con.close()
+
+
+def publish(
+    revision: Revision = "default", merge: bool = False, campaign: bool = False, report_url: str | None = None
+) -> tuple[Path, MergeStats | None]:
+    if campaign and (merge or not report_url):
+        raise ValueError("--campaign requires --report-url and replaces the published dataset; --merge is not allowed")
+    if not campaign and report_url is not None:
+        raise ValueError("--report-url requires --campaign")
     source_db_path = _require_revision(revision)
     output_dir = PUBLISHED_DATA_DIRECTORY
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -220,7 +266,17 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
             "deliberately replace everything that is published."
         )
 
-    cells = expand_matrix(published_only=True)
+    if merge:
+        if not manifest_path.is_file():
+            raise ValueError("--merge requires the currently published manifest.json alongside results.db")
+        publication = json.loads(manifest_path.read_text())["publication"]
+        if publication["kind"] != "matrix":
+            raise ValueError(
+                "--merge cannot preserve a campaign publication's expanded inventory and coverage disclosures. "
+                "Publish a complete replacement with --campaign --report-url instead."
+            )
+
+    cells = campaign_cells() if campaign else expand_matrix(published_only=True)
     pins = current_pins()
     drivers = current_drivers()
     merge_stats: MergeStats | None = None
@@ -233,12 +289,14 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
         else:
             shutil.copy2(source_db_path, staging_path)
 
-        dropped = _restrict_to_publishable_runs(staging_path, cells, drivers)
+        dropped = _restrict_to_publishable_runs(staging_path, cells, drivers, pins=pins, campaign=campaign)
         if dropped:
-            _LOGGER.info(f"Left out {dropped} run(s) that are not the latest run of a published matrix cell")
+            _LOGGER.info(f"Left out {dropped} run(s) outside the selected publication cohorts")
 
         validate_results(db_path=staging_path, pins=pins, mark=True)
-        validate_publishable_runs(staging_path, cells, pins=pins, drivers=drivers, allow_mixed_commits=merge)
+        validate_publishable_runs(
+            staging_path, cells, pins=pins, drivers=drivers, allow_mixed_commits=merge or campaign, campaign=campaign
+        )
         compact_results(db_path=staging_path)
         staging_path.replace(output_db_path)
     finally:
@@ -249,6 +307,7 @@ def publish(revision: Revision = "default", merge: bool = False) -> tuple[Path, 
         "revision": revision,
         "source": source_db_path.as_posix(),
         "merged": merge_stats is not None,
+        "publication": _publication_metadata(output_db_path, revision, report_url),
         "schema_revision": get_results_head_revision(),
         "results_db_sha256": _file_sha256(output_db_path),
         "results_db_bytes": output_db_path.stat().st_size,
@@ -494,6 +553,57 @@ def delete_runs(run_ids: list[int], revision: Revision = "default", db_path: Pat
         with Session(engine) as session:
             _delete_run_subtrees(session, run_ids)
             return len(run_ids)
+    finally:
+        engine.dispose()
+
+
+def invalidate_runs(
+    run_ids: list[int],
+    reason: str,
+    revision: Revision = "default",
+    db_path: Path | None = None,
+) -> int:
+    if not run_ids:
+        raise ValueError("Specify at least one run ID to invalidate.")
+    if not reason.strip():
+        raise ValueError("An invalidation reason is required.")
+
+    path = db_path or _require_revision(revision)
+    if not path.is_file():
+        raise FileNotFoundError(f"Results database does not exist: {path}")
+    engine = get_results_engine(read_only=False, db_path=path)
+
+    try:
+        with Session(engine) as session:
+            selected_ids = set(run_ids)
+            runs = list(session.scalars(select(Run).where(Run.id.in_(selected_ids))).all())
+            missing = selected_ids - {run.id for run in runs}
+            if missing:
+                raise ValueError(f"Run IDs not found: {', '.join(map(str, sorted(missing)))}")
+            unfinished = sorted(run.id for run in runs if run.status == "running" or run.finished_at is None)
+            if unfinished:
+                raise ValueError(f"Only finished runs can be invalidated: {', '.join(map(str, unfinished))}")
+
+            invalidated_at = datetime.now(UTC).isoformat()
+            for run in runs:
+                metadata = dict(run.metadata_json or {})
+                metadata.setdefault(
+                    "invalidation",
+                    {
+                        "reason": reason,
+                        "time": invalidated_at,
+                        "original_status": run.status,
+                        "error_type": run.error_type,
+                        "error_message": run.error_message,
+                    },
+                )
+                run.metadata_json = metadata
+                if run.status == "completed":
+                    run.status = "failed"
+                    run.error_type = "InvalidBenchmark"
+                    run.error_message = reason
+            session.commit()
+            return len(runs)
     finally:
         engine.dispose()
 

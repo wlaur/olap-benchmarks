@@ -7,6 +7,8 @@ WHERE
   and event_created < '2024-08-01'
   AND processor LIKE '%ron%'
 ORDER BY
-  event_created
+    event_created,
+    order_id,
+    counter
 LIMIT
   10;

@@ -10,6 +10,7 @@ from urllib.request import urlopen
 
 import polars as pl
 from pydantic import Field
+from pymysql.constants import FIELD_TYPE
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -162,17 +163,47 @@ class Doris(Database):
         return (DORIS_FE_CONTAINER, DORIS_BE_CONTAINER)
 
     @property
+    def container_cpu_limits(self) -> Mapping[str, float | None]:
+        threads = get_settings().benchmark_threads
+        if threads is None:
+            return {DORIS_FE_CONTAINER: None, DORIS_BE_CONTAINER: None}
+        frontend = threads / 10
+        return {DORIS_FE_CONTAINER: frontend, DORIS_BE_CONTAINER: threads - frontend}
+
+    @property
+    def container_memory_limit_mb(self) -> int | None:
+        memory_gb = get_settings().benchmark_memory_gb
+        return memory_gb * 1024 // 2 if memory_gb is not None else None
+
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        cpu_limits = self.container_cpu_limits
+        memory_limit_mb = self.container_memory_limit_mb
+        return {
+            **super().run_options,
+            "container_budget_policy": "combined-v1",
+            "container_shutdown_policy": "native-grace-v1",
+            "container_limits": {
+                name: {"cpu_limit": cpu_limits[name], "memory_limit_mb": memory_limit_mb}
+                for name in self.metric_container_names
+            },
+        }
+
+    @property
     def start(self) -> str | None:
         return None
 
     @property
     def start_commands(self) -> tuple[str, ...]:
+        entrypoint = Path(__file__).with_name("container-entrypoint.sh")
         meta_dir = self.database_directory / "fe-meta"
         fe_log_dir = self.database_directory / "fe-log"
         storage_dir = self.database_directory / "be-storage"
         be_log_dir = self.database_directory / "be-log"
         self.staging_directory.mkdir(parents=True, exist_ok=True)
         images = self.container_images
+        cpu_limits = self.container_cpu_limits
+        memory_limit_mb = self.container_memory_limit_mb
 
         for directory in (meta_dir, fe_log_dir, storage_dir, be_log_dir):
             directory.mkdir(parents=True, exist_ok=True)
@@ -188,8 +219,13 @@ class Doris(Database):
                 mounts={
                     meta_dir.as_posix(): "/opt/apache-doris/fe/doris-meta",
                     fe_log_dir.as_posix(): "/opt/apache-doris/fe/log",
+                    entrypoint.as_posix(): "/benchmark-entrypoint.sh:ro",
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "FE_ID": "1"},
+                cpu_limit=cpu_limits[DORIS_FE_CONTAINER],
+                memory_limit_mb=memory_limit_mb,
+                entrypoint="/bin/bash",
+                args=("/benchmark-entrypoint.sh", "fe", "/usr/local/bin/init_fe.sh"),
             ),
             self.docker_run_command(
                 images["be"],
@@ -200,22 +236,31 @@ class Doris(Database):
                 mounts={
                     storage_dir.as_posix(): "/opt/apache-doris/be/storage",
                     be_log_dir.as_posix(): "/opt/apache-doris/be/log",
+                    entrypoint.as_posix(): "/benchmark-entrypoint.sh:ro",
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "BE_ADDR": f"{DORIS_BE_IP}:9050"},
+                cpu_limit=cpu_limits[DORIS_BE_CONTAINER],
+                memory_limit_mb=memory_limit_mb,
+                entrypoint="/bin/bash",
+                args=("/benchmark-entrypoint.sh", "be", "/usr/local/bin/entry_point.sh"),
             ),
         )
 
     @property
     def stop_commands(self) -> tuple[str, ...]:
         return (
-            f"docker stop {DORIS_BE_CONTAINER}",
-            f"docker stop {DORIS_FE_CONTAINER}",
+            f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_BE_CONTAINER}",
+            f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_FE_CONTAINER}",
             f"docker network rm {DORIS_NETWORK}",
         )
 
     @property
     def restart_commands(self) -> tuple[str, ...]:
-        return (f"docker restart {DORIS_FE_CONTAINER}", f"docker restart {DORIS_BE_CONTAINER}")
+        return (
+            f"docker stop --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_BE_CONTAINER}",
+            f"docker restart --timeout {self.CONTAINER_SHUTDOWN_TIMEOUT_SECONDS} {DORIS_FE_CONTAINER}",
+            self.start_commands[-1],
+        )
 
     @property
     def staging_directory(self) -> Path:
@@ -335,14 +380,19 @@ class Doris(Database):
             result = self.connect().execute(text(sql))
 
         columns = list(result.keys())
+        cursor = result.cursor
+        if cursor is None:
+            raise RuntimeError("Doris query did not return column metadata")
+        float_columns = {
+            column: pl.Float32
+            for column, description in zip(columns, cursor.description, strict=True)
+            if description[1] == FIELD_TYPE.FLOAT
+        }
         rows = result.fetchall()
 
-        if not rows:
-            if schema:
-                return pl.DataFrame(schema=cast(pl.Schema, schema))
-            return pl.DataFrame({col: [] for col in columns})
-
-        df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
+        df = pl.DataFrame(
+            {col: [row[idx] for row in rows] for idx, col in enumerate(columns)}, schema_overrides=float_columns
+        )
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))

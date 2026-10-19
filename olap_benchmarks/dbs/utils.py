@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
+import shutil
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+import duckdb
 import polars as pl
 import pyarrow.parquet as pq
 from sqlalchemy import Connection, text
 
-from ..settings import TableName
+from ..settings import TableName, get_settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +69,46 @@ def iter_parquet_frames(fpath: Path, batch_size: int) -> Iterator[pl.DataFrame]:
 
     for batch in parquet_file.iter_batches(batch_size=batch_size):
         yield cast(pl.DataFrame, cast(Any, pl).from_arrow(batch))
+
+
+def sort_parquet_file(source: Path, target: Path, column: str) -> None:
+    # Out-of-core sort with a bounded share of the client memory budget; an in-memory sort of a
+    # full-scale input can exceed the whole client-tree limit before writing a single row. DuckDB's
+    # allocator keeps that memory resident after the connection closes, so the sort runs in a
+    # short-lived child process.
+    settings = get_settings()
+    memory_gb = max(1, (settings.client_memory_limit_gb or 32) // 2)
+    process = multiprocessing.get_context("spawn").Process(
+        target=_sort_parquet_file,
+        args=(source, target, column, memory_gb, settings.benchmark_threads),
+        name="olap-sort-parquet",
+    )
+    process.start()
+    process.join()
+    if process.exitcode != 0:
+        target.unlink(missing_ok=True)
+        raise RuntimeError(f"Sorting {source} by {column} failed with exit code {process.exitcode}")
+
+
+def _sort_parquet_file(source: Path, target: Path, column: str, memory_gb: int, threads: int | None) -> None:
+    spill = target.parent / f".{target.stem}-sort-spill"
+    config: dict[str, str | bool | int | float | list[str]] = {
+        "memory_limit": f"{memory_gb}GiB",
+        "temp_directory": str(spill),
+    }
+    if threads is not None:
+        config["threads"] = threads
+    try:
+        with duckdb.connect(config=config) as connection:
+            connection.execute("SET enable_progress_bar = false")
+            source_literal = str(source).replace("'", "''")
+            target_literal = str(target).replace("'", "''")
+            connection.execute(
+                f"COPY (SELECT * FROM read_parquet('{source_literal}') ORDER BY \"{column}\") "
+                f"TO '{target_literal}' (FORMAT parquet, COMPRESSION snappy)"
+            )
+    finally:
+        shutil.rmtree(spill, ignore_errors=True)
 
 
 def drop_table(table: TableName, connection: Connection, commit: bool = True) -> None:

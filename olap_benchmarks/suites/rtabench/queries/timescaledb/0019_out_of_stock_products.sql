@@ -20,4 +20,5 @@ WHERE
 GROUP BY
     p.product_id
 HAVING
-    (sum(oi.amount) < p.stock);
+    (sum(oi.amount) < p.stock)
+ORDER BY p.product_id;

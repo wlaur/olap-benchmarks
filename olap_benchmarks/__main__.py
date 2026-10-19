@@ -8,6 +8,7 @@ from setproctitle import setproctitle
 
 from .dbs import get_databases
 from .inputs import drop_page_cache, fingerprint_input_directory
+from .limits import check_disk_space
 from .matrix import MatrixCell, current_drivers, current_pins, expand_matrix, published_databases
 from .metrics.storage import WriterProcessHandle, start_writer_process
 from .operation_runner import run_operation
@@ -85,6 +86,7 @@ app.command(matrix_app)
 
 
 def _start_db(db_instance: "Database") -> None:
+    check_disk_space()
     commands = db_instance.start_commands
     db_instance._last_start_command = "\n".join(commands) if commands else None
     if not commands:
@@ -328,6 +330,10 @@ def run_benchmark_groups(
             failed_runs = mark_running_runs_failed(revision=revision)
             if failed_runs:
                 _LOGGER.warning(f"Marked {failed_runs} interrupted run(s) as failed")
+        elif any(outcome.error is not None for outcome in outcomes):
+            error = next(outcome.error for outcome in reversed(outcomes) if outcome.error is not None)
+            error_type, _, error_message = error.partition(": ")
+            mark_running_runs_failed(revision=revision, error_type=error_type, error_message=error_message)
 
     return outcomes
 
@@ -452,7 +458,13 @@ def docker(
 
 
 @app.command
-def publish(revision: Revision = "default", merge: bool = False, upload: bool = False) -> None:
+def publish(
+    revision: Revision = "default",
+    merge: bool = False,
+    upload: bool = False,
+    campaign: bool = False,
+    report_url: str | None = None,
+) -> None:
     """Publish a results revision to site/public/data for the webpage, with a manifest.
 
     Only the latest run of each cell of the declared matrix (`olap matrix status`)
@@ -468,13 +480,22 @@ def publish(revision: Revision = "default", merge: bool = False, upload: bool = 
     runs of that cell, and everything else in the published file is kept. Different commits are
     accepted for a merge, with each run's original provenance preserved.
 
+    With `--campaign --report-url URL`, replace the dataset with all registered engine/suite/scale
+    combinations. Every combination must have a nonempty completed select cohort with one warmup
+    and three measured iterations. Explicitly skipped queries and failed or missing non-select
+    operations are allowed and disclosed. Measurements may span clean commits; their original
+    provenance is retained. Invalid diagnostics are excluded. The linked report must explain
+    methodology, corrections and resource limits. This mode cannot be combined with `--merge`.
+
     With `--upload`, the published results.db is uploaded to the `data` GitHub release, which is
     where the site build fetches it from, and the Pages workflow is triggered so the site serves
     the new file. The database is not committed to the repository.
     """
     try:
-        output_dir, merge_stats = publish_results(revision=revision, merge=merge)
-    except PublishValidationError as exc:
+        output_dir, merge_stats = publish_results(
+            revision=revision, merge=merge, campaign=campaign, report_url=report_url
+        )
+    except (PublishValidationError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
     if merge_stats is not None:

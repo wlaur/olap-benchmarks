@@ -8,7 +8,8 @@ import { CatalogSuiteList } from "../components/catalog/CatalogSuiteList"
 import { QuietButton } from "../components/controls/Control"
 import { ControlSelect, ControlSelectSkeleton } from "../components/controls/ControlSelect"
 import { PanelCard, PanelHeader } from "../components/layout/Panel"
-import { MetaLabel, SectionTitle } from "../components/Typography"
+import { CampaignNotice } from "../components/methodology/ComparisonScopeNotices"
+import { BodyText, MetaLabel, SectionTitle } from "../components/Typography"
 import { useCatalogData } from "../hooks/useCatalogData"
 import { isBenchmarkSuiteId } from "../lib/benchmarks"
 import { buildCatalogSuiteSummary, getSqlDialects } from "../lib/catalog"
@@ -98,6 +99,8 @@ export function CatalogPage() {
         </div>
       </header>
 
+      <CampaignNotice />
+
       <div className="xl:hidden">
         {loading || selectedSuiteId === null ? (
           <ControlSelectSkeleton label="Suite" labelMode="always" className="w-full" />
@@ -180,6 +183,10 @@ export function CatalogPage() {
                   {selectedSummary?.systems.length ?? 0} completed{" "}
                   {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
                 </p>
+                <BodyText className="mt-1 text-xs leading-5 text-slate-500">
+                  A checked cell means a completed select run exists; its query coverage may be
+                  partial. Open the explorer for measured and missing queries.
+                </BodyText>
               </div>
               <div className="flex flex-wrap gap-2">
                 <QuietButton

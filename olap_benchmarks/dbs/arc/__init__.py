@@ -24,7 +24,7 @@ from ...suites.time_series_metrics.config import METRIC_COUNTS, TimeSeriesMetric
 from ...suites.time_series_ranges.config import METRIC_COUNTS as RANGE_METRIC_COUNTS
 from ...suites.time_series_ranges.config import TimeSeriesRanges
 from .. import Database
-from ..utils import require_columns
+from ..utils import require_columns, sort_parquet_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -158,7 +158,16 @@ class ArcClickbench(Clickbench["Arc"]):
             if not self.should_populate():
                 return
 
-        self.db.insert_sorted(self.load_dataset(), "hits")
+        source = get_settings().input_data_directory / "clickbench/hits.parquet"
+        staged = get_settings().temporary_directory / "arc" / f"hits_{uuid.uuid4().hex}.parquet"
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self.db.phase_context("sort_input", table_name="hits"):
+                sort_parquet_file(source, staged, "EventTime")
+            with self.db.phase_context("insert", table_name="hits"):
+                self.db.insert(self.cast_dataset(pl.scan_parquet(staged)), "hits")
+        finally:
+            staged.unlink(missing_ok=True)
 
         with self.db.phase_context("verify_populate"):
             self.verify_populated_data()
@@ -191,7 +200,7 @@ class ArcChatThreads(ChatThreads["Arc"]):
 class Arc(Database):
     name: DatabaseName = "arc"
     supports_arm64_containers: ClassVar[bool] = True
-    METRICS_INGEST_ENV: ClassVar[dict[str, str]] = {
+    BOUNDED_INGEST_ENV: ClassVar[dict[str, str]] = {
         "ARC_INGEST_FLUSH_WORKERS": "2",
         "GOMEMLIMIT": "1GiB",
     }
@@ -209,7 +218,8 @@ class Arc(Database):
         }
         if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             env["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
-            env.update(self.METRICS_INGEST_ENV)
+        if self.current_suite in ("time_series", "time_series_metrics", "time_series_ranges"):
+            env.update(self.BOUNDED_INGEST_ENV)
         return self.docker_run_command(
             self.container_images["server"],
             ports={str(host_port("arc")): "8000"},
@@ -227,7 +237,8 @@ class Arc(Database):
         settings = dict(super().benchmark_settings)
         if self.current_suite in ("time_series_metrics", "time_series_ranges"):
             settings["ARC_INGEST_SORT_KEYS"] = self.metric_sort_keys
-            settings.update(self.METRICS_INGEST_ENV)
+        if self.current_suite in ("time_series", "time_series_metrics", "time_series_ranges"):
+            settings.update(self.BOUNDED_INGEST_ENV)
         return settings
 
     @property
@@ -382,7 +393,7 @@ class Arc(Database):
         _ = primary_key, not_null
         initial_count = self.get_count(table) if table in self.get_table_names() else 0
         rows = self._write(df, table)
-        if self.current_suite in ("time_series_metrics", "time_series_ranges"):
+        if self.current_suite in ("time_series", "time_series_metrics", "time_series_ranges"):
             with self.phase_context("compact", table_name=table):
                 self.compact()
         self.wait_until_count(table, initial_count + rows)
