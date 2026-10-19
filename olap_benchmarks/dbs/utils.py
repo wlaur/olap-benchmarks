@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import shutil
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, nullcontext
@@ -72,16 +73,31 @@ def iter_parquet_frames(fpath: Path, batch_size: int) -> Iterator[pl.DataFrame]:
 
 def sort_parquet_file(source: Path, target: Path, column: str) -> None:
     # Out-of-core sort with a bounded share of the client memory budget; an in-memory sort of a
-    # full-scale input can exceed the whole client-tree limit before writing a single row.
+    # full-scale input can exceed the whole client-tree limit before writing a single row. DuckDB's
+    # allocator keeps that memory resident after the connection closes, so the sort runs in a
+    # short-lived child process.
     settings = get_settings()
     memory_gb = max(1, (settings.client_memory_limit_gb or 32) // 2)
+    process = multiprocessing.get_context("spawn").Process(
+        target=_sort_parquet_file,
+        args=(source, target, column, memory_gb, settings.benchmark_threads),
+        name="olap-sort-parquet",
+    )
+    process.start()
+    process.join()
+    if process.exitcode != 0:
+        target.unlink(missing_ok=True)
+        raise RuntimeError(f"Sorting {source} by {column} failed with exit code {process.exitcode}")
+
+
+def _sort_parquet_file(source: Path, target: Path, column: str, memory_gb: int, threads: int | None) -> None:
     spill = target.parent / f".{target.stem}-sort-spill"
     config: dict[str, str | bool | int | float | list[str]] = {
         "memory_limit": f"{memory_gb}GiB",
         "temp_directory": str(spill),
     }
-    if settings.benchmark_threads is not None:
-        config["threads"] = settings.benchmark_threads
+    if threads is not None:
+        config["threads"] = threads
     try:
         with duckdb.connect(config=config) as connection:
             connection.execute("SET enable_progress_bar = false")
