@@ -171,15 +171,34 @@ Required storage stayed 3,734/19,494 MiB, including all eight external Parquet
 tables once. Zero spill at the endpoints does not establish peak temporary
 usage or prove absence of spill. One pattern used 121.871 seconds of cumulative
 diagnostic time across both scales, including review and cleanup. Populates
-526/527 verified every table; full-suite select replacements remain required.
+526/527 verified every table. Full-suite select replacements 528/529 validated
+all 22 queries at each scale. Q17's measured medians were 149.337 ms at SF10
+and 721.919 ms at SF50, with stable hashes across all four iterations.
 
 Polars registers most tables as links to external Parquet. The previous store
 directory measurement counted link entries without their targets. Metrics
 version 8 includes required referenced files and records their allocated-MiB
 baseline separately from the imported store. Those bytes are already included
-in the total and must not be added again. Fresh resource measurements for all
-six Polars scale cells are pending. Historical near-zero store values do not
-establish a storage advantage.
+in the total and must not be added again. All six Polars scale cells now have
+validated replacements: 324 planned queries completed one warmup and three
+measured iterations, with no skips or unsupported queries. Existing ClickBench
+Q28 cross-engine comparison policy is unchanged; its repeat hashes are stable.
+Historical near-zero store values do not establish a storage advantage.
+
+| Suite | Populate / select | Queries | Sum of measured medians | Required disk | Sampled peak client RSS |
+| --- | --- | ---: | ---: | ---: | ---: |
+| TPC-H SF10 | 526 / 528 | 22 | 3.647 s | 3,734 MiB | 6,815 MiB |
+| TPC-H SF50 | 527 / 529 | 22 | 21.145 s | 19,494 MiB | 25,255 MiB |
+| ClickBench SF1 | 530 / 531 | 43 | 20.422 s | 14,095 MiB | 18,359 MiB |
+| JSONBench SF10 | 532 / 533 | 5 | 2.769 s | 992 MiB | 3,049 MiB |
+| Metrics SF1 | 534 / 535 | 112 | 4.165 s | 1,417 MiB | 5,885 MiB |
+| Ranges SF1 | 536 / 537 | 120 | 1.419 s | 898 MiB | 1,536 MiB |
+
+These RSS peaks cover the full select operation. Polars does not enforce the
+nominal 24 GiB heap cap; the existing 28 GiB client RSS guard remained in force.
+SF10 Q17 has no fully contained RSS samples, so its per-query reading remains
+NULL. Required disk includes referenced immutable inputs once and excludes
+client staging and temporary spill; endpoint sizes do not establish peak spill.
 
 The [tuning protocol](2026-10-tuning-protocol.md) describes the common bounded
 review and resource interpretation. Query-window resource SQL reports observed
