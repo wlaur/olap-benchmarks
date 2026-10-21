@@ -180,11 +180,15 @@ def test_connectorx_initializes_each_fetch_and_preserves_uri_and_schema(monkeypa
         return pl.DataFrame({"one": [1]})
 
     monkeypatch.setattr(pl, "read_database_uri", read_database_uri)
-    database = Doris(connection_string="mysql+pymysql://reader:password@server:1234/db")
+    database = Doris(connection_string="mysql+pymysql://reader:password@server:1234/db?prefer_socket=false")
     for _ in range(2):
         result = database.fetch("select 1 as one;", schema={"one": pl.Int32}, method="connectorx")
         assert result.schema == {"one": pl.Int32}
-    assert calls == [("select 1 as one", "mysql://reader:password@server:1234/db", [DORIS_CACHE_INIT_SQL])] * 2
+    assert (
+        calls
+        == [("select 1 as one", "mysql://reader:password@server:1234/db?prefer_socket=false", [DORIS_CACHE_INIT_SQL])]
+        * 2
+    )
 
 
 def test_connectorx_initialization_errors_are_not_retried_without_cache_controls(

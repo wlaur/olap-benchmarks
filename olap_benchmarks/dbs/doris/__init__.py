@@ -423,7 +423,7 @@ class Doris(Database):
         raise ValueError(f"Unknown method: {method}")
 
     def _connectorx_uri(self) -> str:
-        url = make_url(self.connection_string).set(drivername="mysql")
+        url = make_url(self.connection_string).set(drivername="mysql").update_query_dict({"prefer_socket": "false"})
         return url.render_as_string(hide_password=False)
 
     def fetch_connectorx(

@@ -98,7 +98,7 @@ def test_doris_fetch_uses_connectorx_mysql_uri(monkeypatch: pytest.MonkeyPatch) 
     df = RecordingDoris().fetch("select 1 as one;", schema={"one": pl.Int64}, method="connectorx")
 
     assert df.to_dict(as_series=False) == {"one": [1]}
-    assert calls == [("select 1 as one", "mysql://root@localhost:9030/benchmark")]
+    assert calls == [("select 1 as one", "mysql://root@localhost:9030/benchmark?prefer_socket=false")]
     assert recorded_queries == ["select 1 as one"]
 
 
