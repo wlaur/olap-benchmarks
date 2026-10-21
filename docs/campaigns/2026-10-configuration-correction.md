@@ -152,8 +152,26 @@ time/metric pairs; this correction does not imply those published answers were
 wrong. Seven new fixture cases failed before the changes and pass afterward.
 TPC-H Q17 also now returns NULL for an empty or all-NULL qualifying SUM while
 preserving legitimate zero and decimal accumulation. Fourteen fixture variants
-failed before that correction; all 26 pass afterward. Its semijoin performance
-proposal remains separate and unadopted.
+failed before that correction; all 26 pass afterward.
+
+The separately evaluated Q17 semijoin is now adopted. Both scales' plans show
+that the original computes average quantities for every part, while the rewrite
+restricts that aggregation to selected part keys. It preserves all quantities
+for those keys, the final join's multiplicity and the corrected NULL sum.
+All 26 fixture variants passed for both implementations; all eight full fetches
+per scale matched exact schemas, values, Arrow IPC hashes and canonical hashes.
+Counterbalanced measured medians were 0.448 to 0.150 seconds at SF10 and 2.704
+to 0.702 seconds at SF50. Every measured pair favored the candidate, with
+speedups of 2.929–3.045× and 3.830–3.906× respectively.
+
+Sampled process RSS peaks were 3.53–3.65 versus 1.55–2.20 GiB at SF10, and
+10.75–10.83 versus 1.27–1.55 GiB at SF50. These include retained allocations;
+the fast SF10 candidate had only two or three samples per measured fetch.
+Required storage stayed 3,734/19,494 MiB, including all eight external Parquet
+tables once. Zero spill at the endpoints does not establish peak temporary
+usage or prove absence of spill. One pattern used 121.871 seconds of cumulative
+diagnostic time across both scales, including review and cleanup. Populates
+526/527 verified every table; full-suite select replacements remain required.
 
 Polars registers most tables as links to external Parquet. The previous store
 directory measurement counted link entries without their targets. Metrics
