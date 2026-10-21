@@ -125,6 +125,34 @@ exports at both scales exceeded the existing 5M-cell hash cap (172,039,680 and
 84,810,840 cells); the initial comparison alone cannot certify a storage winner
 for that suite. Counts and schemas are not substitutes for full answer equality.
 
+### Supplementary Airbnb output validation
+
+A separate serial diagnostic rebuilt both layouts from the same input
+fingerprint and ran all five unchanged queries, with one warmup and three
+controls per layout: 40 full fetches. Both large joins returned 5,654,056 rows.
+Exact output schemas, values, NULLs and multiplicity matched. Q02 orders only by
+`listing_id`; raw order within ties varied across repeats in both layouts. The
+comparison verified that ordering and unique, non-NULL `(listing_id, date)`
+pairs, then normalized only within equal-`listing_id` groups by date. Q03's
+complete ordering was compared directly. Ten full Arrow answers are retained.
+
+Native is conservatively retained for Airbnb, completing the native selection
+for all ten suites. Using every original timing, its equal-query advantage is
+1.305×; all three original aggregate comparisons agree (1.257×, 1.286×, 1.312×).
+The very short count query receives the same predeclared weight as each join.
+Parquet instead has a slightly lower sum of query medians, 4.037 versus 4.101
+seconds, and about half the required storage. Those are useful tradeoffs, not
+contradictory measurements of the same score.
+
+The new proof does not recover the original missing hashes: the four historical
+query/layout positions, comprising sixteen fetch hashes, remain unknown. The
+initial comparison is not retrospectively certified by the later diagnostic,
+and its timings are not replaced. Evidence is retained under
+`data/duckdb2-upgrade/airbnb-full-answer/`, including `complete.json`,
+`original-timing-summary.json`, `summary.json` and the Arrow answers. Both
+diagnostic stores were removed after validation; final campaign reruns remain
+required.
+
 ### Resource and loading tradeoffs
 
 Each pair below lists **native / Parquet**. Loading is full recorded population
