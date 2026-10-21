@@ -263,6 +263,38 @@ and store/WAL endpoints are retained separately, without claims of peak spill
 or candidate resource savings. Evidence is under
 `data/fairness-audit/query-proposals/validation/relational/live-r5/`.
 
+### ClickHouse TPC-H Q15
+
+The adopted Q15 rewrite computes supplier revenue once, then obtains its global
+maximum with a window before joining suppliers. That order preserves the empty
+answer when the maximum belongs to a supplier absent from the dimension. Both
+scales passed all seven adversarial fixture pairs and eight complete full-data
+answer comparisons, including native Decimal/FixedString types, actual Arrow
+transport schemas, NULLs, duplicate rows and exact padded bytes.
+
+The original executes a separate revenue aggregation for its scalar maximum.
+ClickHouse evaluated that scalar during EXPLAIN, leaving a literal in the
+displayed plan; query-log read counters confirmed the otherwise hidden fact
+scan. The candidate has one aggregation followed by the global window and
+supplier join. Counterbalanced measured medians fell from 266.095 to 138.798 ms
+at SF10 and from 1,680.884 to 835.959 ms at SF50. Every measured pair improved.
+These diagnostics remain separate from the required full-suite reruns.
+
+Sampled resource evidence does not establish lower memory use: SF10 server
+samples are sparse, and SF50 candidate anonymous-memory observations can be
+modestly higher. Store endpoints include logs, background state and temporary
+files; they do not measure peak spill or exclusive query storage. Effective
+`use_query_cache=0` disabled answer caching while
+`use_query_condition_cache=1` retained predicate caching. No cache setting was
+changed, and this observation is not evidence of historical contamination.
+
+One pattern used 551.739 seconds across both scales. Populates 574/575 verified
+all eight full tables under the original limits on ClickHouse 26.9.19.9.
+Evidence is retained in
+`data/fairness-audit/query-proposals/validation/relational/clickhouse-live-r6/`.
+The complete 22-query SELECT cohort at each scale must validate before replacing
+earlier results.
+
 ### Rerun policy
 
 Reruns use the original immutable inputs, engine pins, ten-CPU/24-GiB budget,
