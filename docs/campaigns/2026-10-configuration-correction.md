@@ -241,6 +241,28 @@ covering 34 operations and 2,516 successful SELECT fetches. Ten unsupported
 RTABench aggregates and the existing large-output hash limits remain explicit.
 The storage report lists each replacement cohort and its resource limitations.
 
+### PostgreSQL and TimescaleDB Q11 investigation
+
+The proposed TPC-DS Q11 `NOT MATERIALIZED` directive remains unapplied. Both
+engines independently passed exact edge and empty fixtures, preserving native
+VARCHAR metadata, NULLs, ordered values and duplicate output rows. Plans showed
+earlier year/channel filtering but also repeated fact scans, so the net benefit
+required a full-data comparison.
+
+Each original full-data warmup reached its native 45-second statement timeout.
+The candidate full runs and measured repetitions were therefore not executed.
+This leaves full answer equivalence, latency and resource benefit inconclusive;
+small fixture timings are not evidence of a campaign speedup. PostgreSQL used
+127.536 diagnostic seconds and TimescaleDB 106.002 seconds, one pattern each.
+
+Fresh normal populations 572/573 verified all 24 tables and completed ANALYZE.
+Actual query sessions reported PostgreSQL 18.6, UTC, 139 MiB work_mem, ten
+parallel workers and nine per gather; TimescaleDB's extension version was 2.30.2.
+Neither client memory nor disk-reserve guard fired. Sampled server footprints
+and store/WAL endpoints are retained separately, without claims of peak spill
+or candidate resource savings. Evidence is under
+`data/fairness-audit/query-proposals/validation/relational/live-r5/`.
+
 ### Rerun policy
 
 Reruns use the original immutable inputs, engine pins, ten-CPU/24-GiB budget,
