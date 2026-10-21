@@ -318,7 +318,7 @@ def get_resource_sample(
 
 
 def get_disk_sample(metric_directories: Sequence[Path], wal_globs: Sequence[str] = ()) -> DiskSample:
-    total_mb = sum(get_directory_size_mb(path) for path in dict.fromkeys(metric_directories))
+    total_mb = get_paths_size_mb(metric_directories)
     if not wal_globs:
         return DiskSample(total_mb=total_mb, data_mb=total_mb, wal_mb=None)
 
@@ -357,10 +357,14 @@ def get_glob_size_mb(patterns: Sequence[str]) -> int:
     raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts")
 
 
-def get_directory_size_mb(path: Path) -> int:
-    for _ in range(DIRECTORY_SIZE_ATTEMPTS):
-        sizes = _du_kilobytes([path.resolve().as_posix()])
-        if sizes is not None:
-            return sizes[0] // 1_024
-
-    raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts")
+def get_paths_size_mb(paths: Sequence[Path]) -> int:
+    total_kb = 0
+    for path in dict.fromkeys(path.resolve() for path in paths):
+        for _ in range(DIRECTORY_SIZE_ATTEMPTS):
+            sizes = _du_kilobytes([path.as_posix()])
+            if sizes is not None:
+                total_kb += sizes[0]
+                break
+        else:
+            raise RuntimeError(f"Call to du failed after {DIRECTORY_SIZE_ATTEMPTS} attempts")
+    return total_kb // 1_024

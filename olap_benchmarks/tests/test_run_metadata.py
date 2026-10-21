@@ -25,7 +25,7 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
 
     metrics = cast(dict[str, object], metadata["metrics"])
 
-    assert metrics["version"] == 7
+    assert metrics["version"] == 8
     assert set(metrics) == {
         "version",
         "sampling",
@@ -53,6 +53,8 @@ def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) 
     for column in ("disk_mb", "disk_data_mb", "disk_wal_mb"):
         assert cast(str, metrics[column]).startswith("storage:")
     assert cast(str, metrics["cpu_percent"]).startswith("combined:")
+    assert "allocated MiB from du -sk" in cast(str, metrics["disk_mb"])
+    assert "options.storage_accounting" in cast(str, metrics["disk_mb"])
 
 
 def test_input_fingerprint_is_complete_and_changes_with_content(tmp_path: Path) -> None:

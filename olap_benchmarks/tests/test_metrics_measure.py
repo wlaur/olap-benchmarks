@@ -205,12 +205,58 @@ def test_container_stats_refreshes_a_stale_container_handle(monkeypatch: pytest.
 
 
 def test_disk_sample_sums_deduplicated_directories(monkeypatch: pytest.MonkeyPatch) -> None:
-    sizes = {Path("/database"): 123, Path("/temporary"): 45}
-    monkeypatch.setattr(measure, "get_directory_size_mb", sizes.__getitem__)
+    sizes = {"/database": 123 * 1_024, "/temporary": 45 * 1_024}
+    measured: list[str] = []
+
+    def du(paths: list[str]) -> list[int]:
+        measured.extend(paths)
+        return [sizes[path] for path in paths]
+
+    monkeypatch.setattr(measure, "_du_kilobytes", du)
 
     assert measure.get_disk_sample((Path("/database"), Path("/temporary"), Path("/database"))) == measure.DiskSample(
         total_mb=168, data_mb=168, wal_mb=None
     )
+    assert measured == ["/database", "/temporary"]
+
+
+def test_disk_sample_sums_allocated_kib_before_rounding(monkeypatch: pytest.MonkeyPatch) -> None:
+    sizes = {"/database": 512, "/input/a.parquet": 768, "/input/b.parquet": 768}
+
+    def du(paths: list[str]) -> list[int]:
+        return [sizes[path] for path in paths]
+
+    monkeypatch.setattr(measure, "_du_kilobytes", du)
+
+    sample = measure.get_disk_sample(tuple(Path(path) for path in sizes))
+
+    assert sample == measure.DiskSample(total_mb=2, data_mb=2, wal_mb=None)
+
+
+def test_disk_sample_resolves_path_aliases_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source = tmp_path / "source.parquet"
+    source.touch()
+    alias = tmp_path / "alias.parquet"
+    alias.symlink_to(source.name)
+    calls: list[list[str]] = []
+
+    def du(paths: list[str]) -> list[int]:
+        calls.append(paths)
+        return [1_536]
+
+    monkeypatch.setattr(measure, "_du_kilobytes", du)
+
+    assert measure.get_paths_size_mb((source, alias, source)) == 1
+    assert calls == [[source.as_posix()]]
+
+
+def test_empty_referenced_storage_needs_no_du(monkeypatch: pytest.MonkeyPatch) -> None:
+    def du(_paths: list[str]) -> list[int]:
+        pytest.fail("No du call is needed for an empty reference set")
+
+    monkeypatch.setattr(measure, "_du_kilobytes", du)
+
+    assert measure.get_paths_size_mb(()) == 0
 
 
 def test_container_memory_separates_engine_memory_from_page_cache() -> None:
@@ -297,7 +343,7 @@ def test_directory_size_accepts_the_total_when_a_file_vanishes_mid_walk(monkeypa
 
     monkeypatch.setattr(measure.subprocess, "run", run)
 
-    assert measure.get_directory_size_mb(Path("/database")) == 2
+    assert measure.get_paths_size_mb((Path("/database"),)) == 2
 
 
 def test_directory_size_retries_after_a_transient_du_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -312,7 +358,7 @@ def test_directory_size_retries_after_a_transient_du_failure(monkeypatch: pytest
 
     monkeypatch.setattr(measure.subprocess, "run", run)
 
-    assert measure.get_directory_size_mb(Path("/database")) == 2
+    assert measure.get_paths_size_mb((Path("/database"),)) == 2
     assert calls == 2
 
 
@@ -323,7 +369,7 @@ def test_directory_size_raises_once_the_retries_are_exhausted(monkeypatch: pytes
     monkeypatch.setattr(measure.subprocess, "run", run)
 
     with pytest.raises(RuntimeError, match="du failed after"):
-        measure.get_directory_size_mb(Path("/database"))
+        measure.get_paths_size_mb((Path("/database"),))
 
 
 def test_one_shot_container_cpu_uses_consecutive_samples() -> None:

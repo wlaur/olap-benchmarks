@@ -3,11 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 from shutil import rmtree
+from stat import S_ISREG
 from typing import Any, cast
 
 import polars as pl
 from sqlalchemy import Connection
 
+from ...metrics.measure import get_paths_size_mb
 from ...settings import DatabaseName, SuiteName, TableName, get_settings
 from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import (
@@ -134,6 +136,64 @@ class Polars(Database):
     def table_path(self, table: TableName) -> Path:
         return self.database_directory / f"{table}.parquet"
 
+    @property
+    def _metric_external_files(self) -> tuple[Path, ...]:
+        directory = self.database_directory.resolve()
+        references = {path for path in directory.glob("*.parquet") if path.is_symlink()}
+        if self._current_operation == "populate":
+            sources: Mapping[TableName, Path]
+            match self.current_suite:
+                case "time_series_metrics" | "time_series_ranges":
+                    suite = cast(PolarsTimeSeriesMetrics, self.benchmarks[self.current_suite])
+                    sources = suite.dataset_files()
+                case "tpc_h":
+                    sources = {table: self.input_directory / f"{table}.parquet" for table in TPCH_TABLES}
+                case "clickbench":
+                    sources = {"hits": self.input_directory / "hits.parquet"}
+                case "jsonbench":
+                    sources = {}
+                case _:
+                    raise NotImplementedError(f"Unsupported Polars storage suite: {self.current_suite}")
+            references.update(
+                source
+                for table, source in sources.items()
+                if not self.table_path(table).exists() and not self.table_path(table).is_symlink()
+            )
+        external: set[Path] = set()
+        for reference in references:
+            target = reference.resolve(strict=True)
+            if not S_ISREG(target.stat().st_mode):
+                raise ValueError(f"Polars storage reference is not a regular file: {reference}")
+            if not target.is_relative_to(directory):
+                external.add(target)
+        return tuple(sorted(external))
+
+    @property
+    def metric_directories(self) -> tuple[Path, ...]:
+        return (self.database_directory.resolve(), *self._metric_external_files)
+
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        if self._current_suite is None:
+            return super().run_options
+        external = self._metric_external_files
+        return {
+            **super().run_options,
+            "storage_accounting": {
+                "version": 1,
+                "additional_imported_store_path": self.database_directory.resolve().as_posix(),
+                "required_referenced_storage_paths": [path.as_posix() for path in external],
+                "required_referenced_storage_mb_before_operation": get_paths_size_mb(external),
+                "scope": (
+                    "disk_mb includes the additional imported store (owned Parquet and directory/link overhead) "
+                    "plus required referenced storage outside it. All retained table links count, including "
+                    "unselected tables; absent links during populate use the selected suite sources. "
+                    "The referenced-storage baseline assumes immutable prepared inputs; it is already included "
+                    "in disk_mb, not an amount to add again. Client staging and temporary spill are excluded"
+                ),
+            },
+        }
+
     def _scan_table(self, table: TableName) -> pl.LazyFrame:
         fpath = self.table_path(table)
         if not fpath.is_file():
@@ -225,7 +285,7 @@ class Polars(Database):
                     .group_by("event")
                     .agg(
                         pl.len().cast(pl.Int64).alias("count"),
-                        pl.col("did").n_unique().cast(pl.Int64).alias("users"),
+                        pl.col("did").drop_nulls().n_unique().cast(pl.Int64).alias("users"),
                     )
                     .sort("count", "event", descending=[True, False], nulls_last=True)
                 )
