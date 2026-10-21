@@ -40,6 +40,18 @@ _LOGGER = logging.getLogger(__name__)
 
 MONETDB_APPLICATION = "olap-benchmarks"
 MONETDB_CONTAINER_PORT = "50000"
+MONETDB_RUNTIME_ENVIRONMENT_NAMES = ("gdk_nr_threads", "gdk_mem_maxsize", "gdk_vm_maxsize", "monet_version")
+MONETDB_RUNTIME_ENVIRONMENT_SQL = (
+    "SELECT name, value FROM sys.env() WHERE name IN ("
+    + ", ".join(f"'{name}'" for name in MONETDB_RUNTIME_ENVIRONMENT_NAMES)
+    + ")"
+)
+MONETDB_RUNTIME_SESSION_SQL = (
+    "SELECT s.optimizer, s.workerlimit, s.memorylimit, s.querytimeout, s.sessiontimeout, "
+    "u.max_workers AS user_max_workers, u.max_memory AS user_max_memory "
+    "FROM sys.sessions s JOIN sys.users u ON u.name = s.username "
+    "WHERE s.sessionid = sys.current_sessionid()"
+)
 
 
 def _monetdb_base_uri() -> str:
@@ -198,6 +210,35 @@ class MonetDB(Database):
 
     def before_benchmark_operation(self) -> None:
         self._record_session_baseline("session_baseline_before", expected_sessions=1)
+        self._record_runtime_settings()
+
+    def _record_runtime_settings(self) -> None:
+        step_id = self._start_step("phase", "monetdb_runtime_settings")
+        try:
+            environment = {
+                str(name): str(value) for name, value in self.fetch(MONETDB_RUNTIME_ENVIRONMENT_SQL).iter_rows()
+            }
+            missing = set(MONETDB_RUNTIME_ENVIRONMENT_NAMES) - environment.keys()
+            if missing:
+                raise RuntimeError(f"MonetDB runtime environment is missing settings: {', '.join(sorted(missing))}")
+            session = self.fetch(MONETDB_RUNTIME_SESSION_SQL)
+            if session.height != 1:
+                raise RuntimeError(f"Expected one current MonetDB session, observed {session.height}")
+        except BaseException as exc:
+            self._finish_step(
+                step_id,
+                status="failed",
+                step_type="phase",
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+        self._finish_step(
+            step_id,
+            status="completed",
+            step_type="phase",
+            metadata={"environment": environment, "session": session.row(0, named=True)},
+        )
 
     def after_benchmark_operation(self) -> None:
         self.close_connection()

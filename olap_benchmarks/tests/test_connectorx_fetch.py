@@ -9,7 +9,7 @@ import pytest
 from pymysql.constants import FIELD_TYPE
 from sqlalchemy import Connection
 
-from ..dbs.doris import Doris
+from ..dbs.doris import DORIS_CACHE_INIT_SQL, Doris
 from ..dbs.postgres import Postgres, _postgres_connection_string
 from ..dbs.starrocks import StarRocks
 
@@ -88,7 +88,8 @@ def test_doris_fetch_uses_connectorx_mysql_uri(monkeypatch: pytest.MonkeyPatch) 
             recorded_queries.append(query)
             yield
 
-    def fake_read_database_uri(query: str, uri: str) -> pl.DataFrame:
+    def fake_read_database_uri(query: str, uri: str, *, pre_execution_query: list[str]) -> pl.DataFrame:
+        assert pre_execution_query == [DORIS_CACHE_INIT_SQL]
         calls.append((query, uri))
         return pl.DataFrame({"one": [1]})
 

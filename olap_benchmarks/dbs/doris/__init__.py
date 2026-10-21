@@ -37,6 +37,36 @@ DORIS_USER = "root"
 DORIS_PASSWORD = ""
 DORIS_DATABASE = "benchmark"
 
+DORIS_RESULT_CACHE_VARIABLES = (
+    "enable_sql_cache",
+    "enable_query_cache",
+)
+DORIS_CACHE_INIT_SQL = "SET " + ", ".join(f"{name} = false" for name in DORIS_RESULT_CACHE_VARIABLES)
+DORIS_CACHE_SETTINGS_SQL = "SELECT " + ", ".join(
+    f"@@{name} AS {name}"
+    for name in (
+        *DORIS_RESULT_CACHE_VARIABLES,
+        "enable_condition_cache",
+        "enable_inverted_index_query_cache",
+        "enable_page_cache",
+        "enable_file_cache",
+        "enable_segment_cache",
+        "enable_inverted_index_searcher_cache",
+        "version",
+        "version_comment",
+    )
+)
+
+
+def _verify_result_cache_settings(settings: Mapping[str, object]) -> None:
+    unexpected = {
+        name: settings.get(name)
+        for name in DORIS_RESULT_CACHE_VARIABLES
+        if str(settings.get(name)).lower() not in {"false", "off", "0"}
+    }
+    if unexpected:
+        raise RuntimeError(f"Doris result caches must be disabled: {unexpected}")
+
 
 def _doris_connection_string() -> str:
     return f"mysql+pymysql://{DORIS_USER}@{DORIS_HOST}:{host_port('doris_fe_mysql')}/{DORIS_DATABASE}"
@@ -183,6 +213,9 @@ class Doris(Database):
             **super().run_options,
             "container_budget_policy": "combined-v1",
             "container_shutdown_policy": "native-grace-v1",
+            "result_cache_policy": "disabled-v1",
+            "session_settings": dict.fromkeys(DORIS_RESULT_CACHE_VARIABLES, False),
+            "connectorx_pre_execution_query": [DORIS_CACHE_INIT_SQL],
             "container_limits": {
                 name: {"cpu_limit": cpu_limits[name], "memory_limit_mb": memory_limit_mb}
                 for name in self.metric_container_names
@@ -335,9 +368,46 @@ class Doris(Database):
         if self._connection is not None:
             return self._connection
 
-        engine = create_engine(self.connection_string)
-        self._connection = self.bind_query_recorder(engine.connect())
+        engine = create_engine(self.connection_string, connect_args={"init_command": DORIS_CACHE_INIT_SQL})
+        try:
+            connection = engine.connect()
+            try:
+                settings = dict(connection.execute(text(DORIS_CACHE_SETTINGS_SQL)).mappings().one())
+                _verify_result_cache_settings(settings)
+            except BaseException:
+                connection.close()
+                raise
+        except BaseException:
+            engine.dispose()
+            raise
+        self._connection = self.bind_query_recorder(connection)
         return self._connection
+
+    def _record_cache_settings(self, step_name: str) -> None:
+        step_id = self._start_step("phase", step_name)
+        snapshots: dict[str, dict[str, object]] = {}
+        try:
+            for method in ("python", "connectorx"):
+                settings = self.fetch(DORIS_CACHE_SETTINGS_SQL, method=method).row(0, named=True)
+                snapshots[method] = settings
+                _verify_result_cache_settings(settings)
+        except BaseException as exc:
+            self._finish_step(
+                step_id,
+                status="failed",
+                step_type="phase",
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+                metadata={"sessions": snapshots},
+            )
+            raise
+        self._finish_step(step_id, status="completed", step_type="phase", metadata={"sessions": snapshots})
+
+    def before_benchmark_operation(self) -> None:
+        self._record_cache_settings("doris_cache_settings_before")
+
+    def after_benchmark_operation(self) -> None:
+        self._record_cache_settings("doris_cache_settings_after")
 
     def fetch(
         self,
@@ -363,7 +433,7 @@ class Doris(Database):
     ) -> pl.DataFrame:
         sql = query.strip().removesuffix(";")
         with self.record_query_execution(sql):
-            df = pl.read_database_uri(sql, self._connectorx_uri())
+            df = pl.read_database_uri(sql, self._connectorx_uri(), pre_execution_query=[DORIS_CACHE_INIT_SQL])
 
         if schema is not None:
             df = df.cast(cast(pl.Schema, schema))

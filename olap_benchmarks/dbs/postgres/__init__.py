@@ -338,9 +338,11 @@ class PostgresTimeSeriesMetrics[DBT: "Postgres"](TimeSeriesMetrics[DBT]):
 
 
 class PostgresTimeSeries[DBT: "Postgres"](TimeSeries[DBT]):
-    # Wide telemetry tables (1500+ cols) blow past PG's 8160-byte tuple limit, so
-    # the row-store engines (Postgres, TimescaleDB) use the idiomatic EAV layout
-    # for them. Tall (10 cols) stays wide.
+    # Shared EAV layout for wide/large telemetry; tall stays wide. The original
+    # Float32 rows can fit PostgreSQL's heap. TimescaleDB compression still hits
+    # the 8160-byte tuple limit: 785/1500-metric fixtures produce compressed
+    # tuples of 14216/27088 bytes on 2.30.2/PG18. Successful COPY is not evidence
+    # that the wide layout can be compressed; check compress_chunk before changing this.
     EAV_TABLES: ClassVar[frozenset[TableName]] = frozenset({"data_wide", "data_large"})
 
     # pyarrow row-batch size for the single-pass parquet stream. 100 k wide

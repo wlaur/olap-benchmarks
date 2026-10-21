@@ -260,6 +260,10 @@ current profile is **`resident-hot-v1`**:
   restart); embedded engines (DuckDB, Polars) are reopened because every operation runs in a fresh
   process. The operating-system page cache is not dropped between operations or iterations, so the
   measured iterations read resident data: the profile measures hot latency, not cold storage reads.
+- **Result reuse.** Doris explicitly disables SQL-result and aggregate-query caches on both
+  Python and ConnectorX sessions, and publication requires before/after readbacks. Data, index,
+  and predicate caches remain available, consistent with the hot profile and ClickHouse's
+  predicate-cache default. This is not a cache-free execution profile.
 - **Timed boundary.** End-to-end client latency: `perf_counter` around the connector's `fetch()`,
   from sending the query until the full result is materialised as a Polars DataFrame, stored as
   `run_step.metadata.duration_ms`. Driver, transfer and conversion time are included; answer

@@ -16,7 +16,8 @@ from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import MutateStep
-from ..postgres import Postgres, PostgresTimeSeries
+from ...suites.time_series_ranges.config import TimeSeriesRanges
+from ..postgres import Postgres, PostgresTimeSeries, PostgresTimeSeriesMetrics
 from ..utils import iter_parquet_frames, require_columns, tracked_commit
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,6 +25,39 @@ _LOGGER = logging.getLogger(__name__)
 
 def _timescaledb_connection_string() -> str:
     return f"postgresql://postgres:password@localhost:{host_port('timescaledb')}/postgres"
+
+
+class TimescaleTimeSeriesMetrics(PostgresTimeSeriesMetrics["TimescaleDB"]):
+    # TimescaleDB 2.30.2/PG18 loads wide1000, but compress_chunk fails with
+    # "row is too big: size 18088, maximum size 8160" (256 original input rows).
+    # Keep this explicit rowstore hypertable; EAV and wide100 use columnstore.
+    ROWSTORE_TABLES: ClassVar[frozenset[str]] = frozenset({"wide1000"})
+
+    def populate_table(self, table: str, path: Path) -> None:
+        schema = cast(pl.Schema, pl.read_parquet_schema(path))
+        self.db.create_table(schema, table, not_null=["time", "metric_name"] if table.startswith("eav") else "time")
+        with self.db.phase_context("create_hypertable", table_name=table):
+            self.db.execute(f"SELECT create_hypertable('{table}', by_range('time', INTERVAL '7 days'))")
+            if table not in self.ROWSTORE_TABLES:
+                segmentby = "metric_name" if table.startswith("eav") else ""
+                self.db.execute(
+                    f'ALTER TABLE "{table}" SET '
+                    f"(timescaledb.enable_columnstore = true, timescaledb.segmentby = '{segmentby}', "
+                    "timescaledb.orderby = 'time DESC')"
+                )
+        super().populate_table(table, path)
+        if table not in self.ROWSTORE_TABLES:
+            with self.db.phase_context("compress", table_name=table):
+                self.db.execute(
+                    f"SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('{table}') i",
+                    autocommit=True,
+                )
+        with self.db.phase_context("analyze", table_name=table):
+            self.db.execute(f'VACUUM FREEZE ANALYZE "{table}"', autocommit=True)
+
+
+class TimescaleTimeSeriesRanges(TimeSeriesRanges["TimescaleDB"], TimescaleTimeSeriesMetrics):
+    pass
 
 
 class TimescaleRTABench(RTABench["TimescaleDB"]):
@@ -424,5 +458,7 @@ class TimescaleDB(Postgres):
             "rtabench": TimescaleRTABench,
             "clickbench": TimescaleClickbench,
             "time_series": TimescaleTimeSeries,
+            "time_series_metrics": TimescaleTimeSeriesMetrics,
+            "time_series_ranges": TimescaleTimeSeriesRanges,
             "chat_threads": TimescaleChatThreads,
         }
