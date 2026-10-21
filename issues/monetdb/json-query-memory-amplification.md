@@ -196,9 +196,37 @@ resource change was adopted. The diagnostic ended without OOM and with the
 engine stopped. Evidence is retained under ignored
 `data/monetdb-diagnostics/20261021-live-round/`.
 
-## Rerun and retention proposal
+## Controlled follow-ups and measured replacements
 
-The demonstrated Q08 correction requires full chat SF1/SF10 select reruns.
+The full SF1 select replacement 508 validated all 23 queries. Q08's measured
+median was 96.62 ms, compared with 3,334.30 ms in run 81. Concurrency 509 also
+completed. Two additional chat proposals were rejected despite exact fixture
+and full-SF1 answer/schema matches. Filtering assistants before Q17 expansion
+was slower in both execution orders. Hoisting Q16's nested content extraction
+had controlled medians of 11.589 s versus 9.961 s for the original and lost two
+of three pairs. Its sampled memory footprints did not establish a repeatable
+saving; allocator retention and file-cache state changed across the schedule.
+
+Fresh SF10 population 517 completed. Select 518 finished queries 01–14,
+including Q08, then the server crashed during Q15's warmup. Sampled charge
+reached 24,576 MiB and anonymous/shared memory 24,563 MiB; client RSS was only
+250 MiB. The daemon log confirms a crash/restart. This is consistent with
+memory exhaustion, but this removed container's OOM event counter was not
+captured. Independent runs 519/520 exceeded the 45-second limit on Q16/Q17.
+Run 521 completed and validated Q18–23, establishing that the earlier failure
+did not imply the entire tail was unavailable.
+
+Final SF10 select 522 completed and validated 20 queries with only Q15–17
+explicitly excluded. Q08's measured times were 105.36, 94.48 and 101.11 ms.
+The unchanged global search remained expensive at a 38.35 s median. SF10
+concurrency 523 completed with four readers and 20 writer batches. Failure
+evidence remains separate from these completed replacement cohorts. Store
+daemon logs were archived under ignored
+`data/monetdb-diagnostics/20261021-sf10-campaign/` before store cleanup.
+
+## Rerun and retention scope
+
+The demonstrated Q08 correction's chat SF1/SF10 select reruns are complete.
 Unchanged schema and ingestion do not require all twelve MonetDB cells to be
 replaced. Old results remain until validated replacements cover them.
 
@@ -206,8 +234,9 @@ If a chat SQL/physical-design fix is demonstrated, rerun MonetDB chat SF1 and
 SF10 select with all 23 planned queries; include populate if schema/statistics
 change, and mutate/concurrent at both scales if physical design or connection
 behavior changes. Verify SF10's previously unobserved tail independently.
-Expected effects are lower server memory and broader coverage if the JSON
-evaluation diagnosis is confirmed; no numeric speedup is established.
+The completed Q08 replacements above establish broader coverage and lower
+latency under the original limits. They do not establish a general reduction
+in MonetDB's memory requirements for global JSON expansion.
 
 If a ClickBench fix is demonstrated, rerun MonetDB ClickBench SF1 populate and
 select, all 43 queries under the existing exclusions and budgets. If a common

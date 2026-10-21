@@ -94,8 +94,13 @@ The daemon log records the server crash/restart. This is consistent with memory
 exhaustion; the removed container's OOM counter was not captured. Q15's failure
 does not establish that unattempted Q16–23 fail. Independent attempts then
 exceeded the 45-second limit for Q16 (519) and Q17 (520). Run 521 completed and
-validated all six remaining queries, Q18–23. A final full-scope cohort retains
-explicit exclusions for only those three observed failures.
+validated all six remaining queries, Q18–23. Final select 522 completed the full
+23-query plan with 20 measured queries and explicit exclusions for those three
+observed failures. Row counts and answer hashes validated, and hashes were
+stable across iterations. Q08's measured median was 101.11 ms. The SF10
+concurrency replacement 523 also completed, with four readers and 20 writer
+batches. These replace the former seven-query primary and failed concurrency
+coverage without asserting that the three excluded queries now complete.
 
 Two further chat rewrites passed exact fixture and full-SF1 correctness gates
 but were rejected. Filtering assistants before Q17's JSON expansion was slower
