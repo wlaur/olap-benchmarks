@@ -150,8 +150,8 @@ initial comparison is not retrospectively certified by the later diagnostic,
 and its timings are not replaced. Evidence is retained under
 `data/duckdb2-upgrade/airbnb-full-answer/`, including `complete.json`,
 `original-timing-summary.json`, `summary.json` and the Arrow answers. Both
-diagnostic stores were removed after validation; final campaign reruns remain
-required.
+diagnostic stores were removed after validation. Final campaign runs are
+reported separately below.
 
 ### Resource and loading tradeoffs
 
@@ -203,4 +203,67 @@ replace the final campaign records. Local retained evidence is indexed by
 status. The runner hashes, plan, inputs, physical manifests, effective runtime
 settings, strict fixture proof, and worker-release observations are retained
 there. Successful temporary stores were removed; input files and result
-revisions remain. Fresh final campaign measurements are still required.
+revisions remain.
+
+## Optimized JSON confirmation and final campaign
+
+After the Q02/Q03 extraction rewrites were validated and committed, JSONBench
+repeated its complete five-query storage comparison with the new SQL. Fresh
+Parquet and native stores ran in that order. All forty fetches matched schemas,
+dimensions and answer hashes, with identical resolved SQL and immutable inputs.
+Native remained the latency winner: Parquet/native was 1.348×, with aggregate
+iteration ratios of 1.336×, 1.348× and 1.343×. These measurements are separate
+from the original SQL comparison; the samples were not pooled.
+
+Parquet retained its loading and disk advantages. Native/Parquet population
+took 28.477/14.260 seconds; SELECT peak sampled client RSS was 4,152/4,819 MiB;
+required allocated storage was 2,902,478,848/2,103,132,160 bytes. Temporary
+endpoints were empty, which does not establish peak spill. The separate
+`duckdb2-json-optimized-native-20261021` and
+`duckdb2-json-optimized-parquet-20261021` revisions contain populate/select 1/2.
+
+The final native campaign is complete in revision `2026-10-expanded`: 34
+operations, including thirteen validated SELECT cohorts and four mutation and
+four concurrency runs. All 629 executable query positions completed one warmup
+and three measured fetches, totaling 2,516 successful fetches. The 639-position
+plan retains ten unsupported RTABench aggregates, producing forty explicit
+unsupported iteration statuses. No additional query exclusions were introduced.
+
+| Suite | SF | Populate | SELECT | Mutate | Concurrent |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| JSONBench | 10 | 538 | 539 | — | — |
+| Time Series | 1 | 540 | 541 | 542 | 543 |
+| Time Series | 10 | 544 | 545 | 546 | 547 |
+| Metrics | 1 | 548 | 549 | — | — |
+| Ranges | 1 | 550 | 551 | — | — |
+| Chat Threads | 1 | 552 | 553 | 554 | 555 |
+| Chat Threads | 10 | 556 | 557 | 558 | 559 |
+| RTABench | 1 | 560 | 561 | — | — |
+| Airbnb | 1 | 562 | 563 | — | — |
+| TPC-H | 10 | 564 | 565 | — | — |
+| TPC-H | 50 | 566 | 567 | — | — |
+| TPC-DS | 1 | 568 | 569 | — | — |
+| ClickBench | 1 | 570 | 571 | — | — |
+
+Run 538 reused the fresh native population from the tuning diagnostic; its
+loading implementation and schema were unchanged by the later SQL rewrites.
+All SELECTs use clean commit `beb1320`. Normal JSON medians were 742.754 ms for
+Q02 and 1,045.558 ms for Q03. A process-inspection race interrupted evidence
+export after successful population 548; repairing the helper resumed only
+unstarted operations, with no benchmark reruns or changed limits.
+
+The largest sampled client RSS across the final operations was 22,890 MiB during
+Time Series SF10 population. Of 1,917 measured query positions, 1,796 lacked a
+fully contained client RSS interval and remain NULL in strict query summaries.
+Whole-operation peaks are available separately. Large Time Series batch exports
+at both scales and Airbnb Q02/Q03 still exceed the unchanged hash cap; normal
+validation passing does not turn these missing hashes into equality proof.
+The supplementary Airbnb full-output proof remains separate.
+
+All successful owned stores were cleaned after validation, preserving inputs,
+results and evidence. The final run, validation and resource index is
+`data/duckdb2-upgrade/final-cohorts-r7/merged-final-index.json`; query timings are
+in `query-medians.csv`, and the optimized JSON confirmation remains under
+`data/duckdb2-upgrade/final-cohorts-r6/`. Historical comparison artifacts and the
+helper failure history are retained unchanged. No result deletion or publication
+was part of these runs.

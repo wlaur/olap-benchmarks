@@ -229,15 +229,17 @@ were checked separately: the connection's prior cursor metadata is stale after
 relation fetch and was explicitly excluded as fetch metadata.
 
 One pattern consumed 266.361 seconds of the 1,200-second exploration allowance.
-Native populate 538 verified 10,000,000 rows and remains available for the full
-five-query SELECT rerun. Detailed evidence is retained under
+Native populate 538 verified 10,000,000 rows. Full five-query SELECT replacement
+539 passed normal validation, with measured medians of 742.754 ms for Q02 and
+1,045.558 ms for Q03. Detailed diagnostic evidence is retained under
 `data/fairness-audit/query-proposals/validation/duckdb2-live-r5/`. The separate
 [storage comparison](2026-10-duckdb-storage-comparison.md) selected native for
-every suite; fresh DuckDB 2 campaign cohorts remain required.
-Because this tuning changes the SQL used in the initial storage comparison,
-JSONBench will first repeat its complete native/Parquet comparison with the
-adopted queries. That confirmation will retain separate measurements and the
-same predeclared selection criteria.
+every suite. A separate complete native/Parquet comparison with the adopted
+JSON queries confirmed native at 1.348× under the same selection criteria.
+All thirteen fresh DuckDB 2 campaign cells are now validated, with runs 538–571
+covering 34 operations and 2,516 successful SELECT fetches. Ten unsupported
+RTABench aggregates and the existing large-output hash limits remain explicit.
+The storage report lists each replacement cohort and its resource limitations.
 
 ### Rerun policy
 
