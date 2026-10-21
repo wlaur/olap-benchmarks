@@ -8,8 +8,9 @@ schedule; no published bundle embedding final DuckDB 2.0 was verified on October
 benchmark stores use fresh 2.0 files. Historical runs retain their actual engine
 versions. Integration and browser validation precede performance measurements.
 
-No storage winner has been measured yet. The following decision rules are fixed
-before the first comparison, building on the [tuning protocol](2026-10-tuning-protocol.md).
+The initial comparison is complete. The decision rules below were committed
+before measurement; results and remaining correctness limits follow them. See
+also the [tuning protocol](2026-10-tuning-protocol.md).
 
 ## Scope and execution
 
@@ -91,3 +92,87 @@ and committing defaults, rerun all thirteen full campaign cells, including the
 original native mutation/concurrency operations for the writable suites.
 Supersede old completed cohorts only after validated replacements; preserve
 meaningful failure evidence.
+
+## Initial comparison results
+
+All 52 populate/SELECT operations completed serially at commit `6778832`. Both
+variants ran all 629 executable query positions with one warmup and three measured
+iterations: 5,032 successful fetches. The ten RTABench unsupported queries stayed
+explicit. Across all four iterations, 625 positions matched canonical SQL, exact
+output schemas, dimensions and canonical-v11 answer hashes. ClickBench Q28 matched.
+
+Native storage is retained for every fully certified read-only suite below.
+Ratios are equal-query geometric means of Parquet/native median latency, with
+equal weighting of TPC-H scales. They are not total suite-duration ratios. All
+three corresponding measured-iteration aggregates exceeded the 5% threshold in
+the same direction, so no reversal confirmation was indicated.
+
+| Suite | Parquet/native latency | Selected storage |
+| --- | ---: | --- |
+| time_series_metrics | 9.081× | Native |
+| time_series_ranges | 9.954× | Native |
+| rtabench | 3.458× | Native |
+| tpc_h | 2.878× | Native |
+| tpc_ds | 2.431× | Native |
+| jsonbench | 1.308× | Native |
+| clickbench | 4.147× | Native |
+
+Time Series and Chat Threads retain native storage for their writable contracts.
+All Chat SELECT controls also passed the full equality gates. Time Series batch
+exports at both scales exceeded the existing 5M-cell hash cap (172,039,680 and
+328,538,880 cells), so those SELECT controls remain uncertified. Airbnb
+`02_join_one_table` and `03_join_two_tables` also exceed the cap (39,578,392 and
+84,810,840 cells); the initial comparison alone cannot certify a storage winner
+for that suite. Counts and schemas are not substitutes for full answer equality.
+
+### Resource and loading tradeoffs
+
+Each pair below lists **native / Parquet**. Loading is full recorded population
+wall time, including readiness work and JSONBench conversion where applicable.
+RSS is the sampled peak of the SELECT client process, including retained engine
+allocations and materialized results. Required storage includes external Parquet
+files exactly once; original input files retained beside a native import are not
+query-required native storage. GiB uses 2³⁰ bytes.
+
+| Suite | SF | Population seconds N/P | SELECT RSS GiB N/P | Required storage GiB N/P |
+| --- | ---: | ---: | ---: | ---: |
+| time_series | 1 | 12.14 / 1.08 | 3.31 / 4.37 | 1.33 / 1.03 |
+| time_series | 10 | 92.06 / 11.99 | 6.92 / 8.27 | 10.49 / 10.45 |
+| time_series_metrics | 1 | 9.75 / 8.58 | 7.22 / 12.39 | 1.52 / 1.39 |
+| time_series_ranges | 1 | 6.41 / 5.58 | 1.19 / 0.95 | 0.95 / 0.88 |
+| chat_threads | 1 | 1.40 / 0.23 | 3.52 / 3.04 | 0.84 / 0.32 |
+| chat_threads | 10 | 6.21 / 0.93 | 17.04 / 10.53 | 7.45 / 2.67 |
+| rtabench | 1 | 45.60 / 1.59 | 2.88 / 1.06 | 8.47 / 3.77 |
+| kaggle_airbnb | 1 | 1.74 / 0.18 | 4.86 / 4.89 | 0.13 / 0.06 |
+| tpc_h | 10 | 16.95 / 0.46 | 3.02 / 2.06 | 2.67 / 3.65 |
+| tpc_h | 50 | 63.09 / 1.13 | 13.27 / 6.11 | 13.77 / 19.04 |
+| tpc_ds | 1 | 3.28 / 1.00 | 1.11 / 1.05 | 0.33 / 0.25 |
+| jsonbench | 10 | 29.00 / 15.06 | 4.14 / 4.72 | 2.70 / 1.96 |
+| clickbench | 1 | 122.80 / 0.45 | 17.14 / 8.57 | 18.06 / 13.77 |
+
+Native wins latency while Parquet often reduces loading time, disk, or RSS. For
+example, ClickBench native is 4.147× faster under equal-query weighting, but its
+SELECT RSS is about twice Parquet’s and required storage is larger. TPC-H native
+is faster and smaller on disk, while Parquet uses less SELECT RSS. These are
+separate tradeoffs; a latency choice does not establish a memory-efficiency win.
+
+All operations stayed within the configured guards. The largest sampled
+individual-operation RSS was 21,229 MiB; the smallest observed boundary reserve
+was 142,053,228,544 bytes. Sampling can miss short peaks. Temporary/spill boundary
+observations do not establish peak temporary use, and no remote-I/O conclusion
+is supported by this local resident-hot experiment. Native shutdown emitted
+nanobind reference warnings, but processes exited with code zero and absence
+was verified; the warnings alone do not establish a retained-memory leak.
+
+### Evidence and final cohort separation
+
+The separate revisions are `duckdb2-ab-storage-ab-20261021-native-r1` and
+`duckdb2-ab-storage-ab-20261021-parquet-r1`. Each contains populate/select pairs
+1/2 through 25/26 in the matrix order above. These selection experiments do not
+replace the final campaign records. Local retained evidence is indexed by
+`data/duckdb2-upgrade/comparison/evidence-index-initial-completed.json`;
+`analysis-initial-completed.json` retains every query’s timings and equality
+status. The runner hashes, plan, inputs, physical manifests, effective runtime
+settings, strict fixture proof, and worker-release observations are retained
+there. Successful temporary stores were removed; input files and result
+revisions remain. Fresh final campaign measurements are still required.
