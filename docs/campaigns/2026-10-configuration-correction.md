@@ -2,9 +2,9 @@
 
 The October 21 audit identified two changes requiring measured replacements:
 Doris SQL-result caching was uncontrolled, and TimescaleDB metrics/ranges used
-ordinary PostgreSQL tables. MonetDB's chat SF10 failures were confirmed server
-OOM events; no worker, optimizer, or memory configuration error was established
-by the static audit.
+ordinary PostgreSQL tables. Historical MonetDB chat SF10 runs recorded server
+OOM events; the later Q15 crash reached the memory limit without a captured OOM
+counter. No common worker, optimizer, or memory configuration error was established.
 
 ## Cache boundary
 
@@ -305,6 +305,47 @@ plan operator names establish spill. The final evidence index is under
 `data/fairness-audit/query-proposals/validation/relational/clickhouse-final-r7/`.
 Both successful stores were cleaned after validation; inputs and results remain.
 
+### QuestDB native-layout correctness gate
+
+The proposed designated timestamp, DAY partitions and WAL layout remains
+unapplied. All 22 baseline fixture states and eight nonempty candidate wide
+states passed exact values, schemas, NULLs, duplicates and ordering checks.
+Catalogs proved the intended native layout and plans showed interval scans.
+However, `SELECT max(time)` on the empty candidate returned zero rows instead
+of the baseline's single NULL row. Its plan replaced aggregation with a backward
+scan limited to one existing row. The [engine investigation](../../issues/questdb/empty-designated-timestamp-max.md)
+records the observed answers and the consistent pinned-source optimizer path.
+
+This correctness failure stopped the experiment before candidate EAV, boundary
+and NULL-time rejection checks or any full-scale comparison. An earlier helper
+NULL-order assertion was corrected and is recorded separately. The same layout
+pattern consumed 423.289 diagnostic seconds across both rounds; no retry followed
+the engine mismatch. Tiny fixture resource samples do not support a performance
+or memory-efficiency claim. Existing QuestDB cohorts remain results for the
+original layout, not measurements of its native partitioning potential.
+
+### Selected results and supersession
+
+The corrected campaign stages 244 operations, including 99 SELECT cohorts with
+5,206 planned query positions: 4,790 measured and 416 explicitly skipped or
+unsupported. All selected cohorts passed the campaign publication and answer
+validation gates. These include documented hash-cap and comparison exceptions;
+validation does not imply every output had an independent peer hash.
+
+Removed 250 older successful raw runs only after a selected completed replacement
+covered their measured queries or completed operation steps and matched their
+input manifest. DuckDB's validated 2.0 upgrade also supersedes its older-version
+successes. The [removal ledger](2026-10-superseded-runs.csv) maps every removed ID
+to its replacement. All 86 failed raw runs remain, as do successful runs 314,
+392 and 395 with additional query coverage absent from their selected cohorts.
+The raw revision now contains 324 operations; the selected publication contains
+244. Failures excluded from primary scoring remain available in the raw revision.
+
+The [audit coverage ledger](2026-10-audit-coverage.md) distinguishes source review,
+live diagnostics, accepted changes, rejected candidates and explicit deferrals.
+The [updated analysis](2026-10-expanded-analysis.md) interprets only the selected
+corrected results and reports latency, coverage, memory and storage separately.
+
 ### Rerun policy
 
 Reruns use the original immutable inputs, engine pins, ten-CPU/24-GiB budget,
@@ -317,3 +358,19 @@ ClickBench workloads. Answers must validate before replacement.
 Only runs covered by validated replacements are superseded. Distinct timeout,
 OOM, disk-limit and additional-query evidence must survive. Benchmark databases
 remain release assets and are not committed.
+
+
+## Delivery validation
+
+Final checks passed: 1,090 Python tests (one skipped, six live tests deselected),
+Ruff formatting/lint, strict Pyright, site type checking/lint/format/build, 15 Bun
+script tests, schema generation check, asset verification and 14 Chromium tests
+with one worker. Browser tests used the corrected 244-operation asset and tested
+both compatible storage and explicit rejection of unsupported native 2.0 files.
+
+The selected checksum-addressed asset is 116,404,224 bytes, SHA-256
+`6e12f959af14dfefafd8d8d8c8c75032640f70d610813f3c559ba8ff54446b22`.
+It is uploaded to the `data` release; GitHub reports the matching SHA-256 and
+size. The compacted raw revision, with failures and extra coverage retained, is
+uploaded to the `runs` release. Uploading assets does not deploy the site;
+matching code and metadata must merge before the normal Pages workflow runs.

@@ -1,5 +1,7 @@
 # October 2026 expanded campaign
 
+> This is the original October 19 campaign report. See the [October 22 correction](2026-10-configuration-correction.md), [updated rankings](2026-10-expanded-analysis.md), and [audit coverage](2026-10-audit-coverage.md) for the replacement cohorts and current interpretation.
+
 Completed on 2026-10-19, branch `t3/expand-suite-db-benchmarks`, local revision
 `2026-10-expanded`: **99 combinations, 75 full supported operation groups and 24
 measured partials**. Every combination has a nonempty completed select cohort.

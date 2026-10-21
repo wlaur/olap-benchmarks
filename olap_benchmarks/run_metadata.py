@@ -276,8 +276,8 @@ def build_run_metadata(
             "client_uss_mb": "client side: benchmark client process peak USS, on the client_uss interval",
             "disk_mb": (
                 "storage: allocated MiB from du -sk over the declared paths (Database.metric_directories), "
-                "summing KiB before rounding to MiB, WAL included. Polars includes external table references "
-                "and records their paths and pre-operation allocated MiB in options.storage_accounting. "
+                "summing KiB before rounding to MiB, WAL included. Engines with external table references include them "
+                "and record their paths and pre-operation allocated MiB in options.storage_accounting. "
                 "Client staging files and the benchmark client's own disk use are not "
                 "measured. Sampled on the slow disk lane, whose interval stretches beyond its nominal value "
                 "when a du walk is expensive, so disk readings are sparser and less regular than the other "
