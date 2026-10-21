@@ -27,7 +27,6 @@ from .results import (
     migrate_results,
     query_results,
     rename_database,
-    trigger_pages_deploy,
     upload_published_database,
     upload_results_revision,
 )
@@ -487,9 +486,9 @@ def publish(
     provenance is retained. Invalid diagnostics are excluded. The linked report must explain
     methodology, corrections and resource limits. This mode cannot be combined with `--merge`.
 
-    With `--upload`, the published results.db is uploaded to the `data` GitHub release, which is
-    where the site build fetches it from, and the Pages workflow is triggered so the site serves
-    the new file. The database is not committed to the repository.
+    With `--upload`, the verified database is uploaded as results-{sha256}.db to the `data`
+    GitHub release. Merge the matching manifest and site metadata into main to trigger the
+    normal Pages workflow. The database is not committed to the repository.
     """
     try:
         output_dir, merge_stats = publish_results(
@@ -507,10 +506,8 @@ def publish(
         print(f"Published revision '{revision}' to {output_dir}")
 
     if upload:
-        upload_published_database()
-        print(f"Uploaded results.db to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
-        trigger_pages_deploy()
-        print("Triggered the Pages deployment")
+        asset_name = upload_published_database()
+        print(f"Uploaded {asset_name} to the '{PUBLISHED_DATABASE_RELEASE_TAG}' release")
 
 
 @app.command

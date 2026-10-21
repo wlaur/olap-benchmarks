@@ -3,13 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import duckdb
 from alembic.config import Config
@@ -29,7 +30,6 @@ from ..settings import (
 )
 from .campaign import campaign_cells, select_campaign_runs
 from .cells import StoredRun, load_runs, superseded_runs
-from .duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from .merge import MergeStats, merge_results
 from .models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from .publishing import publishable_run_ids, single_system, validate_publishable_runs
@@ -39,6 +39,7 @@ from .validation import validate_results
 _LOGGER = logging.getLogger(__name__)
 
 PUBLISHED_DATA_DIRECTORY = REPO_ROOT / "site" / "public" / "data"
+PUBLISHED_STORAGE_VERSION: Literal["v1.4.0"] = "v1.4.0"
 
 
 def _serialize_json(value: object) -> str:
@@ -85,7 +86,6 @@ def migrate_results(revision: Revision = "default", db_path: Path | None = None,
 
 def get_results_engine(read_only: bool = True, db_path: Path | None = None, revision: Revision = "default") -> Engine:
     path = db_path or get_results_db_path(revision)
-    patch_duckdb_sqlalchemy_compat()
 
     if read_only:
         if not path.is_file():
@@ -136,7 +136,12 @@ def query_results(sql: str, revision: Revision = "default") -> None:
             con.close()
 
 
-def compact_results(revision: Revision = "default", db_path: Path | None = None) -> tuple[Path, int, int]:
+def compact_results(
+    revision: Revision = "default",
+    db_path: Path | None = None,
+    *,
+    storage_version: Literal["v1.4.0", "v2.0.0"] = "v2.0.0",
+) -> tuple[Path, int, int]:
     path = (db_path or _require_revision(revision)).expanduser().resolve()
     size_before = path.stat().st_size
 
@@ -148,7 +153,7 @@ def compact_results(revision: Revision = "default", db_path: Path | None = None)
 
         try:
             con.execute(f"ATTACH '{path.as_posix()}' AS src (READ_ONLY)")
-            con.execute(f"ATTACH '{tmp_path.as_posix()}' AS dst")
+            con.execute(f"ATTACH '{tmp_path.as_posix()}' AS dst (STORAGE_VERSION '{storage_version}')")
             # copies tables, views, and sequences including their current state
             con.execute("COPY FROM DATABASE src TO dst")
         finally:
@@ -297,7 +302,7 @@ def publish(
         validate_publishable_runs(
             staging_path, cells, pins=pins, drivers=drivers, allow_mixed_commits=merge or campaign, campaign=campaign
         )
-        compact_results(db_path=staging_path)
+        compact_results(db_path=staging_path, storage_version=PUBLISHED_STORAGE_VERSION)
         staging_path.replace(output_db_path)
     finally:
         staging_path.unlink(missing_ok=True)
@@ -309,6 +314,11 @@ def publish(
         "merged": merge_stats is not None,
         "publication": _publication_metadata(output_db_path, revision, report_url),
         "schema_revision": get_results_head_revision(),
+        "results_db_format": {
+            "storage_compatibility_version": PUBLISHED_STORAGE_VERSION,
+            "minimum_reader_engine_version": PUBLISHED_STORAGE_VERSION,
+            "writer_engine_version": duckdb.build_info()["duckdb_version"],
+        },
         "results_db_sha256": _file_sha256(output_db_path),
         "results_db_bytes": output_db_path.stat().st_size,
         "table_counts": _published_table_counts(output_db_path),
@@ -356,26 +366,33 @@ def _upload_release_asset(tag: str, path: Path) -> None:
     subprocess.run(["gh", "release", "upload", tag, path.as_posix(), "--clobber"], check=True)
 
 
-def upload_published_database() -> None:
-    """Replace the `data` release asset with the locally published results database.
-
-    The database is not committed: it is large and rewritten on every publish, so git would keep
-    every version forever. The site build fetches this asset instead (`bun run fetch-data`).
-    """
+def upload_published_database() -> str:
     output_db_path = PUBLISHED_DATA_DIRECTORY / "results.db"
     if not output_db_path.is_file():
         raise FileNotFoundError(f"No published database at {output_db_path}; run 'olap publish' first")
 
-    _upload_release_asset(PUBLISHED_DATABASE_RELEASE_TAG, output_db_path)
+    manifest = json.loads((PUBLISHED_DATA_DIRECTORY / "manifest.json").read_text())
+    if not isinstance(manifest, dict):
+        raise TypeError("manifest.json must contain a publication manifest")
+    manifest_values = cast(dict[str, object], manifest)
+    expected_sha256 = manifest_values.get("results_db_sha256")
+    expected_bytes = manifest_values.get("results_db_bytes")
+    if not isinstance(expected_sha256, str) or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
+        raise ValueError("manifest.json has no valid results_db_sha256; run 'olap publish' first")
+    if type(expected_bytes) is not int or expected_bytes <= 0:
+        raise ValueError("manifest.json has no valid results_db_bytes; run 'olap publish' first")
+    if output_db_path.stat().st_size != expected_bytes:
+        raise ValueError("Published results.db size does not match manifest.json; run 'olap publish' first")
+    actual_sha256 = _file_sha256(output_db_path)
+    if actual_sha256 != expected_sha256:
+        raise ValueError("Published results.db SHA-256 does not match manifest.json; run 'olap publish' first")
 
-
-PAGES_WORKFLOW = "pages.yml"
-
-
-def trigger_pages_deploy() -> None:
-    _require_gh(PUBLISHED_DATABASE_RELEASE_TAG)
-    _LOGGER.info(f"Triggering the {PAGES_WORKFLOW} workflow on main")
-    subprocess.run(["gh", "workflow", "run", PAGES_WORKFLOW, "--ref", "main"], check=True)
+    asset_name = f"results-{actual_sha256}.db"
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        asset_path = Path(temporary_directory) / asset_name
+        asset_path.symlink_to(output_db_path.resolve())
+        _upload_release_asset(PUBLISHED_DATABASE_RELEASE_TAG, asset_path)
+    return asset_name
 
 
 def upload_results_revision(revision: Revision) -> Path:

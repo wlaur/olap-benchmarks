@@ -18,6 +18,7 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
 
     assert left["answer_rows"] == 2
     assert left["answer_columns"] == 2
+    assert left["answer_schema"] == [["id", "Int64"], ["name", "String"]]
     assert left["answer_cells"] == 4
     assert left["answer_hash_version"] == "canonical-v11"
     assert left["answer_hash"] == right["answer_hash"]
@@ -40,7 +41,10 @@ def test_answer_metadata_canonicalizes_equivalent_numeric_dtypes() -> None:
         }
     )
 
-    assert hashing.build_answer_metadata(narrow)["answer_hash"] == hashing.build_answer_metadata(wide)["answer_hash"]
+    narrow_metadata = hashing.build_answer_metadata(narrow)
+    wide_metadata = hashing.build_answer_metadata(wide)
+    assert narrow_metadata["answer_hash"] == wide_metadata["answer_hash"]
+    assert narrow_metadata["answer_schema"] != wide_metadata["answer_schema"]
 
 
 def test_answer_metadata_canonicalizes_fixed_width_text_to_strings() -> None:

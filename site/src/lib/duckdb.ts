@@ -7,6 +7,8 @@ import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url"
 import { Kysely } from "kysely"
 
 import type { DB } from "./generated/db"
+import { assertResultsReaderCompatible, parseResultsDbFormat } from "./resultsFormat"
+import { fetchResultsManifest } from "./resultsManifest"
 
 const BASE = import.meta.env.BASE_URL
 const RESULTS_DB_FILE = "results.db"
@@ -32,17 +34,25 @@ async function initDuckDb(): Promise<duckdb.AsyncDuckDB> {
   const logger = new duckdb.VoidLogger()
   const database = new duckdb.AsyncDuckDB(logger, worker)
 
-  await database.instantiate(bundle.mainModule, bundle.pthreadWorker)
-  await database.registerFileURL(
-    RESULTS_DB_FILE,
-    `${BASE}data/results.db`,
-    duckdb.DuckDBDataProtocol.HTTP,
-    false,
-  )
-  await database.open({
-    path: RESULTS_DB_FILE,
-    accessMode: duckdb.DuckDBAccessMode.READ_ONLY,
-  })
+  try {
+    await database.instantiate(bundle.mainModule, bundle.pthreadWorker)
+    const manifest = await fetchResultsManifest()
+    const format = parseResultsDbFormat(manifest.results_db_format)
+    assertResultsReaderCompatible(format, await database.getVersion())
+    await database.registerFileURL(
+      RESULTS_DB_FILE,
+      `${BASE}data/results.db`,
+      duckdb.DuckDBDataProtocol.HTTP,
+      false,
+    )
+    await database.open({
+      path: RESULTS_DB_FILE,
+      accessMode: duckdb.DuckDBAccessMode.READ_ONLY,
+    })
+  } catch (error) {
+    await database.terminate()
+    throw error
+  }
 
   return database
 }
@@ -53,9 +63,6 @@ export function getDuckDb(): Promise<duckdb.AsyncDuckDB> {
   }
   return duckDbPromise
 }
-
-// Start DuckDB initialization immediately at module load
-getDuckDb()
 
 export async function getKyselyDb(): Promise<Kysely<DB>> {
   if (kyselyInstance) return kyselyInstance

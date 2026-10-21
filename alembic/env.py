@@ -13,7 +13,6 @@ from sqlalchemy.engine import Connection
 
 from alembic import context
 from olap_benchmarks.results import get_results_db_path
-from olap_benchmarks.results.duckdb_sqlalchemy import patch_duckdb_sqlalchemy_compat
 from olap_benchmarks.results.models import Base
 
 _LOGGER = logging.getLogger(__name__)
@@ -200,7 +199,6 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in online mode."""
-    patch_duckdb_sqlalchemy_compat()
     _patch_duckdb_reflection_for_autogenerate()
     connectable = create_engine(
         _database_url(),

@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+import duckdb
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -362,6 +363,11 @@ def test_publish_writes_the_selected_compacted_set_with_its_checksum(
     assert manifest["results_db_bytes"] == output_db.stat().st_size
     assert manifest["table_counts"]["run"] == len(CELLS)
     assert manifest["publication"] == {"kind": "matrix"}
+    assert manifest["results_db_format"] == {
+        "storage_compatibility_version": "v1.4.0",
+        "minimum_reader_engine_version": "v1.4.0",
+        "writer_engine_version": duckdb.build_info()["duckdb_version"],
+    }
     assert not (output_dir / "results.db.staging").exists()
 
 
@@ -438,24 +444,6 @@ def test_matrix_merge_refuses_to_discard_campaign_inventory_or_disclosures(
     assert json.loads(manifest.read_text())["publication"]["kind"] == "campaign"
 
 
-def test_upload_triggers_the_pages_workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(args)
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
-
-    def fake_require_gh(_tag: str) -> None:
-        return None
-
-    monkeypatch.setattr(results_module.subprocess, "run", fake_run)
-    monkeypatch.setattr(results_module, "_require_gh", fake_require_gh)
-
-    results_module.trigger_pages_deploy()
-
-    assert calls == [["gh", "workflow", "run", "pages.yml", "--ref", "main"]]
-
-
 def _missing_gh(_name: str) -> str | None:
     return None
 
@@ -499,3 +487,89 @@ def test_upload_published_database_requires_a_published_file(monkeypatch: pytest
 
     with pytest.raises(FileNotFoundError, match="run 'olap publish' first"):
         results_module.upload_published_database()
+
+
+def _stage_upload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[bytes, dict[str, object]]:
+    monkeypatch.setattr(results_module, "PUBLISHED_DATA_DIRECTORY", tmp_path)
+    content = b"published database bytes"
+    (tmp_path / "results.db").write_bytes(content)
+    manifest: dict[str, object] = {
+        "results_db_sha256": hashlib.sha256(content).hexdigest(),
+        "results_db_bytes": len(content),
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    return content, manifest
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("results_db_bytes", 1, "size does not match"),
+        ("results_db_sha256", "0" * 64, "SHA-256 does not match"),
+        ("results_db_sha256", "../results.db", "no valid results_db_sha256"),
+        ("results_db_sha256", None, "no valid results_db_sha256"),
+        ("results_db_bytes", None, "no valid results_db_bytes"),
+        ("results_db_bytes", True, "no valid results_db_bytes"),
+    ],
+)
+def test_upload_refuses_manifest_mismatch_before_any_github_call(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    _, manifest = _stage_upload(monkeypatch, tmp_path)
+    manifest[field] = value
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+
+    def forbidden_run(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("No GitHub command may run before local validation")
+
+    monkeypatch.setattr(results_module.subprocess, "run", forbidden_run)
+    with pytest.raises(ValueError, match=message):
+        results_module.upload_published_database()
+
+
+def test_upload_uses_hash_named_link_and_preserves_local_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    content, manifest = _stage_upload(monkeypatch, tmp_path)
+    asset_name = f"results-{manifest['results_db_sha256']}.db"
+    uploaded_paths: list[Path] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args != ["gh", "auth", "status"]:
+            asset_path = Path(args[4])
+            assert args == ["gh", "release", "upload", "data", asset_path.as_posix(), "--clobber"]
+            assert asset_path.name == asset_name
+            assert asset_path.is_symlink()
+            assert asset_path.read_bytes() == content
+            uploaded_paths.append(asset_path)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(results_module.shutil, "which", _present_gh)
+    monkeypatch.setattr(results_module.subprocess, "run", fake_run)
+
+    assert results_module.upload_published_database() == asset_name
+    assert len(uploaded_paths) == 1
+    assert not uploaded_paths[0].exists()
+    assert (tmp_path / "results.db").read_bytes() == content
+
+
+def test_publish_cli_reports_named_asset_without_dispatch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from olap_benchmarks import __main__ as cli
+
+    content, manifest = _stage_upload(monkeypatch, tmp_path)
+
+    def fake_publish(**_kwargs: object) -> tuple[Path, None]:
+        return tmp_path, None
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert args == ["gh", "auth", "status"] or args[:4] == ["gh", "release", "upload", "data"]
+        if args[:3] == ["gh", "release", "upload"]:
+            assert Path(args[4]).read_bytes() == content
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(cli, "publish_results", fake_publish)
+    monkeypatch.setattr(results_module.shutil, "which", _present_gh)
+    monkeypatch.setattr(results_module.subprocess, "run", fake_run)
+    cli.publish(upload=True)
+
+    assert f"Uploaded results-{manifest['results_db_sha256']}.db to the 'data' release" in capsys.readouterr().out

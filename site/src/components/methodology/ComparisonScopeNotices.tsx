@@ -34,7 +34,14 @@ export function CampaignNotice({ className }: { className?: string }) {
 }
 
 export function ProfileScopeNotice({ className }: { className?: string }) {
-  const scope = useProfileScope()
+  const { scope, error } = useProfileScope()
+  if (error) {
+    return (
+      <NoticeStrip tone="warning" className={className}>
+        Failed to load benchmark profile: {error}
+      </NoticeStrip>
+    )
+  }
   if (!scope?.active) return null
 
   const { id, warmupIterations, measuredIterations } = scope.active

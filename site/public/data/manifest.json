@@ -37,13 +37,18 @@
     ]
   },
   "schema_revision": "f6d2b8c4e0a3",
-  "results_db_sha256": "013b198a4e7fb89a5a5afddde94977460f57b3bfa5adbc03f44e468a69945dc2",
-  "results_db_bytes": 115879936,
+  "results_db_sha256": "d7db73e9a29d01e74c1617e32a5dc744acbaaacf3ff77c083974ed99d4a30e5b",
+  "results_db_bytes": 108015616,
   "table_counts": {
     "system_snapshot": 1,
     "run": 244,
     "run_step": 25262,
     "run_metric": 147360,
     "query_execution": 127987
+  },
+  "results_db_format": {
+    "storage_compatibility_version": "v1.4.0",
+    "minimum_reader_engine_version": "v1.4.0",
+    "writer_engine_version": "2.0.0"
   }
 }

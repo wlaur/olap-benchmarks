@@ -94,6 +94,6 @@ def test_polars_jsonbench_matches_sql_for_tied_results(polars_jsonbench_db: Pola
     with duckdb.connect() as connection:
         connection.execute("CREATE TABLE bluesky (j JSON)")
         connection.executemany("INSERT INTO bluesky VALUES (?)", [(json.dumps(row),) for row in frame.to_dicts()])
-        expected = connection.execute(sql).pl()
+        expected = connection.sql(sql).pl()
 
     assert polars_jsonbench_db.fetch("").equals(expected)

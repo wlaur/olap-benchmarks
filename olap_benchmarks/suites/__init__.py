@@ -116,6 +116,7 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
             return True
 
         if all(check.matches for check in checks):
+            self.db.verify_storage_readiness()
             _LOGGER.info(
                 f"Skipping populate for {self.name} on {self.db.name}; existing data matches expected row counts: "
                 f"{self._format_table_row_count_checks(checks)}"

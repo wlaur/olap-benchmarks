@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import duckdb
+import pytest
 from sqlalchemy.orm import Session
 
 from ..results import compact_results, get_results_engine, migrate_results
@@ -72,7 +73,8 @@ def _query(db_path: Path, sql: str) -> list[tuple[Any, ...]]:
         con.close()
 
 
-def test_compact_preserves_data_and_sequences(tmp_path: Path) -> None:
+@pytest.mark.parametrize("storage_version", ["v1.4.0", "v2.0.0"])
+def test_compact_preserves_data_and_sequences(tmp_path: Path, storage_version: Literal["v1.4.0", "v2.0.0"]) -> None:
     db_path = tmp_path / "results.db"
     migrate_results(db_path=db_path)
 
@@ -85,10 +87,13 @@ def test_compact_preserves_data_and_sequences(tmp_path: Path) -> None:
     }
     revision_before = _query(db_path, "select version_num from alembic_version")[0][0]
 
-    compacted_path, _, _ = compact_results(db_path=db_path)
+    compacted_path, _, _ = compact_results(db_path=db_path, storage_version=storage_version)
 
     assert compacted_path == db_path.resolve()
     assert not db_path.with_name(f"{db_path.name}.compact").exists()
+    assert _query(db_path, "select tags['storage_version'] from duckdb_databases() where not internal") == [
+        (f"{storage_version}+",)
+    ]
 
     for table, count in counts_before.items():
         assert _query(db_path, f"select count(*) from {table}")[0][0] == count
@@ -107,7 +112,10 @@ def test_compact_reclaims_space(tmp_path: Path) -> None:
 
     con: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(str(db_path))
     try:
-        con.execute("create table bloat as select range from range(2_000_000)")
+        con.execute("create table bloat as select md5(range::varchar) as payload from range(200_000)")
+        con.execute("checkpoint")
+        con.execute("create table retained as select md5(range::varchar) as payload from range(200_000)")
+        con.execute("checkpoint")
         con.execute("drop table bloat")
         con.execute("checkpoint")
     finally:

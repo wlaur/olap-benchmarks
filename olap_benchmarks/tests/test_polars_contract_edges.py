@@ -93,7 +93,7 @@ def test_eav_alignment_matches_canonical_max(number: int, suffix: str, reverse: 
     query = (REPO_ROOT / "olap_benchmarks/suites/time_series_metrics/queries" / f"{query_name}.sql").read_text()
     with duckdb.connect() as connection:
         connection.register("eav100", frame)
-        expected = connection.execute(query).pl()
+        expected = connection.sql(query).pl()
     result = execute_time_series_metrics_query(frame.lazy(), query_name).collect()
     assert build_answer_metadata(result)["answer_hash"] == build_answer_metadata(expected)["answer_hash"]
     assert result.columns == expected.columns

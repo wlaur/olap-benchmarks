@@ -18,7 +18,7 @@ def test_full_aggregate_uses_sample_standard_deviation(table: str, column: str, 
         connection.execute(f"CREATE TABLE data_{table} ({column} FLOAT)")
         for value in (*values, None):
             connection.execute(f"INSERT INTO data_{table} VALUES (?)", [value])
-        actual = connection.execute(suite.load_query(f"{table}_07_full_aggregate")).pl()
+        actual = connection.sql(suite.load_query(f"{table}_07_full_aggregate")).pl()
 
     assert actual.item(0, "cnt") == len(values)
     if len(values) > 1:

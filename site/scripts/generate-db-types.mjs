@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process"
 import { readFile, writeFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 
-import duckdb from "duckdb"
+import { DuckDBInstance } from "@duckdb/node-api"
 
 const RESULTS_DB_PATH = fileURLToPath(new URL("../public/data/results.db", import.meta.url))
 const OUTPUT_PATH = fileURLToPath(new URL("../src/lib/generated/db.ts", import.meta.url))
@@ -49,19 +49,24 @@ function pascalCase(tableName) {
     .join("")
 }
 
-const db = new duckdb.Database(RESULTS_DB_PATH, { access_mode: "READ_ONLY" })
-
-const columns = await new Promise((resolve, reject) => {
-  db.all(
-    `select table_name, column_name, data_type, is_nullable, column_default
-     from information_schema.columns
-     where table_schema = 'main'
-     order by table_name, ordinal_position`,
-    (err, rows) => (err ? reject(err) : resolve(rows)),
-  )
-})
-
-db.close()
+const instance = await DuckDBInstance.create(RESULTS_DB_PATH, { access_mode: "READ_ONLY" })
+let columns
+try {
+  const connection = await instance.connect()
+  try {
+    const result = await connection.runAndReadAll(
+      `select table_name, column_name, data_type, is_nullable, column_default
+       from information_schema.columns
+       where table_schema = 'main'
+       order by table_name, ordinal_position`,
+    )
+    columns = result.getRowObjects()
+  } finally {
+    connection.closeSync()
+  }
+} finally {
+  instance.closeSync()
+}
 
 const tables = new Map()
 for (const column of columns) {

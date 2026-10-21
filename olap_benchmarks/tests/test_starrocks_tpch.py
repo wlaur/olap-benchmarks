@@ -32,8 +32,8 @@ def test_pricing_summary_averages_preserve_nullable_and_empty_inputs(empty: bool
             )
         canonical = (QUERY_DIRECTORY / "01_pricing_summary.sql").read_text()
         override = (QUERY_DIRECTORY / "starrocks/01_pricing_summary.sql").read_text()
-        reference = connection.execute(canonical).pl()
-        actual = connection.execute(override).pl()
+        reference = connection.sql(canonical).pl()
+        actual = connection.sql(override).pl()
 
     assert_frame_equal(actual, reference)
     if not empty:

@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { Navigate, Route, Routes, useParams } from "react-router-dom"
 
 import { Navbar } from "./components/layout/Navbar"
+import { NoticeStrip } from "./components/layout/Panel"
 import {
   getDefaultBenchmarkId,
   isBenchmarkSuiteId,
@@ -60,6 +61,7 @@ export function App() {
   const selectedSystem = useAppStore((s) => s.selectedSystem)
   const setSelectedSystem = useAppStore((s) => s.setSelectedSystem)
   const loading = useAppStore((s) => s.systemLoading)
+  const systemError = useAppStore((s) => s.systemError)
   const loadSuites = useAppStore((s) => s.loadSuites)
   const loadSystems = useAppStore((s) => s.loadSystems)
 
@@ -80,6 +82,11 @@ export function App() {
   return (
     <div className="flex h-dvh min-h-screen flex-col overflow-hidden bg-surface-primary text-slate-100">
       {navbar}
+      {systemError ? (
+        <NoticeStrip tone="warning" className="mx-4 my-3 shrink-0">
+          Failed to load results: {systemError}
+        </NoticeStrip>
+      ) : null}
       <Routes>
         <Route
           path="/"

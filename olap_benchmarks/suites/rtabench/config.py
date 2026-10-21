@@ -4,6 +4,7 @@
 import logging
 import shutil
 from gzip import open as gzip_open
+from pathlib import Path
 from typing import Any
 
 import polars as pl
@@ -147,6 +148,9 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
     def populate_table_order(self) -> list[TableName]:
         return list(RTABENCH_SCHEMAS)
 
+    def populate_table(self, table: TableName, path: Path) -> None:
+        self.db.insert(pl.scan_parquet(path), table, **self.populate_kwargs)
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -155,10 +159,8 @@ class RTABench[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("rtabench")
 
         for table_name in self.populate_table_order:
-            df = pl.scan_parquet(get_settings().input_data_directory / f"rtabench/{table_name}.parquet")
-
             with self.db.phase_context("insert", table_name=table_name):
-                self.db.insert(df, table_name, **self.populate_kwargs)
+                self.populate_table(table_name, get_settings().input_data_directory / f"rtabench/{table_name}.parquet")
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all rtabench tables for {self.name}")

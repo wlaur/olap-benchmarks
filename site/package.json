@@ -5,22 +5,23 @@
   "scripts": {
     "build": "tsc && vite build",
     "check": "tsc --noEmit",
-    "codegen": "node ./scripts/generate-db-types.mjs",
-    "codegen:check": "node ./scripts/generate-db-types.mjs --check",
+    "codegen": "bun ./scripts/generate-db-types.mjs",
+    "codegen:check": "bun ./scripts/generate-db-types.mjs --check",
     "dev": "vite",
-    "fetch-data": "curl -fL --create-dirs -o public/data/results.db https://github.com/wlaur/olap-benchmarks/releases/download/data/results.db",
+    "fetch-data": "bun ./scripts/fetch-data.mjs",
     "fmt": "oxfmt --write .",
     "fmt:check": "oxfmt --check .",
     "lint": "oxlint .",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:reader": "playwright test tests/e2e/results-reader.spec.ts --workers=1",
     "verify": "bun run check && bun run lint && bun run fmt:check && bun run build",
-    "verify-data": "node ./scripts/verify-data.mjs"
+    "verify-data": "bun ./scripts/verify-data.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
     "@coji/kysely-duckdb-wasm": "^0.4.0",
-    "@duckdb/duckdb-wasm": "^1.32.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
     "@lezer/highlight": "^1.2.5",
     "@radix-ui/react-select": "^2.4.1",
     "@tailwindcss/typography": "^0.5.20",
@@ -36,12 +37,12 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@duckdb/node-api": "2.0.0-r.1",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "duckdb": "^1.4.4",
     "oxfmt": "0.73.0",
     "oxlint": "1.88.0",
     "tailwindcss": "^4.3.3",

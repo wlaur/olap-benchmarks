@@ -1,3 +1,5 @@
+import { fetchResultsManifest } from "./resultsManifest"
+
 export type Publication =
   | { kind: "matrix" }
   | {
@@ -17,12 +19,7 @@ export function fetchPublication(): Promise<Publication> {
 }
 
 async function loadPublication(): Promise<Publication> {
-  const response = await fetch(`${import.meta.env.BASE_URL}data/manifest.json`)
-  if (!response.ok) {
-    throw new Error(`Failed to load manifest.json: ${response.status}`)
-  }
-
-  const { publication } = (await response.json()) as { publication: Publication }
+  const { publication } = (await fetchResultsManifest()) as { publication: Publication }
   if (!publication || (publication.kind !== "matrix" && publication.kind !== "campaign")) {
     throw new Error("manifest.json has no valid publication context")
   }
