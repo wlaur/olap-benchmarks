@@ -119,8 +119,14 @@ executions returned the same 6,019,103 distinct non-NULL phrases over 99,997,497
 input rows. Counterbalanced measured medians were 21.532 s for the original and
 2.207 s for the candidate, with paired speedups of 9.803×, 9.510× and 9.844×.
 The rewrite is adopted; these diagnostic timings are not campaign measurements.
-Fresh populate 524 validated the full 105-column input; a full select replacement
-is required before publishing the changed query.
+Fresh populate 524 validated the full 105-column input. Select replacement 525
+completed in 392.3 seconds with all 43 planned queries: 40 measured and explicit
+Q4/Q9/Q32 timeout exclusions. Answers and repeat hashes validated. Q5's measured
+median was 2.205 seconds. Q33 now has complete primary-cohort observations
+(17.725-second median); Q18/Q28/Q34 remained about 13.129/8.922/16.946 seconds.
+The whole select run's sampled peaks were 19,347 MiB server charge, 252 MiB
+client RSS and 48,597 MiB store allocation; independent maxima are not summed
+or attributed exclusively to Q5.
 
 Q5's sampled total container charge was lower for the candidate (1.68–1.80 GiB
 versus 2.33–2.42 GiB), while its anonymous-memory peaks were higher and allocations
