@@ -375,7 +375,15 @@ def execute_tpc_h_query(tables: TpcHTables, query_name: str, scale_factor: int) 
                     right_on="p_partkey",
                 )
                 .filter(pl.col("l_quantity") < Decimal("0.2") * pl.col("avg_quantity"))
-                .select((pl.col("l_extendedprice").sum().cast(pl.Float64) / 7.0).alias("avg_yearly"))
+                .select(
+                    (
+                        pl.when(pl.col("l_extendedprice").count() > 0)
+                        .then(pl.col("l_extendedprice").sum())
+                        .otherwise(None)
+                        .cast(pl.Float64)
+                        / 7.0
+                    ).alias("avg_yearly")
+                )
             )
         case "18_large_volume_customer":
             large_orders = (

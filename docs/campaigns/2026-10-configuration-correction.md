@@ -92,8 +92,10 @@ server crashed during Q15's warmup. The sampled container charge reached exactly
 24,576 MiB, anonymous/shared memory 24,563 MiB, and client RSS only 250 MiB.
 The daemon log records the server crash/restart. This is consistent with memory
 exhaustion; the removed container's OOM counter was not captured. Q15's failure
-does not establish that unattempted Q16–23 fail. Replacement coverage remains
-pending their independent checks and final cohort validation.
+does not establish that unattempted Q16–23 fail. Independent attempts then
+exceeded the 45-second limit for Q16 (519) and Q17 (520). Run 521 completed and
+validated all six remaining queries, Q18–23. A final full-scope cohort retains
+explicit exclusions for only those three observed failures.
 
 Two further chat rewrites passed exact fixture and full-SF1 correctness gates
 but were rejected. Filtering assistants before Q17's JSON expansion was slower
@@ -111,6 +113,10 @@ distinct aggregates, returns NULL for the empty ClickBench average, and uses
 MAX for the metrics EAV alignment. The generated EAV inputs already have unique
 time/metric pairs; this correction does not imply those published answers were
 wrong. Seven new fixture cases failed before the changes and pass afterward.
+TPC-H Q17 also now returns NULL for an empty or all-NULL qualifying SUM while
+preserving legitimate zero and decimal accumulation. Fourteen fixture variants
+failed before that correction; all 26 pass afterward. Its semijoin performance
+proposal remains separate and unadopted.
 
 Polars registers most tables as links to external Parquet. The previous store
 directory measurement counted link entries without their targets. Metrics
