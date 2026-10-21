@@ -33,6 +33,12 @@ class TimescaleTimeSeriesMetrics(PostgresTimeSeriesMetrics["TimescaleDB"]):
     # Keep this explicit rowstore hypertable; EAV and wide100 use columnstore.
     ROWSTORE_TABLES: ClassVar[frozenset[str]] = frozenset({"wide1000"})
 
+    def should_populate(self) -> bool:
+        populate = super().should_populate()
+        if not populate:
+            self.db.verify_telemetry_storage(self.expected_table_row_counts())
+        return populate
+
     def populate_table(self, table: str, path: Path) -> None:
         schema = cast(pl.Schema, pl.read_parquet_schema(path))
         self.db.create_table(schema, table, not_null=["time", "metric_name"] if table.startswith("eav") else "time")
@@ -380,6 +386,50 @@ class TimescaleDB(Postgres):
     wal_path_patterns: ClassVar[tuple[str, ...]] = ("pg_wal",)
 
     connection_string: str = Field(default_factory=_timescaledb_connection_string)
+
+    def before_benchmark_operation(self) -> None:
+        if self._current_operation == "select" and self._current_suite in {"time_series_metrics", "time_series_ranges"}:
+            self.verify_telemetry_storage(self.benchmarks[self.current_suite].expected_table_row_counts())
+
+    def verify_telemetry_storage(self, expected_tables: Mapping[str, int]) -> None:
+        step_id = self._start_step("phase", "timescaledb_telemetry_storage")
+        metadata: dict[str, Any] = {}
+        try:
+            rows = self.fetch_python(
+                "SELECT h.hypertable_name, h.compression_enabled, count(c.chunk_name) AS chunks, "
+                "count(c.chunk_name) FILTER (WHERE c.is_compressed) AS compressed_chunks "
+                "FROM timescaledb_information.hypertables h LEFT JOIN timescaledb_information.chunks c "
+                "ON c.hypertable_name=h.hypertable_name AND c.hypertable_schema=h.hypertable_schema "
+                "WHERE h.hypertable_schema='public' GROUP BY 1,2 ORDER BY 1"
+            ).to_dicts()
+            metadata["tables"] = rows
+            states = {row["hypertable_name"]: row for row in rows}
+            problems: list[str] = []
+            for table in expected_tables:
+                state = states.get(table)
+                if state is None or state["chunks"] == 0:
+                    problems.append(f"{table}: missing populated hypertable")
+                    continue
+                compressed = table not in TimescaleTimeSeriesMetrics.ROWSTORE_TABLES
+                if state["compression_enabled"] != compressed or state["compressed_chunks"] != (
+                    state["chunks"] if compressed else 0
+                ):
+                    problems.append(f"{table}: unexpected columnstore state {state}")
+            if problems:
+                raise RuntimeError(
+                    "Repopulate Timescale telemetry with its native storage layout: " + "; ".join(problems)
+                )
+        except BaseException as exc:
+            self._finish_step(
+                step_id,
+                status="failed",
+                step_type="phase",
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+                metadata=metadata,
+            )
+            raise
+        self._finish_step(step_id, status="completed", step_type="phase", metadata=metadata)
 
     @property
     def start(self) -> str:

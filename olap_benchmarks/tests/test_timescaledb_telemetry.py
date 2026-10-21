@@ -1,7 +1,7 @@
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import polars as pl
 import pytest
@@ -161,3 +161,38 @@ def test_wide1000_remains_a_rowstore_hypertable_because_compression_exceeds_tupl
     assert any("create_hypertable" in event for event in database.events)
     assert not any("enable_columnstore" in event or "compress_chunk" in event for event in database.events)
     assert database.events[-1] == 'VACUUM FREEZE ANALYZE "wide1000"'
+
+
+@pytest.mark.parametrize("problem", [None, "missing", "incomplete", "wide_compressed"])
+def test_native_telemetry_rejects_count_complete_stores_with_unfinished_physical_preparation(
+    problem: str | None,
+) -> None:
+    class StorageDatabase(TimescaleDB):
+        steps: list[dict[str, Any]] = []
+
+        def _start_step(self, *args: object, **kwargs: object) -> int:
+            return 1
+
+        def _finish_step(self, step_id: int, *args: object, **kwargs: object) -> None:
+            self.steps.append(kwargs)
+
+        def fetch_python(
+            self, query: str, schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None
+        ) -> pl.DataFrame:
+            return pl.DataFrame(
+                {
+                    "hypertable_name": ["absent" if problem == "missing" else "eav100", "wide1000"],
+                    "compression_enabled": [True, problem == "wide_compressed"],
+                    "chunks": [3, 3],
+                    "compressed_chunks": [2 if problem == "incomplete" else 3, 0],
+                }
+            )
+
+    database = StorageDatabase()
+    if problem is None:
+        database.verify_telemetry_storage({"eav100": 100, "wide1000": 10})
+    else:
+        with pytest.raises(RuntimeError, match="Repopulate Timescale telemetry"):
+            database.verify_telemetry_storage({"eav100": 100, "wide1000": 10})
+    assert database.steps[0]["status"] == ("completed" if problem is None else "failed")
+    assert len(database.steps[0]["metadata"]["tables"]) == 2

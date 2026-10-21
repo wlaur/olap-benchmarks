@@ -201,23 +201,37 @@ class Doris(Database):
         return {DORIS_FE_CONTAINER: frontend, DORIS_BE_CONTAINER: threads - frontend}
 
     @property
-    def container_memory_limit_mb(self) -> int | None:
+    def container_memory_limits_mb(self) -> Mapping[str, int | None]:
         memory_gb = get_settings().benchmark_memory_gb
-        return memory_gb * 1024 // 2 if memory_gb is not None else None
+        if memory_gb is None:
+            return {DORIS_FE_CONTAINER: None, DORIS_BE_CONTAINER: None}
+        total = memory_gb * 1024
+        frontend = total // 4
+        return {DORIS_FE_CONTAINER: frontend, DORIS_BE_CONTAINER: total - frontend}
+
+    @property
+    def frontend_heap_limits_mb(self) -> Mapping[str, int] | None:
+        frontend_limit = self.container_memory_limits_mb[DORIS_FE_CONTAINER]
+        if frontend_limit is None:
+            return None
+        maximum = frontend_limit * 2 // 3
+        return {"initial": min(1024, maximum), "maximum": maximum}
 
     @property
     def run_options(self) -> Mapping[str, object]:
         cpu_limits = self.container_cpu_limits
-        memory_limit_mb = self.container_memory_limit_mb
+        memory_limits_mb = self.container_memory_limits_mb
         return {
             **super().run_options,
-            "container_budget_policy": "combined-v1",
+            "container_budget_policy": "combined-fe25-be75-v2",
+            "frontend_heap_policy": "fe-conf-jdk17-v1",
+            "frontend_heap_limits_mb": self.frontend_heap_limits_mb,
             "container_shutdown_policy": "native-grace-v1",
             "result_cache_policy": "disabled-v1",
             "session_settings": dict.fromkeys(DORIS_RESULT_CACHE_VARIABLES, False),
             "connectorx_pre_execution_query": [DORIS_CACHE_INIT_SQL],
             "container_limits": {
-                name: {"cpu_limit": cpu_limits[name], "memory_limit_mb": memory_limit_mb}
+                name: {"cpu_limit": cpu_limits[name], "memory_limit_mb": memory_limits_mb[name]}
                 for name in self.metric_container_names
             },
         }
@@ -236,7 +250,15 @@ class Doris(Database):
         self.staging_directory.mkdir(parents=True, exist_ok=True)
         images = self.container_images
         cpu_limits = self.container_cpu_limits
-        memory_limit_mb = self.container_memory_limit_mb
+        memory_limits_mb = self.container_memory_limits_mb
+
+        frontend_env = {"FE_SERVERS": DORIS_FE_SERVERS, "FE_ID": "1"}
+        heap_limits = self.frontend_heap_limits_mb
+        if heap_limits is not None:
+            frontend_env.update(
+                OLAP_DORIS_FE_HEAP_INITIAL_MB=str(heap_limits["initial"]),
+                OLAP_DORIS_FE_HEAP_MAXIMUM_MB=str(heap_limits["maximum"]),
+            )
 
         for directory in (meta_dir, fe_log_dir, storage_dir, be_log_dir):
             directory.mkdir(parents=True, exist_ok=True)
@@ -254,9 +276,9 @@ class Doris(Database):
                     fe_log_dir.as_posix(): "/opt/apache-doris/fe/log",
                     entrypoint.as_posix(): "/benchmark-entrypoint.sh:ro",
                 },
-                env={"FE_SERVERS": DORIS_FE_SERVERS, "FE_ID": "1"},
+                env=frontend_env,
                 cpu_limit=cpu_limits[DORIS_FE_CONTAINER],
-                memory_limit_mb=memory_limit_mb,
+                memory_limit_mb=memory_limits_mb[DORIS_FE_CONTAINER],
                 entrypoint="/bin/bash",
                 args=("/benchmark-entrypoint.sh", "fe", "/usr/local/bin/init_fe.sh"),
             ),
@@ -273,7 +295,7 @@ class Doris(Database):
                 },
                 env={"FE_SERVERS": DORIS_FE_SERVERS, "BE_ADDR": f"{DORIS_BE_IP}:9050"},
                 cpu_limit=cpu_limits[DORIS_BE_CONTAINER],
-                memory_limit_mb=memory_limit_mb,
+                memory_limit_mb=memory_limits_mb[DORIS_BE_CONTAINER],
                 entrypoint="/bin/bash",
                 args=("/benchmark-entrypoint.sh", "be", "/usr/local/bin/entry_point.sh"),
             ),

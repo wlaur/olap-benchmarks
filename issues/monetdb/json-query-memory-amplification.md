@@ -1,9 +1,10 @@
 # JSON query memory amplification in the expanded campaign
 
-Static investigation on 2026-10-21 of the retained October 2026 campaign,
+Investigation on 2026-10-21 of the retained October 2026 campaign,
 MonetDB Dec2025-SP4 / 11.55.9, native ARM64 image
 `wlaur/monetdb-container:11.55.9-1`, ADBC 0.13.1 and
-sqlalchemy-monetdb-adbc 0.4.1. No new server or benchmark was run for this note.
+sqlalchemy-monetdb-adbc 0.4.1. The initial static audit was followed by a bounded
+live SF1 diagnostic; its findings are separated below from campaign measurements.
 The host had ten configured benchmark threads, a 24 GiB container limit and no
 container swap. This is evidence of a server memory failure, not yet a minimal
 upstream reproduction or proof of its specific allocation cause.
@@ -123,7 +124,8 @@ configuration evidence gap; it is not a claimed performance fix.
 Use a disposable store populated from the full immutable input, serially, with
 the original 10-thread/24-GiB policy and 45-second query/900-second operation
 limits. Keep the external client/disk guards. Do not rerun SF50 merely to test
-the JSON issue. Nothing below was executed in this investigation.
+the JSON issue. The later live round covered SF1 query plans and selected
+native/ADBC controls, not every proposed diagnostic below.
 
 1. On the benchmark connection collect the connector's
    `MONETDB_RUNTIME_ENVIRONMENT_SQL` and `MONETDB_RUNTIME_SESSION_SQL` constants.
@@ -162,11 +164,43 @@ Any SQL improvement must pass the full answer audit, including attachments
 nested inside tool results and visualization objects with unrelated `data`
 keys. Preserve the rolling-AVG and regex comparison exclusions.
 
+## Live SF1 findings and query correction
+
+The server reported `gdk_nr_threads=14`, `gdk_mem_maxsize=21002390077`,
+`default_pipe`, and zero additional session/user worker or memory caps. Docker
+enforced `cpu.max=1000000 100000`, `memory.max=25769803776` and no swap. The
+daemon's online-CPU default passes an explicit `gdk_nr_threads=14` argument,
+overriding GDK's quota-derived default. This does not grant fourteen CPUs.
+Session `sys.setworkerlimit(10)` controls overlapped default-worker timings;
+there is no demonstrated benefit supporting a common worker-setting change.
+
+Q08's physical plan evaluated nested JSON filters over each whole content BAT,
+then applied the selected user's candidate list. A plain derived table was
+flattened and retained that behavior. A filtered derived table with `OFFSET 0`
+projects the selected content before JSON parsing. This preserves every row
+and duplicate: there is no inner limit, changed JSON expression, precomputed
+answer, or preparation outside the timed query. The outer ordering and limit
+remain unchanged.
+
+Both forms returned the same 43 SF1 rows with the exact ordered Arrow hash.
+Additional inline fixtures covered 17 JSON shapes and matched both the first
+50 rows and all 300 qualifying rows. The rewrite took 124–129 ms through ADBC
+and 99–104 ms through native mclient; a warmed original control took 2.68 s
+and 2.47 s respectively. These are diagnostic observations, not replacement
+benchmark samples. SF10 still requires measured execution and answer validation.
+
+Q16 took about 9–13 seconds through both clients. Its physical plan reuses
+parts extraction across attachment branches; CTE reuse does not eliminate the
+remaining server-side JSON parsing and expansion. No Q15–17 rewrite or global
+resource change was adopted. The diagnostic ended without OOM and with the
+engine stopped. Evidence is retained under ignored
+`data/monetdb-diagnostics/20261021-live-round/`.
+
 ## Rerun and retention proposal
 
-With only settings capture implemented, old timings are not proven invalid.
-The first new runs should be the bounded diagnostics above. No immediate
-publication replacement or deletion is justified by this static work.
+The demonstrated Q08 correction requires full chat SF1/SF10 select reruns.
+Unchanged schema and ingestion do not require all twelve MonetDB cells to be
+replaced. Old results remain until validated replacements cover them.
 
 If a chat SQL/physical-design fix is demonstrated, rerun MonetDB chat SF1 and
 SF10 select with all 23 planned queries; include populate if schema/statistics

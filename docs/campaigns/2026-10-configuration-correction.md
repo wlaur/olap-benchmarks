@@ -19,6 +19,26 @@ The initial subagent proposed disabling predicate caches too. That proposal was
 narrowed before measured runs. Final-result and aggregate-result reuse are the
 controlled variables; this campaign is not a cache-free comparison.
 
+The running image identifies itself as `doris-4.1.5-release-917b20be838`.
+A serial Q33 experiment used off → SQL-only-on → aggregate-cache-on → off,
+with four executions per condition and an identical answer hash throughout.
+On the campaign's Python path, uncached execution took 4.15–5.71 seconds;
+SQL-cached repeats took 5.84–8.97 milliseconds. The SQL-on plan contained
+`LogicalSqlCache` / `PhysicalSqlCache`; the off plans did not. This confirms
+cached-answer reuse, rather than merely inferring it from warmup differences.
+Enabling the aggregate cache made this query slower (about 11–12 seconds).
+ConnectorX did not show the SQL-cache speedup despite enabled flag readback;
+the causal conclusion applies to the Python path actually used by the campaign.
+
+Uncached ClickBench run 506 exposed a separate resource issue: Q18 exceeded the
+backend's 10.8 GiB process limit within its 12 GiB container. The frontend also
+had a 12 GiB cap, leaving too little of the combined allowance available to
+execution. The corrected allocation is FE 6 GiB / BE 18 GiB, retaining FE one
+CPU / BE nine CPUs and exactly 24 GiB combined. FE heap flags become
+`-Xms1024m -Xmx4096m`; the backend retains its normal 90% process-memory policy.
+All three Doris suites require fresh populate and select measurements under
+this allocation. Run 506 remains failure evidence, not a replacement cohort.
+
 ## TimescaleDB storage proof
 
 Live tests used TimescaleDB 2.30.2 / PostgreSQL 18, ten workers and a 24 GiB
@@ -37,6 +57,19 @@ Wide tables exceeding PostgreSQL's column limit remain unsupported.
 
 The live server reported ten parallel workers, nine workers per gather, 6 GiB
 shared buffers and 139 MiB work_mem, all from command-line configuration.
+
+Validated telemetry replacements preserve the original measured scope:
+
+| Suite | Populate / select | Measured queries | Old sum of medians | New sum of medians |
+| --- | --- | ---: | ---: | ---: |
+| Metrics SF1 | 500 / 501 | 82 | 18.103 s | 4.135 s |
+| Ranges SF1 | 502 / 503 | 90 | 11.543 s | 1.693 s |
+
+Physical readback confirmed all 15 metrics chunks and all 75 ranges chunks in
+the five compressible tables were compressed. `wide1000` remained an explicit
+rowstore hypertable. Representative plans used columnar scans, vectorized
+aggregation and metric/time pruning. A readiness guard now rejects old stores
+whose row counts match but required hypertables or compressed chunks are absent.
 
 ## Replacement procedure
 
