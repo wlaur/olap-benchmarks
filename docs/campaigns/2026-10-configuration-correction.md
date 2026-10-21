@@ -110,6 +110,32 @@ for the original and 11.589 s for the candidate. Its memory samples also do not
 establish a repeatable saving: retained allocations and cache rose across the
 shared-process schedule. Neither rewrite is adopted.
 
+ClickBench Q5's distinct-string count uses a serial whole-column `algebra.unique`
+path in MonetDB 11.55.9. Grouping SearchPhrase in an `OFFSET 0` derived table and
+counting its non-NULL representatives changes this to partitioned grouping and
+reconciliation. Empty, NULL-only, empty-string and mixed duplicate fixtures
+passed exact value/schema/Arrow/canonical-hash comparisons. All eight full-store
+executions returned the same 6,019,103 distinct non-NULL phrases over 99,997,497
+input rows. Counterbalanced measured medians were 21.532 s for the original and
+2.207 s for the candidate, with paired speedups of 9.803×, 9.510× and 9.844×.
+The rewrite is adopted; these diagnostic timings are not campaign measurements.
+Fresh populate 524 validated the full 105-column input; a full select replacement
+is required before publishing the changed query.
+
+Q5's sampled total container charge was lower for the candidate (1.68–1.80 GiB
+versus 2.33–2.42 GiB), while its anonymous-memory peaks were higher and allocations
+remained after execution. This establishes a latency improvement in the tested
+cohort, not an unconditional memory saving. No OOM, timeout or resource guard
+fired. Required storage remained 44.805 GiB; endpoint sizes do not establish
+temporary-space peaks or spill. The three ClickBench candidate investigations
+used 255.076 seconds of cumulative live diagnostic time, excluding population.
+
+Actual plans rejected the proposed Q28 and Q34 rewrites: all 56 regex operators
+already consume filtered projections, and Q34 already groups only by URL before
+projecting its constant output. Q18's physical-plan fetch completed but exceeded
+the diagnostic's 2,000-row artifact guard; its detailed localization remains
+incomplete. Its original query and all existing failure evidence are retained.
+
 ### Polars correctness and storage accounting
 
 Adversarial fixtures exposed NULL-distinct, empty-average and duplicate-pivot
