@@ -205,6 +205,40 @@ review and resource interpretation. Query-window resource SQL reports observed
 footprints and sample counts; it does not claim exclusive query allocations or
 spill bytes from whole-store measurements.
 
+### DuckDB 2 JSON extraction
+
+DuckDB's Q02/Q03 overrides now extract two JSON string paths together after the
+original filters. The verified 2.0.0 build (`d54cbbe3df`) retains a single shared
+list extraction, with the Q03 timestamp cast above its filters. NULL handling,
+distinct counts, numeric conversion, UTC hours and output ordering are unchanged.
+Q04/Q05 retain their original lexical timestamp aggregation.
+
+Both rewrites independently passed physical-plan review, 46 fixture executions
+in UTC and Helsinki, and eight exact full-data answer/schema comparisons per
+query. Four fixture executions raised the same expected invalid-timestamp error.
+Counterbalanced measured medians fell from 1.095 to 0.741 seconds for Q02 and
+1.143 to 1.035 seconds for Q03; every measured pair favored the candidate.
+These are tuning diagnostics, separate from final campaign measurements.
+
+The full diagnostic phase sampled a peak process RSS of 4,366,467,072 bytes,
+with three to six samples per query window. No material candidate footprint
+increase was observed, but retained allocations prevent exclusive attribution.
+Store allocation remained 2,902,470,656 bytes; empty WAL/temp endpoints do not
+establish peak spill. Native DESCRIBE and actual returned Polars/Arrow schemas
+were checked separately: the connection's prior cursor metadata is stale after
+relation fetch and was explicitly excluded as fetch metadata.
+
+One pattern consumed 266.361 seconds of the 1,200-second exploration allowance.
+Native populate 538 verified 10,000,000 rows and remains available for the full
+five-query SELECT rerun. Detailed evidence is retained under
+`data/fairness-audit/query-proposals/validation/duckdb2-live-r5/`. The separate
+[storage comparison](2026-10-duckdb-storage-comparison.md) selected native for
+every suite; fresh DuckDB 2 campaign cohorts remain required.
+Because this tuning changes the SQL used in the initial storage comparison,
+JSONBench will first repeat its complete native/Parquet comparison with the
+adopted queries. That confirmation will retain separate measurements and the
+same predeclared selection criteria.
+
 ### Rerun policy
 
 Reruns use the original immutable inputs, engine pins, ten-CPU/24-GiB budget,
