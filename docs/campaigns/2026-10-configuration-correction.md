@@ -278,7 +278,7 @@ displayed plan; query-log read counters confirmed the otherwise hidden fact
 scan. The candidate has one aggregation followed by the global window and
 supplier join. Counterbalanced measured medians fell from 266.095 to 138.798 ms
 at SF10 and from 1,680.884 to 835.959 ms at SF50. Every measured pair improved.
-These diagnostics remain separate from the required full-suite reruns.
+These diagnostics remain separate from the final full-suite measurements.
 
 Sampled resource evidence does not establish lower memory use: SF10 server
 samples are sparse, and SF50 candidate anonymous-memory observations can be
@@ -292,8 +292,18 @@ One pattern used 551.739 seconds across both scales. Populates 574/575 verified
 all eight full tables under the original limits on ClickHouse 26.9.19.9.
 Evidence is retained in
 `data/fairness-audit/query-proposals/validation/relational/clickhouse-live-r6/`.
-The complete 22-query SELECT cohort at each scale must validate before replacing
-earlier results.
+The full SELECT replacements 576/577 validated all 22 queries at each scale:
+176 successful fetches, with no skips or unsupported queries. Q15's final
+measured medians were 156.518 ms at SF10 and 833.060 ms at SF50. All iteration
+hashes and output schemas were stable, and Q15 matched the diagnostic proofs.
+
+Whole-operation sampled server-charge peaks were 6,823/17,165 MiB at SF10/SF50;
+anonymous-memory peaks were 3,099/9,344 MiB and client RSS peaks 266/277 MiB.
+These independently sampled peaks are not summed. SF50's observed store size
+fell during ordinary background activity, so neither endpoint differences nor
+plan operator names establish spill. The final evidence index is under
+`data/fairness-audit/query-proposals/validation/relational/clickhouse-final-r7/`.
+Both successful stores were cleaned after validation; inputs and results remain.
 
 ### Rerun policy
 
