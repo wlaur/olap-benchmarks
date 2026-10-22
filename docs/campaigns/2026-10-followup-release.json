@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "revision": "2026-10-followup",
+  "remote_verified": true,
+  "assets": [
+    {
+      "kind": "selected",
+      "release": "data",
+      "name": "results-832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f.db",
+      "sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+      "bytes": 143929344,
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/data/results-832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f.db",
+      "github_asset_id": 666101474,
+      "remote_digest": "sha256:832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f"
+    },
+    {
+      "kind": "raw",
+      "release": "runs",
+      "name": "2026-10-followup-raw-4b549128c0cead5ca43734b14ea15ccd1ce6b1e9d2e05b6694118aef6ebde2b0.db",
+      "sha256": "4b549128c0cead5ca43734b14ea15ccd1ce6b1e9d2e05b6694118aef6ebde2b0",
+      "bytes": 251146240,
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/2026-10-followup-raw-4b549128c0cead5ca43734b14ea15ccd1ce6b1e9d2e05b6694118aef6ebde2b0.db",
+      "github_asset_id": 666103825,
+      "remote_digest": "sha256:4b549128c0cead5ca43734b14ea15ccd1ce6b1e9d2e05b6694118aef6ebde2b0"
+    },
+    {
+      "kind": "evidence",
+      "release": "runs",
+      "name": "2026-10-followup-evidence-6f3ae03ea492f8562a60c89af810667eb0dacfb63918e86feba3caff4fc7ce11.tar.gz",
+      "sha256": "6f3ae03ea492f8562a60c89af810667eb0dacfb63918e86feba3caff4fc7ce11",
+      "bytes": 21000221,
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/2026-10-followup-evidence-6f3ae03ea492f8562a60c89af810667eb0dacfb63918e86feba3caff4fc7ce11.tar.gz",
+      "github_asset_id": 666106619,
+      "remote_digest": "sha256:6f3ae03ea492f8562a60c89af810667eb0dacfb63918e86feba3caff4fc7ce11"
+    }
+  ],
+  "preserve_existing_assets": true,
+  "deployment": "Upload only; matching code and metadata require review and merge before Pages deployment",
+  "evidence_files": 2716,
+  "verified_at": "2026-10-22T14:28:07.136699+00:00",
+  "verification": "GitHub release API reports uploaded state and matching SHA-256 digest, exact byte length and download URL for each asset; prior selected, legacy and original raw asset digests remain unchanged"
+}

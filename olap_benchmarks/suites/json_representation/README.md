@@ -30,9 +30,9 @@ Temporary repaired NDJSON is removed after raw insertion. Raw storage contains
 JSON text after this repair and the engine's ingestion serialization; it is not
 a byte-for-byte copy of the compressed source.
 
-| Table | Stored fields |
-| --- | --- |
-| `json_raw` | Required JSON text `j` |
+| Table           | Stored fields                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `json_raw`      | Required JSON text `j`                                                                          |
 | `json_prepared` | Nullable `kind`, `operation`, `collection`, `did`, `time_us_text`, and signed integer `time_us` |
 
 `operation` and `collection` come from the nested `commit` object. Every raw row
@@ -60,13 +60,13 @@ verification contract still checks the retained source identity and fingerprint.
 
 Each family below has a `raw_` and a `prepared_` query with matching output:
 
-| Family | Operation |
-| --- | --- |
-| `01_events_by_collection` | Count all rows by collection, including missing/NULL collections |
+| Family                           | Operation                                                            |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `01_events_by_collection`        | Count all rows by collection, including missing/NULL collections     |
 | `02_create_events_by_collection` | Count create commits and exact distinct non-NULL users by collection |
-| `03_create_events_by_hour` | Count post/repost/like create commits by collection and UTC hour |
-| `04_first_post_users` | First three users by canonical first-post timestamp |
-| `05_longest_post_activity` | Top three users by canonical post-activity span in milliseconds |
+| `03_create_events_by_hour`       | Count post/repost/like create commits by collection and UTC hour     |
+| `04_first_post_users`            | First three users by canonical first-post timestamp                  |
+| `05_longest_post_activity`       | Top three users by canonical post-activity span in milliseconds      |
 
 Families 04 and 05 preserve the canonical JSONBench order of operations:
 `MIN`/`MAX` compare timestamp **text** before conversion to signed integers.
@@ -115,8 +115,12 @@ fixtures, compared with DuckDB results. This live query fixture uses temporary
 Memory tables rather than the full MergeTree population path. A separate native
 check of the shared Parquet loader also passed; JSON representation population
 itself uses NDJSON. These checks do not establish a full 10-million-row native
-run or independent correctness of every answer. Full-scale native population,
-answer comparison, and performance measurements remain pending.
+run or independent correctness of every answer. The subsequent full-scale
+populations 584/598 and SELECT cohorts 585/599 completed on DuckDB/ClickHouse,
+including the actual NDJSON loading path. All ten queries have warmup plus three
+measured observations, and matching-input peer hashes agree. The [follow-up report](../../../docs/campaigns/2026-10-followup.md)
+records raw/prepared timings, field-materialization and total preparation costs,
+eligibility and the combined-storage limitation.
 
 ```sh
 uv run --no-sync ruff format --check olap_benchmarks/suites/json_representation olap_benchmarks/tests/test_json_representation*.py

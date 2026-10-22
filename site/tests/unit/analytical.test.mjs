@@ -16,6 +16,7 @@ function parse(analytical = analyticalMetadata(), extra = {}) {
       db_driver: null,
       status: "completed",
       finished_at: null,
+      error_type: null,
       error_message: null,
       run_metadata: JSON.stringify({ analytical, ...extra }),
     },

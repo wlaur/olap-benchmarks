@@ -14,6 +14,73 @@ test.afterAll(async () => {
   await empty.cleanup()
 })
 
+test("published analytical evidence keeps warmup failures unknown", async ({ page }, testInfo) => {
+  const response = await page.request.get("data/manifest.json")
+  const manifest = await response.json()
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await page.goto("#/")
+  const section = page.getByRole("region", { name: "Analytical concurrency evidence", exact: true })
+  await expect(section.locator("[data-analytical-run]")).toHaveCount(
+    manifest.publication.analytical_runs,
+  )
+  const runs = await page.evaluate(async () => {
+    const modulePath = "/olap-benchmarks/src/lib/analyticalReader.ts"
+    const { fetchAnalyticalRuns } = (await import(
+      modulePath
+    )) as typeof import("../../src/lib/analyticalReader")
+    return (await fetchAnalyticalRuns()).map((run) => ({
+      id: run.row.id,
+      db: run.row.db,
+      clients: run.clients,
+      status: run.row.status,
+      manifest: run.manifestStatus,
+      selected: run.selectedCount,
+      canonical: run.canonicalCount,
+      overall: run.overall,
+      elapsed: run.elapsedSeconds,
+    }))
+  })
+  await testInfo.attach("published-analytical-evidence", {
+    body: JSON.stringify(runs, null, 2),
+    contentType: "application/json",
+  })
+  expect(runs).toHaveLength(manifest.publication.analytical_runs)
+  const postgres = runs.filter((run) => run.db === "postgres")
+  expect(postgres.map((run) => run.clients).sort((a, b) => a! - b!)).toEqual([1, 4, 16])
+  for (const run of runs) {
+    expect(run.manifest).toBe("full")
+    expect(run.selected).toBe(run.canonical)
+    const row = section.locator(`[data-analytical-run="${run.id}"]`)
+    if (run.db === "postgres") {
+      expect(run.status).toBe("failed")
+      expect(run.elapsed).toBeNull()
+      expect(run.overall.qps).toBeNull()
+      expect(run.overall.completed ?? 0).toBe(0)
+      expect(run.overall.percentiles.every((percentile) => percentile.valueMs === null)).toBe(true)
+      await expect(row.locator("td").nth(6)).toHaveText("Unknown")
+      await expect(row).toContainText("p50 Unknown")
+      const evidence = section
+        .getByText(`Run ${run.id} · per-query, manifest & budget evidence`, { exact: true })
+        .locator("..")
+      await evidence.locator("summary").first().click()
+      await expect(evidence.getByText(/Recorded run error:/)).toBeVisible()
+    } else {
+      expect(run.status).toBe("completed")
+      expect(run.overall.qps).toBeGreaterThan(0)
+      expect(run.overall.errors).toBe(0)
+      expect(run.overall.timeouts).toBe(0)
+    }
+  }
+  for (const width of [1024, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+  }
+  expect(errors).toEqual([])
+})
+
 test("analytical runs retain qualified latency, failures and drilldown without affecting SELECT scores", async ({
   page,
 }, testInfo) => {

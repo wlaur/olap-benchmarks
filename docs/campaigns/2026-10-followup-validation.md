@@ -28,13 +28,13 @@ reuses the existing JSONBench SF10 inputs.
 
 ## Engine execution fixture gates
 
-| Workload | Native engines checked | Scope and oracle |
-| --- | --- | --- |
-| JOB | DuckDB, ClickHouse, PostgreSQL, MonetDB, StarRocks | All 113 queries on populated and empty fixtures, including native ingestion; SQLite reference and selected hand-checked goldens |
-| Device Telemetry | DuckDB, ClickHouse, PostgreSQL, TimescaleDB | All 18 queries against the Python fixture oracle; TimescaleDB checked before and after compression |
-| JSON Representation | ClickHouse | Five raw/prepared query pairs on populated and empty fixtures through the shared loading path; DuckDB reference with lossless timestamp-unit normalization |
-| Doris TPC-H | Doris 4.1.5 | All 22 queries on populated and empty canonical-typed fixtures against DuckDB; exact row counts and full persisted/cached column-statistics readiness |
-| Doris TPC-DS | Doris 4.1.5 | All 99 queries on populated and empty canonical-typed fixtures against DuckDB; native loading and strict column-statistics readiness |
+| Workload            | Native engines checked                             | Scope and oracle                                                                                                                                           |
+| ------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JOB                 | DuckDB, ClickHouse, PostgreSQL, MonetDB, StarRocks | All 113 queries on populated and empty fixtures, including native ingestion; SQLite reference and selected hand-checked goldens                            |
+| Device Telemetry    | DuckDB, ClickHouse, PostgreSQL, TimescaleDB        | All 18 queries against the Python fixture oracle; TimescaleDB checked before and after compression                                                         |
+| JSON Representation | ClickHouse                                         | Five raw/prepared query pairs on populated and empty fixtures through the shared loading path; DuckDB reference with lossless timestamp-unit normalization |
+| Doris TPC-H         | Doris 4.1.5                                        | All 22 queries on populated and empty canonical-typed fixtures against DuckDB; exact row counts and full persisted/cached column-statistics readiness      |
+| Doris TPC-DS        | Doris 4.1.5                                        | All 99 queries on populated and empty canonical-typed fixtures against DuckDB; native loading and strict column-statistics readiness                       |
 
 DuckDB JSON fixture tests also compare all raw/prepared variants offline.
 Fixture agreement establishes the tested cases, not universal correctness or
@@ -90,12 +90,12 @@ uninstrumented.
 All twelve TPC-H SF10 attempts finished under parent scheduling. Nine completed;
 PostgreSQL failed warmup at all client counts and has unknown QPS.
 
-| Engine | 1 client QPS | 4 clients QPS | 16 clients QPS | Run IDs (1/4/16 clients) |
-| --- | ---: | ---: | ---: | --- |
-| DuckDB | 15.598 | 21.616 | 21.542 | 662 / 663 / 664 |
-| Polars | 5.587 | 6.366 | 6.243 | 666 / 667 / 668 |
-| ClickHouse | 4.155 | 4.792 | 4.898 | 674 / 675 / 676 |
-| PostgreSQL | Unknown | Unknown | Unknown | 670 / 671 / 672; warmup failed |
+| Engine     | 1 client QPS | 4 clients QPS | 16 clients QPS | Run IDs (1/4/16 clients)       |
+| ---------- | -----------: | ------------: | -------------: | ------------------------------ |
+| DuckDB     |       15.598 |        21.616 |         21.542 | 662 / 663 / 664                |
+| Polars     |        5.587 |         6.366 |          6.243 | 666 / 667 / 668                |
+| ClickHouse |        4.155 |         4.792 |          4.898 | 674 / 675 / 676                |
+| PostgreSQL |      Unknown |       Unknown |        Unknown | 670 / 671 / 672; warmup failed |
 
 Completed measured requests are 936/1,298/1,308 for DuckDB, 336/384/383 for
 Polars and 250/290/305 for ClickHouse. All nine completed runs record zero failed
@@ -113,8 +113,11 @@ request records; run 671 lacks budget readback and 672 lacks worker readback,
 so those facts remain unknown. Export fixes `d7fe4e7` and `be8eafc` represent unknown work only
 for terminal failed operations with an explicit error, preserving raw rows and
 NULL times. Logical request order and both warmup-completion boundaries are
-checked. Independent review found no further issues. Final export acceptance
-remains pending.
+checked. Amendment `276b8c2` retains explicit unscored failures that return
+during cleanup after the run's failure marker, while successful requests retain
+the strict cutoff. It passed 191 focused tests, Ruff/Pyright and independent
+review. The actual campaign export accepted all twelve configurations,
+including this retained failure trace.
 
 All twelve input manifests share prefix `1ff2594823ab`. Completed readbacks
 record ten shared threads and a configured 24 GiB engine budget without scaling
@@ -125,8 +128,8 @@ analytical fetches and TPC-H SF10 SELECT at matching input and hash versions.
 This supports peer answer agreement, not exact-schema or universal correctness.
 
 Evidence is retained in `data/temp/followup-analytical-{summary,request-check,budget-check,answer-check}.log`
-and the engine/client CLI logs under `results/followup-logs/`. Final public
-evidence binding and export validation remain pending.
+and the engine/client CLI logs under `results/followup-logs/`. Final counts and
+public assets are bound by the [publication report](2026-10-followup.md).
 
 ## Verification boundary
 
@@ -166,7 +169,8 @@ The [protocol amendment](2026-10-followup-protocol.md#ordering-evidence-amendmen
 retains the initial run 589 diagnostically. Complete DuckDB SF10 replacement 619
 now agrees with ClickHouse 620 across all 99 query identities under the final
 four-entry policy. The other five completed cells and original 99 measurements
-retain their evidence; final selection remains pending.
+retain their evidence; the final selection is recorded in the report and
+final-export section below.
 
 After the scoped hashing change, repository-wide Ruff and Pyright passed again;
 the full non-live suite passed 1,933 tests, with one skipped and fourteen live
@@ -338,18 +342,34 @@ Adopt exact decimal SUM followed by DOUBLE division by NULLIF(COUNT(...), 0)
 for all six Q44 means and the three pricing means after both-scale gates and
 offline checks. These are numerical SQL translations, not a change to hashing
 or a demonstrated optimizer defect. The [four-capture summary](2026-10-followup-doris-means.json)
-binds source and artifact hashes. Complete TPC-DS SF1/SF10 and TPC-H SF10/SF50
-SELECT replacements remain required after committing validated source.
+binds source and artifact hashes. Clean-source adoption `d3a6ccb` was followed
+by complete replacements 681/682 (TPC-DS SF1/SF10) and 683/684 (TPC-H SF10/SF50).
+All 99/99/22/22 queries have successful warmup and three measured observations;
+matching-input/hash-version peer answers agree. Final population operations
+678/677/680/679 respectively cost 73.501/164.375/100.414/315.743 seconds,
+including preparation verification. Superseded attempts remain raw evidence.
 
 ### Completed common-file and JOB replacements
 
 ClickHouse common-Parquet replacement 602 completed all 22 queries after the
-scoped Q5 join-order change. Preserve 601 and its Q5 timeout diagnostically;
-final complete-cohort answer/source/configuration binding remains pending.
+scoped Q5 join-order change. Preserve 601 and its Q5 timeout diagnostically.
+Final export provenance and matching-input/hash-version peer comparisons pass.
 
 PostgreSQL fresh JOB population 635 and indexed SELECT 636 completed with all
 113 query hashes matching DuckDB, ClickHouse, MonetDB and StarRocks. Preserve
 primary-key-only 612, its 112 completed queries and Q29c timeout. Final 635
-index/readiness readback, preparation timings and storage accounting remain
-to be bound to publication. Diagnostic timings do not substitute for these
-costs or final SELECT measurements.
+population cost 123.484 seconds, including loading, all 23 expected index
+definitions, statistics and readiness verification. The selected run records
+that layout; diagnostic index construction and storage observations remain
+separately labeled in the tuning ledger and report.
+
+## Final export acceptance
+
+The exported revision contains 312 operations, 127 SELECT cohorts (125 completed,
+two failed, 34 partial), and 12 analytical attempts (nine completed, three failed).
+Coverage across 6,837 planned SELECT positions is 6,244 complete, 515 skipped,
+72 unsupported and six partial/failed. Complete execution alone does not imply
+ranking eligibility. The SHA-bound metadata carries 52 exact-run annotations.
+The raw revision retains 351 operations, and all original 244 operations match
+their original table counts and row fingerprints. See the [retention record](2026-10-followup-retention.json)
+and [report](2026-10-followup.md) for asset checksums, reader checks and rollout.

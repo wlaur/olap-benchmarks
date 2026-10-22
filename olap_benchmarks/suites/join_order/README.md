@@ -14,7 +14,7 @@ edges, aliases, and independent `MIN` projections, including string comparisons
 of ratings. No join hints, added filters, numeric casts, or query substitutions
 are applied.
 
-The original paper is [Leis et al., *How Good Are Query Optimizers, Really?*,
+The original paper is [Leis et al., _How Good Are Query Optimizers, Really?_,
 PVLDB 9(3), 2015](https://www.vldb.org/pvldb/vol9/p204-leis.pdf).
 The dataset is the paper's [CWI IMDb archive](https://event.cwi.nl/da/job/imdb.tgz),
 with [CWI's accompanying provenance and terms](https://event.cwi.nl/da/job/readme.txt).
@@ -241,8 +241,10 @@ uv run --no-sync olap benchmark postgres join_order select --scale-factor 1
 ```
 
 The normal SELECT profile runs every one of the 113 queries four times: one
-warmup and three measured iterations. These reproduction commands do not claim
-that the final population or SELECT rerun has completed.
+warmup and three measured iterations. Final fresh population 635 and SELECT 636
+completed; all 113 query hashes agree with DuckDB, ClickHouse, MonetDB and
+StarRocks. The [follow-up report](../../../docs/campaigns/2026-10-followup.md)
+records full-scale eligibility and timings for all five participants.
 
 Adoption is supported by the bounded 325.21-second diagnostic recorded in
 `results/followup-tuning/postgres-job.json`. The candidate completed all 113
@@ -268,5 +270,6 @@ Observed database size grew from 8,293,947,071 to 10,027,595,455 bytes. All 23
 candidate indexes were dropped at diagnostic completion and the primary-only
 layout was verified. Dropping indexes did not restore the earlier statistics:
 candidate `ANALYZE` changed them, which remains a confound in the reversed
-controls. Final results require the fresh indexed population and complete
-113-query SELECT rerun described above.
+controls. Final fresh population 635 cost 123.484 seconds, including loading,
+indexes, statistics and readiness verification, before the complete SELECT 636.
+Diagnostic construction timings remain separate from that full preparation cost.

@@ -7,11 +7,11 @@ A custom multi-device workload with 12 nullable metrics, a small device dimensio
 Both scales end at **2025-01-15 00:00:00 UTC, exclusive**. Timestamps are naive UTC with millisecond precision. The fixed arithmetic seed is **20251022**; generation never reads the wall clock or uses process-local randomness.
 
 | Scale | Devices | History | Exact reading rows | Device rows |
-| --- | ---: | ---: | ---: | ---: |
-| 1 | 1,000 | 7 days | 484,318 | 1,000 |
-| 10 | 5,000 | 14 days | 4,863,454 | 5,000 |
+| ----- | ------: | ------: | -----------------: | ----------: |
+| 1     |   1,000 |  7 days |            484,318 |       1,000 |
+| 10    |   5,000 | 14 days |          4,863,454 |       5,000 |
 
-SF10 multiplies cardinality by five and history by two. It preserves the final seven days of every SF1 device exactly. These scales change device/history cardinality, rather than column width. The largest scale has approximately 467 MB of raw metric doubles before null masks, identifiers, strings, indexes, and engine overhead; this is a size calculation, not a measured memory or storage result. Generation processes 24 five-minute slots per batch, filtering activity before computing metrics. It does not materialize the full dataset in memory. Full-scale native load memory, storage, and query performance remain unmeasured.
+SF10 multiplies cardinality by five and history by two. It preserves the final seven days of every SF1 device exactly. These scales change device/history cardinality, rather than column width. The largest scale has approximately 467 MB of raw metric doubles before null masks, identifiers, strings, indexes, and engine overhead; this is a size calculation, not a measured memory or storage result. Generation processes 24 five-minute slots per batch, filtering activity before computing metrics. It does not materialize the full dataset in memory. Full-scale warm-read measurements and preparation observations are recorded in the [follow-up report](../../../docs/campaigns/2026-10-followup.md); the size calculation is not a peak-memory measurement.
 
 `telemetry_device` has one row per `device_id`. Its columns are `device_id`, `region`, `tenant`, `model`, nullable `rack`, `cadence_slots`, and `rated_power`. Tags are immutable: four regions, 100 tenants, three models, and sixteen rack labels. `rack` is NULL when `device_id % 11 = 0`. Tenants and reporting cadence are intentionally correlated; tenant 7 is a selective cold-device cohort. This is a tag-selectivity workload, not a claim of statistically independent tags.
 
@@ -37,26 +37,26 @@ Preparation writes two Zstd Parquet files and a versioned `generation.json` cont
 
 ## Queries and exact semantics
 
-| Query | Operation |
-| --- | --- |
-| 01 | Time, CPU, and memory from the latest row for device 42 |
-| 02 | Time, CPU, and memory from the latest row for each observed device |
-| 03 | Time, CPU, and memory from the latest row per device in region 1 |
-| 04 | Tenant 7 statistics in the final hour |
-| 05 | Region 1 statistics by model in the final day |
-| 06 | Fleet averages across all twelve metrics in the final hour |
-| 07 | Ordered raw readings for device 42 in the final day |
-| 08 | Hourly downsampling of device 42 in the final day |
-| 09 | Region/model hourly downsampling in the final day |
-| 10 | Daily fleet aggregates by region over all stored history |
-| 11 | Top twenty devices by average CPU, requiring twelve valid samples in the final day |
-| 12 | CPU and joint CPU/memory threshold counts by region |
-| 13 | Six-observation moving average for device 42 |
-| 14 | Reporting gaps relative to each device's configured cadence |
-| 15 | CPU, battery, and nullable-rack coverage by region |
-| 16 | Many-to-one metadata join and synthetic power estimate, grouped by region/rack |
-| 17 | Inventory devices whose latest event precedes the final day, or which have no observations |
-| 18 | Simulated arrivals after the cutoff among events from the final hour |
+| Query | Operation                                                                                  |
+| ----- | ------------------------------------------------------------------------------------------ |
+| 01    | Time, CPU, and memory from the latest row for device 42                                    |
+| 02    | Time, CPU, and memory from the latest row for each observed device                         |
+| 03    | Time, CPU, and memory from the latest row per device in region 1                           |
+| 04    | Tenant 7 statistics in the final hour                                                      |
+| 05    | Region 1 statistics by model in the final day                                              |
+| 06    | Fleet averages across all twelve metrics in the final hour                                 |
+| 07    | Ordered raw readings for device 42 in the final day                                        |
+| 08    | Hourly downsampling of device 42 in the final day                                          |
+| 09    | Region/model hourly downsampling in the final day                                          |
+| 10    | Daily fleet aggregates by region over all stored history                                   |
+| 11    | Top twenty devices by average CPU, requiring twelve valid samples in the final day         |
+| 12    | CPU and joint CPU/memory threshold counts by region                                        |
+| 13    | Six-observation moving average for device 42                                               |
+| 14    | Reporting gaps relative to each device's configured cadence                                |
+| 15    | CPU, battery, and nullable-rack coverage by region                                         |
+| 16    | Many-to-one metadata join and synthetic power estimate, grouped by region/rack             |
+| 17    | Inventory devices whose latest event precedes the final day, or which have no observations |
+| 18    | Simulated arrivals after the cutoff among events from the final hour                       |
 
 All time ranges are half open. Buckets align to UTC hour/day boundaries, with no gap filling. Aggregates ignore NULL values, return NULL for an all-NULL numeric input, and count actual rows. A threshold comparison against NULL is not a breach. Latest means the latest **row**, preserving NULL metrics from that row; it never substitutes an older non-NULL value. Identity uniqueness makes latest ordering deterministic.
 
@@ -64,14 +64,14 @@ Query 13 uses `ROWS BETWEEN 5 PRECEDING AND CURRENT ROW` after applying the fina
 
 ## Engine contracts and validation limits
 
-The registry and matrix include **DuckDB, PostgreSQL, TimescaleDB, and ClickHouse** at SF1 and SF10, with `populate` and `select` operations. No queries are marked unsupported or excluded from answer comparison for these engines. Other engines fail closed if the class is instantiated manually. Matrix inclusion describes planned coverage; full-scale benchmark measurements remain pending.
+The registry and matrix include **DuckDB, PostgreSQL, TimescaleDB, and ClickHouse** at SF1 and SF10, with `populate` and `select` operations. No queries are marked unsupported or excluded from answer comparison for these engines. Other engines fail closed if the class is instantiated manually. The full-scale campaign completed all eight engine/scale cohorts, with successful warmup plus three measured observations for each query and matching-input peer hashes agreeing.
 
 - DuckDB uses shared SQL and the existing native/Parquet storage loader and manifest. Its schema declares required values without persistent primary-key indexes, matching the repository's existing DuckDB storage convention.
 - PostgreSQL uses `(device_id, time)` and time, tenant/time, and region/time indexes. Latest-per-device queries use `DISTINCT ON`. Data loads through the existing COPY path, followed by `VACUUM FREEZE ANALYZE` on both tables.
 - TimescaleDB uses the PostgreSQL schema plus one-day hypertable chunks and columnstore segmented by device, ordered by descending time. Populate compresses all chunks, runs `VACUUM FREEZE ANALYZE`, and reuses `verify_telemetry_storage` for the reading hypertable on completion, reuse, and select. Device metadata remains a regular table. Latest uses `DISTINCT ON`; bucket queries use `time_bucket`. No retention policy is installed, so fixed historical events and simulated late-arrival metadata are retained.
 - ClickHouse uses MergeTree, daily partitions, and `(region, tenant, device_id, time)` ordering. Metrics and rack remain nullable. `argMax(tuple(time, cpu_user, memory_used), time)` preserves NULLs in the latest row. `*OrNull` aggregates preserve all-NULL/empty semantics, an explicitly nullable `lagInFrame` avoids a fabricated first-row gap, and `join_use_nulls=1` preserves absent metadata-join matches. Timestamp outputs use the existing normalization path. No ReplacingMergeTree or background deduplication changes row identity.
 
-All 18 queries passed the populated native fixture against an independent Python oracle on DuckDB, ClickHouse, PostgreSQL, and TimescaleDB. These engine gates ran serially; TimescaleDB passed both before and after chunk compression. The fixture uses 60 devices and two days of history, not the complete SF1 or SF10 dataset. This evidence covers the tested answers, not full-scale ingestion cost, storage, or query performance.
+All 18 queries passed the populated native fixture against an independent Python oracle on DuckDB, ClickHouse, PostgreSQL, and TimescaleDB. These engine gates ran serially; TimescaleDB passed both before and after chunk compression. The fixture uses 60 devices and two days of history, not the complete SF1 or SF10 dataset. This fixture evidence covers its tested answers. Separate full-scale cohorts 579/581 (DuckDB), 593/595 (ClickHouse), 608/610 (PostgreSQL), and 614/616 (TimescaleDB) supply SF1/SF10 warm-read timings and recorded preparation evidence in the follow-up report.
 
 Offline tests also execute shared, PostgreSQL, and TimescaleDB query texts in in-memory DuckDB against the Python oracle, and check ClickHouse SQL structurally. They cover batch-independent generation, scale overlap, schema/null/multiplicity, half-open boundaries, latest-row NULLs, failed population/reuse, and the append-visibility probe. The native fixture above provides separate evidence of execution on each engine.
 

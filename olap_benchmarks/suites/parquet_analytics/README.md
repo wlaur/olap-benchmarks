@@ -19,15 +19,15 @@ with `tpc_h`. Preparation checks that it contains exactly these eight
 unpartitioned Parquet files, their canonical column order and types, and their
 SF10 footer row counts:
 
-| Table | Rows |
-| --- | ---: |
-| `region` | 5 |
-| `nation` | 25 |
-| `supplier` | 100,000 |
-| `customer` | 1,500,000 |
-| `part` | 2,000,000 |
-| `partsupp` | 8,000,000 |
-| `orders` | 15,000,000 |
+| Table      |       Rows |
+| ---------- | ---------: |
+| `region`   |          5 |
+| `nation`   |         25 |
+| `supplier` |    100,000 |
+| `customer` |  1,500,000 |
+| `part`     |  2,000,000 |
+| `partsupp` |  8,000,000 |
+| `orders`   | 15,000,000 |
 | `lineitem` | 59,986,052 |
 
 The 61 columns use the existing DuckDB TPC-H schema as their type specification:
@@ -109,7 +109,9 @@ uv run --no-sync pyright olap_benchmarks/suites/parquet_analytics olap_benchmark
 uv run --no-sync pytest -q olap_benchmarks/tests/test_parquet_analytics_contracts.py
 ```
 
-Native full-engine execution of all 22 common-file queries, full-scale answer
-comparisons, and performance measurements remain pending. Agreement between
-engines would be peer comparison evidence, not an independent proof of every
-answer.
+The subsequent full-scale campaign completed all 22 queries on DuckDB 587,
+Polars 626 and ClickHouse 602, with matching-input peer hashes agreeing.
+ClickHouse 602 uses the scoped Q5 written-join-order setting; the original Q5
+timeout remains diagnostic. The [follow-up report](../../../docs/campaigns/2026-10-followup.md)
+records performance, eligibility and preparation evidence. Peer agreement is
+not an independent proof of every answer.

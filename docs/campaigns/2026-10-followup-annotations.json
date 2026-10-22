@@ -1,0 +1,522 @@
+[
+  {
+    "db": "postgres",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "run_id": 397,
+    "preparation": "incomplete",
+    "tuning": null,
+    "summary": "Population did not complete. The full table was verified, but completed index preparation is unproven.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "run_id": 404,
+    "preparation": "incomplete",
+    "tuning": null,
+    "summary": "Population 398 failed before compression; this SELECT cohort does not establish completed compressed storage.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-audit-coverage.md"
+  },
+  {
+    "db": "monetdb",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "run_id": 449,
+    "preparation": "incomplete",
+    "tuning": null,
+    "summary": "The full lineitem load did not complete within resource limits. Only queries whose required tables were verified are measured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
+  },
+  {
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "run_id": 458,
+    "preparation": "incomplete",
+    "tuning": null,
+    "summary": "The full lineitem load did not complete within resource limits. Only queries whose required tables were verified are measured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "run_id": 465,
+    "preparation": "incomplete",
+    "tuning": null,
+    "summary": "The full lineitem load did not complete within resource limits. Only queries whose required tables were verified are measured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "time_series_metrics",
+    "scale_factor": 1,
+    "run_id": 501,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Seven-day hypertables and all 15 compressible chunks were verified. wide1000 remains rowstore after a reproduced compression tuple-size limit. Scope is 82 of 112 queries.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "time_series_ranges",
+    "scale_factor": 1,
+    "run_id": 503,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Seven-day hypertables and all 75 compressible chunks were verified. wide1000 remains rowstore; larger wide layouts exceed table limits. Scope is 90 of 120 queries.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "doris",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "run_id": 511,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Actual query sessions recorded SQL-answer and aggregate-result caches disabled. Data/predicate caches remain enabled. FE 6 GiB and BE 18 GiB share the 24 GiB budget.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "doris",
+    "suite": "jsonbench",
+    "scale_factor": 10,
+    "run_id": 513,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Actual query sessions recorded SQL-answer and aggregate-result caches disabled. Data/predicate caches remain enabled. FE 6 GiB and BE 18 GiB share the 24 GiB budget.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "doris",
+    "suite": "rtabench",
+    "scale_factor": 1,
+    "run_id": 515,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Actual query sessions recorded SQL-answer and aggregate-result caches disabled. Data/predicate caches remain enabled. FE 6 GiB and BE 18 GiB share the 24 GiB budget.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "monetdb",
+    "suite": "chat_threads",
+    "scale_factor": 1,
+    "run_id": 508,
+    "preparation": "unknown",
+    "tuning": "Q08 filtered projection before JSON extraction was adopted after exact fixtures and full-data comparisons; Q16/Q17 candidates were rejected.",
+    "summary": "All 23 query positions completed. The source report separates tuning diagnostics from the selected campaign timings.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "monetdb",
+    "suite": "chat_threads",
+    "scale_factor": 10,
+    "run_id": 522,
+    "preparation": "unknown",
+    "tuning": "Q08 filtered projection before JSON extraction was adopted after exact fixtures and full-data comparisons; Q16/Q17 candidates were rejected.",
+    "summary": "20 of 23 queries are measured. Q15's server crash and independent Q16/Q17 timeouts remain documented failure evidence. Unattempted queries were not assumed to fail.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "monetdb",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "run_id": 525,
+    "preparation": "observed",
+    "tuning": "Q5 grouped distinct rewrite was adopted after exact fixture and full-store comparisons.",
+    "summary": "40 of 43 queries are measured. Q4/Q9/Q32 timeout exclusions remain. Q18 localization is incomplete; its original SQL remains.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "polars",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "run_id": 528,
+    "preparation": "observed",
+    "tuning": "Q17 restricted-key semijoin was adopted after exact schema/value/hash checks at both scales.",
+    "summary": "Required external Parquet files are included once in storage accounting. RSS is the whole client-process footprint, not exclusive query allocation.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "polars",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "run_id": 529,
+    "preparation": "observed",
+    "tuning": "Q17 restricted-key semijoin was adopted after exact schema/value/hash checks at both scales.",
+    "summary": "Required external Parquet files are included once in storage accounting. RSS is the whole client-process footprint, not exclusive query allocation.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "duckdb",
+    "suite": "jsonbench",
+    "scale_factor": 10,
+    "run_id": 539,
+    "preparation": "observed",
+    "tuning": "Q02/Q03 shared JSON-path extraction was adopted after plan, edge-fixture and full-data validation.",
+    "summary": "Fresh DuckDB 2 native storage was selected in a separate full native/Parquet comparison. This raw-JSON path is physically different from typed JSON subcolumns.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "run_id": 576,
+    "preparation": "observed",
+    "tuning": "Q15 computes supplier revenue once before the global maximum window and supplier join.",
+    "summary": "Both scales passed exact adversarial and full-data comparisons. Runtime readback showed answer caching off and predicate caching retained.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "run_id": 577,
+    "preparation": "observed",
+    "tuning": "Q15 computes supplier revenue once before the global maximum window and supplier join.",
+    "summary": "Both scales passed exact adversarial and full-data comparisons. Runtime readback showed answer caching off and predicate caching retained.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "questdb",
+    "suite": "time_series",
+    "scale_factor": 1,
+    "run_id": 272,
+    "preparation": "unknown",
+    "tuning": null,
+    "summary": "The proposed designated-timestamp/DAY/WAL layout was not adopted: an empty MAX(time) fixture returned the wrong row shape. These measurements retain the original layout; native-layout performance remains unmeasured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "questdb",
+    "suite": "time_series",
+    "scale_factor": 10,
+    "run_id": 488,
+    "preparation": "unknown",
+    "tuning": null,
+    "summary": "The proposed designated-timestamp/DAY/WAL layout was not adopted: an empty MAX(time) fixture returned the wrong row shape. These measurements retain the original layout; native-layout performance remains unmeasured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "questdb",
+    "suite": "time_series_metrics",
+    "scale_factor": 1,
+    "run_id": 149,
+    "preparation": "unknown",
+    "tuning": null,
+    "summary": "The proposed designated-timestamp/DAY/WAL layout was not adopted: an empty MAX(time) fixture returned the wrong row shape. These measurements retain the original layout; native-layout performance remains unmeasured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "questdb",
+    "suite": "time_series_ranges",
+    "scale_factor": 1,
+    "run_id": 126,
+    "preparation": "unknown",
+    "tuning": null,
+    "summary": "The proposed designated-timestamp/DAY/WAL layout was not adopted: an empty MAX(time) fixture returned the wrong row shape. These measurements retain the original layout; native-layout performance remains unmeasured.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
+  },
+  {
+    "db": "duckdb",
+    "suite": "device_telemetry",
+    "scale_factor": 1,
+    "run_id": 579,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 484,318 readings and device metadata. Evidence applies to this static-read workload.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "duckdb",
+    "suite": "device_telemetry",
+    "scale_factor": 10,
+    "run_id": 581,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 4,863,454 readings and device metadata. Evidence applies to this static-read workload.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "duckdb",
+    "suite": "join_order",
+    "scale_factor": 1,
+    "run_id": 583,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 21 canonical table counts verified for the pinned JOB snapshot.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "duckdb",
+    "suite": "json_representation",
+    "scale_factor": 10,
+    "run_id": 585,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Raw/prepared row readiness and preparation phases recorded. Storage covers the combined raw/prepared store; separate per-track disk usage is unknown.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "duckdb",
+    "suite": "parquet_analytics",
+    "scale_factor": 10,
+    "run_id": 587,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Source schema and row-count evidence covers the same eight immutable SF10 Parquet files. Referenced file bytes are included in storage accounting.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "duckdb",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 619,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Complete 99-query replacement uses the frozen four-query ordered-ties evidence policy.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "device_telemetry",
+    "scale_factor": 1,
+    "run_id": 593,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 484,318 readings and device metadata. Evidence applies to this static-read workload.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "device_telemetry",
+    "scale_factor": 10,
+    "run_id": 595,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 4,863,454 readings and device metadata. Evidence applies to this static-read workload.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "join_order",
+    "scale_factor": 1,
+    "run_id": 597,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 21 canonical table counts verified for the pinned JOB snapshot.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "json_representation",
+    "scale_factor": 10,
+    "run_id": 599,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Raw/prepared row readiness and preparation phases recorded. Storage covers the combined raw/prepared store; separate per-track disk usage is unknown.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "parquet_analytics",
+    "scale_factor": 10,
+    "run_id": 602,
+    "preparation": "observed",
+    "tuning": "Adopted written join order for Q5 only",
+    "summary": "Source schema and row-count evidence covers the same eight immutable SF10 Parquet files. Referenced file bytes are included in storage accounting. Q5 uses query_plan_optimize_join_order_limit=0 after bounded controls; the full 22-query replacement completed.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
+  },
+  {
+    "db": "clickhouse",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 620,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Complete 99-query replacement uses the frozen four-query ordered-ties evidence policy.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "polars",
+    "suite": "parquet_analytics",
+    "scale_factor": 10,
+    "run_id": 626,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "Source schema and row-count evidence covers the same eight immutable SF10 Parquet files. Referenced file bytes are included in storage accounting.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "monetdb",
+    "suite": "join_order",
+    "scale_factor": 1,
+    "run_id": 606,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 21 canonical table counts verified for the pinned JOB snapshot.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "monetdb",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 644,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Complete replacement follows both-scale SQL portability gates. Superseded observations remain raw evidence.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "monetdb",
+    "suite": "tpc_ds",
+    "scale_factor": 1,
+    "run_id": 646,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Complete replacement follows both-scale SQL portability gates. Superseded observations remain raw evidence.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "starrocks",
+    "suite": "join_order",
+    "scale_factor": 1,
+    "run_id": 622,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 21 canonical table counts verified for the pinned JOB snapshot.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#new-suite-measurements"
+  },
+  {
+    "db": "starrocks",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 648,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Complete replacement follows both-scale SQL portability gates. Superseded observations remain raw evidence.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "starrocks",
+    "suite": "tpc_ds",
+    "scale_factor": 1,
+    "run_id": 650,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Complete replacement follows both-scale SQL portability gates. Superseded observations remain raw evidence.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "postgres",
+    "suite": "device_telemetry",
+    "scale_factor": 1,
+    "run_id": 608,
+    "preparation": "observed",
+    "tuning": "Bounded traversal candidates rejected",
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 484,318 readings and device metadata. Evidence applies to this static-read workload. Tested rewrites were rejected; measured cohorts retain their original layout.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
+  },
+  {
+    "db": "postgres",
+    "suite": "device_telemetry",
+    "scale_factor": 10,
+    "run_id": 610,
+    "preparation": "observed",
+    "tuning": "Bounded traversal candidates rejected",
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 4,863,454 readings and device metadata. Evidence applies to this static-read workload. Tested rewrites were rejected; measured cohorts retain their original layout.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
+  },
+  {
+    "db": "postgres",
+    "suite": "join_order",
+    "scale_factor": 1,
+    "run_id": 636,
+    "preparation": "observed",
+    "tuning": "Adopted 23 pinned upstream foreign-key indexes",
+    "summary": "All 21 canonical table counts verified for the pinned JOB snapshot. Population 635 and SELECT 636 verify the index layout. Diagnostics retain Q17a/Q26c regressions, extra storage and an ANALYZE-statistics confound.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
+  },
+  {
+    "db": "postgres",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 658,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Preparation completed, but the Q11 operation watchdog stopped this SELECT after 11 fully measured queries. Other positions retain their recorded partial, timeout or unstarted outcomes; this cohort is unranked.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "device_telemetry",
+    "scale_factor": 1,
+    "run_id": 614,
+    "preparation": "observed",
+    "tuning": "Bounded traversal candidates rejected",
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 484,318 readings and device metadata. Evidence applies to this static-read workload. Tested rewrites were rejected; measured cohorts retain their original layout.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "device_telemetry",
+    "scale_factor": 10,
+    "run_id": 616,
+    "preparation": "observed",
+    "tuning": "Bounded traversal candidates rejected",
+    "summary": "Canonical telemetry preparation and SELECT readiness recorded for 4,863,454 readings and device metadata. Evidence applies to this static-read workload. Tested rewrites were rejected; measured cohorts retain their original layout.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
+  },
+  {
+    "db": "timescaledb",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 660,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Preparation completed, but the Q11 operation watchdog stopped this SELECT after 10 fully measured queries. Other positions retain their recorded partial, timeout or unstarted outcomes; this cohort is unranked.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "doris",
+    "suite": "tpc_ds",
+    "scale_factor": 1,
+    "run_id": 681,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Full manual column-statistics readiness recorded. Q44 exact-aggregate mean translation passed both-scale gates and the complete replacement; result-cache attestations retained.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "doris",
+    "suite": "tpc_ds",
+    "scale_factor": 10,
+    "run_id": 682,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All 24 canonical table counts verified. Full manual column-statistics readiness recorded. Q44 exact-aggregate mean translation passed both-scale gates and the complete replacement; result-cache attestations retained.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "doris",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "run_id": 683,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All eight canonical table counts and full manual column-statistics readiness recorded. Pricing means use exact decimal sums before division after both-scale gates; result-cache attestations retained.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  },
+  {
+    "db": "doris",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "run_id": 684,
+    "preparation": "observed",
+    "tuning": null,
+    "summary": "All eight canonical table counts and full manual column-statistics readiness recorded. Pricing means use exact decimal sums before division after both-scale gates; result-cache attestations retained.",
+    "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+  }
+]

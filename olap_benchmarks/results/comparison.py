@@ -61,11 +61,14 @@ def comparison_families(
         for family_id, track, coverage_names in tracks:
             if not coverage_names:
                 continue
+            title = spec.label
+            if track == "prepared":
+                title += " prepared fields" if suite == "json_representation" else " prepared aggregates"
             families.append(
                 {
                     "id": family_id,
                     "suite": suite,
-                    "title": f"{spec.label} prepared aggregates" if track == "prepared" else spec.label,
+                    "title": title,
                     "weight": 1 if track == "raw" and suite not in ("parquet_analytics", "json_representation") else 0,
                     "scale_factors": sorted(scales),
                     "query_names": [name for name in coverage_names if name not in excluded],

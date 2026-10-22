@@ -24,6 +24,7 @@ async function loadAnalyticalRuns(): Promise<AnalyticalRun[]> {
       "db_version",
       "db_driver",
       "status",
+      "error_type",
       "error_message",
       sql<string | null>`cast(finished_at as varchar)`.as("finished_at"),
       sql<string | null>`cast(metadata as varchar)`.as("run_metadata"),

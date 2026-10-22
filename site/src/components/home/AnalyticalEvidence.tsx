@@ -49,6 +49,9 @@ function RecordedObject({ value }: { value: Record<string, unknown> | null }) {
 }
 
 function RunEvidence({ run }: { run: AnalyticalRun }) {
+  const error = [run.row.error_type, run.row.error_message]
+    .filter((value) => value?.trim())
+    .join(": ")
   return (
     <details className="text-xs leading-5 text-slate-300">
       <summary className="cursor-pointer">
@@ -59,9 +62,7 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
           Measurement: {run.startedAt ?? unknown} → {run.finishedAt ?? unknown}. Drain:{" "}
           {seconds(run.drainSeconds)}. Run finished: {run.row.finished_at ?? unknown}.
         </BodyText>
-        {run.row.error_message ? (
-          <BodyText className="text-xs">Recorded run error: {run.row.error_message}</BodyText>
-        ) : null}
+        {error ? <BodyText className="text-xs">Recorded run error: {error}</BodyText> : null}
         {run.limitations.length > 0 ? (
           <ul className="list-disc space-y-1 pl-4 text-amber-200/90">
             {run.limitations.map((limitation) => (

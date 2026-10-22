@@ -10,6 +10,7 @@ export interface AnalyticalRunRow {
   db_driver: string | null
   status: string
   finished_at: string | null
+  error_type: string | null
   error_message: string | null
   run_metadata: string | null
 }

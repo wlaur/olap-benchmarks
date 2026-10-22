@@ -5,11 +5,11 @@ participants and resource limits before measurement. This ledger declares the
 initial candidates before observing full-data timings. The initial table records
 planned investigations; completed investigations are recorded separately below.
 
-| Engine / suite | Candidate pattern | Physical-plan gate | Correctness and cost gate |
-| --- | --- | --- | --- |
-| PostgreSQL / Device Telemetry | Reverse the internal DISTINCT ON device order in queries 02/03, then restore ascending output order outside | Check whether a backward scan of the existing composite key removes incremental/full sorting without adding larger scans | Exact original/candidate rows and schema at SF1/SF10, including latest-row NULLs and inactive devices; original/candidate controls in both orders |
-| TimescaleDB / Device Telemetry | The same ordering rewrite against the actual compressed hypertable | Inspect chunk scans, decompression and sorting; no adoption based only on PostgreSQL's plan | Verify before/after compressed results and both scales independently; count compressed chunks and retain memory/storage evidence |
-| PostgreSQL / JOB | Add the pinned upstream secondary foreign-key indexes | Check whether representative canonical queries use the new indexes and change join/scan work | All 113 query answers and schemas; charge index building and ANALYZE to preparation, include disk cost, and rerun the full workload on adoption |
+| Engine / suite                 | Candidate pattern                                                                                           | Physical-plan gate                                                                                                       | Correctness and cost gate                                                                                                                         |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL / Device Telemetry  | Reverse the internal DISTINCT ON device order in queries 02/03, then restore ascending output order outside | Check whether a backward scan of the existing composite key removes incremental/full sorting without adding larger scans | Exact original/candidate rows and schema at SF1/SF10, including latest-row NULLs and inactive devices; original/candidate controls in both orders |
+| TimescaleDB / Device Telemetry | The same ordering rewrite against the actual compressed hypertable                                          | Inspect chunk scans, decompression and sorting; no adoption based only on PostgreSQL's plan                              | Verify before/after compressed results and both scales independently; count compressed chunks and retain memory/storage evidence                  |
+| PostgreSQL / JOB               | Add the pinned upstream secondary foreign-key indexes                                                       | Check whether representative canonical queries use the new indexes and change join/scan work                             | All 113 query answers and schemas; charge index building and ANALYZE to preparation, include disk cost, and rerun the full workload on adoption   |
 
 The telemetry rewrite changes only row traversal order. The outer ORDER BY
 restores the original output. It does not introduce a metadata-dimension lookup,
@@ -51,11 +51,11 @@ adaptation, despite its explicit written join chain.
 
 Investigate three patterns within the new suite's twenty-minute budget:
 
-| Pattern | Outcome | Disposition |
-| --- | --- | --- |
-| Force `join_algorithm=hash` | The bad join order remains; server reports its 45-second timeout | Rejected |
-| Hash joins plus `query_plan_optimize_join_order_limit=0` | Exact DuckDB rows and schema; successful controls around 307–338 ms | Correct, but the extra algorithm override is unnecessary |
-| Only `query_plan_optimize_join_order_limit=0` | Exact DuckDB rows and schema in three controls around 330–343 ms; effective readback is zero | Adopt for common-Parquet Q5 only |
+| Pattern                                                  | Outcome                                                                                      | Disposition                                              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Force `join_algorithm=hash`                              | The bad join order remains; server reports its 45-second timeout                             | Rejected                                                 |
+| Hash joins plus `query_plan_optimize_join_order_limit=0` | Exact DuckDB rows and schema; successful controls around 307–338 ms                          | Correct, but the extra algorithm override is unnecessary |
+| Only `query_plan_optimize_join_order_limit=0`            | Exact DuckDB rows and schema in three controls around 330–343 ms; effective readback is zero | Adopt for common-Parquet Q5 only                         |
 
 The last setting preserves the explicit lineitem/orders/customer/supplier/nation/
 region chain. Plans show the large customer/supplier intermediate disappearing.
@@ -68,10 +68,9 @@ Diagnostics ran serially at the same ten-CPU/24-GiB container limits, with nativ
 09:48:55 and 09:52:43 UTC. No table, source file, row group, index, precomputed
 answer or materialized relation changed.
 
-The scoped change was followed by complete 22-query SF10 SELECT replacement
-602. Retain 601 and its Q5 timeout diagnostically. Final complete-cohort
-answer/source/configuration binding remains pending; record configured
-per-query settings in operation metadata. The other ClickHouse workloads and
+The scoped change was followed by complete 22-query SF10 SELECT replacement 602. Retain 601 and its Q5 timeout diagnostically. Final export provenance and
+matching-input/hash-version peer comparisons pass; the scoped per-query setting
+is recorded in operation metadata. The other ClickHouse workloads and
 the original 99 measurements are unaffected. The censored baseline supplies
 no finite speedup ratio; successful controls do not establish an overall
 workload speedup.
@@ -88,12 +87,12 @@ The following are diagnostic median fetch times in milliseconds, from six
 observations per form in three original/candidate/candidate/original blocks.
 They are separate from the publication's three-iteration SELECT medians.
 
-| Engine | Query | SF1 original / candidate | SF10 original / candidate | Decision |
-| --- | --- | --- | --- | --- |
-| PostgreSQL | 02 latest per device | 158.9 / 143.7 | 611.9 / 1496.3 | Reject: the modest small-scale improvement reverses at SF10 |
-| PostgreSQL | 03 latest in region | No paired controls | No paired controls | Reject at plan gate: the same bitmap scan and inner sort remain, with an additional outer sort |
-| TimescaleDB | 02 latest per device | 65.7 / 72.8 | 370.7 / 442.9 | Reject: slower at both scales |
-| TimescaleDB | 03 latest in region | 37.3 / 45.5 | 149.8 / 195.8 | Reject: slower at both scales |
+| Engine      | Query                | SF1 original / candidate | SF10 original / candidate | Decision                                                                                       |
+| ----------- | -------------------- | ------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------- |
+| PostgreSQL  | 02 latest per device | 158.9 / 143.7            | 611.9 / 1496.3            | Reject: the modest small-scale improvement reverses at SF10                                    |
+| PostgreSQL  | 03 latest in region  | No paired controls       | No paired controls        | Reject at plan gate: the same bitmap scan and inner sort remain, with an additional outer sort |
+| TimescaleDB | 02 latest per device | 65.7 / 72.8              | 370.7 / 442.9             | Reject: slower at both scales                                                                  |
+| TimescaleDB | 03 latest in region  | 37.3 / 45.5              | 149.8 / 195.8             | Reject: slower at both scales                                                                  |
 
 PostgreSQL Q02 replaces a sequential scan and sort with a backward primary-key
 scan. At SF10 the original uses a parallel scan with Gather Merge, and the
@@ -128,12 +127,12 @@ The predeclared controls used original-forward, candidate-forward,
 candidate-reverse and original-reverse blocks, with three retained observations
 per block and six per form. All four candidate plans used new indexes.
 
-| Query | Original median (ms) | Indexed median (ms) | Observation |
-| --- | ---: | ---: | --- |
-| 1a | 113.8 | 50.3 | Faster in both block orders |
-| 6a | 243.4 | 26.9 | Faster in both block orders |
-| 17a | 1087.1 | 4402.8 | About four times slower in both block orders |
-| 28a | 621.7 | 366.6 | Faster in both block orders |
+| Query | Original median (ms) | Indexed median (ms) | Observation                                  |
+| ----- | -------------------: | ------------------: | -------------------------------------------- |
+| 1a    |                113.8 |                50.3 | Faster in both block orders                  |
+| 6a    |                243.4 |                26.9 | Faster in both block orders                  |
+| 17a   |               1087.1 |              4402.8 | About four times slower in both block orders |
+| 28a   |                621.7 |               366.6 | Faster in both block orders                  |
 
 The single-fetch checks across 112 comparable queries have a candidate/original
 geometric ratio of 0.4754, but their summed fetch time increases from 75.61 to
@@ -153,15 +152,16 @@ statistics are not restored, a limitation of the reverse controls.
 
 Adoption in `96ecbf5` was followed by fresh population 635 and complete
 113-query SELECT 636. All 113 query hashes match DuckDB, ClickHouse, MonetDB
-and StarRocks. Preserve primary-key-only 612 and its timeout. Final 635
-preparation timings, charged index construction/ANALYZE, storage and exact
-index-definition/readiness readback remain to be bound to publication,
-separately from the diagnostic costs above. The implementation is scoped to
+and StarRocks. Preserve primary-key-only 612 and its timeout. Final 635 population
+cost 123.484 seconds, including loading, the 23 expected index definitions,
+statistics and readiness verification. The selected run records the adopted
+layout; diagnostic construction timings and storage observations remain
+separate from final population cost. The implementation is scoped to
 PostgreSQL JOB; other PostgreSQL workloads, TimescaleDB and original cells are
 unaffected by this physical-design change. Retain the diagnostic details under
 `results/followup-tuning/postgres-job.json` and `postgres-job/`.
 
-## TPC-DS correctness corrections and remaining Doris gates
+## TPC-DS correctness corrections and Doris acceptance
 
 The completed portability corrections preserve the fixed workloads. MonetDB
 644/SF10 and 646/SF1 and StarRocks 648/SF10 and 650/SF1 completed all 99
@@ -196,8 +196,10 @@ Adopt exact decimal SUM followed by DOUBLE division by NULLIF(COUNT(...), 0)
 for all six Q44 means and the three pricing means after both-scale gates and
 offline checks. These are numerical SQL translations, not a change to hashing
 or a demonstrated optimizer defect. The [four-capture summary](2026-10-followup-doris-means.json)
-binds source and artifact hashes. Complete TPC-DS SF1/SF10 and TPC-H SF10/SF50
-SELECT replacements remain required after committing validated source.
+binds source and artifact hashes. Clean-source adoption `d3a6ccb` was followed
+by full replacements 681/682 (TPC-DS SF1/SF10) and 683/684 (TPC-H SF10/SF50).
+All required warmup/measured observations completed and matching-input,
+matching-hash-version peer answers agree. Superseded attempts remain raw.
 
 ## Analytical export verification
 
@@ -206,7 +208,10 @@ All twelve analytical attempts finished: nine completed and PostgreSQL
 request records. Export fixes `d7fe4e7` and `be8eafc` retain unknown work only
 for terminal failed operations with an explicit error, preserving raw rows and
 NULL finish times. Logical request order and warmup-completion claims remain
-checked. Ruff/Pyright and 162 focused tests passed; independent review found
-no further issues. The full non-live suite subsequently passed 2,125 tests,
-with one skipped and fourteen live tests excluded. Final export acceptance
-remains pending. This is an evidence-export correction, not engine tuning.
+checked. Amendment `276b8c2` retains explicit unscored failures returned during
+cleanup after the run's failure marker; successful requests retain the strict
+cutoff. Ruff/Pyright, 191 focused tests and independent review passed. The full
+non-live suite previously passed 2,125 tests, with one skipped and fourteen live
+tests excluded. The actual campaign export accepted all twelve attempts,
+including run 672's failure trace. This is an evidence-export correction, not
+engine tuning.

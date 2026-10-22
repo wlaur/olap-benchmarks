@@ -18,14 +18,14 @@ failed attempts, provenance and documented limitations remain retained.
 
 ## Fixed workloads and participants
 
-| Workload | Scales | Query set | Existing engine candidates |
-| --- | --- | --- | --- |
-| Device Telemetry | 1, 10 | All 18 declared queries | DuckDB, ClickHouse, PostgreSQL, TimescaleDB |
-| Join Order Benchmark | Original May 2013 snapshot | All 113 upstream queries | DuckDB, ClickHouse, MonetDB, PostgreSQL, StarRocks |
-| TPC-DS | 10 | All 99 canonical queries | DuckDB, ClickHouse, MonetDB, PostgreSQL, TimescaleDB, StarRocks, Doris |
-| Doris relational coverage | TPC-H 10, 50; TPC-DS 1 | All 22 / 99 queries | Doris |
-| Common Parquet Analytics | TPC-H 10 | All 22 canonical queries over the same eight files | DuckDB, Polars, ClickHouse |
-| JSON Representation | 10 | Five raw and five prepared variants | DuckDB, ClickHouse |
+| Workload                  | Scales                     | Query set                                          | Existing engine candidates                                             |
+| ------------------------- | -------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------- |
+| Device Telemetry          | 1, 10                      | All 18 declared queries                            | DuckDB, ClickHouse, PostgreSQL, TimescaleDB                            |
+| Join Order Benchmark      | Original May 2013 snapshot | All 113 upstream queries                           | DuckDB, ClickHouse, MonetDB, PostgreSQL, StarRocks                     |
+| TPC-DS                    | 10                         | All 99 canonical queries                           | DuckDB, ClickHouse, MonetDB, PostgreSQL, TimescaleDB, StarRocks, Doris |
+| Doris relational coverage | TPC-H 10, 50; TPC-DS 1     | All 22 / 99 queries                                | Doris                                                                  |
+| Common Parquet Analytics  | TPC-H 10                   | All 22 canonical queries over the same eight files | DuckDB, Polars, ClickHouse                                             |
+| JSON Representation       | 10                         | Five raw and five prepared variants                | DuckDB, ClickHouse                                                     |
 
 Candidate registration is implementation coverage, not evidence of successful
 native execution. Run native fixture gates before full measurement; record any
@@ -185,8 +185,10 @@ Adopt exact decimal SUM followed by DOUBLE division by NULLIF(COUNT(...), 0)
 for all six Q44 means and the three pricing means after both-scale gates and
 offline checks. These are numerical SQL translations, not a change to hashing
 or a demonstrated optimizer defect. The [four-capture summary](2026-10-followup-doris-means.json)
-binds source and artifact hashes. Complete TPC-DS SF1/SF10 and TPC-H SF10/SF50
-SELECT replacements remain required after committing validated source.
+binds source and artifact hashes. After adoption in clean `d3a6ccb`, complete
+replacements 681/682 (TPC-DS SF1/SF10) and 683/684 (TPC-H SF10/SF50) finished.
+Every query has warmup plus three measured observations; all matching-input,
+matching-hash-version peer comparisons agree. Superseded attempts remain raw.
 
 ## Analytical streams
 
@@ -212,8 +214,12 @@ TPC-H SF10 SELECT at matching input and hash versions. Run 672 retains twelve
 unfinished request records. Export fixes `d7fe4e7` and `be8eafc` represent unknown work only
 for terminal failed operations with an explicit error; raw rows and NULL times
 are unchanged. Logical request order and both warmup-completion boundaries
-remain enforced. Independent review found no further issues; 162 focused tests
-and the 2,125-test non-live suite passed. Final export acceptance remains pending. See the [full-scale outcomes](2026-10-followup-validation.md#full-scale-analytical-outcomes).
+remain enforced. Amendment `276b8c2` also retains explicit unscored request
+failures that finish after the run's failure marker, preserving strict success
+cutoffs. Its 191 focused tests and independent review passed. The final campaign
+export accepted all twelve analytical attempts, including run 672's failure
+trace, alongside 127 SELECT cells. See the [full-scale outcomes](2026-10-followup-validation.md#full-scale-analytical-outcomes)
+and [final report](2026-10-followup.md).
 
 ## Tuning and adoption
 
