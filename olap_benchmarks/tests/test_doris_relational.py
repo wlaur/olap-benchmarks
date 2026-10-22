@@ -67,6 +67,7 @@ TPCDS_OVERRIDES = {
     "45",
     "47",
     "49",
+    "50",
     "53",
     "57",
     "58",
@@ -194,7 +195,7 @@ def test_doris_relational_overrides_only_widen_numeric_expressions(suite: SuiteN
     assert {path.stem for path in (directory / "doris").glob("*.sql")} == overrides
     with duckdb.connect() as connection:
         for name in sorted(overrides):
-            if name in {"13_customer_distribution", "17", "39", "45", "49", "72"}:
+            if name in {"13_customer_distribution", "12", "17", "39", "45", "49", "50", "72"}:
                 continue
             if suite == "tpc_ds" and name in TPCDS_EMPTY_ROLLUP_OVERRIDES:
                 continue
@@ -487,6 +488,20 @@ def test_doris_web_sales_zip_order_preserves_canonical_nulls_last() -> None:
     assert adapted == original.replace(
         "ORDER BY ca_zip,\n         ca_city", "ORDER BY ca_zip NULLS LAST,\n         ca_city NULLS LAST"
     )
+
+
+@pytest.mark.parametrize(("name", "sort_keys"), [("12", 5), ("50", 10)])
+def test_doris_portability_overrides_only_make_reference_null_placement_explicit(name: str, sort_keys: int) -> None:
+    directory = SUITES / "tpc_ds/queries"
+    original = (directory / f"{name}.sql").read_text()
+    adapted = (directory / "doris" / f"{name}.sql").read_text()
+    order = adapted.rpartition("\nORDER BY ")[2].removesuffix("\nLIMIT 100;\n")
+    terms = order.split(",")
+    assert len(terms) == sort_keys
+    assert all(term.strip().endswith(" NULLS LAST") for term in terms)
+    assert adapted.count(" NULLS LAST") == sort_keys
+    with duckdb.connect() as connection:
+        assert _sql_tree(connection, original) == _sql_tree(connection, adapted.replace(" NULLS LAST", ""))
 
 
 @pytest.mark.parametrize("values", [[], [None], [1], [1, None], [1, 1], [1, 2, None]])

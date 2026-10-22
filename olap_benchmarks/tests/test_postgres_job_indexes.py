@@ -298,15 +298,26 @@ def test_select_checks_all_counts_and_index_readiness_before_any_query(
 
     monkeypatch.setattr(BenchmarkSuite, "run_select_queries", queries)
     benchmark = database.benchmarks["join_order"]
+    database._current_operation = "select"
     if damage == "none":
+        database.before_benchmark_operation()
         benchmark.select()
         assert database.events == [*(f"count:{table}" for table in job_schema.JOB_TABLES), "readback", "queries"]
     else:
         with pytest.raises(RuntimeError):
+            database.before_benchmark_operation()
             benchmark.select()
         assert "queries" not in database.events
         assert ("readback" in database.events) == (damage == "indexes")
     assert not database.statements
+
+
+def test_populate_hook_allows_fresh_job_tables_and_indexes_to_be_created(database: _OfflinePostgres) -> None:
+    database._current_operation = "populate"
+    database.counts = {}
+    database.catalog_rows = []
+    database.before_benchmark_operation()
+    assert database.events == []
 
 
 @pytest.mark.parametrize(
@@ -357,6 +368,8 @@ def test_other_job_engines_keep_their_existing_select_path(
         database.events.append("queries")
 
     monkeypatch.setattr(BenchmarkSuite, "run_select_queries", queries)
+    database._current_operation = "select"
+    database.before_benchmark_operation()
     database.benchmarks["join_order"].select()
 
     assert database.events == ["queries"]

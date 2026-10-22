@@ -632,6 +632,12 @@ class Postgres(Database):
             )
         return values
 
+    def before_benchmark_operation(self) -> None:
+        if self._uses_job_indexes and self._current_operation == "select":
+            with self.phase_context("verify_populated_data"):
+                self.benchmarks[self.current_suite].verify_populated_data()
+            self.verify_storage_readiness()
+
     def finalize_populate(self) -> None:
         if self._uses_job_indexes and not self._verify_job_indexes(allow_primary_only=True):
             for table_name, _column, statement in _job_indexes().values():

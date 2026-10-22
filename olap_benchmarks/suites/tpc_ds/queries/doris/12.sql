@@ -19,9 +19,9 @@ GROUP BY i_item_id,
          i_category,
          i_class,
          i_current_price
-ORDER BY i_category,
-         i_class,
-         i_item_id,
-         i_item_desc,
-         revenueratio
+ORDER BY i_category NULLS LAST,
+         i_class NULLS LAST,
+         i_item_id NULLS LAST,
+         i_item_desc NULLS LAST,
+         revenueratio NULLS LAST
 LIMIT 100;

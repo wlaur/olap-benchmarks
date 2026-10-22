@@ -114,11 +114,44 @@ them. Q36/Q70/Q86 have hidden conditional order expressions and remain outside
 this projected-key policy.
 
 Retain DuckDB run 591 and ClickHouse run 604 as diagnostics, alongside run 589.
-After committing the validated combined source, the parent must rerun both
-complete 99-query DuckDB and ClickHouse TPC-DS SF10 SELECT workloads under the
-four-entry policy before selecting replacements. These full reruns are pending;
-the other completed cells and all 99 original baseline cells need no rerun.
+After committing the validated combined source, the parent reran both complete
+99-query DuckDB and ClickHouse TPC-DS SF10 SELECT workloads under the four-entry
+policy. Runs 619 and 620 agree across all 99 query identities. This evidence
+policy change requires no rerun of the original baseline cells.
 This second amendment follows measurement and is not a premeasurement claim.
+
+### SQL portability amendment after the other SF10 cohorts
+
+Later full-scale observations exposed differences that the ordering policy must
+not normalize away. MonetDB run 628 disagrees on Q12/Q44/Q45/Q50/Q67;
+StarRocks run 624 on Q07/Q12/Q20/Q45/Q49/Q50/Q72; and Doris run 632 on Q12/Q50.
+These observations remain retained while complete outputs and candidate SQL
+are checked against the fixed reference at both SF1 and SF10.
+
+The corrections make implicit NULL placement explicit, promote specific numeric
+inputs before averages or division, and express date offsets in calendar days.
+They must preserve all output values within the established numeric comparison
+contract, ranks, duplicates, complete ordering and limited membership. Matching
+the displayed sample or a convenient subset is insufficient. The four-entry
+ordering registry and default numeric precision remain fixed.
+
+MonetDB Q67 additionally loses qualifying boundary ties under its direct rank
+predicate. A self-contained eight-row reproduction returns four rows for
+`rank <= 2` where six qualify. The equivalent
+`CASE WHEN rk <= 100 THEN 1 ELSE 0 END = 1` predicate preserves the complete
+1,107-row SF10 qualifying pool and the final 100-row reference result. This is
+a tested predicate workaround; the optimizer mechanism is not established.
+Replacing ROLLUP with equivalent UNION branches and casting the rank predicate
+were ineffective and are rejected.
+
+After both-scale gates and offline checks, commit the corrected SQL before
+rerunning each affected complete 99-query SELECT workload at both scales.
+This includes targeted replacements of the original MonetDB and StarRocks SF1
+cells, alongside their new SF10 cells and both new Doris cells. The original
+measurements remain in the retained revision. These targeted correctness reruns
+do not imply a rerun of all 99 original combinations, and are separate from the
+publication-only policy work. They were added after measurement, not predeclared
+with the initial follow-up plan.
 
 ## Analytical streams
 

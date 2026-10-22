@@ -175,8 +175,8 @@ duplicates and LIMIT-boundary membership.
 The [second protocol amendment](2026-10-followup-protocol.md#q44-amendment-after-the-first-clickhouse-sf10-cohort)
 retains runs 591 and 604 diagnostically and requires complete DuckDB and
 ClickHouse 99-query SF10 SELECT reruns after the validated combined source is
-committed. Those replacements remain pending. No original baseline cohort is
-rerun for this policy change.
+committed. Runs 619 and 620 supply those complete replacements and agree on all
+99 query identities. No original baseline cohort is rerun for this policy change.
 
 With engines paused, repository-wide Ruff format checking and lint passed,
 strict Pyright reported zero errors and warnings, and the focused registry and
@@ -184,3 +184,60 @@ hashing tests passed all 215 cases on Python 3.14.3. An offline reread of the
 twelve retained Arrow frames also confirmed exact `Counter` agreement, the
 rank-8 tie, one shared policy hash and both preserved schemas. No engine was
 started or benchmark rerun for these implementation checks.
+
+### Full-data portability diagnostics
+
+Complete SF10 output capture exposed additional query differences in MonetDB
+628, StarRocks 624 and Doris 632. The diagnostic frames retain every column,
+row, duplicate, original SQL, candidate SQL, engine version, input fingerprint,
+schema, Arrow-file digest and normal answer-policy hash. A separate diagnostic
+multiset hash helps distinguish order changes; it is not a publication hash or
+a new correctness exemption.
+
+MonetDB Q12/Q45/Q50 require explicit reference NULL placement. Q44 requires
+DOUBLE inputs to all six AVG expressions, including its HAVING thresholds.
+Its original ranks differ in value and membership, so the Q44 ordering policy
+cannot reconcile that observation. The candidate output retains the genuine
+rank-8 tie and matches the complete reference at both SF1 and SF10.
+
+MonetDB Q67 loses boundary peers under a direct rank predicate. The complete
+unfiltered NULL category has 13,084 exact matching rows and ranks in both
+engines. A subsequent Python rank filter retains 102 qualifying occurrences,
+including four tied at rank 99. MonetDB's direct SQL predicate retains 100.
+The equivalent CASE predicate preserves the complete 1,107-row qualifying pool,
+with exact row-multiset and sequence agreement, and the final limited result.
+An independent eight-row reproduction establishes the same defect without
+aggregation or LIMIT. The [engine issue](../../issues/monetdb/rank-filter-drops-boundary-ties.md)
+contains the complete tested SQL. An equivalent ROLLUP expansion and a rank
+cast did not correct the observation and are not adopted.
+
+All five MonetDB, seven StarRocks and two Doris candidate outputs agree with the
+normal reference policy and diagnostic multiset hash at both SF1 and SF10.
+The [28-capture evidence summary](2026-10-followup-tpcds-evidence.json) binds
+the source SQL, input and Arrow fingerprints to each comparison. The Doris
+changes make Q12's five and Q50's ten final NULL positions explicit. StarRocks
+changes widen three monetary AVG inputs, widen revenue/return-ratio numerators
+before division and ranking, make NULL placement explicit, and express Q72's
+offset as five calendar days. Rank values, selected membership and complete
+outputs are compared; neither displayed samples nor sorting alone supplies
+this gate. These checks establish the stated full-data comparisons within the
+existing numeric precision contract, not exact-schema or universal correctness.
+
+The [SQL amendment](2026-10-followup-protocol.md#sql-portability-amendment-after-the-other-sf10-cohorts)
+requires complete affected SF1 and SF10 SELECT reruns after validation and a
+clean source commit. The original observations remain retained. No diagnostic
+duration is substituted for a measured SELECT duration.
+
+The subsequent full offline check identified JOB's SELECT override as a harness
+contract violation. Its PostgreSQL-only row-count and index checks now use the
+existing `before_benchmark_operation` hook, after result storage is initialized
+and before the shared SELECT loop. The same checks and SQL still precede timed
+queries. Populate and other engine/workload paths are guarded separately. This
+placement correction changes neither the indexed layout nor the measured JOB
+queries and does not replace run 636's measurements.
+
+With all engines stopped, repository-wide Ruff formatting/lint and strict
+Pyright passed. The focused portability, Doris, registry and hashing checks
+passed 429 tests. After the JOB hook correction, the complete non-live suite
+passed 2,054 tests, with one skipped and fourteen live tests excluded. These
+offline checks precede the final corrected TPC-DS measurements.

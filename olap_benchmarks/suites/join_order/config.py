@@ -55,13 +55,6 @@ class JoinOrder[DBT: Database](BenchmarkSuite[DBT]):
         if restart:
             self.db.restart_event()
 
-    def select(self) -> None:
-        if self.db.name == "postgres":
-            with self.db.phase_context("verify_populated_data"):
-                self.verify_populated_data()
-            self.db.verify_storage_readiness()
-        super().select()
-
     @property
     def fetch_kwargs(self) -> dict[str, Any]:
         if self.db.name == "clickhouse":
