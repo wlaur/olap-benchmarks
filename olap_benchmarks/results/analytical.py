@@ -456,13 +456,17 @@ def _request_problems(
     issued_clients: set[int] = set()
     positions: dict[tuple[int, str], list[int]] = defaultdict(list)
     successful_warmups: dict[int, set[int]] = defaultdict(set)
-    request_times: dict[int, list[tuple[datetime, datetime | None]]] = defaultdict(list)
+    client_requests: dict[int, list[_Request]] = defaultdict(list)
     samples: list[RequestSample] = []
     unknown_phases: set[str] = set()
     clients, seed = cast(int, evidence["clients"]), cast(int, evidence["workload_seed"])
     manifest = _record(_record(evidence["query_manifest"])["files"])
     start, end = _timestamp(evidence.get("measurement_started_at")), _timestamp(evidence.get("measurement_finished_at"))
     stop = _timestamp(evidence.get("stop_issuing_at"))
+    warmup_start, warmup_end = (
+        _timestamp(evidence.get("warmup_started_at")),
+        _timestamp(evidence.get("warmup_finished_at")),
+    )
     for request in requests:
         meta = request.metadata
         client, phase, sequence = meta.get("client_id"), meta.get("phase"), meta.get("sequence")
@@ -503,13 +507,19 @@ def _request_problems(
         )
         if (
             not valid_times
-            or (phase == "warmup" and start is not None and (request.finished is None or request.finished > start))
+            or (
+                phase == "warmup"
+                and any(
+                    boundary is not None and (request.finished is None or request.finished > boundary)
+                    for boundary in (start, warmup_end)
+                )
+            )
             or (phase == "measured" and start is not None and request.started < start)
             or (phase == "measured" and end is not None and (request.finished is None or request.finished > end))
         ):
             problems.append(f"step {request.id} has unfinished or contradictory request timestamps")
         else:
-            request_times[client].append((request.started, request.finished))
+            client_requests[client].append(request)
         duration = meta.get("duration_ms")
         if (
             _number(duration)
@@ -570,11 +580,15 @@ def _request_problems(
     if any(sorted(values) != list(range(len(values))) for values in positions.values()):
         problems.append("analytical request sequences contain duplicates or gaps")
     if any(
-        left[1] is None or left[1] > right[0]
-        for times in request_times.values()
-        for left, right in pairwise(sorted(times, key=lambda interval: interval[0]))
+        left.finished is None or left.finished > right.started
+        for history in client_requests.values()
+        for left, right in pairwise(
+            sorted(history, key=lambda request: (request.metadata["phase"] == "measured", request.metadata["sequence"]))
+        )
     ):
         problems.append("analytical client requests overlap despite the closed-loop load model")
+    if "warmup" in unknown_phases and (start is not None or warmup_end is not None):
+        problems.append("analytical warmup completion contradicts unknown warmup requests")
     if (run.status == "completed" or any(phase == "measured" for _, phase in positions)) and any(
         successful_warmups.get(client, set()) != set(range(len(names))) for client in range(clients)
     ):
@@ -594,10 +608,6 @@ def _request_problems(
         or (run.status == "completed" and elapsed < duration)
     ):
         problems.append("analytical elapsed time, measurement bounds or drain evidence is invalid")
-    warmup_start, warmup_end = (
-        _timestamp(evidence.get("warmup_started_at")),
-        _timestamp(evidence.get("warmup_finished_at")),
-    )
     for key in (
         "measurement_started_at",
         "measurement_finished_at",

@@ -705,6 +705,158 @@ def test_unfinished_requests_preserve_seeded_order_and_closed_loop_checks(tmp_pa
         _validate(_db(tmp_path, add))
 
 
+@pytest.mark.parametrize("boundary", ["measurement_started_at", "warmup_finished_at"])
+@pytest.mark.parametrize("finished", [False, True])
+def test_unknown_warmup_requests_reject_completion_boundaries(tmp_path: Path, boundary: str, finished: bool) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session, phase="warmup")
+        step = _step(session, run_id, phase="warmup")
+        if finished:
+            step.status = "failed"
+            step.finished_at = step.started_at + timedelta(milliseconds=1)
+            step.error_type, step.error_message = "KeyboardInterrupt", "interrupted"
+
+        def change(_run: Run, metadata: Metadata) -> None:
+            time = step.started_at + timedelta(seconds=1)
+            metadata["analytical"][boundary] = time.replace(tzinfo=UTC).isoformat()
+
+        _edit(session, run_id, change)
+
+    with pytest.raises(PublishValidationError, match="unfinished|warmup completion"):
+        _validate(_db(tmp_path, add))
+
+
+@pytest.mark.parametrize("boundary", ["measurement_started_at", "warmup_finished_at"])
+@pytest.mark.parametrize("offset", [-1, 0])
+def test_completed_warmup_requests_respect_completion_boundaries(tmp_path: Path, boundary: str, offset: int) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session)
+        warmups = session.scalars(select(RunStep).where(RunStep.run_id == run_id, RunStep.status == "completed")).all()
+        last = max(warmups, key=lambda request: request.started_at)
+        assert last.finished_at is not None
+        time = last.finished_at + timedelta(microseconds=offset)
+        _edit(
+            session,
+            run_id,
+            lambda _run, metadata: metadata["analytical"].update({boundary: time.replace(tzinfo=UTC).isoformat()}),
+        )
+
+    path = _db(tmp_path, add)
+    before = path.read_bytes()
+    if offset < 0:
+        with pytest.raises(PublishValidationError, match="contradictory request timestamps"):
+            _validate(path)
+    else:
+        _validate(path)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("phase", ["warmup", "measured"])
+@pytest.mark.parametrize("unfinished", [False, True])
+def test_client_requests_reject_reversed_sequence_history(tmp_path: Path, phase: str, unfinished: bool) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session, phase=phase)
+        step = _step(session, run_id, phase=phase)
+        queries = _queries()
+        order = balanced_query_order([query.name for query in queries], 99, 0)
+        time = step.started_at
+        step.started_at = time + timedelta(seconds=2)
+        if not unfinished:
+            step.status, step.result_status, step.row_count = "completed", "ok", 1
+            step.finished_at = step.started_at + timedelta(seconds=1)
+            step.metadata_json = {**(step.metadata_json or {}), "duration_ms": 1_000.0, **deepcopy(ANSWER)}
+        name = order[1]
+        session.add(
+            RunStep(
+                run_id=run_id,
+                step_type="query",
+                step_name="analytical_request",
+                query_name=name,
+                status="completed",
+                result_status="ok",
+                started_at=time,
+                finished_at=time + timedelta(seconds=1),
+                row_count=1,
+                metadata_json={
+                    "request_id": f"client-0:{phase}:1",
+                    "client_id": 0,
+                    "phase": phase,
+                    "sequence": 1,
+                    "query_sha256": next(sha256_text(query.query) for query in queries if query.name == name),
+                    "duration_ms": 1_000.0,
+                    **deepcopy(ANSWER),
+                },
+            )
+        )
+
+    with pytest.raises(PublishValidationError, match="requests overlap"):
+        _validate(_db(tmp_path, add))
+
+
+@pytest.mark.parametrize("phase", ["warmup", "measured"])
+@pytest.mark.parametrize("gap_microseconds", [-1, 0, 1])
+def test_unfinished_final_requests_respect_logical_closed_loop_boundaries(
+    tmp_path: Path, phase: str, gap_microseconds: int
+) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session, phase=phase)
+        step = _step(session, run_id, phase=phase)
+        queries = _queries()
+        order = balanced_query_order([query.name for query in queries], 99, 0)
+        previous = deepcopy(step.metadata_json or {})
+        time = step.started_at
+        step.started_at = time + timedelta(seconds=1, microseconds=gap_microseconds)
+        step.query_name = order[1]
+        step.metadata_json = {
+            **previous,
+            "sequence": 1,
+            "request_id": f"client-0:{phase}:1",
+            "query_sha256": next(sha256_text(query.query) for query in queries if query.name == order[1]),
+        }
+        session.add(
+            RunStep(
+                run_id=run_id,
+                step_type="query",
+                step_name="analytical_request",
+                query_name=order[0],
+                status="completed",
+                result_status="ok",
+                started_at=time,
+                finished_at=time + timedelta(seconds=1),
+                row_count=1,
+                metadata_json={**previous, "duration_ms": 1_000.0, **deepcopy(ANSWER)},
+            )
+        )
+
+    path = _db(tmp_path, add)
+    before = path.read_bytes()
+    if gap_microseconds < 0:
+        with pytest.raises(PublishValidationError, match="requests overlap"):
+            _validate(path)
+    else:
+        _validate(path)
+    assert path.read_bytes() == before
+
+
+def test_client_requests_reject_measurement_before_warmup_without_phase_timestamps(tmp_path: Path) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session)
+        step = _step(session, run_id)
+        step.status, step.result_status, step.row_count = "completed", "ok", 1
+        step.metadata_json = {**(step.metadata_json or {}), "duration_ms": 1.0, **deepcopy(ANSWER)}
+
+        def change(run: Run, metadata: Metadata) -> None:
+            step.started_at = run.started_at
+            step.finished_at = run.started_at + timedelta(milliseconds=1)
+            metadata["analytical"]["measurement_started_at"] = None
+            metadata["analytical"]["warmup_finished_at"] = None
+
+        _edit(session, run_id, change)
+
+    with pytest.raises(PublishValidationError, match="requests overlap"):
+        _validate(_db(tmp_path, add))
+
+
 @pytest.mark.parametrize("conflict", ["hash", "rows"])
 @pytest.mark.parametrize("within_stream", [False, True])
 def test_answer_conflicts_block_analytical_publication(tmp_path: Path, conflict: str, within_stream: bool) -> None:
