@@ -1,6 +1,6 @@
 ## October 2026 · M4 Pro
 
-**DuckDB 2** has the strongest results overall, with lower latency, memory use and storage than Polars on [TPC-H SF50](#/explorer/tpc_h?mode=database&system=macbook-m4-pro&scale=50&databases=duckdb,clickhouse,starrocks,polars). **StarRocks** also does well on that workload, beating ClickHouse on [18 of the 22 queries](#/explorer/tpc_h?mode=database&system=macbook-m4-pro&scale=50&databases=starrocks,clickhouse&query=15_top_supplier&sql_database=starrocks).
+**DuckDB** has the strongest results overall, with lower latency, memory use and storage than Polars on [TPC-H SF50](#/explorer/tpc_h?mode=database&system=macbook-m4-pro&scale=50&databases=duckdb,clickhouse,starrocks,polars). **StarRocks** also does well on that workload, beating ClickHouse on [18 of the 22 queries](#/explorer/tpc_h?mode=database&system=macbook-m4-pro&scale=50&databases=starrocks,clickhouse&query=15_top_supplier&sql_database=starrocks).
 
 **ClickHouse** wins all five [JSONBench queries](#/explorer/jsonbench?mode=database&system=macbook-m4-pro&scale=10), although its [global chat keyword search](#/explorer/chat_threads?mode=database&system=macbook-m4-pro&scale=10&databases=clickhouse,duckdb&query=09_keyword_search_global&sql_database=clickhouse) takes 6.49 s against DuckDB’s 0.24 s. **Doris** still wins [ClickBench Q21](#/explorer/clickbench?mode=database&system=macbook-m4-pro&scale=1&databases=doris,duckdb,clickhouse&query=Q21&sql_database=doris) with result caching disabled, at 38 ms against DuckDB’s 315 ms.
 
