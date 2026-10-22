@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "baseline_sha256": "6e12f959af14dfefafd8d8d8c8c75032640f70d610813f3c559ba8ff54446b22",
+  "baseline_bytes": 116404224,
+  "retained_in_revision": "2026-10-followup",
+  "run_id_predicate": "run.id <= 577; dependent tables use run_id <= 577",
+  "fingerprint_algorithm": "md5(string_agg(to_json(row), '' ORDER BY id)); comparison detects unintended row changes, not an artifact authentication hash",
+  "tables": {
+    "run": {
+      "rows": 244,
+      "fingerprint": "e0f753f966bb98df0ab5de1a0a93d9d7"
+    },
+    "run_step": {
+      "rows": 25364,
+      "fingerprint": "55ac315ca1244573acaa54b283e045ec"
+    },
+    "run_metric": {
+      "rows": 151939,
+      "fingerprint": "1ba49376749b97c89076b260631961a3"
+    },
+    "query_execution": {
+      "rows": 128349,
+      "fingerprint": "20bbb7cff16802affe8d019b85ed96fe"
+    }
+  },
+  "final_check": "All four counts and row fingerprints match the baseline exactly",
+  "raw_operations": 351,
+  "selection": "Superseded rows stay in the retained raw revision; publication selection is separate"
+}

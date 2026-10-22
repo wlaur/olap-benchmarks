@@ -14,7 +14,7 @@ test("catalog loads real coverage and keeps selected results visible on mobile",
   await expect(page.getByRole("heading", { name: "ClickBench SQL", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Show coverage" }).click()
   await expect(page.getByRole("rowheader", { name: "ClickHouse" })).toBeVisible()
-  await expect(page.getByText("43/43")).toBeVisible()
+  await expect(page.getByText("43/43", { exact: true }).first()).toBeVisible()
   await expectNoHorizontalPageOverflow(page)
 
   await page.getByRole("button", { name: "Q22", exact: true }).click()

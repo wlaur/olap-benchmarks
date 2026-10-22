@@ -1,7 +1,7 @@
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import polars as pl
 import pytest
@@ -10,6 +10,7 @@ from pydantic import ConfigDict
 
 from ..dbs.postgres import Postgres
 from ..dbs.timescaledb import TimescaleDB, TimescaleTimeSeriesMetrics, TimescaleTimeSeriesRanges
+from ..metrics.storage import Storage
 from ..settings import TableName, get_settings
 from ..suites.time_series_metrics.config import QUERY_NAMES as METRIC_QUERIES
 from ..suites.time_series_metrics.config import generate_batch, to_eav
@@ -164,8 +165,10 @@ def test_wide1000_remains_a_rowstore_hypertable_because_compression_exceeds_tupl
 
 
 @pytest.mark.parametrize("problem", [None, "missing", "incomplete", "wide_compressed"])
+@pytest.mark.parametrize("recorded", [False, True])
 def test_native_telemetry_rejects_count_complete_stores_with_unfinished_physical_preparation(
     problem: str | None,
+    recorded: bool,
 ) -> None:
     class StorageDatabase(TimescaleDB):
         steps: list[dict[str, Any]] = []
@@ -189,10 +192,31 @@ def test_native_telemetry_rejects_count_complete_stores_with_unfinished_physical
             )
 
     database = StorageDatabase()
+    if recorded:
+        database._result_storage = cast(Storage, object())
+        database._run_id = 1
     if problem is None:
         database.verify_telemetry_storage({"eav100": 100, "wide1000": 10})
     else:
         with pytest.raises(RuntimeError, match="Repopulate Timescale telemetry"):
             database.verify_telemetry_storage({"eav100": 100, "wide1000": 10})
-    assert database.steps[0]["status"] == ("completed" if problem is None else "failed")
-    assert len(database.steps[0]["metadata"]["tables"]) == 2
+    if recorded:
+        assert database.steps[0]["status"] == ("completed" if problem is None else "failed")
+        assert len(database.steps[0]["metadata"]["tables"]) == 2
+    else:
+        assert database.steps == []
+
+
+def test_device_telemetry_select_requires_columnstore_only_for_readings() -> None:
+    class ReadinessDatabase(TimescaleDB):
+        verified: list[dict[str, int]] = []
+
+        def verify_telemetry_storage(self, expected_tables: Mapping[str, int]) -> None:
+            self.verified.append(dict(expected_tables))
+
+    database = ReadinessDatabase()
+    database._current_suite = "device_telemetry"
+    database._current_suite_scale_factor = 10
+    database._current_operation = "select"
+    database.before_benchmark_operation()
+    assert database.verified == [{"telemetry_reading": 4863454}]

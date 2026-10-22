@@ -37,8 +37,12 @@ SuiteName = Literal[
     "kaggle_airbnb",
     "tpc_h",
     "tpc_ds",
+    "device_telemetry",
+    "join_order",
+    "parquet_analytics",
+    "json_representation",
 ]
-Operation = Literal["populate", "select", "mutate", "concurrent"]
+Operation = Literal["populate", "select", "mutate", "concurrent", "analytical"]
 Revision = Annotated[str, "Results database revision"]
 ContainerPlatform = Literal["linux/amd64", "linux/arm64"]
 
@@ -113,7 +117,17 @@ SUITE_SPECS: dict[SuiteName, SuiteSpec] = {
     "tpc_h": SuiteSpec(
         "TPC-H", scale_factors=(10, 50), default_scale_factor=10, scalable=True, row_store_optional=True
     ),
-    "tpc_ds": SuiteSpec("TPC-DS", scale_factors=(1,), default_scale_factor=1, scalable=True, row_store_optional=True),
+    "tpc_ds": SuiteSpec(
+        "TPC-DS", scale_factors=(1, 10), default_scale_factor=1, scalable=True, row_store_optional=True
+    ),
+    "device_telemetry": SuiteSpec("Device Telemetry", scale_factors=(1, 10), default_scale_factor=1, scalable=True),
+    "join_order": SuiteSpec("Join Order", scale_factors=(1,), default_scale_factor=1, scalable=False),
+    "parquet_analytics": SuiteSpec(
+        "Common Parquet Analytics", scale_factors=(10,), default_scale_factor=10, scalable=True
+    ),
+    "json_representation": SuiteSpec(
+        "JSON Representation", scale_factors=(10,), default_scale_factor=10, scalable=True
+    ),
 }
 
 SUITE_NAMES = cast(tuple[SuiteName, ...], get_args(SuiteName))
@@ -168,6 +182,16 @@ def format_suite_data_directory_name(suite: SuiteName, scale_factor: int) -> str
     if SUITE_SPECS[suite].scalable:
         return f"{suite}_sf{scale_factor}"
     return suite
+
+
+def suite_input_directory(suite: SuiteName, scale_factor: int) -> Path:
+    resolve_suite_scale_factor(suite, scale_factor)
+    source: SuiteName = suite
+    if suite == "parquet_analytics":
+        source = "tpc_h"
+    elif suite == "json_representation":
+        source = "jsonbench"
+    return get_settings().input_data_directory / format_suite_data_directory_name(source, scale_factor)
 
 
 def resolve_dbs(arg: DatabaseArg) -> list[DatabaseName]:

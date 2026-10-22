@@ -1,0 +1,2 @@
+olap_benchmarks/suites/join_order/queries/** -whitespace
+olap_benchmarks/suites/join_order/upstream/** -whitespace

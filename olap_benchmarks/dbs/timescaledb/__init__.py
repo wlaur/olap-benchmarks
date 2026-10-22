@@ -390,9 +390,16 @@ class TimescaleDB(Postgres):
     def before_benchmark_operation(self) -> None:
         if self._current_operation == "select" and self._current_suite in {"time_series_metrics", "time_series_ranges"}:
             self.verify_telemetry_storage(self.benchmarks[self.current_suite].expected_table_row_counts())
+        elif self._current_operation == "select" and self._current_suite == "device_telemetry":
+            counts = self.benchmarks[self.current_suite].expected_table_row_counts()
+            self.verify_telemetry_storage({"telemetry_reading": counts["telemetry_reading"]})
 
     def verify_telemetry_storage(self, expected_tables: Mapping[str, int]) -> None:
-        step_id = self._start_step("phase", "timescaledb_telemetry_storage")
+        step_id = (
+            self._start_step("phase", "timescaledb_telemetry_storage")
+            if self._result_storage is not None and self._run_id is not None
+            else None
+        )
         metadata: dict[str, Any] = {}
         try:
             rows = self.fetch_python(
@@ -420,16 +427,18 @@ class TimescaleDB(Postgres):
                     "Repopulate Timescale telemetry with its native storage layout: " + "; ".join(problems)
                 )
         except BaseException as exc:
-            self._finish_step(
-                step_id,
-                status="failed",
-                step_type="phase",
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-                metadata=metadata,
-            )
+            if step_id is not None:
+                self._finish_step(
+                    step_id,
+                    status="failed",
+                    step_type="phase",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    metadata=metadata,
+                )
             raise
-        self._finish_step(step_id, status="completed", step_type="phase", metadata=metadata)
+        if step_id is not None:
+            self._finish_step(step_id, status="completed", step_type="phase", metadata=metadata)
 
     @property
     def start(self) -> str:

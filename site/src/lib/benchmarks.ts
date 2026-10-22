@@ -1,16 +1,6 @@
 import type { BenchmarkOperation } from "./types"
 
-export type BenchmarkSuiteId =
-  | "time_series"
-  | "time_series_metrics"
-  | "time_series_ranges"
-  | "rtabench"
-  | "clickbench"
-  | "jsonbench"
-  | "chat_threads"
-  | "kaggle_airbnb"
-  | "tpc_h"
-  | "tpc_ds"
+export type BenchmarkSuiteId = string
 
 type QueryNameParserId = "generic" | "time_series"
 type BenchmarkPublicRole = "benchmark" | "smoke"
@@ -45,19 +35,6 @@ interface SuitesManifest {
   suites: SuiteManifestEntry[]
 }
 
-const KNOWN_SUITE_IDS: readonly BenchmarkSuiteId[] = [
-  "time_series",
-  "time_series_metrics",
-  "time_series_ranges",
-  "rtabench",
-  "clickbench",
-  "jsonbench",
-  "chat_threads",
-  "kaggle_airbnb",
-  "tpc_h",
-  "tpc_ds",
-]
-
 let benchmarkDefinitionsCache: BenchmarkDefinition[] | null = null
 
 const fallbackBenchmarkId: BenchmarkSuiteId = "time_series"
@@ -90,8 +67,8 @@ export async function fetchBenchmarkDefinitions(): Promise<BenchmarkDefinition[]
 }
 
 function parseSuiteManifestEntry(entry: SuiteManifestEntry): BenchmarkDefinition {
-  if (!KNOWN_SUITE_IDS.includes(entry.id as BenchmarkSuiteId)) {
-    throw new Error(`suites.json contains unknown suite: ${entry.id}`)
+  if (typeof entry.id !== "string" || entry.id.length === 0) {
+    throw new Error("suites.json contains an invalid suite id")
   }
 
   return {

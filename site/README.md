@@ -1,5 +1,35 @@
 # Results viewer
 
+The viewer separates fixed-workload performance, execution coverage and correctness
+evidence. `public/data/comparison.json` binds the versioned comparison policy to
+the exact results database SHA-256. Query lists and scales come from the selected
+recorded plans; incomplete engines remain visible but cannot shrink the comparison
+set. RTABench raw queries and prepared aggregates are separate tracks. ClickBench
+Q28 remains in coverage and timing detail but is excluded from comparable ranking.
+
+The initial policy is a retrospective analysis of the October measurements, not
+a claim that it was declared before that campaign. Registration comes from the
+harness registry, and sourced preparation/tuning annotations apply only to their
+documented run IDs. Missing facts remain unknown. Refreshing this metadata requires
+no benchmark execution or results schema migration:
+
+```sh
+uv run olap results publication-metadata
+```
+
+This command verifies the existing asset's hash and byte count and writes only
+`comparison.json`. Normal publication writes the policy alongside the other site
+metadata. Keep the matching policy when copying or deploying a published asset.
+
+Campaign publication retains terminal failed SELECT attempts with their complete
+recorded plans; unstarted positions remain unknown. Completed and failed cohort
+counts are separate manifest fields. Optional `analytical-streams-v1` attempts are
+retained per configuration, including distinct client counts, duration, seed and
+workload fingerprints. Unfinished attempts or conflicting answers block publication.
+When present, `analytical_runs` and `analytical_track` describe this supplementary
+evidence. The analytical panel reports actual windows, qualified percentiles,
+per-query mixes and effective budget scopes separately from SELECT rankings.
+
 Use Bun for installation and scripts. For the current staged checkout:
 
 ```sh

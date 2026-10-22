@@ -25,6 +25,150 @@ def test_answer_metadata_hashes_small_results_deterministically() -> None:
     assert left["answer_hash"] != changed["answer_hash"]
 
 
+def test_answer_metadata_preserves_row_order_by_default() -> None:
+    frame = pl.DataFrame({"key": [1, 1], "value": ["b", "a"]})
+    metadata = hashing.build_answer_metadata(frame)
+
+    assert metadata == hashing.build_answer_metadata(frame, order_keys=None)
+    assert metadata["answer_hash"] != hashing.build_answer_metadata(frame.reverse())["answer_hash"]
+    assert metadata["answer_hash_version"] == "canonical-v11"
+    assert not any(key.startswith("answer_order_") for key in metadata)
+
+
+def test_ordered_ties_sorts_all_columns_within_each_group() -> None:
+    frame = pl.DataFrame(
+        {
+            "key": [1, 1, 1, 1, 2, 2],
+            "value": ["b", "a", "b", "b", "z", "x"],
+            "detail": [3, 9, 1, 3, 2, 5],
+        }
+    )
+    original = frame.clone()
+    metadata = hashing.build_answer_metadata(frame, order_keys=(0,))
+    permuted = hashing.build_answer_metadata(frame[[3, 2, 1, 0, 5, 4]], order_keys=(0,))
+
+    assert metadata["answer_hash"] == permuted["answer_hash"]
+    assert metadata["answer_hash_version"] == "canonical-v11-ordered-ties-v1"
+    assert metadata["answer_order_policy"] == "ordered-ties-v1"
+    assert metadata["answer_order_key_indices"] == [0]
+    assert "consecutive" in metadata["answer_order_scope"]
+    assert metadata["answer_rows"] == 6
+    assert metadata["answer_schema"] == hashing.build_answer_metadata(frame)["answer_schema"]
+    assert frame.equals(original)
+
+
+def test_ordered_ties_uses_all_keys_with_null_safe_equality() -> None:
+    frame = pl.DataFrame(
+        {
+            "key": [None, None, None, None, "a", "a"],
+            "value": [2, 1, 4, 3, 6, 5],
+            "other_key": [None, None, 1, 1, None, None],
+        }
+    )
+    metadata = hashing.build_answer_metadata(frame, order_keys=(2, 0))
+
+    assert metadata["answer_hash"] == hashing.build_answer_metadata(frame[[1, 0, 3, 2, 5, 4]], (2, 0))["answer_hash"]
+    assert metadata["answer_hash"] != hashing.build_answer_metadata(frame[[2, 3, 0, 1, 4, 5]], (2, 0))["answer_hash"]
+    assert metadata["answer_order_key_indices"] == [2, 0]
+
+
+def test_ordered_ties_does_not_conflate_composite_key_values() -> None:
+    frame = pl.DataFrame({"key": ["a|b", "a"], "other_key": ["c", "b|c"], "value": [2, 1]})
+
+    assert (
+        hashing.build_answer_metadata(frame, (0, 1))["answer_hash"]
+        != hashing.build_answer_metadata(frame.reverse(), (0, 1))["answer_hash"]
+    )
+
+
+def test_ordered_ties_preserves_distinct_group_order() -> None:
+    frame = pl.DataFrame({"key": [2, 2, 1, 1], "value": ["d", "c", "b", "a"]})
+
+    assert (
+        hashing.build_answer_metadata(frame, (0,))["answer_hash"]
+        != hashing.build_answer_metadata(frame[[2, 3, 0, 1]], (0,))["answer_hash"]
+    )
+
+
+def test_ordered_ties_does_not_merge_separated_equal_keys() -> None:
+    frame = pl.DataFrame({"key": [1, 1, 2, 1, 1], "value": ["d", "c", "b", "a", "e"]})
+    metadata = hashing.build_answer_metadata(frame, (0,))
+
+    assert metadata["answer_hash"] == hashing.build_answer_metadata(frame[[1, 0, 2, 4, 3]], (0,))["answer_hash"]
+    assert metadata["answer_hash"] != hashing.build_answer_metadata(frame[[3, 1, 2, 0, 4]], (0,))["answer_hash"]
+
+
+def test_ordered_ties_preserves_duplicate_counts_and_values() -> None:
+    frame = pl.DataFrame({"key": [1, 1, 1], "value": ["a", "a", "b"]})
+    metadata = hashing.build_answer_metadata(frame, (0,))
+    changed_duplicates = pl.DataFrame({"key": [1, 1, 1], "value": ["a", "b", "b"]})
+    changed_value = pl.DataFrame({"key": [1, 1, 1], "value": ["a", "a", "c"]})
+
+    for changed in (changed_duplicates, changed_value, frame.head(2)):
+        assert metadata["answer_hash"] != hashing.build_answer_metadata(changed, (0,))["answer_hash"]
+
+
+def test_ordered_ties_does_not_equate_row_replacement_at_limit_boundary() -> None:
+    first = pl.DataFrame({"store": ["able"] * 100, "description": [None] * 100, "value": range(100)})
+    replaced = first.with_columns(pl.when(pl.col("value") == 99).then(100).otherwise(pl.col("value")).alias("value"))
+
+    assert first.height == replaced.height == 100
+    assert (
+        hashing.build_answer_metadata(first, (0, 1))["answer_hash"]
+        != hashing.build_answer_metadata(replaced, (0, 1))["answer_hash"]
+    )
+
+
+@pytest.mark.parametrize("keys", [[43.242039026201894, 43.24203902622548], [float("nan"), None]])
+def test_ordered_ties_compares_keys_after_canonical_conversion(keys: list[float | None]) -> None:
+    frame = pl.DataFrame({"key": keys, "value": ["b", "a"]})
+
+    assert (
+        hashing.build_answer_metadata(frame, (0,))["answer_hash"]
+        == hashing.build_answer_metadata(frame.reverse(), (0,))["answer_hash"]
+    )
+
+
+def test_ordered_ties_keeps_array_elements_ordered() -> None:
+    frame = pl.DataFrame({"key": [1, 1], "values": [[3, 1, 2], [4]]})
+    changed = pl.DataFrame({"key": [1, 1], "values": [[1, 2, 3], [4]]})
+    metadata = hashing.build_answer_metadata(frame, (0,))
+
+    assert metadata["answer_hash"] == hashing.build_answer_metadata(frame.reverse(), (0,))["answer_hash"]
+    assert metadata["answer_hash"] != hashing.build_answer_metadata(changed, (0,))["answer_hash"]
+
+
+@pytest.mark.parametrize("rows", [0, 1])
+def test_ordered_ties_accepts_empty_and_single_row_answers(rows: int) -> None:
+    frame = pl.DataFrame({"key": [None], "value": ["a"]}).head(rows)
+    metadata = hashing.build_answer_metadata(frame, (0,))
+
+    assert metadata["answer_rows"] == rows
+    assert metadata["answer_hash"] == hashing.build_answer_metadata(frame, (0,))["answer_hash"]
+
+
+@pytest.mark.parametrize("keys", [(), (0, 0), (-1,), (2,), (0, 2)])
+def test_ordered_ties_rejects_invalid_key_indices(keys: tuple[int, ...]) -> None:
+    with pytest.raises(ValueError, match="nonempty, unique column indices within the answer width"):
+        hashing.build_answer_metadata(pl.DataFrame({"key": [1], "value": ["a"]}), keys)
+
+
+def test_ordered_ties_records_policy_for_capped_answers_without_canonicalizing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected_canonicalize(_frame: pl.DataFrame) -> pl.DataFrame:
+        pytest.fail("capped answers must not be canonicalized")
+
+    monkeypatch.setattr(hashing, "MAX_ANSWER_HASH_CELLS", 1)
+    monkeypatch.setattr(hashing, "_canonicalize_answer_frame", unexpected_canonicalize)
+    metadata = hashing.build_answer_metadata(pl.DataFrame({"key": [1], "value": ["a"]}), (0,))
+
+    assert metadata["answer_hash_version"] == "canonical-v11-ordered-ties-v1"
+    assert metadata["answer_order_policy"] == "ordered-ties-v1"
+    assert metadata["answer_order_key_indices"] == [0]
+    assert metadata["answer_order_scope"]
+    assert "answer_hash" not in metadata
+    assert metadata["answer_hash_skipped_reason"] == "result has 2 cells, above the 1-cell hash limit"
+
+
 def test_answer_metadata_canonicalizes_equivalent_numeric_dtypes() -> None:
     narrow = pl.DataFrame(
         {

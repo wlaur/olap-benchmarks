@@ -30,6 +30,7 @@ from ..settings import (
 )
 from .campaign import campaign_cells, select_campaign_runs
 from .cells import StoredRun, load_runs, superseded_runs
+from .comparison import write_comparison_manifest
 from .merge import MergeStats, merge_results
 from .models import QueryExecution, Run, RunMetric, RunStep, SystemSnapshot
 from .publishing import publishable_run_ids, single_system, validate_publishable_runs
@@ -218,7 +219,9 @@ def _publication_metadata(db_path: Path, revision: str, report_url: str | None) 
     try:
         row = con.execute(
             """
-            select count(*), count(*) filter (where exists (
+            select count(*), count(*) filter (where r.status = 'completed'),
+              count(*) filter (where r.status = 'failed'),
+              count(*) filter (where r.status = 'failed' or exists (
                 select 1 from run_step s where s.run_id = r.id
                   and s.step_type = 'query' and s.result_status <> 'ok'
             ))
@@ -227,14 +230,21 @@ def _publication_metadata(db_path: Path, revision: str, report_url: str | None) 
         ).fetchone()
         assert row is not None
         commits = sorted({run.commit for run in load_runs(db_path, con) if run.commit is not None})
-        return {
+        metadata: dict[str, object] = {
             "kind": "campaign",
             "title": f"Benchmark campaign: {revision}",
             "report_url": report_url,
             "select_cohorts": int(row[0]),
-            "partial_select_cohorts": int(row[1]),
+            "completed_select_cohorts": int(row[1]),
+            "failed_select_cohorts": int(row[2]),
+            "partial_select_cohorts": int(row[3]),
             "source_commits": commits,
         }
+        analytical = con.execute("select count(*) from run where operation = 'analytical'").fetchone()
+        assert analytical is not None
+        if analytical[0]:
+            metadata.update(analytical_runs=int(analytical[0]), analytical_track="analytical-streams-v1")
+        return metadata
     finally:
         con.close()
 
@@ -298,7 +308,7 @@ def publish(
         if dropped:
             _LOGGER.info(f"Left out {dropped} run(s) outside the selected publication cohorts")
 
-        validate_results(db_path=staging_path, pins=pins, mark=True)
+        validate_results(db_path=staging_path, pins=pins, mark=True, include_failed=campaign)
         validate_publishable_runs(
             staging_path, cells, pins=pins, drivers=drivers, allow_mixed_commits=merge or campaign, campaign=campaign
         )
@@ -333,6 +343,8 @@ def publish(
     suites_manifest = _build_suites_manifest()
     suites_path = output_dir / "suites.json"
     suites_path.write_text(f"{json.dumps(suites_manifest, indent=2)}\n")
+
+    write_comparison_manifest(output_dir)
 
     return output_dir, merge_stats
 
@@ -451,6 +463,8 @@ def _build_suites_manifest() -> dict[str, list[dict[str, object]]]:
 
 
 def _build_queries_manifest() -> dict[str, dict[str, dict[str, str | None | dict[str, str]]]]:
+    from ..suites.parquet_analytics.config import queries_for_publication
+
     suites_root = REPO_ROOT / "olap_benchmarks" / "suites"
     manifest: dict[str, dict[str, dict[str, str | None | dict[str, str]]]] = {}
 
@@ -495,6 +509,7 @@ def _build_queries_manifest() -> dict[str, dict[str, dict[str, str | None | dict
 
         manifest[suite_dir.name] = suite_queries
 
+    manifest["parquet_analytics"] = queries_for_publication()
     return manifest
 
 

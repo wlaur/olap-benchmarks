@@ -16,11 +16,18 @@ from clickhouse_connect.driver.client import Client as ClickhouseClient
 from pydantic import Field
 from sqlalchemy import Connection, create_engine
 
+from ...metrics.measure import get_paths_size_mb
 from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_port
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
+from ...suites.json_representation.config import SUITE_NAME as JSON_REPRESENTATION
+from ...suites.json_representation.config import JSONRepresentation
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
+from ...suites.parquet_analytics.config import SUITE_NAME as PARQUET_ANALYTICS
+from ...suites.parquet_analytics.config import ParquetAnalytics
+from ...suites.parquet_analytics.config import source_directory as parquet_source_directory
+from ...suites.parquet_analytics.contract import manifest_metadata, required_external_files
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import TimeSeries
 from ...suites.time_series_metrics.config import TimeSeriesMetrics
@@ -395,6 +402,63 @@ class Clickhouse(Database):
     _clickhouse_client: clickhouse_connect.driver.client.Client | None = None
 
     @property
+    def input_directory(self) -> Path:
+        if self._current_suite == PARQUET_ANALYTICS:
+            return parquet_source_directory(self.current_suite_scale_factor)
+        if self._current_suite == JSON_REPRESENTATION:
+            return get_jsonbench_input_files(self.current_suite_scale_factor)[0].parent
+        return super().input_directory
+
+    @property
+    def _representation_external_files(self) -> tuple[Path, ...]:
+        if self._current_suite != PARQUET_ANALYTICS:
+            return ()
+        return required_external_files(self.database_directory, list(self.input_directory.glob("*.parquet")))
+
+    @property
+    def metric_directories(self) -> tuple[Path, ...]:
+        return (*super().metric_directories, *self._representation_external_files)
+
+    @property
+    def run_options(self) -> Mapping[str, object]:
+        if self._current_suite not in (PARQUET_ANALYTICS, JSON_REPRESENTATION):
+            return super().run_options
+        external = self._representation_external_files
+        return {
+            **super().run_options,
+            "configured_select_settings": self.benchmarks[self.current_suite].fetch_kwargs.get("settings", {}),
+            "configured_query_settings": {
+                name: self.benchmarks[self.current_suite].query_fetch_kwargs(name).get("settings", {})
+                for name in self.benchmarks[self.current_suite].planned_query_names()
+            },
+            "physical_representation": manifest_metadata(self.database_directory),
+            "storage_accounting": {
+                "version": 1,
+                "additional_imported_store_path": self.database_directory.resolve().as_posix(),
+                "required_referenced_storage_paths": [path.as_posix() for path in external],
+                "required_referenced_storage_mb_before_operation": get_paths_size_mb(external),
+                "scope": "Owned store plus required external files exactly once; retained import sources and "
+                "temporary staging/spill excluded. Store differences are not measurements of peak spill.",
+            },
+        }
+
+    def verify_storage_readiness(self) -> None:
+        if self._current_suite == PARQUET_ANALYTICS:
+            cast(ParquetAnalytics[Clickhouse], self.benchmarks[PARQUET_ANALYTICS]).verify_representation()
+        elif self._current_suite == JSON_REPRESENTATION:
+            cast(JSONRepresentation[Clickhouse], self.benchmarks[JSON_REPRESENTATION]).verify_representation()
+
+    def before_benchmark_operation(self) -> None:
+        if self._current_operation != "populate":
+            self.verify_storage_readiness()
+
+    def _executed_query_metadata(self) -> dict[str, Any] | None:
+        metadata = super()._executed_query_metadata()
+        if self._current_suite not in (PARQUET_ANALYTICS, JSON_REPRESENTATION):
+            return metadata
+        return {**(metadata or {}), "options": self.run_options}
+
+    @property
     def benchmark_settings(self) -> Mapping[str, object]:
         settings = dict(super().benchmark_settings)
         if self._current_suite in ("time_series_metrics", "time_series_ranges"):
@@ -407,13 +471,17 @@ class Clickhouse(Database):
     def start(self) -> str:
         (get_settings().temporary_directory / "clickhouse/data").mkdir(exist_ok=True, parents=True)
 
+        mounts = {
+            self.database_directory.as_posix(): "/var/lib/clickhouse",
+            f"{get_settings().temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
+        }
+        if self._current_suite == PARQUET_ANALYTICS:
+            mounts[self.input_directory.resolve(strict=True).as_posix()] = "/benchmark_input/parquet_analytics:ro"
+
         return self.docker_run_command(
             self.container_images["server"],
             ports={str(host_port("clickhouse_http")): "8123", str(host_port("clickhouse_native")): "9000"},
-            mounts={
-                self.database_directory.as_posix(): "/var/lib/clickhouse",
-                f"{get_settings().temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
-            },
+            mounts=mounts,
             env={
                 # does not seem to be able to create a new dt "benchmark", use the default name "default" instead
                 "CLICKHOUSE_DB": "default",
@@ -421,6 +489,7 @@ class Clickhouse(Database):
                 "CLICKHOUSE_USER": "user",
                 "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
             },
+            args=("--", "--user_files_path=/benchmark_input") if self._current_suite == PARQUET_ANALYTICS else (),
         )
 
     def connect(self, reconnect: bool = False) -> Connection:
@@ -790,6 +859,8 @@ class Clickhouse(Database):
             "rtabench": ClickHouseRTABench,
             "clickbench": ClickhouseClickbench,
             "jsonbench": ClickhouseJSONBench,
+            PARQUET_ANALYTICS: ParquetAnalytics,
+            JSON_REPRESENTATION: JSONRepresentation,
             "chat_threads": ChatThreads,
             "time_series": ClickhouseTimeseries,
             "time_series_metrics": ClickhouseTimeSeriesMetrics,

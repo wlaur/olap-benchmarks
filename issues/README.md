@@ -9,8 +9,8 @@ itself belong in [`../REVIEW.md`](../REVIEW.md).
 | --- | --- |
 | [`arc/`](arc/) | [MessagePack write with an all-null column infers `VARCHAR`](arc/msgpack-all-null-batch-infers-varchar.md); [MessagePack timestamp unit guessed from magnitude](arc/msgpack-timestamp-unit-guessed-from-magnitude.md); [Parquet import stores extra timestamps as BIGINT and rejects DATE](arc/parquet-import-drops-timestamp-and-date-types.md); [Wide Parquet schema query cost](arc/wide-parquet-query-cost.md) |
 | [`clickhouse/`](clickhouse/) | [`FixedString` deserialization failure under `parallel_hash`](clickhouse/fixedstring-too-large-under-parallel-hash.md); [Automatic PREWHERE preparation cost on wide tables](clickhouse/wide-range-prewhere-planning.md) |
-| [`doris/`](doris/) | [Container stop bypasses graceful engine shutdown](doris/container-stop-bypasses-graceful-shutdown.md) |
-| [`monetdb/`](monetdb/) | [Planning thousands of wide aggregates](monetdb/wide-many-aggregate-planning.md); [JSON query memory amplification](monetdb/json-query-memory-amplification.md) |
+| [`doris/`](doris/) | [Container stop bypasses graceful engine shutdown](doris/container-stop-bypasses-graceful-shutdown.md); [Single-value sample deviation differs from the canonical workload](doris/single-value-sample-deviation.md) |
+| [`monetdb/`](monetdb/) | [Planning thousands of wide aggregates](monetdb/wide-many-aggregate-planning.md); [JSON query memory amplification](monetdb/json-query-memory-amplification.md); [Rank filter drops boundary ties](monetdb/rank-filter-drops-boundary-ties.md) |
 | [`questdb/`](questdb/) | [DOUBLE PRECISION casts fail inside CASE](questdb/double-precision-cast-inside-case.md); [MAX of an empty designated timestamp returns no row](questdb/empty-designated-timestamp-max.md) |
 | [`starrocks/`](starrocks/) | [Bucket-shuffle full join loses matching rows after analytic aggregation](starrocks/bucket-shuffle-full-join-loses-matches.md) |
 

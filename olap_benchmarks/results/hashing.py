@@ -20,6 +20,7 @@ MAX_ANSWER_HASH_CELLS = 5_000_000
 # because that noise grows with row count and the largest suites run at ten times this scale.
 FLOAT_SIGNIFICANT_DIGITS = 10
 ANSWER_HASH_VERSION = "canonical-v11"
+ORDERED_TIES_ANSWER_HASH_VERSION = "canonical-v11-ordered-ties-v1"
 
 
 def _normalize_json_text(value: str | None) -> str | None:
@@ -113,10 +114,17 @@ def _canonicalize_answer_frame(df: pl.DataFrame) -> pl.DataFrame:
     return canonical
 
 
-def build_answer_metadata(df: pl.DataFrame) -> dict[str, Any]:
+def build_answer_metadata(df: pl.DataFrame, order_keys: tuple[int, ...] | None = None) -> dict[str, Any]:
     row_count = df.height
     column_count = df.width
     cell_count = row_count * column_count
+    if order_keys is not None and (
+        not order_keys
+        or len(set(order_keys)) != len(order_keys)
+        or any(index < 0 or index >= column_count for index in order_keys)
+    ):
+        raise ValueError("order_keys must be nonempty, unique column indices within the answer width")
+
     metadata: dict[str, Any] = {
         "answer_rows": row_count,
         "answer_columns": column_count,
@@ -124,6 +132,16 @@ def build_answer_metadata(df: pl.DataFrame) -> dict[str, Any]:
         "answer_cells": cell_count,
         "answer_hash_version": ANSWER_HASH_VERSION,
     }
+    if order_keys is not None:
+        metadata.update(
+            answer_hash_version=ORDERED_TIES_ANSWER_HASH_VERSION,
+            answer_order_policy="ordered-ties-v1",
+            answer_order_key_indices=list(order_keys),
+            answer_order_scope=(
+                "after canonical-v11 type/precision conversion, stable-sort all columns only within consecutive "
+                "groups of equal ORDER BY keys (zero-based output indices); preserve group sequence and all rows"
+            ),
+        )
 
     if cell_count > MAX_ANSWER_HASH_CELLS:
         metadata["answer_hash_skipped_reason"] = (
@@ -131,7 +149,18 @@ def build_answer_metadata(df: pl.DataFrame) -> dict[str, Any]:
         )
         return metadata
 
+    canonical = _canonicalize_answer_frame(df)
+    if order_keys is not None:
+        same_keys = pl.all_horizontal(
+            pl.col(f"c{index}").eq_missing(pl.col(f"c{index}").shift()) for index in order_keys
+        )
+        canonical = (
+            canonical.with_columns((~same_keys).cast(pl.UInt32).cum_sum().alias("_order_group"))
+            .sort(["_order_group", *canonical.columns], maintain_order=True)
+            .drop("_order_group")
+        )
+
     sink = BytesIO()
-    _canonicalize_answer_frame(df).write_ndjson(sink)
+    canonical.write_ndjson(sink)
     metadata["answer_hash"] = f"blake2b128:{blake2b(sink.getbuffer(), digest_size=16).hexdigest()}"
     return metadata

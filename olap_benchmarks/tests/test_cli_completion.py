@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol, get_args
 
 import pytest
@@ -11,12 +12,28 @@ from cyclopts.exceptions import CoercionError
 from .. import __main__
 from ..__main__ import app
 from ..results.validation import ValidationReport
-from ..settings import DatabaseArg, DatabaseName, SuiteArg, SuiteName
+from ..settings import DatabaseArg, DatabaseName, SuiteArg, SuiteName, get_settings
 from ..suites import ManualPreparationRequired
 
 
 class _BenchmarkDouble(Protocol):
     def benchmark(self, suite: str, operation: str, scale_factor: int | None = None) -> None: ...
+
+
+@pytest.mark.parametrize(
+    ("suite", "source"), [("parquet_analytics", "tpc_h_sf10"), ("json_representation", "jsonbench_sf10")]
+)
+def test_representation_input_check_fingerprints_the_shared_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suite: SuiteName, source: str
+) -> None:
+    source_directory = tmp_path / source
+    source_directory.mkdir()
+    (source_directory / "input").write_bytes(b"canonical input")
+    monkeypatch.setattr(get_settings(), "input_data_directory", tmp_path)
+    inspected: list[Path] = []
+    monkeypatch.setattr(__main__, "fingerprint_input_directory", inspected.append)
+    __main__._check_and_hash_input_data(suite, 10)
+    assert inspected == [source_directory]
 
 
 def _fake_run_operation(

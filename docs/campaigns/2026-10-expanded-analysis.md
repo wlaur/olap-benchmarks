@@ -16,9 +16,18 @@ on many relational queries but has severe outliers, and Polars is competitive
 on its smaller implemented workload set. The remaining order depends heavily
 on workload and coverage.
 
-The site's existing score gives this ordering. Lower is better; the numbers
+The historical coverage-adjusted score gives this ordering. Lower is better; the numbers
 are scores, not direct runtime multipliers between engines. Airbnb is excluded
 from the ranking but included in campaign validation.
+
+The subsequent `fixed-workloads-v1` publication separates performance eligibility,
+coverage and correctness evidence using the same recorded measurements. Its
+checksum-bound `comparison.json` freezes the comparison query lists and scales,
+separates raw RTABench from prepared aggregates, and excludes ClickBench Q28 from
+comparable performance while retaining its coverage position. This is a
+retrospective policy; the table below preserves the historical score and must not
+be read as the new family-ranking policy. Neither the policy change nor its
+metadata export requires rerunning the 99 SELECT combinations.
 
 | Rank | Engine | Score | Ranked cells with a cohort | Measured queries |
 | ---: | --- | ---: | ---: | ---: |

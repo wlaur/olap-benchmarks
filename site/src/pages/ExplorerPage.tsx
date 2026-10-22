@@ -11,7 +11,6 @@ import {
   Scale,
   Search,
   Server,
-  Trophy,
   type LucideIcon,
 } from "lucide-react"
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
@@ -26,6 +25,8 @@ import {
   ProfileScopeNotice,
   SnapshotSpanWarning,
 } from "../components/methodology/ComparisonScopeNotices"
+import { EngineComparison } from "../components/methodology/EngineComparison"
+import { QueryEvidence, RunContext } from "../components/methodology/ObservationContext"
 import { Skeleton } from "../components/Skeleton"
 import { SqlCodeView } from "../components/SqlCodeView"
 import { MetaLabel, SectionTitle } from "../components/Typography"
@@ -34,7 +35,7 @@ import type { BenchmarkDefinition, BenchmarkSuiteId } from "../lib/benchmarks"
 import { cn } from "../lib/cn"
 import { getDatabaseColors } from "../lib/databaseColors"
 import { formatLatencyMs } from "../lib/format"
-import { computeRelativeSeriesScores, formatScore } from "../lib/score"
+import { compareFamily, observeQuery, type RunObservation } from "../lib/observations"
 import type { ExplorerQueryMetric, QuerySqlEntry } from "../lib/types"
 
 type ComparisonMode = "database" | "scale" | "version" | "system"
@@ -117,13 +118,6 @@ interface ComparisonRow {
   queryValues: Map<string, number>
 }
 
-interface ScoredComparisonRow extends ComparisonRow {
-  score: number
-  queryCount: number
-  wins: number
-  missing: number
-}
-
 interface QueryRow {
   query: string
   values: (number | null)[]
@@ -151,8 +145,14 @@ export function ExplorerPage({
     searchParams.get("sql_database") ?? "",
   )
   const [showAllQueries, setShowAllQueries] = useState(false)
-  const { metrics, queriesManifest, loading, error } = useExplorerData(suiteId)
-  const variants = useMemo(() => makeRunVariants(metrics), [metrics])
+  const { metrics, runs, comparison, queriesManifest, loading, error } = useExplorerData(suiteId)
+  const [requestedFamily, setRequestedFamily] = useState(searchParams.get("family") ?? "")
+  const families = comparison?.families.filter((family) => family.suite === suiteId) ?? []
+  const family =
+    families.find((entry) => entry.id === requestedFamily) ??
+    families.find((entry) => entry.track === "raw") ??
+    families[0]
+  const variants = makeRunVariants(runs)
   const selection = useMemo(
     () =>
       resolveSelection({
@@ -188,77 +188,55 @@ export function ExplorerPage({
     () => buildComparisonRows({ mode, metrics, variants, selection, databaseColors }),
     [databaseColors, metrics, mode, selection, variants],
   )
-  const manifestEntries = useMemo(
-    () => queriesManifest[suiteDefinition.queriesKey] ?? {},
-    [queriesManifest, suiteDefinition.queriesKey],
+  const manifestEntries = Object.fromEntries(
+    Object.entries(queriesManifest[suiteDefinition.queriesKey] ?? {}).filter(
+      ([name]) => !family || family.coverage_query_names.includes(name),
+    ),
   )
-  const rankedRows = useMemo(() => {
-    const scores = new Map(
-      computeRelativeSeriesScores(
-        comparisonRows.map((row) => ({ key: row.id, queryValues: row.queryValues })),
-        Object.keys(manifestEntries),
-        10,
-      ).map((score) => [score.key, score]),
-    )
-    return comparisonRows
-      .map((row): ScoredComparisonRow => ({ ...row, ...scores.get(row.id)! }))
-      .sort((left, right) => left.score - right.score || left.label.localeCompare(right.label))
-  }, [comparisonRows, manifestEntries])
-  const scoredQueryCount = rankedRows[0]
-    ? rankedRows[0].queryCount + rankedRows[0].missing
-    : Object.keys(manifestEntries).length
-  const queryNames = useMemo(
-    () => orderQueryNames(Object.keys(manifestEntries), rankedRows),
-    [manifestEntries, rankedRows],
-  )
-  const queryOptions = useMemo(
-    () => queryNames.map((query) => ({ value: query, label: query })),
-    [queryNames],
-  )
+  const publicationRows =
+    family && comparison
+      ? compareFamily(family, selection.scale, selection.system, runs, comparison)
+      : []
+  const displayRows = comparisonRows
+  const queryNames = family?.coverage_query_names ?? Object.keys(manifestEntries)
+  const queryOptions = queryNames.map((query) => ({ value: query, label: query }))
   const selectedQuery = queryNames.includes(requestedQuery) ? requestedQuery : (queryNames[0] ?? "")
-  const queryRows = useMemo(() => makeQueryRows(queryNames, rankedRows), [queryNames, rankedRows])
+  const queryRows = makeQueryRows(queryNames, displayRows)
   const sqlDatabaseOptions = useMemo(
     () =>
       unique(
         mode === "database"
-          ? rankedRows.map((row) => row.database)
+          ? displayRows.map((row) => row.database)
           : selection.database
             ? [selection.database]
             : [],
       ),
-    [mode, rankedRows, selection.database],
+    [mode, displayRows, selection.database],
   )
   const sqlDatabase = sqlDatabaseOptions.includes(requestedSqlDatabase)
     ? requestedSqlDatabase
     : (sqlDatabaseOptions[0] ?? "")
   const selectedSqlEntry = manifestEntries[selectedQuery]
   const selectedSql = resolveSql(selectedSqlEntry, sqlDatabase)
-  const sqlVariants = useMemo(
-    () =>
-      new Map(
-        sqlDatabaseOptions.map((database) => [
-          database,
-          sqlDiffersFromDefault(selectedSqlEntry, database),
-        ]),
-      ),
-    [selectedSqlEntry, sqlDatabaseOptions],
+  const sqlVariants = new Map(
+    sqlDatabaseOptions.map((database) => [
+      database,
+      sqlDiffersFromDefault(selectedSqlEntry, database),
+    ]),
   )
   const hasDifferentSql = [...sqlVariants.values()].some(Boolean)
-  const selectedQueryRows = useMemo(
-    () =>
-      rankedRows
-        .flatMap((row) => {
-          const valueMs = row.queryValues.get(selectedQuery)
-          return valueMs === undefined ? [] : [{ ...row, valueMs }]
-        })
-        .sort((a, b) => a.valueMs - b.valueMs),
-    [rankedRows, selectedQuery],
-  )
+  const selectedQueryRows = displayRows
+    .flatMap((row) => {
+      const valueMs = row.queryValues.get(selectedQuery)
+      return valueMs === undefined ? [] : [{ ...row, valueMs }]
+    })
+    .sort((a, b) => a.valueMs - b.valueMs)
   const queryDetailHeight = Math.min(480, Math.max(384, 112 + selectedQueryRows.length * 60))
-  const nextSearchParams = useMemo(() => {
+  const nextSearchParams = (() => {
     if (!selection.ready || !selectedQuery) return ""
     const params = new URLSearchParams()
     params.set("mode", mode)
+    if (family) params.set("family", family.id)
     params.set("system", selection.system)
     params.set("systems", selection.systems.join(","))
     params.set("database", selection.database)
@@ -270,7 +248,7 @@ export function ExplorerPage({
     params.set("query", selectedQuery)
     if (sqlDatabase) params.set("sql_database", sqlDatabase)
     return params.toString()
-  }, [mode, selectedQuery, selection, sqlDatabase])
+  })()
 
   useEffect(() => {
     if (nextSearchParams && searchParams.toString() !== nextSearchParams) {
@@ -417,7 +395,7 @@ export function ExplorerPage({
               </div>
             ) : !selection.ready ? (
               <div className="border-y border-border-subtle px-3 py-4 text-sm text-slate-500">
-                No completed query results are available for this suite.
+                No recorded SELECT runs are available for this suite.
               </div>
             ) : mode === "database" ? (
               <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(24rem,0.7fr)]">
@@ -534,7 +512,7 @@ export function ExplorerPage({
                     helper={
                       getVaryingOptionCount(mode, selection) < 2
                         ? `Only one recorded ${getModePluralLabel(mode).toLowerCase().replace(/s$/, "")} is available. Try another dimension or database for a meaningful comparison.`
-                        : "Select the values that should appear together in the ranking and query views."
+                        : "Select the values that should appear together in the comparison and query views."
                     }
                   >
                     {mode === "scale" ? (
@@ -651,7 +629,7 @@ export function ExplorerPage({
                   mode,
                   suiteDefinition.title,
                   selection,
-                  rankedRows.length,
+                  displayRows.length,
                 )}
               </p>
             ) : null}
@@ -662,56 +640,90 @@ export function ExplorerPage({
         <ProfileScopeNotice />
         {mode !== "system" ? (
           <SnapshotSpanWarning
-            snapshotCount={new Set(rankedRows.map((row) => row.systemSnapshotId)).size}
+            snapshotCount={new Set(displayRows.map((row) => row.systemSnapshotId)).size}
           />
         ) : null}
 
+        <div role="group" aria-label="Workload track" className="flex flex-wrap gap-2">
+          {families.map((entry) => (
+            <SegmentedButton
+              key={entry.id}
+              selected={entry.id === family?.id}
+              aria-pressed={entry.id === family?.id}
+              onClick={() => setRequestedFamily(entry.id)}
+            >
+              {entry.title} · {entry.track}
+            </SegmentedButton>
+          ))}
+        </div>
         {showLoading ? (
           <ResultsSkeleton />
         ) : error ? (
-          <div className="flex min-h-72 items-center justify-center border-y border-red-500/30 bg-red-950/20 px-4 text-sm text-red-300">
+          <p role="alert" className="text-sm text-red-300">
             Failed to load explorer data: {error}
-          </div>
-        ) : rankedRows.length === 0 ? (
-          <div className="flex min-h-72 items-center justify-center border-y border-border-subtle text-sm text-slate-500">
-            No completed query results match this comparison.
-          </div>
-        ) : rankedRows.length < 2 ? (
-          <div className="rounded-md border border-border-subtle bg-surface-inset px-4 py-5">
-            <p className="text-sm font-semibold text-slate-200">No comparison available</p>
-            <p className="mt-1 max-w-3xl font-sans text-sm leading-6 text-slate-400">
-              Only one recorded value matches this setup. Choose another database, dimension, or
-              environment to compare suite scores. Query SQL and latency remain available below.
-            </p>
-          </div>
-        ) : (
+          </p>
+        ) : family && mode === "database" ? (
           <>
-            <OverviewStats rows={rankedRows} />
-
-            <div className="border-t border-border-subtle pt-4">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <MetaLabel>Latency &amp; coverage</MetaLabel>
-                  <p className="mt-1 text-sm font-medium text-slate-200">
-                    Score across {scoredQueryCount} queries
-                  </p>
-                  <p className="mt-1 max-w-3xl font-sans text-xs leading-5 text-slate-500">
-                    Scores use 10 ms smoothing and penalize missing results, so they change with the
-                    selection.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                  <Gauge className="h-3.5 w-3.5 text-accent-300" strokeWidth={1.8} />
-                  Larger score → wider bar · lower is better
-                </div>
-              </div>
-              <ScoreRanking rows={rankedRows} />
-            </div>
+            <p className="text-xs leading-5 text-slate-400">
+              {family.query_names.length} fixed performance queries ·{" "}
+              {family.coverage_query_names.length} coverage positions. Scores use unsmoothed median
+              ratios against the full eligible publication cohort. Hiding engines preserves scores.
+              Complete warmup + 3 measured evidence is required; errors, wrong results, invalidation
+              and incomplete preparation block eligibility.
+            </p>
+            <EngineComparison
+              rows={publicationRows.filter(
+                (row) => selection.databases.includes(row.db) || row.run === null,
+              )}
+              family={family}
+              eligibleCount={publicationRows.filter((row) => row.eligible).length}
+            />
           </>
+        ) : (
+          <p className="text-sm text-slate-400">
+            Per-query medians below describe recorded iterations across the selected dimension. No
+            aggregate ranking is published across scales, systems or versions. Inspect execution and
+            validation evidence for each selected run.
+          </p>
         )}
       </PanelCard>
 
-      {!showLoading && !error && rankedRows.length > 0 ? (
+      {!showLoading && !error && family && comparison ? (
+        <PanelCard className="space-y-3 p-4">
+          <SectionTitle as="h2">Selected query evidence · {selectedQuery}</SectionTitle>
+          <p className="text-xs text-slate-400">
+            Latency charts show successful measured iterations, including incomplete runs. They are
+            descriptive; eligibility appears separately above. Hashes do not prove exact schemas or
+            independent-oracle correctness.
+          </p>
+          {displayRows.map((row) => {
+            const run = runs.find((entry) => String(entry.runId) === row.id)
+            if (!run) return null
+            return (
+              <div key={row.id} className="space-y-2">
+                <MetaLabel>
+                  {row.label} · run {run.runId}
+                </MetaLabel>
+                <QueryEvidence
+                  query={observeQuery(run, selectedQuery, runs, comparison)}
+                  comparable={family.query_names.includes(selectedQuery)}
+                />
+                <RunContext
+                  run={run}
+                  annotations={comparison.annotations.filter(
+                    (entry) =>
+                      entry.db === run.db &&
+                      entry.suite === run.suite &&
+                      (entry.scale_factor === null || entry.scale_factor === run.scale) &&
+                      (entry.run_id === null || entry.run_id === run.runId),
+                  )}
+                />
+              </div>
+            )
+          })}
+        </PanelCard>
+      ) : null}
+      {!showLoading && !error && displayRows.length > 0 ? (
         <PanelCard className="min-w-0 space-y-4 overflow-visible p-3 sm:p-4">
           <PanelHeader className="flex-wrap sm:flex-nowrap sm:items-end">
             <div className="min-w-0 flex-1">
@@ -853,7 +865,7 @@ export function ExplorerPage({
                   </div>
                 </div>
                 <QueryBreakdown
-                  rows={rankedRows}
+                  rows={displayRows}
                   queryRows={queryRows}
                   selectedQuery={selectedQuery}
                   onSelectQuery={setRequestedQuery}
@@ -891,43 +903,6 @@ function AnalysisField({
       </div>
       <div className="mt-2.5 min-w-0 sm:pl-6">{children}</div>
     </section>
-  )
-}
-
-function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
-  const leader = rows[0]
-  if (!leader) return null
-  const scoredQueryCount = leader.queryCount + leader.missing
-
-  return (
-    <div className="grid overflow-hidden rounded-md border border-border-subtle bg-surface-inset sm:grid-cols-3 sm:divide-x sm:divide-border-subtle">
-      <div className="border-b border-border-subtle px-4 py-3 sm:border-b-0">
-        <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
-          Best suite score
-        </div>
-        <p className="mt-2 truncate text-xl font-semibold text-slate-50">{leader.label}</p>
-        <p className="mt-1 text-xs text-slate-400">{formatScore(leader.score)} score</p>
-      </div>
-      <div className="border-b border-border-subtle px-4 py-3 sm:border-b-0">
-        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Fastest medians
-        </p>
-        <p className="mt-2 text-xl font-semibold text-slate-50">
-          {leader.wins}/{leader.queryCount}
-        </p>
-        <p className="mt-1 truncate text-xs text-slate-400" title={leader.label}>
-          Fastest completed results ({leader.label})
-        </p>
-      </div>
-      <div className="px-4 py-3">
-        <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Scored workload
-        </p>
-        <p className="mt-2 text-xl font-semibold text-slate-50">{scoredQueryCount} queries</p>
-        <p className="mt-1 text-xs text-slate-400">Missing results are penalized</p>
-      </div>
-    </div>
   )
 }
 
@@ -991,74 +966,6 @@ function ChoiceChips<T extends string | number>({
             />
             <span className="min-w-0 truncate">{option.label}</span>
           </ControlChip>
-        )
-      })}
-    </div>
-  )
-}
-
-function ScoreRanking({ rows }: { rows: readonly ScoredComparisonRow[] }) {
-  const largestScore = rows.at(-1)?.score ?? 1
-
-  return (
-    <div className="divide-y divide-border-subtle overflow-hidden rounded-md border border-border-subtle bg-surface-primary/25">
-      {rows.map((row, index) => {
-        const relativeScoreWidth =
-          Number.isFinite(row.score) && row.score > 0 && Number.isFinite(largestScore)
-            ? Math.max(0, Math.min(1, row.score / largestScore))
-            : 0
-        const barWidth = Math.max(4, relativeScoreWidth * 100)
-
-        return (
-          <div
-            key={row.id}
-            data-score-ranking-row={row.id}
-            className={cn(
-              "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5",
-              index === 0 && "bg-amber-300/[0.035]",
-            )}
-          >
-            <span className="flex w-7 items-center gap-1 text-xs font-semibold text-slate-500">
-              {index === 0 ? (
-                <Trophy className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.8} />
-              ) : null}
-              <span>#{index + 1}</span>
-            </span>
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: row.color }}
-                />
-                <span className="truncate text-sm font-medium text-slate-100">{row.label}</span>
-              </div>
-              <div
-                role="meter"
-                aria-label={`${row.label} normalized suite score`}
-                aria-valuemin={0}
-                aria-valuemax={largestScore}
-                aria-valuenow={row.score}
-                aria-valuetext={`${formatScore(row.score)}; lower is better`}
-                data-score-bar={relativeScoreWidth}
-                className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-primary"
-              >
-                <div
-                  className="h-full rounded-full opacity-80"
-                  style={{ width: `${barWidth}%`, backgroundColor: row.color }}
-                />
-              </div>
-              <p className="mt-1 truncate text-[0.7rem] text-slate-500">
-                {row.wins}/{row.queryCount} fastest
-                {row.missing > 0 ? ` · ${row.missing} missing penalized` : ""} · {row.detail}
-              </p>
-            </div>
-            <span
-              data-score={row.score}
-              className="text-base font-semibold text-slate-50 tabular-nums"
-            >
-              {formatScore(row.score)}
-            </span>
-          </div>
         )
       })}
     </div>
@@ -1405,10 +1312,14 @@ function ResultsSkeleton() {
     <>
       <div className="grid gap-2 sm:grid-cols-3">
         {Array.from({ length: 3 }, (_, index) => (
-          <Skeleton key={index} className="h-24 w-full rounded-lg" />
+          <ChartFrame key={index}>
+            <Skeleton className="h-24 w-full rounded-lg" />
+          </ChartFrame>
         ))}
       </div>
-      <Skeleton className="h-80 w-full rounded-lg" />
+      <ChartFrame>
+        <Skeleton className="h-80 w-full rounded-lg" />
+      </ChartFrame>
     </>
   )
 }
@@ -1703,30 +1614,20 @@ function buildComparisonRows({
   })
 }
 
-function makeRunVariants(metrics: readonly ExplorerQueryMetric[]): RunVariant[] {
+function makeRunVariants(runs: readonly RunObservation[]): RunVariant[] {
   const variants = new Map<number, RunVariant>()
-  for (const metric of metrics) {
-    variants.set(metric.run_id, {
-      runId: metric.run_id,
-      system: metric.system,
-      scale: metric.suite_scale_factor,
-      database: metric.db,
-      version:
-        metric.db_driver === null
-          ? metric.db_version
-          : `${metric.db_version} · ${metric.db_driver}`,
-      systemSnapshotId: metric.system_snapshot_id,
-      finishedAt: metric.finished_at,
+  for (const run of runs) {
+    variants.set(run.runId, {
+      runId: run.runId,
+      system: run.system,
+      scale: run.scale,
+      database: run.db,
+      version: run.driver === null ? run.version : run.version + " · " + run.driver,
+      systemSnapshotId: run.snapshotId,
+      finishedAt: run.finishedAt,
     })
   }
   return [...variants.values()]
-}
-
-function orderQueryNames(manifestNames: readonly string[], rows: readonly ComparisonRow[]) {
-  const available = new Set(rows.flatMap((row) => [...row.queryValues.keys()]))
-  const ordered = manifestNames.filter((query) => available.has(query))
-  const unlisted = [...available].filter((query) => !manifestNames.includes(query)).sort()
-  return [...ordered, ...unlisted]
 }
 
 function makeQueryRows(queryNames: readonly string[], rows: readonly ComparisonRow[]): QueryRow[] {
@@ -1874,7 +1775,7 @@ function median(values: readonly number[]) {
 }
 
 function getModeLabel(mode: ComparisonMode, selection: ResolvedSelection) {
-  if (mode === "database") return "Database ranking"
+  if (mode === "database") return "Database comparison"
   const database = formatDatabaseName(selection.database)
   if (mode === "scale") return `${database} across scale factors`
   if (mode === "version") return `${database} version comparison`
@@ -1904,7 +1805,7 @@ function getComparisonDescription(
   seriesCount: number,
 ) {
   if (mode === "database") {
-    return `${suiteTitle} · ${selection.system} · SF ${selection.scale} · ${seriesCount} databases · latest completed version per database`
+    return `${suiteTitle} · ${selection.system} · SF ${selection.scale} · ${seriesCount} databases · latest recorded version per database; query medians are descriptive`
   }
   if (mode === "scale") {
     return `${suiteTitle} · ${selection.version} · ${selection.system} · ${seriesCount} recorded scale ${seriesCount === 1 ? "factor" : "factors"}`

@@ -4,7 +4,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^olap_benchmarks/suites/join_order/(queries|upstream)/
       - id: end-of-file-fixer
+        exclude: ^olap_benchmarks/suites/join_order/(queries|upstream)/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.1

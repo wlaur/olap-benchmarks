@@ -56,7 +56,7 @@ export function CatalogSuiteList({
               </span>
               <span className="mt-0.5 block truncate text-xs text-slate-400">
                 {summary.queryNames.length} queries / {summary.coveredCombinations}/
-                {summary.totalCombinations} cells with results
+                {summary.totalCombinations} cells with recorded runs
               </span>
             </span>
           </button>

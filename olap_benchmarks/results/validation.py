@@ -16,6 +16,10 @@ def _answer_comparison_exclusions(suite: SuiteName | None) -> list[tuple[SuiteNa
     return [key for key in ANSWER_COMPARISON_EXCLUSIONS if suite is None or key[0] == suite]
 
 
+def _select_run_label(include_failed: bool) -> str:
+    return "latest terminal select attempts" if include_failed else "latest completed select runs"
+
+
 @dataclass(frozen=True)
 class RowCountObservation:
     db: str
@@ -75,6 +79,7 @@ class ValidationReport:
     iteration_inconsistencies: list[IterationInconsistency]
     marks_cleared: int = 0
     marks_applied: int = 0
+    include_failed: bool = False
 
     @property
     def ok(self) -> bool:
@@ -82,8 +87,8 @@ class ValidationReport:
 
     def format(self) -> str:
         sections = [
-            format_row_count_mismatches(self.row_count_mismatches),
-            format_answer_hash_mismatches(self.answer_hash_mismatches),
+            format_row_count_mismatches(self.row_count_mismatches, include_failed=self.include_failed),
+            format_answer_hash_mismatches(self.answer_hash_mismatches, include_failed=self.include_failed),
             format_iteration_inconsistencies(self.iteration_inconsistencies),
         ]
         if self.marks_cleared or self.marks_applied:
@@ -100,6 +105,7 @@ class _Scope:
     system: str | None
     suite: SuiteName | None
     suite_scale_factor: int | None
+    include_failed: bool = False
 
     def run_filter(self, alias: str = "r") -> tuple[str, list[object]]:
         clauses: list[str] = []
@@ -146,7 +152,7 @@ class _Scope:
             ) as run_rank
           from run r
           where r.operation = 'select'
-            and r.status = 'completed'
+            and r.status in ({"'completed', 'failed'" if self.include_failed else "'completed'"})
             and json_extract(r.metadata, '$.invalidation') is null
             and r.finished_at is not null
             and {where_sql}
@@ -343,7 +349,7 @@ def _consensus[T](values: list[T]) -> T | None:
     return consensus_values[0]
 
 
-def _row_count_marks(mismatches: list[RowCountMismatch]) -> dict[int, tuple[str, str]]:
+def _row_count_marks(mismatches: list[RowCountMismatch], *, include_failed: bool = False) -> dict[int, tuple[str, str]]:
     marks: dict[int, tuple[str, str]] = {}
     for mismatch in mismatches:
         expected = _consensus([observation.row_count for observation in mismatch.observations])
@@ -353,7 +359,7 @@ def _row_count_marks(mismatches: list[RowCountMismatch]) -> dict[int, tuple[str,
             f"{_database_label(o.db, o.db_version, o.db_driver)}: {o.row_count}" for o in mismatch.observations
         )
         message = (
-            "Row count differs from the consensus of the latest completed select runs: "
+            f"Row count differs from the consensus of the {_select_run_label(include_failed)}: "
             f"{mismatch.system} {mismatch.suite} sf{mismatch.suite_scale_factor} "
             f"{mismatch.query_name} iteration {mismatch.iteration}; expected {expected}; observed {values}"
         )
@@ -363,7 +369,9 @@ def _row_count_marks(mismatches: list[RowCountMismatch]) -> dict[int, tuple[str,
     return marks
 
 
-def _answer_hash_marks(mismatches: list[AnswerHashMismatch]) -> dict[int, tuple[str, str]]:
+def _answer_hash_marks(
+    mismatches: list[AnswerHashMismatch], *, include_failed: bool = False
+) -> dict[int, tuple[str, str]]:
     marks: dict[int, tuple[str, str]] = {}
     for mismatch in mismatches:
         expected = _consensus([observation.answer_hash for observation in mismatch.observations])
@@ -373,7 +381,7 @@ def _answer_hash_marks(mismatches: list[AnswerHashMismatch]) -> dict[int, tuple[
             f"{_database_label(o.db, o.db_version, o.db_driver)}: {o.answer_hash}" for o in mismatch.observations
         )
         message = (
-            "Answer hash differs from the consensus of the latest completed select runs: "
+            f"Answer hash differs from the consensus of the {_select_run_label(include_failed)}: "
             f"{mismatch.system} {mismatch.suite} sf{mismatch.suite_scale_factor} "
             f"{mismatch.query_name} iteration {mismatch.iteration}; expected {expected}; observed {values}"
         )
@@ -424,9 +432,12 @@ def validate_results(
     suite: SuiteName | None = None,
     suite_scale_factor: int | None = None,
     mark: bool = False,
+    include_failed: bool = False,
 ) -> ValidationReport:
     path = _resolve_results_path(revision, db_path)
-    scope = _Scope(pins=pins, system=system, suite=suite, suite_scale_factor=suite_scale_factor)
+    scope = _Scope(
+        pins=pins, system=system, suite=suite, suite_scale_factor=suite_scale_factor, include_failed=include_failed
+    )
     con = _connect(path, read_only=not mark)
     try:
         if not mark:
@@ -434,6 +445,7 @@ def validate_results(
                 row_count_mismatches=_load_row_count_mismatches(con, scope),
                 answer_hash_mismatches=_load_answer_hash_mismatches(con, scope),
                 iteration_inconsistencies=_load_iteration_inconsistencies(con, scope),
+                include_failed=include_failed,
             )
 
         con.execute("begin")
@@ -441,7 +453,10 @@ def validate_results(
             cleared = _clear_marks(con, scope)
             row_count_mismatches = _load_row_count_mismatches(con, scope)
             answer_hash_mismatches = _load_answer_hash_mismatches(con, scope)
-            marks = {**_answer_hash_marks(answer_hash_mismatches), **_row_count_marks(row_count_mismatches)}
+            marks = {
+                **_answer_hash_marks(answer_hash_mismatches, include_failed=include_failed),
+                **_row_count_marks(row_count_mismatches, include_failed=include_failed),
+            }
             _apply_marks(con, marks)
             report = ValidationReport(
                 row_count_mismatches=row_count_mismatches,
@@ -449,6 +464,7 @@ def validate_results(
                 iteration_inconsistencies=_load_iteration_inconsistencies(con, scope),
                 marks_cleared=cleared,
                 marks_applied=len(marks),
+                include_failed=include_failed,
             )
             con.execute("commit")
         except BaseException:
@@ -475,11 +491,14 @@ def clear_wrong_result_marks(
         con.close()
 
 
-def format_row_count_mismatches(mismatches: list[RowCountMismatch], limit: int = 20) -> str:
+def format_row_count_mismatches(
+    mismatches: list[RowCountMismatch], limit: int = 20, *, include_failed: bool = False
+) -> str:
+    label = _select_run_label(include_failed)
     if not mismatches:
-        return "Row counts match across latest completed select runs."
+        return f"Row counts match across {label}."
 
-    lines = ["Row-count mismatches across latest completed select runs:"]
+    lines = [f"Row-count mismatches across {label}:"]
     for mismatch in mismatches[:limit]:
         values = ", ".join(
             f"{_database_label(o.db, o.db_version, o.db_driver)}: {o.row_count}" for o in mismatch.observations
@@ -496,11 +515,14 @@ def format_row_count_mismatches(mismatches: list[RowCountMismatch], limit: int =
     return "\n".join(lines)
 
 
-def format_answer_hash_mismatches(mismatches: list[AnswerHashMismatch], limit: int = 20) -> str:
+def format_answer_hash_mismatches(
+    mismatches: list[AnswerHashMismatch], limit: int = 20, *, include_failed: bool = False
+) -> str:
+    label = _select_run_label(include_failed)
     if not mismatches:
-        return "Answer hashes match across latest completed select runs."
+        return f"Answer hashes match across {label}."
 
-    lines = ["Answer-hash mismatches across latest completed select runs:"]
+    lines = [f"Answer-hash mismatches across {label}:"]
     for mismatch in mismatches[:limit]:
         values = ", ".join(
             f"{_database_label(o.db, o.db_version, o.db_driver)}: {o.answer_hash}" for o in mismatch.observations

@@ -477,7 +477,7 @@ All `results` commands accept `--revision` (default `default`).
 
 Publishes the latest run of every published cell of the declared matrix from
 `results/<revision>.db` to `site/public/data/results.db`, along with
-`manifest.json`, `queries.json` and `suites.json`. Runs of unpublished engines,
+`manifest.json`, `queries.json`, `suites.json` and `comparison.json`. Runs of unpublished engines,
 undeclared cells and superseded runs are left out. Before anything is written,
 publish marks wrong results on the staged copy and refuses the set unless every
 declared cell completed, every select query has an answer hash (or a recorded
@@ -501,14 +501,22 @@ requires one commit.
 
 With `--campaign --report-url URL`, publication replaces the entire dataset using
 all registered engine/suite/scale combinations, including the experimental engines
-and additional supported scales. Every combination needs a nonempty completed
-select cohort with the full recorded query plan, one warmup and three measured
-iterations. Its skipped/unsupported queries must be explicit. The latest completed
-select is selected even if a later exploration failed; invalidated diagnostics are
-excluded. Latest attempted non-select operations may be failed or absent. This mode
+and additional supported scales. Every combination needs a terminal SELECT attempt
+with the complete recorded query plan, one warmup and three measured positions per
+query. Completed cohorts require full iteration evidence; skipped/unsupported
+queries must be explicit. Failed attempts require recorded errors, retain their
+observed outcomes and leave missing measurements unknown. The latest eligible
+terminal attempt is selected, including a later failure; an unfinished latest
+eligible attempt blocks publication. Invalidated diagnostics are excluded.
+Latest attempted non-select operations may be failed or absent. This mode
 accepts multiple clean commits, preserves their provenance, and retains the same
 answer, image, profile, system-snapshot and completed MonetDB session checks.
 Failed non-select MonetDB operations may lack a clean final session baseline.
+Campaign publication also retains the latest terminal analytical-stream attempt
+per recorded configuration, including separate client counts and failures.
+Interrupted requests in failed runs retain their unfinished records as unknown
+work; they establish no throughput, completed latency or answer evidence.
+Analytical attempts remain supplementary to SELECT rankings.
 The manifest and site disclose partial query coverage and source commits, and link
 the required methodology/coverage report. `--campaign` cannot be combined with
 `--merge`. A later ordinary matrix merge is refused when the current publication

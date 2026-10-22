@@ -3,10 +3,10 @@ from __future__ import annotations
 import glob
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from functools import lru_cache
+from functools import lru_cache, partial
 from multiprocessing import Queue
 from multiprocessing.process import BaseProcess
 from pathlib import Path
@@ -25,6 +25,7 @@ from ..limits import query_deadline, start_query_watchdog
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..profile import BENCHMARK_PROFILE, BenchmarkProfile
+from ..query_registry import ANSWER_ORDER_KEYS
 from ..results.hashing import build_answer_metadata
 from ..run_metadata import (
     ExecutionMode,
@@ -52,6 +53,7 @@ from ..versions import EnginePin, engine_pin
 from .utils import tracked_commit
 
 if TYPE_CHECKING:
+    from ..analytical_streams import AnalyticalConfig
     from ..suites import BenchmarkSuite
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,12 +126,18 @@ class Database(BaseModel, ABC):
     _result_queue: Queue[object] | None = None
     _writer_process: BaseProcess | None = None
     _query_watchdog_path: Path | None = None
+    _analytical_config: AnalyticalConfig | None = None
+    _analytical_metadata: dict[str, Any] | None = None
     _active_step_ids_by_thread: dict[int, list[int]] = PrivateAttr(default_factory=_new_active_step_stacks)
     _query_hashes: dict[str, str] = PrivateAttr(default_factory=_new_query_hashes)
     _started_query_steps: set[tuple[str, int]] = PrivateAttr(default_factory=_new_started_query_steps)
 
     @property
     def profile(self) -> BenchmarkProfile:
+        if self._current_operation == "analytical":
+            from ..analytical_streams import ANALYTICAL_PROFILE
+
+            return ANALYTICAL_PROFILE
         return BENCHMARK_PROFILE
 
     @property
@@ -707,13 +715,17 @@ class Database(BaseModel, ABC):
                 self._query_watchdog_path.unlink(missing_ok=True)
             self._pop_active_step(step_id)
 
+        order_keys = (
+            ANSWER_ORDER_KEYS.get((self._current_suite, query_name)) if self._current_suite is not None else None
+        )
+        answer = build_answer_metadata(df) if order_keys is None else build_answer_metadata(df, order_keys=order_keys)
         self._finish_timed_step(
             step_id=step_id,
             status="completed",
             step_type="query",
             row_count=df.shape[0],
             duration_ms=1_000 * duration_seconds,
-            metadata=build_answer_metadata(df),
+            metadata=answer,
         )
 
         return df, duration_seconds
@@ -876,6 +888,8 @@ class Database(BaseModel, ABC):
 
     def suite_registry(self) -> Mapping[SuiteName, type[BenchmarkSuite[Any]]]:
         from ..suites.clickbench.config import Clickbench
+        from ..suites.device_telemetry.config import DeviceTelemetry
+        from ..suites.join_order.config import JoinOrder
         from ..suites.kaggle_airbnb.config import KaggleAirbnb
         from ..suites.rtabench.config import RTABench
         from ..suites.time_series.config import TimeSeries
@@ -884,7 +898,7 @@ class Database(BaseModel, ABC):
         from ..suites.tpc_ds.config import TpcDs
         from ..suites.tpc_h.config import TpcH
 
-        return {
+        suites: dict[SuiteName, type[BenchmarkSuite[Any]]] = {
             "rtabench": RTABench,
             "clickbench": Clickbench,
             "time_series": TimeSeries,
@@ -894,6 +908,11 @@ class Database(BaseModel, ABC):
             "tpc_h": TpcH,
             "tpc_ds": TpcDs,
         }
+        if self.name in JoinOrder.candidate_databases:
+            suites["join_order"] = JoinOrder
+        if self.name in DeviceTelemetry.candidate_databases:
+            suites["device_telemetry"] = DeviceTelemetry
+        return suites
 
     @property
     def benchmarks(self) -> dict[SuiteName, BenchmarkSuite[Any]]:
@@ -917,18 +936,22 @@ class Database(BaseModel, ABC):
         self._active_step_ids_by_thread = {}
         self._query_hashes = {}
         self._started_query_steps = set()
+        self._analytical_metadata = None
         benchmark = self.benchmarks.get(suite)
 
         if benchmark is None:
             raise ValueError(f"Invalid benchmark suite: '{suite}'")
 
-        if operation not in benchmark.supported_operations:
+        benchmark.verify_input_data()
+
+        if operation != "analytical" and operation not in benchmark.supported_operations:
             supported_operations = ", ".join(benchmark.supported_operations)
             raise ValueError(
                 f"{type(benchmark).__name__} does not support operation '{operation}'. "
                 f"Supported operations: {supported_operations}"
             )
 
+        benchmark_func: Callable[[], None]
         match operation:
             case "populate":
                 benchmark_func = benchmark.populate
@@ -938,6 +961,22 @@ class Database(BaseModel, ABC):
                 benchmark_func = benchmark.mutate
             case "concurrent":
                 benchmark_func = benchmark.concurrent
+            case "analytical":
+                from ..analytical_streams import (
+                    analytical_metadata,
+                    prepare_analytical_queries,
+                    run_analytical_streams,
+                    validate_analytical_config,
+                )
+
+                config = self._analytical_config
+                if config is None:
+                    raise ValueError("Analytical streams require explicit configuration through 'olap analytical'")
+                validate_analytical_config(self, config)
+                queries, excluded = prepare_analytical_queries(benchmark)
+                metadata = analytical_metadata(config, queries, excluded)
+                self._analytical_metadata = metadata
+                benchmark_func = partial(run_analytical_streams, self, config, queries, metadata)
             case _:
                 raise ValueError(f"Invalid operation '{operation}'")
 
@@ -974,6 +1013,8 @@ class Database(BaseModel, ABC):
             ),
             page_cache_dropped=self._page_cache_dropped,
         )
+        if self._analytical_metadata is not None:
+            run_metadata["analytical"] = self._analytical_metadata
         started_at = datetime.now(UTC).replace(tzinfo=None)
         self._run_id = self.result_storage.insert_run(
             suite=suite,
@@ -1015,6 +1056,9 @@ class Database(BaseModel, ABC):
                 if operation == "select" and self.profile.restart_server_before_select:
                     self.restart_event()
                 self.before_benchmark_operation()
+                if operation == "analytical":
+                    with self.phase_context("verify_populated_data"):
+                        benchmark.verify_populated_data()
                 with self.phase_context(operation):
                     benchmark_func()
                     if operation == "populate":
@@ -1060,7 +1104,11 @@ class Database(BaseModel, ABC):
                 status=status,
                 error_type=error_type,
                 error_message=error_message,
-                metadata_update=self._executed_query_metadata(),
+                metadata_update={
+                    **(self._executed_query_metadata() or {}),
+                    **({"analytical": self._analytical_metadata} if self._analytical_metadata is not None else {}),
+                }
+                or None,
             )
 
         _LOGGER.info(f"Finished benchmark run {self.run_id} with status={status} in {perf_counter() - t0:_.2f} seconds")

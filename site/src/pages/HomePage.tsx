@@ -1,3 +1,4 @@
+import { AnalyticalEvidence } from "../components/home/AnalyticalEvidence"
 import { HomeScoreTable } from "../components/home/HomeScoreTable"
 import { MarkdownContent } from "../components/MarkdownContent"
 import { BodyText, DisplayTitle } from "../components/Typography"
@@ -14,6 +15,7 @@ export function HomePage() {
         </BodyText>
       </header>
       <HomeScoreTable />
+      <AnalyticalEvidence />
       <div className="mx-auto max-w-4xl">
         <MarkdownContent content={homeContent} />
       </div>
