@@ -1,7 +1,9 @@
 import logging
+import re
 import uuid
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
@@ -15,6 +17,7 @@ from ...settings import DatabaseName, SuiteName, TableName, get_settings, host_p
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
 from ...suites.clickbench.config import Clickbench
+from ...suites.join_order import schema as job_schema
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
 from ...suites.rtabench.config import RTABench
 from ...suites.time_series.config import (
@@ -40,6 +43,42 @@ PostgresFetchMethod = Literal["connectorx", "python"]
 
 COPY_BATCH_ROWS = 1_000_000
 COPY_BATCH_MAX_CELLS = 64_000_000
+JOB_INDEX_POLICY = "upstream-fkindexes-v1"
+JOB_INDEX_SHA256 = "727909bbbb9b0ae2b7d5739cfcd066992fc4bf1e984b29d87bcc700c4e2583cc"
+JOB_INDEX_COUNT = 23
+JOB_INDEX_READBACK_SQL = """
+SELECT t.relname AS table_name, i.relname AS index_name,
+       x.indisprimary, x.indisvalid, x.indisready,
+       pg_get_indexdef(i.oid) AS definition,
+       pg_get_indexdef(i.oid, 1, true) AS column_name,
+       pg_relation_size(i.oid) AS bytes
+FROM pg_index x
+JOIN pg_class i ON i.oid = x.indexrelid
+JOIN pg_class t ON t.oid = x.indrelid
+JOIN pg_namespace n ON n.oid = t.relnamespace
+WHERE n.nspname = 'public'
+ORDER BY t.relname, i.relname
+""".strip()
+
+
+def _job_indexes() -> dict[str, tuple[str, str, str]]:
+    source = (job_schema.DIRECTORY / "upstream/fkindexes.sql").read_bytes()
+    if sha256(source).hexdigest() != JOB_INDEX_SHA256:
+        raise ValueError("JOB fkindexes.sql differs from its upstream SHA-256 pin")
+    indexes: dict[str, tuple[str, str, str]] = {}
+    for statement in source.decode("utf-8").splitlines():
+        match = re.fullmatch(r"create index ([a-z_]+) on ([a-z_]+)\(([a-z_]+)\);", statement)
+        if (
+            match is None
+            or match[1] in indexes
+            or match[2] not in job_schema.JOB_SCHEMA
+            or match[3] not in {column.name for column in job_schema.JOB_SCHEMA[match[2]]}
+        ):
+            raise ValueError("Unexpected pinned JOB foreign-key index definition")
+        indexes[match[1]] = (match[2], match[3], statement)
+    if len(indexes) != JOB_INDEX_COUNT:
+        raise ValueError("Expected exactly 23 pinned JOB foreign-key indexes")
+    return indexes
 
 
 def polars_to_postgres_type(dtype: pl.DataType) -> str:
@@ -536,7 +575,7 @@ class Postgres(Database):
             if self._current_suite is not None
             else "connectorx"
         )
-        return {
+        options: dict[str, object] = {
             **super().run_options,
             "select_fetch_method": method,
             "generic_insert_method": "native-csv-copy-v1",
@@ -544,6 +583,18 @@ class Postgres(Database):
             "copy_batch_rows": COPY_BATCH_ROWS,
             "copy_batch_max_cells": COPY_BATCH_MAX_CELLS,
         }
+        if self._uses_job_indexes:
+            options.update(
+                job_index_policy=JOB_INDEX_POLICY,
+                job_upstream_index_sha256=JOB_INDEX_SHA256,
+                job_intended_secondary_index_count=JOB_INDEX_COUNT,
+                job_index_readback_phase="job_index_readiness",
+            )
+        return options
+
+    @property
+    def _uses_job_indexes(self) -> bool:
+        return self.name == "postgres" and self._current_suite == "join_order"
 
     @property
     def server_settings(self) -> Mapping[str, str]:
@@ -582,10 +633,90 @@ class Postgres(Database):
         return values
 
     def finalize_populate(self) -> None:
+        if self._uses_job_indexes and not self._verify_job_indexes(allow_primary_only=True):
+            for table_name, _column, statement in _job_indexes().values():
+                with self.phase_context("index", table_name=table_name):
+                    self.execute(statement)
         for table_name in sorted(self.get_table_names()):
             quoted_table = table_name.replace('"', '""')
             with self.phase_context("analyze", table_name=table_name):
                 self.execute(f'ANALYZE public."{quoted_table}"')
+        if self._uses_job_indexes:
+            self.verify_storage_readiness()
+
+    def verify_storage_readiness(self) -> None:
+        if self._uses_job_indexes:
+            self._verify_job_indexes()
+
+    def _verify_job_indexes(self, *, allow_primary_only: bool = False) -> bool:
+        evidence: dict[str, Any] = {
+            "index_policy": JOB_INDEX_POLICY,
+            "upstream_index_sha256": JOB_INDEX_SHA256,
+            "intended_secondary_index_count": JOB_INDEX_COUNT,
+            "ready": False,
+        }
+        step_id = (
+            self._start_step("phase", "job_index_readiness")
+            if self._result_storage is not None and self._run_id is not None
+            else None
+        )
+        if step_id is not None:
+            self._push_active_step(step_id)
+        try:
+            indexes = _job_indexes()
+            rows = cast(list[dict[str, object]], self.fetch(JOB_INDEX_READBACK_SQL, method="python").to_dicts())
+            evidence["observed_indexes"] = rows
+            secondary_count = sum(row["indisprimary"] is not True for row in rows)
+            evidence["observed_secondary_index_count"] = secondary_count
+            expected: dict[str, tuple[str, str, str, bool]] = {
+                f"{table}_pkey": (
+                    table,
+                    "id",
+                    f"CREATE UNIQUE INDEX {table}_pkey ON public.{table} USING btree (id)",
+                    True,
+                )
+                for table in job_schema.JOB_TABLES
+            }
+            if secondary_count or not allow_primary_only:
+                expected.update(
+                    {
+                        name: (table, column, f"CREATE INDEX {name} ON public.{table} USING btree ({column})", False)
+                        for name, (table, column, _statement) in indexes.items()
+                    }
+                )
+            if len(rows) != len(expected) or {str(row["index_name"]) for row in rows} != set(expected):
+                raise RuntimeError("PostgreSQL JOB has missing or unexpected indexes; recreate storage and populate")
+            for row in rows:
+                table, column, definition, primary = expected[str(row["index_name"])]
+                if (
+                    row["table_name"] != table
+                    or row["column_name"] != column
+                    or row["definition"] != definition
+                    or row["indisprimary"] is not primary
+                    or row["indisvalid"] is not True
+                    or row["indisready"] is not True
+                ):
+                    raise RuntimeError(f"PostgreSQL JOB index is invalid or differs from the pinned layout: {row}")
+            ready = secondary_count == JOB_INDEX_COUNT
+            evidence["ready"] = ready
+            evidence["observed_layout"] = JOB_INDEX_POLICY if ready else "primary-only"
+        except BaseException as exc:
+            if step_id is not None:
+                self._finish_step(
+                    step_id,
+                    status="failed",
+                    step_type="phase",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    metadata=evidence,
+                )
+            raise
+        finally:
+            if step_id is not None:
+                self._pop_active_step(step_id)
+        if step_id is not None:
+            self._finish_step(step_id, status="completed", step_type="phase", metadata=evidence)
+        return ready
 
     @property
     def parallel_copy_workers(self) -> int:

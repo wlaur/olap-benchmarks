@@ -109,3 +109,49 @@ input fingerprints, exact comparison results, storage and Timescale compression
 readback are retained in `results/followup-tuning/{postgres,timescaledb}-telemetry.json`
 and their accompanying directories. No recorded timeout or wrong answer was
 discarded. These bounded controls do not establish confidence intervals.
+
+## PostgreSQL JOB: adopt the upstream indexes with explicit regressions
+
+Adopt exactly the pinned upstream 23 secondary foreign-key indexes for JOB
+preparation. The primary-key-only SELECT 612 completed 112 of 113 queries;
+Q29c reached its 45-second deadline. Preserve that cohort and its timeout.
+The indexed diagnostic completed every query, including Q29c in 0.548 seconds.
+The 112 available original answers and DBAPI schemas matched exactly; Q29c's
+candidate DataFrame matched a separately executed DuckDB reference exactly.
+The timed-out original PostgreSQL Q29c DBAPI schema remains unproven. This is
+112 same-engine comparisons plus one cross-engine reference, not 113
+same-engine proofs or independent correctness certification.
+
+The predeclared controls used original-forward, candidate-forward,
+candidate-reverse and original-reverse blocks, with three retained observations
+per block and six per form. All four candidate plans used new indexes.
+
+| Query | Original median (ms) | Indexed median (ms) | Observation |
+| --- | ---: | ---: | --- |
+| 1a | 113.8 | 50.3 | Faster in both block orders |
+| 6a | 243.4 | 26.9 | Faster in both block orders |
+| 17a | 1087.1 | 4402.8 | About four times slower in both block orders |
+| 28a | 621.7 | 366.6 | Faster in both block orders |
+
+The single-fetch checks across 112 comparable queries have a candidate/original
+geometric ratio of 0.4754, but their summed fetch time increases from 75.61 to
+107.31 seconds. Q26c regresses from 0.515 to 28.111 seconds in those checks.
+Neither number is a full-workload SELECT score: the original Q29c is censored,
+and these correctness probes are not the final repeated measurements. The
+adoption favors complete workload coverage and typical-query improvement;
+it does not establish an improvement for every query or every workload mix.
+
+Index construction took 23.035 seconds and the candidate ANALYZE took 2.545
+seconds. Observed database size increased from 8,293,947,071 to 10,027,595,455
+bytes. The one candidate pattern consumed 325.212 diagnostic seconds, including
+startup, controls, validation, index construction, ANALYZE, restoration and
+shutdown, within the shared twenty-minute allowance. All 23 indexes were
+dropped afterward and the original primary-key layout was verified; ANALYZE
+statistics are not restored, a limitation of the reverse controls.
+
+Final measurement requires fresh population, charged index construction and
+ANALYZE, exact index-definition/readiness readback, and the complete 113-query
+SELECT at the declared limits. The implementation is scoped to PostgreSQL JOB;
+other PostgreSQL workloads, TimescaleDB and the original 99 cells are unaffected
+by this physical-design change. Retain the diagnostic details under
+`results/followup-tuning/postgres-job.json` and `postgres-job/`.

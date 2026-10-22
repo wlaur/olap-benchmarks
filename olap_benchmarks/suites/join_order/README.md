@@ -102,16 +102,17 @@ StarRocks** at SF1, with `populate` and `select` operations. All five passed the
 native ingestion and query fixture gate serially: every one of the 113 queries
 matched an independent SQLite reference on both populated and empty tables.
 These are fixture checks, not full-snapshot benchmark measurements. Full input
-preparation has completed; full-snapshot answer comparisons and performance
-measurements remain pending.
+preparation has completed. Final full-snapshot results require separately
+recorded complete runs; PostgreSQL layout diagnostics are disclosed below.
 
 - DuckDB: original types, nullability and primary keys in native storage, which
   was used for the native fixture gate. Parquet mode uses the shared external
   view and source-manifest path without persistent primary-key indexes.
 - PostgreSQL: original types and primary keys, with `COLLATE "C"` on text and
   varchar fields to make comparisons and string minima deterministic across
-  engines. The suite uses the existing Python fetch path. Existing PostgreSQL
-  population finalization performs `ANALYZE`.
+  engines. The suite uses the existing Python fetch path. Population finalization
+  installs the 23 pinned upstream foreign-key indexes before the existing
+  all-table `ANALYZE`.
 - MonetDB: original SQL schema and primary keys, loaded through the existing
   ADBC Parquet ingestion API.
 - ClickHouse: original signed integer range and string nullability mapped to
@@ -125,7 +126,8 @@ measurements remain pending.
   `VARCHAR(65533)`, and population refuses a prepared snapshot exceeding that
   byte bound. This cap is an explicit integration constraint, never truncation.
 
-No secondary foreign-key indexes from `upstream/fkindexes.sql` are installed.
+PostgreSQL alone installs the secondary foreign-key indexes from
+`upstream/fkindexes.sql`; the other engines retain their existing layouts.
 DuckDB's four query-15 overrides rename only the `at` table alias to `aka`,
 because `AT` is reserved in DuckDB 2.0. The pinned upstream query files remain
 unchanged; the complete fixture compares the adapted SQL to the original oracle.
@@ -199,3 +201,72 @@ OLAP_BENCHMARKS_JOB_FIXTURE_DATABASE=duckdb uv run --no-sync pytest -m live -q \
 Fixture success establishes behavior on the tested inputs and storage paths. It
 does not establish universal query correctness, full-snapshot completion, or
 performance on the original paper's hardware and software.
+
+## PostgreSQL upstream index layout
+
+PostgreSQL JOB uses the `upstream-fkindexes-v1` policy: the original 21 primary
+keys plus exactly the 23 statements in the pinned upstream
+`upstream/fkindexes.sql`, SHA-256
+`727909bbbb9b0ae2b7d5739cfcd066992fc4bf1e984b29d87bcc700c4e2583cc`.
+This policy applies only to PostgreSQL `join_order`. Query SQL, hints, schemas,
+data and other engines' layouts are unchanged.
+
+Population builds the secondary indexes after ingestion and the loader's
+restart, in recorded index phases, before the existing per-table
+`ANALYZE` phases. SQL execution, commits and their costs remain inside the
+population operation. Readback phases retain the observed catalog definitions,
+columns, tables, sizes and valid/ready flags, and reject missing, invalid or
+unexpected indexes. Run options disclose the intended policy, source hash and
+secondary-index count; observed readiness is recorded separately as
+`job_index_readiness` phase metadata. Fresh population verifies row counts
+before finalization, without prematurely requiring indexes. SELECT checks all
+21 full-snapshot counts and the complete index layout before any warmup.
+
+Existing stores are checked before reuse, including when population decides
+whether to skip before result recording starts. Those early checks perform no
+recording or schema changes. A complete indexed store is reusable; primary-only,
+partial or different layouts fail explicitly. There is no automatic migration
+or index repair. Reproduce adoption using an empty PostgreSQL JOB store and a
+fresh population so index construction and analysis costs are charged.
+After the old PostgreSQL JOB engine has stopped, remove its old store through
+the normal repository cleanup workflow or select an empty database directory.
+Run these operations serially without query or table filters:
+
+```sh
+OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS=900 \
+uv run --no-sync olap benchmark postgres join_order populate --scale-factor 1
+OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS=900 \
+OLAP_BENCHMARKS_QUERY_TIMEOUT_SECONDS=45 \
+uv run --no-sync olap benchmark postgres join_order select --scale-factor 1
+```
+
+The normal SELECT profile runs every one of the 113 queries four times: one
+warmup and three measured iterations. These reproduction commands do not claim
+that the final population or SELECT rerun has completed.
+
+Adoption is supported by the bounded 325.21-second diagnostic recorded in
+`results/followup-tuning/postgres-job.json`. The candidate completed all 113
+queries. The 112 completed PostgreSQL pairs matched exact DataFrames and DBAPI
+schemas, and the table schema was unchanged. Original SELECT run 612's
+45-second timeout for `29c` remains censored. Candidate `29c` completed in
+0.548 seconds and matched the independent DuckDB reference's exact DataFrame
+and schema; the timed-out original PostgreSQL DBAPI schema remains unproven.
+
+Predeclared controls `1a`, `6a`, `17a` and `28a` ran in both layout directions,
+with six measured samples per form. Their plans changed and used candidate
+indexes. Original/candidate median seconds were 0.1138/0.0503,
+0.24345/0.02686, 1.0871/4.4028 and 0.6217/0.3666 respectively: `17a`
+regressed about fourfold. Across the 112 paired single fetches, the
+candidate/original geometric mean was 0.4754, while their summed latency grew
+from 75.61 to 107.31 seconds; `26c` regressed from 0.515 to 28.11 seconds.
+These diagnostics support complete coverage and typical fixed-query gains,
+not a uniform speedup or a completed family score from the partial baseline.
+A balanced layout comparison must retain these regressions and the timeout.
+
+Index construction took 23.035 seconds, followed by 2.545 seconds of analysis.
+Observed database size grew from 8,293,947,071 to 10,027,595,455 bytes. All 23
+candidate indexes were dropped at diagnostic completion and the primary-only
+layout was verified. Dropping indexes did not restore the earlier statistics:
+candidate `ANALYZE` changed them, which remains a confound in the reversed
+controls. Final results require the fresh indexed population and complete
+113-query SELECT rerun described above.
