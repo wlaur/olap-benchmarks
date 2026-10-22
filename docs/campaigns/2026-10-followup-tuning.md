@@ -2,8 +2,8 @@
 
 The [follow-up protocol](2026-10-followup-protocol.md) fixes workload membership,
 participants and resource limits before measurement. This ledger declares the
-initial candidates before observing full-data timings. All entries below are
-planned investigations, not adopted improvements.
+initial candidates before observing full-data timings. The initial table records
+planned investigations; completed investigations are recorded separately below.
 
 | Engine / suite | Candidate pattern | Physical-plan gate | Correctness and cost gate |
 | --- | --- | --- | --- |
@@ -39,3 +39,37 @@ tuning is claimed before that gate passes.
 Common-file and JSON tracks hold their representation contracts fixed. Changing
 row groups, repartitioning files, indexing prepared JSON, or adding materialized
 aggregates would create a different track and is outside these initial candidates.
+
+## ClickHouse common-Parquet Q5: preserve the written join order
+
+The first full common-file cohort, SELECT 601, timed out on Q5 and completed the
+other 21 queries. Retain that failed cohort. Its plan had no cardinality
+statistics for the file views and formed a customer/supplier join on nation
+before applying the selective lineitem/orders chain. This reproduced the
+large intermediate relation already described in the existing ClickHouse Q5
+adaptation, despite its explicit written join chain.
+
+Investigate three patterns within the new suite's twenty-minute budget:
+
+| Pattern | Outcome | Disposition |
+| --- | --- | --- |
+| Force `join_algorithm=hash` | The bad join order remains; server reports its 45-second timeout | Rejected |
+| Hash joins plus `query_plan_optimize_join_order_limit=0` | Exact DuckDB rows and schema; successful controls around 307–338 ms | Correct, but the extra algorithm override is unnecessary |
+| Only `query_plan_optimize_join_order_limit=0` | Exact DuckDB rows and schema in three controls around 330–343 ms; effective readback is zero | Adopt for common-Parquet Q5 only |
+
+The last setting preserves the explicit lineitem/orders/customer/supplier/nation/
+region chain. Plans show the large customer/supplier intermediate disappearing.
+The [documented join-order setting](https://clickhouse.com/docs/reference/settings/session-settings/query-plan#query_plan_optimize_join_order_limit)
+controls this optimization. Original controls before and after candidates still
+timed out; these are censored observations, not finite latency measurements.
+The abandoned hash-only repetition and interrupted work remain in the logs.
+Diagnostics ran serially at the same ten-CPU/24-GiB container limits, with native
+45-second query limits and external sixty-second process deadlines, between
+09:48:55 and 09:52:43 UTC. No table, source file, row group, index, precomputed
+answer or materialized relation changed.
+
+Record configured per-query settings in operation metadata. Commit this change
+and rerun the complete 22-query SF10 SELECT before replacing cohort 601. The
+other ClickHouse workloads and the original 99 measurements are unaffected.
+Successful controls do not establish an overall workload speedup; the complete
+replacement cohort and answer comparison provide the publication evidence.

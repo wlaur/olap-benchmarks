@@ -144,6 +144,11 @@ class ParquetAnalytics[DBT: Database](TpcH[DBT]):
     def fetch_kwargs(self) -> dict[str, Any]:
         return {"settings": {"aggregate_functions_null_for_empty": 1}} if self.db.name == "clickhouse" else {}
 
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        if self.db.name == "clickhouse" and query_name == "05_local_supplier_volume":
+            return {"settings": {"aggregate_functions_null_for_empty": 1, "query_plan_optimize_join_order_limit": 0}}
+        return self.fetch_kwargs
+
     def representation_layout(self) -> dict[str, object]:
         layout = cast(dict[str, object], json.loads(json.dumps(inspect_sources(self.scale_factor))))
         if self.db.name == "clickhouse" and self.db.get_table_names() == set(TPCH_TABLES):

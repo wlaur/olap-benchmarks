@@ -190,6 +190,11 @@ def test_queries_resolve_original_files_and_q11_scale_factor() -> None:
         assert suite.query_fetch_kwargs("17_small_quantity_revenue") == (
             {"settings": {"aggregate_functions_null_for_empty": 1}} if db.name == "clickhouse" else {}
         )
+        assert suite.query_fetch_kwargs("05_local_supplier_volume") == (
+            {"settings": {"aggregate_functions_null_for_empty": 1, "query_plan_optimize_join_order_limit": 0}}
+            if db.name == "clickhouse"
+            else {}
+        )
         if db.name == "polars":
             assert suite.load_query("06_revenue_forecast") == "Polars LazyFrame expression 06_revenue_forecast"
 

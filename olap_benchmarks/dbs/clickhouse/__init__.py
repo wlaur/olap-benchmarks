@@ -427,6 +427,10 @@ class Clickhouse(Database):
         return {
             **super().run_options,
             "configured_select_settings": self.benchmarks[self.current_suite].fetch_kwargs.get("settings", {}),
+            "configured_query_settings": {
+                name: self.benchmarks[self.current_suite].query_fetch_kwargs(name).get("settings", {})
+                for name in self.benchmarks[self.current_suite].planned_query_names()
+            },
             "physical_representation": manifest_metadata(self.database_directory),
             "storage_accounting": {
                 "version": 1,
