@@ -55,7 +55,7 @@ export function HomeScoreTable() {
       <div className="border-b border-border-default px-5 py-4">
         <SectionTitle as="h2">Database ranking</SectionTitle>
         <BodyText className="mt-1">
-          Latency and coverage. Lower is better; scores are not runtime multipliers.{" "}
+          Lower scores mean faster queries and fewer missing results across the suites below.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -67,11 +67,11 @@ export function HomeScoreTable() {
             How scoring works
           </summary>
           <p className="mt-2 max-w-4xl leading-5">
-            Per-query ratios use the fastest database shown, with 10 ms added to each latency.
-            Missing queries count as 10 or twice the worst ratio, whichever is higher. Scores are
-            geometric means across queries, then suite/scale cells; missing cells take the worst
-            score. Airbnb is excluded. Scores change with the selection. Latency captions cover
-            completed queries only; compare matching query sets.
+            Scores compare each query with the fastest database shown, adding 10 ms to both
+            latencies. Missing queries count as 10 or twice the worst ratio, whichever is higher. We
+            take geometric means across queries, then suite/scale cells, using the worst score for
+            missing cells and excluding Airbnb. Scores depend on the databases selected and are not
+            runtime multipliers; the latency figures underneath cover completed queries only.
           </p>
         </details>
         <CampaignNotice className="mt-3" />
@@ -79,8 +79,16 @@ export function HomeScoreTable() {
         <SnapshotSpanWarning snapshotCount={overview.snapshotCount} className="mt-2" />
       </div>
 
-      <div className="panel-scrollbar hidden overflow-x-auto overscroll-x-contain lg:block">
-        <table className="w-full min-w-[59rem] table-fixed border-collapse text-left text-sm">
+      <div
+        className="panel-scrollbar hidden overflow-x-auto overscroll-x-contain lg:block"
+        role="region"
+        aria-label="Database scores by suite"
+        tabIndex={0}
+      >
+        <table
+          className="w-full table-fixed border-collapse text-left text-sm"
+          style={{ minWidth: `${17 + suites.length * 7}rem` }}
+        >
           <thead className="bg-surface-inset/60 text-xs tracking-wide text-slate-300 uppercase">
             <tr>
               <th className="sticky left-0 z-20 w-44 bg-surface-inset px-4 py-3 font-medium">
@@ -96,7 +104,7 @@ export function HomeScoreTable() {
                 <th key={suite.key} className="px-2 py-3 text-right font-medium last:pr-6">
                   <button
                     type="button"
-                    className="cursor-pointer rounded-md px-1 text-right leading-tight text-slate-200 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
+                    className="w-full cursor-pointer rounded-md px-1 text-right leading-tight wrap-anywhere text-slate-200 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
                     onClick={() => openSuite(suite.suiteId, suite.suiteScaleFactor)}
                     title={`Open ${suite.title} explorer`}
                   >

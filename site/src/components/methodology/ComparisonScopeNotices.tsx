@@ -15,9 +15,9 @@ export function CampaignNotice({ className }: { className?: string }) {
 
   return (
     <NoticeStrip tone="warning" className={className}>
-      <span className="font-semibold text-slate-100">{publication.title}</span>:{" "}
-      {publication.select_cohorts} query runs, {publication.partial_select_cohorts} partial. Missing
-      results are penalized.{" "}
+      <span className="font-semibold text-slate-100">{publication.title}</span> includes{" "}
+      {publication.select_cohorts} query runs, of which {publication.partial_select_cohorts} are
+      partial and receive penalties for missing results.{" "}
       <a
         href={publication.report_url}
         target="_blank"
@@ -50,9 +50,9 @@ export function ProfileScopeNotice({ className }: { className?: string }) {
       {warmupIterations !== null && measuredIterations !== null
         ? `: ${warmupIterations} warmup + ${measuredIterations} measured fetches per query`
         : null}
-      . Median includes transfer and conversion.
+      . Reported medians include the time spent transferring and converting results.
       {scope.excluded.length > 0
-        ? ` ${otherRuns} ${otherRuns === 1 ? "run" : "runs"} from other profiles excluded.`
+        ? ` We exclude ${otherRuns} ${otherRuns === 1 ? "run" : "runs"} from other profiles.`
         : null}
     </NoticeStrip>
   )
@@ -69,8 +69,8 @@ export function SnapshotSpanWarning({
 
   return (
     <NoticeStrip tone="warning" className={className}>
-      {snapshotCount} system snapshots: OS, Docker or hardware changed. Latencies may not be
-      comparable.
+      These runs span {snapshotCount} system snapshots with changes to the OS, Docker or hardware,
+      which may affect the comparison.
     </NoticeStrip>
   )
 }

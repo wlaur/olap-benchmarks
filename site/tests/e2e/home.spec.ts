@@ -66,47 +66,56 @@ test("findings open the intended databases, scale, query and SQL", async ({ page
   }
 })
 
-test("home scores fit desktop and switch to cards on smaller screens", async ({ page }) => {
+test("score headers stay inside their columns at desktop and iPad widths", async ({ page }) => {
   const consoleErrors: string[] = []
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text())
   })
 
-  await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto("#/")
-  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
-  await expectTableToFit(page)
-  await expectNoHorizontalPageOverflow(page)
+  await expect(page.getByRole("cell", { name: /duckdb/i }).first()).toBeVisible()
+  for (const width of [1920, 1440, 1366, 1194, 1180, 1024]) {
+    await test.step(`${width}px`, async () => {
+      await page.setViewportSize({ width, height: 900 })
+      await expect(page.locator("table")).toBeVisible()
+      await expectHeadersToFit(page)
+      await expectNoHorizontalPageOverflow(page)
+      const scroll = await page.locator("table").evaluate((table) => {
+        const scroller = table.parentElement!
+        scroller.scrollLeft = scroller.scrollWidth
+        return { offset: scroller.scrollLeft, max: scroller.scrollWidth - scroller.clientWidth }
+      })
+      expect(scroll.offset).toBe(scroll.max)
+      await expectHeadersToFit(page)
+      await page.locator("table").evaluate((table) => {
+        table.parentElement!.scrollLeft = 0
+      })
+    })
+  }
 
-  await page.setViewportSize({ width: 1024, height: 768 })
-  await page.reload()
-  await expect(page.locator("table")).toBeVisible()
-  await expectTableToFit(page)
-  await expectNoHorizontalPageOverflow(page)
-
-  await page.setViewportSize({ width: 768, height: 900 })
-  await page.reload()
-  await expect(page.locator("table")).toBeHidden()
-  await expect(page.getByRole("list", { name: "Suite scores by database" })).toBeVisible()
-  await expect(page.getByRole("listitem", { name: /duckdb scores/i })).toBeVisible()
-  await expectNoHorizontalPageOverflow(page)
-
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.reload()
-  await expect(page.getByRole("list", { name: "Suite scores by database" })).toBeVisible()
-  await expectNoHorizontalPageOverflow(page)
+  for (const width of [834, 820, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect(page.locator("table")).toBeHidden()
+    await expect(page.getByRole("list", { name: "Suite scores by database" })).toBeVisible()
+    await expect(page.getByRole("listitem", { name: /duckdb scores/i })).toBeVisible()
+    await expectNoHorizontalPageOverflow(page)
+  }
   expect(consoleErrors).toEqual([])
 })
 
-async function expectTableToFit(page: import("@playwright/test").Page) {
-  const dimensions = await page.locator("table").evaluate((table) => {
-    const scroller = table.parentElement
-    return {
-      clientWidth: scroller?.clientWidth ?? 0,
-      scrollWidth: scroller?.scrollWidth ?? 0,
-    }
+async function expectHeadersToFit(page: import("@playwright/test").Page) {
+  const overflow = await page.locator("thead th").evaluateAll((cells) => {
+    return cells.flatMap((cell) => {
+      const bounds = cell.getBoundingClientRect()
+      const range = document.createRange()
+      range.selectNodeContents(cell)
+      const outside = [...range.getClientRects()].some(
+        (rect) => rect.left < bounds.left - 1 || rect.right > bounds.right + 1,
+      )
+      return outside ? [cell.textContent] : []
+    })
   })
-  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
+  expect(overflow).toEqual([])
 }
 
 async function expectNoHorizontalPageOverflow(page: import("@playwright/test").Page) {
