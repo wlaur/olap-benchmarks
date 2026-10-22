@@ -86,11 +86,12 @@ membership must still disagree. Record the policy and key positions with the
 answer evidence. Default hashes and all timed SQL remain unchanged; no query
 is excluded from coverage or the performance set.
 
-Run 589 remains retained as the initial diagnostic observation. Repeat the
-complete DuckDB SF10 SELECT under the corrected evidence policy; the other
-five completed DuckDB cells and the original 99 cells need no rerun for this
-change. This amendment follows observed evidence and is not presented as part
-of the original premeasurement declaration.
+Run 589 remains retained as the initial diagnostic observation. Complete
+replacement 619 now supplies all 99 DuckDB SF10 queries and agrees with
+ClickHouse 620 on all 99 peer hashes under the final four-entry policy below.
+The other five completed DuckDB cells and the original 99 cells need no rerun
+for this hash-policy change. This amendment follows observed evidence and is
+not presented as part of the original premeasurement declaration.
 
 ### Q44 amendment after the first ClickHouse SF10 cohort
 
@@ -125,8 +126,9 @@ This second amendment follows measurement and is not a premeasurement claim.
 Later full-scale observations exposed differences that the ordering policy must
 not normalize away. MonetDB run 628 disagrees on Q12/Q44/Q45/Q50/Q67;
 StarRocks run 624 on Q07/Q12/Q20/Q45/Q49/Q50/Q72; and Doris run 632 on Q12/Q50.
-These observations remain retained while complete outputs and candidate SQL
-are checked against the fixed reference at both SF1 and SF10.
+Run 632 also already has Q44 answer instability, omitted from the earlier
+report: its warmup and measured outputs follow A/B/B/A. These observations
+remain retained. The earlier Q12/Q50 candidates did not address Q44.
 
 The corrections make implicit NULL placement explicit, promote specific numeric
 inputs before averages or division, and express date offsets in calendar days.
@@ -144,14 +146,47 @@ a tested predicate workaround; the optimizer mechanism is not established.
 Replacing ROLLUP with equivalent UNION branches and casting the rank predicate
 were ineffective and are rejected.
 
-After both-scale gates and offline checks, commit the corrected SQL before
-rerunning each affected complete 99-query SELECT workload at both scales.
-This includes targeted replacements of the original MonetDB and StarRocks SF1
-cells, alongside their new SF10 cells and both new Doris cells. The original
-measurements remain in the retained revision. These targeted correctness reruns
-do not imply a rerun of all 99 original combinations, and are separate from the
-publication-only policy work. They were added after measurement, not predeclared
-with the initial follow-up plan.
+After both-scale gates, offline checks and a source commit, corrected MonetDB
+644/SF10 and 646/SF1 and StarRocks 648/SF10 and 650/SF1 completed all 99
+queries, with all 99 peer hashes matching at each scale. Doris 652/SF1 and
+654/SF10 also executed all 99, but 654 remains correctness-blocked by Q44:
+three of four materializations show rank 9 where the reference has rank 8.
+Rank values and membership cannot be repaired by the ordered-ties policy.
+
+Only MonetDB 646 and StarRocks 650 replace original SF1 cells. All 99 original
+SELECT cells remain retained as raw evidence. The 28 added SELECT cells give
+a 127-cell coverage target, not an actual eligible or selected count; reruns
+do not add unique cells. These correctness reruns are separate from the
+publication-only policy work and were added after measurement.
+
+### Doris numerical-correctness diagnostic gates
+
+Parent-scheduled Q44 diagnostics now pass their candidate gates at SF1 and
+SF10. Each scale retains six original and six candidate complete outputs plus
+three aggregate captures. At SF10 one original in six changes rank 8 to 9 and
+item membership; all six candidates match the exact Fraction oracle and policy
+hash. At SF1 all six originals and six candidates pass. All item and threshold
+SUM/COUNT values agree. Three independent SF10 native-aggregate repetitions
+show varying original floating AVG in 33,145 groups, with zero varying SUM,
+COUNT or proposed-mean groups. This supports a numerical explanation without
+establishing an optimizer mechanism.
+
+Pricing captures subsequently passed at SF10 and SF50: three original, three
+candidate and three diagnostic captures per scale. At SF50 all originals
+reproduce the historical differing hash; all candidates reproduce the four-peer
+reference hash. The policy-level difference is the N/O group's `avg_disc`,
+`0.04999790773844881` versus reference `0.049997907733309185`. Exact diagnostic
+sums and non-NULL counts match. Candidates preserve all other values, native
+schemas and NULL masks; raw floating means may still differ from the reference
+by a last bit within the unchanged comparison contract. SF10 originals and
+candidates both match the reference policy.
+
+Adopt exact decimal SUM followed by DOUBLE division by NULLIF(COUNT(...), 0)
+for all six Q44 means and the three pricing means after both-scale gates and
+offline checks. These are numerical SQL translations, not a change to hashing
+or a demonstrated optimizer defect. The [four-capture summary](2026-10-followup-doris-means.json)
+binds source and artifact hashes. Complete TPC-DS SF1/SF10 and TPC-H SF10/SF50
+SELECT replacements remain required after committing validated source.
 
 ## Analytical streams
 
@@ -168,6 +203,17 @@ operation watchdog aborts remain visible. Report p50 only with at least five
 completed observations, p95 with 100, and p99 with 1,000. Otherwise show
 insufficient samples. A single timed window is exploratory evidence, not a
 confidence interval or a production concurrency capacity guarantee.
+
+All twelve attempts have now finished: DuckDB 662/663/664, Polars 666/667/668
+and ClickHouse 674/675/676 completed at 1/4/16 clients; PostgreSQL 670/671/672
+failed during warmup before any measured window, leaving QPS unknown.
+Successful completed analytical fetches have zero peer-hash conflicts against
+TPC-H SF10 SELECT at matching input and hash versions. Run 672 retains twelve
+unfinished request records. Export fixes `d7fe4e7` and `be8eafc` represent unknown work only
+for terminal failed operations with an explicit error; raw rows and NULL times
+are unchanged. Logical request order and both warmup-completion boundaries
+remain enforced. Independent review found no further issues; 162 focused tests
+and the 2,125-test non-live suite passed. Final export acceptance remains pending. See the [full-scale outcomes](2026-10-followup-validation.md#full-scale-analytical-outcomes).
 
 ## Tuning and adoption
 

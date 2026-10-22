@@ -1,0 +1,416 @@
+{
+  "version": 1,
+  "scope": "Bounded Doris numerical translation gates; full replacement SELECT measurements are separate",
+  "comparison": "Q44 exact row Counters against a Fraction oracle; pricing uses unchanged canonical-v11, exact diagnostic sums/counts, schemas, other values and NULL masks",
+  "normalization": "Existing four-query ordered-ties registry and canonical-v11 numeric precision unchanged",
+  "sf10_q44_aggregate_variation": {
+    "repetitions": 3,
+    "varying_native_avg_groups": 33145,
+    "varying_exact_sum_groups": 0,
+    "varying_nonnull_count_groups": 0,
+    "varying_proposed_mean_groups": 0,
+    "mechanism": "Numerical observations; optimizer mechanism not isolated"
+  },
+  "captures": [
+    {
+      "case": "q44",
+      "suite": "tpc_ds",
+      "scale_factor": 1,
+      "artifact_directory": "data/temp/doris-q44-sf1-r1",
+      "adopted_sql_path": "olap_benchmarks/suites/tpc_ds/queries/doris/44.sql",
+      "candidate_sql_sha256": "51e6d95a27e0ad935b0c444d568534cbe7e1e903ab0007f30b1f62e8b7207eff",
+      "input_manifest_sha256": "74df9bf461c3813d8a6d3aea94494e252fa4ce0a295894681352d239ecfb94c4",
+      "engine_version": "doris version doris-4.1.5-release-917b20be838",
+      "files": {
+        "summary.json": {
+          "sha256": "b7c625dc04264e17bfc9f4a225e1e86cbe75410da0d31eb7ee5360d0ce549fb1",
+          "bytes": 771
+        },
+        "run.json": {
+          "sha256": "cf8d384d163fa7790924b84b4da990974344278c1851f036415761827af33a61",
+          "bytes": 1345837
+        },
+        "doris/candidate-01.json": {
+          "sha256": "011aefa4f6b1abdc8992fb9814ec7f4c51851e3f58e9a4c00d242e8c4c1ef18a",
+          "bytes": 4315
+        }
+      },
+      "observed_summary": {
+        "scale": 1,
+        "status": "completed",
+        "oracle_gate": "passed",
+        "original_exact_counter": "passed",
+        "original_policy_hash": "passed",
+        "candidate_exact_counter": "passed",
+        "candidate_policy_hash": "passed",
+        "all_item_sum_count": "passed",
+        "threshold_sum_count": "passed",
+        "item_names_exact_counter_matches": true,
+        "completed_repetitions": {
+          "original": 6,
+          "candidate": 6,
+          "aggregates": 3
+        },
+        "shutdown": "confirmed",
+        "adoption": "Not performed; parent requires six exact candidate matches at BOTH SF1 and SF10",
+        "cause": "Unknown; observed stability does not prove exact native arithmetic or the floating AVG hypothesis",
+        "error": null,
+        "evidence": "run.json, duckdb/, doris/; full query Arrows retained with SQL/Arrow SHA256"
+      }
+    },
+    {
+      "case": "q44",
+      "suite": "tpc_ds",
+      "scale_factor": 10,
+      "artifact_directory": "data/temp/doris-q44-sf10-r1",
+      "adopted_sql_path": "olap_benchmarks/suites/tpc_ds/queries/doris/44.sql",
+      "candidate_sql_sha256": "51e6d95a27e0ad935b0c444d568534cbe7e1e903ab0007f30b1f62e8b7207eff",
+      "input_manifest_sha256": "3133ccf10cc174a6ec796f5f4568af0218f9353cf883caf45df7cc906ae8341a",
+      "engine_version": "doris version doris-4.1.5-release-917b20be838",
+      "files": {
+        "summary.json": {
+          "sha256": "027be1b498179ebd580fc741005ebcfd11ae1bba7dc09db698c876a2f04c0f61",
+          "bytes": 772
+        },
+        "run.json": {
+          "sha256": "6fc167971a7fd95945752dbf129a6b6d5622787c024143a879fa1d4f841cd46d",
+          "bytes": 1351192
+        },
+        "doris/candidate-01.json": {
+          "sha256": "35655971eb3a77053d48de9d7bd3a8d28d48bfed083b4294bbe43bcacdddbe73",
+          "bytes": 4315
+        }
+      },
+      "observed_summary": {
+        "scale": 10,
+        "status": "completed",
+        "oracle_gate": "passed",
+        "original_exact_counter": "failed",
+        "original_policy_hash": "failed",
+        "candidate_exact_counter": "passed",
+        "candidate_policy_hash": "passed",
+        "all_item_sum_count": "passed",
+        "threshold_sum_count": "passed",
+        "item_names_exact_counter_matches": true,
+        "completed_repetitions": {
+          "original": 6,
+          "candidate": 6,
+          "aggregates": 3
+        },
+        "shutdown": "confirmed",
+        "adoption": "Not performed; parent requires six exact candidate matches at BOTH SF1 and SF10",
+        "cause": "Unknown; observed stability does not prove exact native arithmetic or the floating AVG hypothesis",
+        "error": null,
+        "evidence": "run.json, duckdb/, doris/; full query Arrows retained with SQL/Arrow SHA256"
+      }
+    },
+    {
+      "case": "pricing",
+      "suite": "tpc_h",
+      "scale_factor": 10,
+      "artifact_directory": "data/temp/doris-pricing-sf10-r1",
+      "adopted_sql_path": "olap_benchmarks/suites/tpc_h/queries/doris/01_pricing_summary.sql",
+      "candidate_sql_sha256": "077f15b23272d92b07a2b629f0f6bae24d3810bd9a0fe503f0bbe2fd0370975c",
+      "input_manifest_sha256": "1ff2594823abbf9cecf2ba1be3df6a38865c306ff3d3999b12df27a077049bc1",
+      "engine_version": "doris version doris-4.1.5-release-917b20be838",
+      "files": {
+        "summary.json": {
+          "sha256": "ceb3bebfef312e3f0de35cd08840d2c439b3e6b0bdc04c0722479ff6b018e512",
+          "bytes": 4115
+        },
+        "run.json": {
+          "sha256": "d9c5dfcd77ed1919c424824ee71b849b0044ce158685f03f3c988f9d15c7aa46",
+          "bytes": 284480
+        },
+        "doris/candidate-1.json": {
+          "sha256": "c1ad680d8bb8a68f9d18ca9e671773c81daa10e893a230613b90a8fab1f1fdfb",
+          "bytes": 53693
+        }
+      },
+      "observed_summary": {
+        "capture_completed": "pass",
+        "cause": "unknown",
+        "production_adoption": "unknown; parent decision only; no production SQL is changed",
+        "historical_outlier": "Doris at SF50; parent confirmed matching $.input.manifest_sha256",
+        "historical_scale_applies": false,
+        "matching_historical_input": "unknown",
+        "schema_scope": "Raw schema equality is a separate observation, never inferred from policy equality",
+        "readiness_before": "pass",
+        "readiness_after": "pass",
+        "runtime_before": "pass",
+        "runtime_after": "pass",
+        "doris_shutdown": "pass",
+        "original": {
+          "captured_repetitions": 3,
+          "required_repetitions": 3,
+          "hashes": [
+            "blake2b128:3cb135be3747b24d1d7985e35f4b5991",
+            "blake2b128:3cb135be3747b24d1d7985e35f4b5991",
+            "blake2b128:3cb135be3747b24d1d7985e35f4b5991"
+          ],
+          "three_policy_hashes_repeat": "pass",
+          "three_raw_frames_repeat": "fail",
+          "all_match_canonical_duckdb": "pass",
+          "raw_schema_equals_reference": [
+            true,
+            true,
+            true
+          ],
+          "first_raw_numeric_difference": {
+            "row": 0,
+            "column": 7,
+            "reference_name": "avg_price",
+            "actual_name": "avg_price",
+            "reference": {
+              "python_type": "float",
+              "repr": "38237.15100895854",
+              "float_hex": "0x1.2aba4d510bd4bp+15",
+              "exact_decimal": "38237.1510089585426612757146358489990234375",
+              "is_null": false
+            },
+            "actual": {
+              "python_type": "float",
+              "repr": "38237.15100895968",
+              "float_hex": "0x1.2aba4d510bde7p+15",
+              "exact_decimal": "38237.1510089596777106635272502899169921875",
+              "is_null": false
+            }
+          }
+        },
+        "candidate": {
+          "captured_repetitions": 3,
+          "required_repetitions": 3,
+          "hashes": [
+            "blake2b128:3cb135be3747b24d1d7985e35f4b5991",
+            "blake2b128:3cb135be3747b24d1d7985e35f4b5991",
+            "blake2b128:3cb135be3747b24d1d7985e35f4b5991"
+          ],
+          "three_policy_hashes_repeat": "pass",
+          "three_raw_frames_repeat": "pass",
+          "all_match_canonical_duckdb": "pass",
+          "raw_schema_equals_reference": [
+            true,
+            true,
+            true
+          ],
+          "first_raw_numeric_difference": {
+            "row": 0,
+            "column": 8,
+            "reference_name": "avg_disc",
+            "actual_name": "avg_disc",
+            "reference": {
+              "python_type": "float",
+              "repr": "0.0500065745402432",
+              "float_hex": "0x1.99a7634787d47p-5",
+              "exact_decimal": "0.050006574540243202420253254558701883070170879364013671875",
+              "is_null": false
+            },
+            "actual": {
+              "python_type": "float",
+              "repr": "0.05000657454024321",
+              "float_hex": "0x1.99a7634787d48p-5",
+              "exact_decimal": "0.050006574540243209359147158465930260717868804931640625",
+              "is_null": false
+            }
+          }
+        },
+        "diagnostic": {
+          "captured_repetitions": 3,
+          "required_repetitions": 3,
+          "hashes": [
+            "blake2b128:75fb63c237f4500317b25f9b06525007",
+            "blake2b128:75fb63c237f4500317b25f9b06525007",
+            "blake2b128:75fb63c237f4500317b25f9b06525007"
+          ],
+          "three_policy_hashes_repeat": "pass",
+          "three_raw_frames_repeat": "fail",
+          "all_match_canonical_duckdb": "pass",
+          "raw_schema_equals_reference": [
+            true,
+            true,
+            true
+          ],
+          "first_raw_numeric_difference": {
+            "row": 0,
+            "column": 8,
+            "reference_name": "avg_price_native_double_avg",
+            "actual_name": "avg_price_native_double_avg",
+            "reference": {
+              "python_type": "float",
+              "repr": "38237.1510089586",
+              "float_hex": "0x1.2aba4d510bd53p+15",
+              "exact_decimal": "38237.1510089586008689366281032562255859375",
+              "is_null": false
+            },
+            "actual": {
+              "python_type": "float",
+              "repr": "38237.15100895918",
+              "float_hex": "0x1.2aba4d510bda3p+15",
+              "exact_decimal": "38237.1510089591829455457627773284912109375",
+              "is_null": false
+            }
+          }
+        },
+        "all_exact_diagnostic_sums_and_counts_match_duckdb": "pass",
+        "candidate_preserves_other_values": "pass",
+        "candidate_preserves_native_schema": "pass",
+        "candidate_preserves_null_masks": "pass"
+      }
+    },
+    {
+      "case": "pricing",
+      "suite": "tpc_h",
+      "scale_factor": 50,
+      "artifact_directory": "data/temp/doris-pricing-sf50-r1",
+      "adopted_sql_path": "olap_benchmarks/suites/tpc_h/queries/doris/01_pricing_summary.sql",
+      "candidate_sql_sha256": "077f15b23272d92b07a2b629f0f6bae24d3810bd9a0fe503f0bbe2fd0370975c",
+      "input_manifest_sha256": "252a574eb1dc2cdf36f2460d8d074cbf91c040040cf2e8286c16c518406888aa",
+      "engine_version": "doris version doris-4.1.5-release-917b20be838",
+      "files": {
+        "summary.json": {
+          "sha256": "c1f7c61a33ef818ef62f46543e77e9d20541692e4b416d18e176c84f427b93ef",
+          "bytes": 4215
+        },
+        "run.json": {
+          "sha256": "6760b5c85c5e2966ff1f6aeda0d64878676eec038a7df91fbd4cebe7ddbb1e21",
+          "bytes": 284251
+        },
+        "doris/candidate-1.json": {
+          "sha256": "72edbd32a8ec7c9c83ce0644745122ad39a82255b28db6564f8f676871fe669f",
+          "bytes": 61092
+        }
+      },
+      "observed_summary": {
+        "capture_completed": "pass",
+        "cause": "unknown",
+        "production_adoption": "unknown; parent decision only; no production SQL is changed",
+        "historical_outlier": "Doris at SF50; parent confirmed matching $.input.manifest_sha256",
+        "historical_scale_applies": true,
+        "matching_historical_input": "pass",
+        "schema_scope": "Raw schema equality is a separate observation, never inferred from policy equality",
+        "readiness_before": "pass",
+        "readiness_after": "pass",
+        "runtime_before": "pass",
+        "runtime_after": "pass",
+        "doris_shutdown": "pass",
+        "original": {
+          "captured_repetitions": 3,
+          "required_repetitions": 3,
+          "hashes": [
+            "blake2b128:6a326039c5330434cc387e83de0aa441",
+            "blake2b128:6a326039c5330434cc387e83de0aa441",
+            "blake2b128:6a326039c5330434cc387e83de0aa441"
+          ],
+          "three_policy_hashes_repeat": "pass",
+          "three_raw_frames_repeat": "fail",
+          "all_match_canonical_duckdb": "fail",
+          "raw_schema_equals_reference": [
+            true,
+            true,
+            true
+          ],
+          "first_raw_numeric_difference": {
+            "row": 0,
+            "column": 7,
+            "reference_name": "avg_price",
+            "actual_name": "avg_price",
+            "reference": {
+              "python_type": "float",
+              "repr": "38236.55666404859",
+              "float_hex": "0x1.2ab91d0311f72p+15",
+              "exact_decimal": "38236.556664048592210747301578521728515625",
+              "is_null": false
+            },
+            "actual": {
+              "python_type": "float",
+              "repr": "38236.55666404938",
+              "float_hex": "0x1.2ab91d0311fdep+15",
+              "exact_decimal": "38236.556664049378014169633388519287109375",
+              "is_null": false
+            }
+          }
+        },
+        "candidate": {
+          "captured_repetitions": 3,
+          "required_repetitions": 3,
+          "hashes": [
+            "blake2b128:fc42e22f683c4e39c64e63eab843ddfe",
+            "blake2b128:fc42e22f683c4e39c64e63eab843ddfe",
+            "blake2b128:fc42e22f683c4e39c64e63eab843ddfe"
+          ],
+          "three_policy_hashes_repeat": "pass",
+          "three_raw_frames_repeat": "pass",
+          "all_match_canonical_duckdb": "pass",
+          "raw_schema_equals_reference": [
+            true,
+            true,
+            true
+          ],
+          "first_raw_numeric_difference": {
+            "row": 0,
+            "column": 8,
+            "reference_name": "avg_disc",
+            "actual_name": "avg_disc",
+            "reference": {
+              "python_type": "float",
+              "repr": "0.05000122818910676",
+              "float_hex": "0x1.999c2cfaa020bp-5",
+              "exact_decimal": "0.050001228189106759758342235500094830058515071868896484375",
+              "is_null": false
+            },
+            "actual": {
+              "python_type": "float",
+              "repr": "0.05000122818910675",
+              "float_hex": "0x1.999c2cfaa020ap-5",
+              "exact_decimal": "0.05000122818910675281944833159286645241081714630126953125",
+              "is_null": false
+            }
+          }
+        },
+        "diagnostic": {
+          "captured_repetitions": 3,
+          "required_repetitions": 3,
+          "hashes": [
+            "blake2b128:53867cb66d0ba3040203d0e638b5e783",
+            "blake2b128:53867cb66d0ba3040203d0e638b5e783",
+            "blake2b128:53867cb66d0ba3040203d0e638b5e783"
+          ],
+          "three_policy_hashes_repeat": "pass",
+          "three_raw_frames_repeat": "fail",
+          "all_match_canonical_duckdb": "pass",
+          "raw_schema_equals_reference": [
+            true,
+            true,
+            true
+          ],
+          "first_raw_numeric_difference": {
+            "row": 0,
+            "column": 8,
+            "reference_name": "avg_price_native_double_avg",
+            "actual_name": "avg_price_native_double_avg",
+            "reference": {
+              "python_type": "float",
+              "repr": "38236.556664049494",
+              "float_hex": "0x1.2ab91d0311feep+15",
+              "exact_decimal": "38236.556664049494429491460323333740234375",
+              "is_null": false
+            },
+            "actual": {
+              "python_type": "float",
+              "repr": "38236.556664049225",
+              "float_hex": "0x1.2ab91d0311fc9p+15",
+              "exact_decimal": "38236.5566640492252190597355365753173828125",
+              "is_null": false
+            }
+          }
+        },
+        "duckdb_reproduces_historical_baseline": "pass",
+        "original_reproduces_historical_doris": "pass",
+        "all_exact_diagnostic_sums_and_counts_match_duckdb": "pass",
+        "candidate_preserves_other_values": "pass",
+        "candidate_preserves_native_schema": "pass",
+        "candidate_preserves_null_masks": "pass"
+      }
+    }
+  ]
+}

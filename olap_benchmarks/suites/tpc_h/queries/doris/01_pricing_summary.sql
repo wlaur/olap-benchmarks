@@ -5,9 +5,9 @@ SELECT
     sum(l_extendedprice) AS sum_base_price,
     sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
     sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
-    avg(CAST(l_quantity AS DOUBLE)) AS avg_qty,
-    avg(CAST(l_extendedprice AS DOUBLE)) AS avg_price,
-    avg(CAST(l_discount AS DOUBLE)) AS avg_disc,
+    CAST(SUM(l_quantity) AS DOUBLE) / NULLIF(COUNT(l_quantity), 0) AS avg_qty,
+    CAST(SUM(l_extendedprice) AS DOUBLE) / NULLIF(COUNT(l_extendedprice), 0) AS avg_price,
+    CAST(SUM(l_discount) AS DOUBLE) / NULLIF(COUNT(l_discount), 0) AS avg_disc,
     count(*) AS count_order
 FROM
     lineitem

@@ -68,11 +68,13 @@ Diagnostics ran serially at the same ten-CPU/24-GiB container limits, with nativ
 09:48:55 and 09:52:43 UTC. No table, source file, row group, index, precomputed
 answer or materialized relation changed.
 
-Record configured per-query settings in operation metadata. Commit this change
-and rerun the complete 22-query SF10 SELECT before replacing cohort 601. The
-other ClickHouse workloads and the original 99 measurements are unaffected.
-Successful controls do not establish an overall workload speedup; the complete
-replacement cohort and answer comparison provide the publication evidence.
+The scoped change was followed by complete 22-query SF10 SELECT replacement
+602. Retain 601 and its Q5 timeout diagnostically. Final complete-cohort
+answer/source/configuration binding remains pending; record configured
+per-query settings in operation metadata. The other ClickHouse workloads and
+the original 99 measurements are unaffected. The censored baseline supplies
+no finite speedup ratio; successful controls do not establish an overall
+workload speedup.
 
 ## PostgreSQL and TimescaleDB telemetry: retain the original traversal
 
@@ -149,9 +151,62 @@ shutdown, within the shared twenty-minute allowance. All 23 indexes were
 dropped afterward and the original primary-key layout was verified; ANALYZE
 statistics are not restored, a limitation of the reverse controls.
 
-Final measurement requires fresh population, charged index construction and
-ANALYZE, exact index-definition/readiness readback, and the complete 113-query
-SELECT at the declared limits. The implementation is scoped to PostgreSQL JOB;
-other PostgreSQL workloads, TimescaleDB and the original 99 cells are unaffected
-by this physical-design change. Retain the diagnostic details under
+Adoption in `96ecbf5` was followed by fresh population 635 and complete
+113-query SELECT 636. All 113 query hashes match DuckDB, ClickHouse, MonetDB
+and StarRocks. Preserve primary-key-only 612 and its timeout. Final 635
+preparation timings, charged index construction/ANALYZE, storage and exact
+index-definition/readiness readback remain to be bound to publication,
+separately from the diagnostic costs above. The implementation is scoped to
+PostgreSQL JOB; other PostgreSQL workloads, TimescaleDB and original cells are
+unaffected by this physical-design change. Retain the diagnostic details under
 `results/followup-tuning/postgres-job.json` and `postgres-job/`.
+
+## TPC-DS correctness corrections and remaining Doris gates
+
+The completed portability corrections preserve the fixed workloads. MonetDB
+644/SF10 and 646/SF1 and StarRocks 648/SF10 and 650/SF1 completed all 99
+queries, with all 99 peer hashes matching at each scale. The only replacements
+of original SF1 cells are MonetDB 646 and StarRocks 650; retain all original
+measurements and affected diagnostics. Doris 652/SF1 and 654/SF10 executed all
+99, but 654 remains blocked by Q44 answer instability. These are correctness
+outcomes, not evidence of a workload speedup or final eligibility.
+
+Run 632 already has Q44 answers in A/B/B/A warmup/measured order, omitted from
+the earlier report. In 654, three of four outputs report rank 9 instead of the
+reference's rank 8. Later parent-scheduled diagnostics retain six original
+and six candidate full results plus three aggregate captures at each scale.
+SF10 has one unstable original in six; all six candidates match the exact
+Fraction oracle and policy hash. At SF1 all six originals and candidates pass.
+All item and threshold SUM/COUNT values match. Three independent SF10 aggregate
+repetitions show varying original floating AVG in 33,145 groups, while SUM,
+COUNT and proposed mean vary in zero groups. This supports a numerical
+explanation without proving an optimizer mechanism.
+
+Pricing captures subsequently passed at SF10 and SF50: three original, three
+candidate and three diagnostic captures per scale. At SF50 all originals
+reproduce the historical differing hash; all candidates reproduce the four-peer
+reference hash. The policy-level difference is the N/O group's `avg_disc`,
+`0.04999790773844881` versus reference `0.049997907733309185`. Exact diagnostic
+sums and non-NULL counts match. Candidates preserve all other values, native
+schemas and NULL masks; raw floating means may still differ from the reference
+by a last bit within the unchanged comparison contract. SF10 originals and
+candidates both match the reference policy.
+
+Adopt exact decimal SUM followed by DOUBLE division by NULLIF(COUNT(...), 0)
+for all six Q44 means and the three pricing means after both-scale gates and
+offline checks. These are numerical SQL translations, not a change to hashing
+or a demonstrated optimizer defect. The [four-capture summary](2026-10-followup-doris-means.json)
+binds source and artifact hashes. Complete TPC-DS SF1/SF10 and TPC-H SF10/SF50
+SELECT replacements remain required after committing validated source.
+
+## Analytical export verification
+
+All twelve analytical attempts finished: nine completed and PostgreSQL
+670/671/672 failed warmup with unknown QPS. Run 672 retains twelve unfinished
+request records. Export fixes `d7fe4e7` and `be8eafc` retain unknown work only
+for terminal failed operations with an explicit error, preserving raw rows and
+NULL finish times. Logical request order and warmup-completion claims remain
+checked. Ruff/Pyright and 162 focused tests passed; independent review found
+no further issues. The full non-live suite subsequently passed 2,125 tests,
+with one skipped and fourteen live tests excluded. Final export acceptance
+remains pending. This is an evidence-export correction, not engine tuning.

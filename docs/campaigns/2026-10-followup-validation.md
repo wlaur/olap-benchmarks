@@ -38,8 +38,8 @@ reuses the existing JSONBench SF10 inputs.
 
 DuckDB JSON fixture tests also compare all raw/prepared variants offline.
 Fixture agreement establishes the tested cases, not universal correctness or
-full-data preparation. Full-scale JSON loading and common-file query execution
-remain separate gates until their results are recorded here.
+full-data preparation. Full-scale JSON and common-file executions are recorded
+below; final selection and source/artifact binding remain separate gates.
 
 JOB required four DuckDB alias renames and two StarRocks quoted output aliases.
 Canonical upstream files remain unchanged. Doris TPC-H Q13 required explicit
@@ -85,6 +85,49 @@ cleanup. A real CLI negative test also rejected a store with its orders removed
 before starting analytical warmup. Engine execution success does not establish cache-hit behavior, which remains
 uninstrumented.
 
+## Full-scale analytical outcomes
+
+All twelve TPC-H SF10 attempts finished under parent scheduling. Nine completed;
+PostgreSQL failed warmup at all client counts and has unknown QPS.
+
+| Engine | 1 client QPS | 4 clients QPS | 16 clients QPS | Run IDs (1/4/16 clients) |
+| --- | ---: | ---: | ---: | --- |
+| DuckDB | 15.598 | 21.616 | 21.542 | 662 / 663 / 664 |
+| Polars | 5.587 | 6.366 | 6.243 | 666 / 667 / 668 |
+| ClickHouse | 4.155 | 4.792 | 4.898 | 674 / 675 / 676 |
+| PostgreSQL | Unknown | Unknown | Unknown | 670 / 671 / 672; warmup failed |
+
+Completed measured requests are 936/1,298/1,308 for DuckDB, 336/384/383 for
+Polars and 250/290/305 for ClickHouse. All nine completed runs record zero failed
+or unfinished request steps. QPS divides completed measured requests by actual
+elapsed time, including drain, hashing and logging; windows span 60.008–62.271
+seconds. Request latency instead covers fetch through DataFrame materialization,
+excluding hashing and logging. A complete cyclic order visits all 22 queries,
+but timing determines completed counts and mix. One window per configuration
+supports neither confidence intervals nor a production-capacity guarantee.
+
+PostgreSQL 670/671/672 failed under the parent's 45-second request watchdog
+during warmup, before measured release. Labels such as `client-N:warmup:13`
+identify sequence positions, not TPC-H Q13. Run 672 retains twelve unfinished
+request records; run 671 lacks budget readback and 672 lacks worker readback,
+so those facts remain unknown. Export fixes `d7fe4e7` and `be8eafc` represent unknown work only
+for terminal failed operations with an explicit error, preserving raw rows and
+NULL times. Logical request order and both warmup-completion boundaries are
+checked. Independent review found no further issues. Final export acceptance
+remains pending.
+
+All twelve input manifests share prefix `1ff2594823ab`. Completed readbacks
+record ten shared threads and a configured 24 GiB engine budget without scaling
+resources with client count. Polars has no hard 24 GiB native allocator cap;
+the separate 28 GiB operation-process RSS guard applies. The parent's read-only
+CLI comparison found zero peer-hash conflicts between successful completed
+analytical fetches and TPC-H SF10 SELECT at matching input and hash versions.
+This supports peer answer agreement, not exact-schema or universal correctness.
+
+Evidence is retained in `data/temp/followup-analytical-{summary,request-check,budget-check,answer-check}.log`
+and the engine/client CLI logs under `results/followup-logs/`. Final public
+evidence binding and export validation remain pending.
+
 ## Verification boundary
 
 Before the first full-scale follow-up measurement, repository-wide Ruff
@@ -96,8 +139,12 @@ Bun formatting, lint, types and production build passed, along with 33 unit
 tests and 23 browser tests including publication-reader and desktop/mobile/iPad
 fixtures. Database code generation matches the selected asset schema. The
 original published asset still matches its declared SHA-256 and byte length.
-Full-scale outcomes belong in the follow-up campaign report once measurement
-and publication validation finish.
+Full-scale outcomes recorded below and in the analytical section remain
+distinct from final publication validation. Export fixes `d7fe4e7` and `be8eafc`
+passed 162 focused tests and independent source review. After the Doris numerical
+translations, the complete non-live suite passed **2,125 tests**, with one
+skipped and fourteen live tests excluded. Final Ruff/Pyright checks and export
+verification are recorded separately; tests do not establish final asset acceptance.
 
 ## First full-data checks and ordering evidence
 
@@ -116,9 +163,10 @@ identities. Static review verified their complete order keys and output position
 registered SQL contracts; dedicated tests cover the failure cases.
 
 The [protocol amendment](2026-10-followup-protocol.md#ordering-evidence-amendment-after-the-first-sf10-cohort)
-retains the initial run 589 diagnostically and requires a complete DuckDB SF10
-SELECT replacement before ranking. The other five completed cells and the
-original 99 measurements retain their evidence.
+retains the initial run 589 diagnostically. Complete DuckDB SF10 replacement 619
+now agrees with ClickHouse 620 across all 99 query identities under the final
+four-entry policy. The other five completed cells and original 99 measurements
+retain their evidence; final selection remains pending.
 
 After the scoped hashing change, repository-wide Ruff and Pyright passed again;
 the full non-live suite passed 1,933 tests, with one skipped and fourteen live
@@ -173,10 +221,9 @@ existing hash tests cover full-key grouping, separated groups, values,
 duplicates and LIMIT-boundary membership.
 
 The [second protocol amendment](2026-10-followup-protocol.md#q44-amendment-after-the-first-clickhouse-sf10-cohort)
-retains runs 591 and 604 diagnostically and requires complete DuckDB and
-ClickHouse 99-query SF10 SELECT reruns after the validated combined source is
-committed. Runs 619 and 620 supply those complete replacements and agree on all
-99 query identities. No original baseline cohort is rerun for this policy change.
+retains runs 591 and 604 diagnostically. After committing validated combined
+source, complete 99-query SF10 replacements 619 and 620 agree on all 99 query
+identities. No original baseline cohort is rerun for this hash-policy change.
 
 With engines paused, repository-wide Ruff format checking and lint passed,
 strict Pyright reported zero errors and warnings, and the focused registry and
@@ -223,10 +270,13 @@ outputs are compared; neither displayed samples nor sorting alone supplies
 this gate. These checks establish the stated full-data comparisons within the
 existing numeric precision contract, not exact-schema or universal correctness.
 
-The [SQL amendment](2026-10-followup-protocol.md#sql-portability-amendment-after-the-other-sf10-cohorts)
-requires complete affected SF1 and SF10 SELECT reruns after validation and a
-clean source commit. The original observations remain retained. No diagnostic
-duration is substituted for a measured SELECT duration.
+After the [SQL amendment](2026-10-followup-protocol.md#sql-portability-amendment-after-the-other-sf10-cohorts),
+validation and a source commit, MonetDB 644/SF10 and 646/SF1 and StarRocks
+648/SF10 and 650/SF1 completed all 99 queries with all 99 peer hashes matching
+at each scale. Only 646 and 650 replace original SF1 cells; all 99 original
+cells remain retained as raw evidence. Doris 652/SF1 and 654/SF10 also executed
+all 99, but 654 retains Q44 instability. The original observations remain
+retained. No diagnostic duration substitutes for a measured SELECT duration.
 
 The subsequent full offline check identified JOB's SELECT override as a harness
 contract violation. Its PostgreSQL-only row-count and index checks now use the
@@ -241,3 +291,65 @@ Pyright passed. The focused portability, Doris, registry and hashing checks
 passed 429 tests. After the JOB hook correction, the complete non-live suite
 passed 2,054 tests, with one skipped and fourteen live tests excluded. These
 offline checks precede the final corrected TPC-DS measurements.
+
+### Doris Q44 and pricing diagnostic status
+
+The earlier report of Doris 632 omitted Q44 instability: its warmup/measured
+outputs follow A/B/B/A. Corrected full-suite 654 again changes Q44 answers,
+with three of four materializations reporting rank 9 where the reference
+reports rank 8. This changes rank values and membership, beyond the permitted
+normalization of order within equal final keys.
+
+Later Q44 diagnostics passed their candidate gates at both SF1 and SF10.
+Each scale retains six original and six candidate full-query outputs plus
+three aggregate captures. At SF10 one original in six changes rank 8 to 9 and
+item membership; all six candidates match the exact Fraction oracle and policy
+hash. At SF1 all six originals and all six candidates pass. All item and
+threshold SUM/COUNT values match. Independent SF10 native-aggregate capture
+across three repetitions finds varying original floating AVG in 33,145 groups,
+with zero varying SUM, COUNT or proposed-mean groups. This supports a numerical
+explanation without proving an optimizer mechanism.
+
+The candidate replaces all six Q44 AVG expressions, including thresholds, with
+exact decimal SUM followed by `CAST(... AS DOUBLE) / NULLIF(COUNT(...), 0)`.
+Complete results, SQL and Arrow fingerprints remain in
+`data/temp/doris-q44-{sf1,sf10}-r1/`; final summaries are in
+`results/followup-logs/doris-q44-{sf1,sf10}-diagnostic.log`. Those logs record
+completed diagnostics and confirmed shutdown. These are separate from the
+earlier 28-capture portability evidence and from final SELECT measurements.
+
+Doris SF50 population 655 verified all eight table counts, including 300,005,811
+lineitems; SELECT 656 executed all 22 TPC-H queries. ClickHouse 577, DuckDB 567,
+Polars 529, StarRocks 467 and Doris 656 share input manifest SHA-256
+`252a574eb1dc2cdf36f2460d8d074cbf91c040040cf2e8286c16c518406888aa`.
+The first four agree on Q01 hash
+`blake2b128:fc42e22f683c4e39c64e63eab843ddfe`; Doris records
+`blake2b128:6a326039c5330434cc387e83de0aa441`. Pricing captures subsequently passed at SF10 and SF50: three original, three
+candidate and three diagnostic captures per scale. At SF50 all originals
+reproduce the historical differing hash; all candidates reproduce the four-peer
+reference hash. The policy-level difference is the N/O group's `avg_disc`,
+`0.04999790773844881` versus reference `0.049997907733309185`. Exact diagnostic
+sums and non-NULL counts match. Candidates preserve all other values, native
+schemas and NULL masks; raw floating means may still differ from the reference
+by a last bit within the unchanged comparison contract. SF10 originals and
+candidates both match the reference policy.
+
+Adopt exact decimal SUM followed by DOUBLE division by NULLIF(COUNT(...), 0)
+for all six Q44 means and the three pricing means after both-scale gates and
+offline checks. These are numerical SQL translations, not a change to hashing
+or a demonstrated optimizer defect. The [four-capture summary](2026-10-followup-doris-means.json)
+binds source and artifact hashes. Complete TPC-DS SF1/SF10 and TPC-H SF10/SF50
+SELECT replacements remain required after committing validated source.
+
+### Completed common-file and JOB replacements
+
+ClickHouse common-Parquet replacement 602 completed all 22 queries after the
+scoped Q5 join-order change. Preserve 601 and its Q5 timeout diagnostically;
+final complete-cohort answer/source/configuration binding remains pending.
+
+PostgreSQL fresh JOB population 635 and indexed SELECT 636 completed with all
+113 query hashes matching DuckDB, ClickHouse, MonetDB and StarRocks. Preserve
+primary-key-only 612, its 112 completed queries and Q29c timeout. Final 635
+index/readiness readback, preparation timings and storage accounting remain
+to be bound to publication. Diagnostic timings do not substitute for these
+costs or final SELECT measurements.

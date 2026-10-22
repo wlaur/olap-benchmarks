@@ -195,12 +195,36 @@ def test_doris_relational_overrides_only_widen_numeric_expressions(suite: SuiteN
     assert {path.stem for path in (directory / "doris").glob("*.sql")} == overrides
     with duckdb.connect() as connection:
         for name in sorted(overrides):
+            if (suite, name) in {("tpc_ds", "44"), ("tpc_h", "01_pricing_summary")}:
+                continue
             if name in {"13_customer_distribution", "12", "17", "39", "45", "49", "50", "72"}:
                 continue
             if suite == "tpc_ds" and name in TPCDS_EMPTY_ROLLUP_OVERRIDES:
                 continue
             queries = [(directory / f"{name}.sql").read_text(), (directory / "doris" / f"{name}.sql").read_text()]
             assert _sql_tree(connection, queries[0]) == _sql_tree(connection, queries[1]), name
+
+
+def test_doris_profit_ranking_only_decomposes_the_six_means() -> None:
+    directory = SUITES / "tpc_ds/queries"
+    original = (directory / "44.sql").read_text()
+    adapted = (directory / "doris/44.sql").read_text()
+    expression = "avg(ss_net_profit)"
+    assert original.count(expression) == 6
+    assert adapted == original.replace(
+        expression, "(CAST(SUM(ss_net_profit) AS DOUBLE) / NULLIF(COUNT(ss_net_profit),0))"
+    )
+
+
+def test_doris_pricing_summary_only_decomposes_the_three_means() -> None:
+    directory = SUITES / "tpc_h/queries"
+    expected = (directory / "01_pricing_summary.sql").read_text()
+    adapted = (directory / "doris/01_pricing_summary.sql").read_text()
+    for column in ("l_quantity", "l_extendedprice", "l_discount"):
+        expression = f"avg({column})"
+        assert expected.count(expression) == 1
+        expected = expected.replace(expression, f"CAST(SUM({column}) AS DOUBLE) / NULLIF(COUNT({column}), 0)")
+    assert adapted == expected
 
 
 def test_doris_return_ranking_only_widens_ratios_and_matches_catalog_alias_case() -> None:
