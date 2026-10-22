@@ -472,9 +472,7 @@ class Clickhouse(Database):
             f"{get_settings().temporary_directory.as_posix()}/clickhouse/data": "/var/lib/clickhouse/user_files",
         }
         if self._current_suite == PARQUET_ANALYTICS:
-            mounts[self.input_directory.resolve(strict=True).as_posix()] = (
-                "/var/lib/clickhouse/user_files/parquet_analytics:ro"
-            )
+            mounts[self.input_directory.resolve(strict=True).as_posix()] = "/benchmark_input/parquet_analytics:ro"
 
         return self.docker_run_command(
             self.container_images["server"],
@@ -487,6 +485,7 @@ class Clickhouse(Database):
                 "CLICKHOUSE_USER": "user",
                 "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
             },
+            args=("--", "--user_files_path=/benchmark_input") if self._current_suite == PARQUET_ANALYTICS else (),
         )
 
     def connect(self, reconnect: bool = False) -> Connection:

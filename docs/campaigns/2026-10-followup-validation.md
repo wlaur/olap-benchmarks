@@ -122,3 +122,13 @@ original 99 measurements retain their evidence.
 After the scoped hashing change, repository-wide Ruff and Pyright passed again;
 the full non-live suite passed 1,933 tests, with one skipped and fourteen live
 tests excluded. The separate static review found no actionable defect.
+
+The first ClickHouse common-file attempt exited during container initialization,
+before recording an operation. Its default entrypoint recursively changes
+ownership beneath the writable data directory, conflicting with a nested
+read-only input mount. Move the same read-only source mount outside that tree
+and explicitly configure `user_files_path` for this suite. A fresh isolated
+container then started, read the five canonical region rows through `file()`,
+and reported Docker mount `RW=false`. Query SQL, input files and resource limits
+remain unchanged. Ruff, Pyright and 53 targeted tests passed for this startup
+correction. Preserve the unsuccessful startup log separately from the retry.

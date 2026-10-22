@@ -229,7 +229,9 @@ def test_clickhouse_mounts_original_directory_read_only(inputs: Path, monkeypatc
     db._current_suite_scale_factor = 10
     assert db.start == "fixture-command"
     mounts = cast(dict[str, str], captured["mounts"])
-    assert mounts[inputs.resolve().as_posix()] == "/var/lib/clickhouse/user_files/parquet_analytics:ro"
+    assert mounts[inputs.resolve().as_posix()] == "/benchmark_input/parquet_analytics:ro"
+    assert captured["args"] == ("--", "--user_files_path=/benchmark_input")
+    assert not mounts[inputs.resolve().as_posix()].startswith("/var/lib/clickhouse/")
     assert set(db.metric_directories[1:]) == {path.resolve() for path in inputs.glob("*.parquet")}
 
 
