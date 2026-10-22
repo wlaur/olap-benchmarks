@@ -259,6 +259,9 @@ class Database(BaseModel, ABC):
     def finalize_populate(self) -> None:
         pass
 
+    def verify_storage_readiness(self) -> None:
+        pass
+
     @property
     def pin(self) -> EnginePin:
         return engine_pin(self.name)

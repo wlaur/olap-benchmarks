@@ -304,4 +304,6 @@ def _sync_sequences(con: duckdb.DuckDBPyConnection) -> None:
         ("seq_query_execution", "query_execution"),
     ):
         next_value = _fetch_scalar(con, f"select coalesce(max(id), 0) + 1 from {table}")
+        con.execute(f"alter table {table} alter column id drop default")
         con.execute(f"create or replace sequence {sequence} start {next_value}")
+        con.execute(f"alter table {table} alter column id set default nextval('{sequence}')")

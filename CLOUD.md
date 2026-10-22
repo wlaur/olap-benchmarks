@@ -139,6 +139,11 @@ step rewrites the database into a fresh file first — DuckDB keeps space freed 
 checkpoints and re-runs, so this typically shrinks it 2–3x and makes the upload
 correspondingly faster:
 
+Raw revision compaction uses DuckDB 2.0's storage format. Use `olap publish`
+to produce the browser asset: it deliberately targets storage compatibility
+`v1.4.0` and records its minimum reader and writer versions in the manifest.
+Do not substitute a raw compacted revision for the site's `results.db`.
+
 ```bash
 REV=$SYSTEM
 uv run olap benchmark all all --revision "$REV" --cleanup
@@ -173,6 +178,13 @@ fetch it first:
 cd site && bun run fetch-data && cd ..
 uv run olap publish --revision aws-i4i-2xlarge --merge --upload
 ```
+
+Publication verifies the staged database against its manifest and uploads
+`results-{sha256}.db` to the existing `data` release, leaving prior assets intact.
+It does not trigger Pages. Merge the matching manifest, query/suite metadata and
+required site changes into `main` after the upload; the normal Pages workflow then
+fetches that exact hash asset and verifies it before deployment. The web-local
+filename stays `results.db`; never commit database files.
 
 Verify in the AWS console that the instance is terminated, and revoke the PAT
 once the campaign is done.

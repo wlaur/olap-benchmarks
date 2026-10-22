@@ -28,13 +28,12 @@ jobs:
         working-directory: site
         run: bun install --frozen-lockfile
 
-      # results.db is not committed; it ships as the `data` release asset (see olap publish --upload)
+      # The manifest pins a results-{sha256}.db asset on the `data` release; keep results.db local.
       - name: Fetch published results database
         working-directory: site
         run: bun run fetch-data
 
-      # the committed manifest pins the asset's size and SHA-256, so a stale, truncated or
-      # replaced-but-not-recommitted asset fails the build instead of shipping mismatched data
+      # Verify the fetched local file against the committed size, SHA-256 and storage contract.
       - name: Verify results database against manifest
         working-directory: site
         run: bun run verify-data
@@ -46,6 +45,14 @@ jobs:
       - name: Build
         working-directory: site
         run: bun run build
+
+      - name: Install browser for results compatibility checks
+        working-directory: site
+        run: bun x playwright install --with-deps chromium
+
+      - name: Verify the browser engine can read the results export
+        working-directory: site
+        run: bun run test:reader
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5.0.0

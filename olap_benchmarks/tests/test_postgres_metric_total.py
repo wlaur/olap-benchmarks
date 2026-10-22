@@ -65,8 +65,8 @@ def test_postgres_native_metric_total_matches_the_canonical_query(
     connection: duckdb.DuckDBPyConnection = cast(Any, duckdb).connect(config={"threads": 1})
     try:
         connection.register("wide1000", frame)
-        expected = connection.execute(canonical).pl()
-        actual = connection.execute(suite.load_query("wide1000_12_all_metrics")).pl()
+        expected = connection.sql(canonical).pl()
+        actual = connection.sql(suite.load_query("wide1000_12_all_metrics")).pl()
     finally:
         connection.close()
 

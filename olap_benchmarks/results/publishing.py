@@ -219,6 +219,36 @@ def _image_digest_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
     return problems
 
 
+def _doris_cache_problems(con: duckdb.DuckDBPyConnection) -> list[str]:
+    from ..dbs.doris import DORIS_RESULT_CACHE_VARIABLES
+
+    conditions = " and ".join(
+        f"lower(json_extract_string(s.metadata, '$.sessions.{method}.{variable}')) in ('false', 'off', '0')"
+        for method in ("python", "connectorx")
+        for variable in DORIS_RESULT_CACHE_VARIABLES
+    )
+    missing = _fetch_ints(
+        con,
+        f"""
+        select r.id from run r
+        where r.db = 'doris' and r.operation = 'select' and r.status = 'completed'
+          and (
+            json_extract_string(r.metadata, '$.options.result_cache_policy') is distinct from 'disabled-v1'
+            or exists (
+              select name from (values ('doris_cache_settings_before'), ('doris_cache_settings_after')) p(name)
+              where (
+                select count(*) from run_step s
+                where s.run_id = r.id and s.step_type = 'phase' and s.step_name = p.name
+                  and s.status = 'completed' and s.finished_at is not null and {conditions}
+              ) <> 1
+            )
+          )
+        order by r.id
+        """,
+    )
+    return [f"Doris select runs lack verified disabled result caches: {missing}"] if missing else []
+
+
 def validate_publishable_runs(
     db_path: Path,
     cells: Sequence[MatrixCell],
@@ -295,6 +325,7 @@ def validate_publishable_runs(
         problems.extend(_image_digest_problems(con))
         problems.extend(_query_step_problems(con))
         problems.extend(_monetdb_problems(con, campaign=campaign))
+        problems.extend(_doris_cache_problems(con))
     finally:
         con.close()
 

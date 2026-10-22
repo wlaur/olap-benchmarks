@@ -235,7 +235,7 @@ def build_run_metadata(
             "start_command": start_command,
         },
         "metrics": {
-            "version": 7,
+            "version": 8,
             "sampling": (
                 "each metric family is sampled on its own schedule and stored as its own run_metric row, "
                 "leaving the columns it does not measure null. Sample spacing is neither constant nor equal "
@@ -275,8 +275,10 @@ def build_run_metadata(
             "client_mem_mb": "client side: benchmark client process peak RSS, on the client_rss interval",
             "client_uss_mb": "client side: benchmark client process peak USS, on the client_uss interval",
             "disk_mb": (
-                "storage: du over the database's own storage directories (Database.metric_directories), "
-                "WAL included. Client staging files and the benchmark client's own disk use are not "
+                "storage: allocated MiB from du -sk over the declared paths (Database.metric_directories), "
+                "summing KiB before rounding to MiB, WAL included. Engines with external table references include them "
+                "and record their paths and pre-operation allocated MiB in options.storage_accounting. "
+                "Client staging files and the benchmark client's own disk use are not "
                 "measured. Sampled on the slow disk lane, whose interval stretches beyond its nominal value "
                 "when a du walk is expensive, so disk readings are sparser and less regular than the other "
                 "columns"

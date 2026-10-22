@@ -366,16 +366,34 @@ def execute_tpc_h_query(tables: TpcHTables, query_name: str, scale_factor: int) 
                 )
             )
         case "17_small_quantity_revenue":
-            average_quantities = lineitem.group_by("l_partkey").agg(pl.col("l_quantity").mean().alias("avg_quantity"))
+            selected_parts = part.filter((pl.col("p_brand") == "Brand#23") & (pl.col("p_container") == "MED BOX"))
+            average_quantities = (
+                lineitem.join(
+                    selected_parts.select("p_partkey"),
+                    left_on="l_partkey",
+                    right_on="p_partkey",
+                    how="semi",
+                )
+                .group_by("l_partkey")
+                .agg(pl.col("l_quantity").mean().alias("avg_quantity"))
+            )
             return (
                 lineitem.join(average_quantities, on="l_partkey")
                 .join(
-                    part.filter((pl.col("p_brand") == "Brand#23") & (pl.col("p_container") == "MED BOX")),
+                    selected_parts,
                     left_on="l_partkey",
                     right_on="p_partkey",
                 )
                 .filter(pl.col("l_quantity") < Decimal("0.2") * pl.col("avg_quantity"))
-                .select((pl.col("l_extendedprice").sum().cast(pl.Float64) / 7.0).alias("avg_yearly"))
+                .select(
+                    (
+                        pl.when(pl.col("l_extendedprice").count() > 0)
+                        .then(pl.col("l_extendedprice").sum())
+                        .otherwise(None)
+                        .cast(pl.Float64)
+                        / 7.0
+                    ).alias("avg_yearly")
+                )
             )
         case "18_large_volume_customer":
             large_orders = (

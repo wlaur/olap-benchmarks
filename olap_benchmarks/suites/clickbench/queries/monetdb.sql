@@ -3,7 +3,7 @@ SELECT COUNT(*) FROM hits WHERE AdvEngineID <> 0;
 SELECT SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth) FROM hits;
 SELECT AVG(UserID) FROM hits;
 SELECT COUNT(DISTINCT UserID) FROM hits;
-SELECT COUNT(DISTINCT SearchPhrase) FROM hits;
+SELECT COUNT(SearchPhrase) FROM (SELECT SearchPhrase FROM hits GROUP BY SearchPhrase OFFSET 0) AS distinct_phrases;
 SELECT MIN(EventDate), MAX(EventDate) FROM hits;
 SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC, AdvEngineID ASC;
 SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC, RegionID ASC LIMIT 10;

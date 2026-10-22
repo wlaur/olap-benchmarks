@@ -130,6 +130,9 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
     def populate_kwargs(self) -> dict[str, Any]:
         return {}
 
+    def populate_table(self, table: TableName, path: Path) -> None:
+        self.db.insert(pl.scan_parquet(path), table, **self.populate_kwargs)
+
     def populate(self, restart: bool = True) -> None:
         with self.db.phase_context("verify_existing_data"):
             if not self.should_populate():
@@ -138,10 +141,10 @@ class KaggleAirbnb[DBT: Database](BenchmarkSuite[DBT]):
         self.db.initialize_schema("kaggle_airbnb")
 
         for table_name in KAGGLE_AIRBNB_TABLES:
-            df = pl.scan_parquet(get_settings().input_data_directory / f"kaggle_airbnb/{table_name}.parquet")
-
             with self.db.phase_context("insert", table_name=table_name):
-                self.db.insert(df, table_name, **self.populate_kwargs)
+                self.populate_table(
+                    table_name, get_settings().input_data_directory / f"kaggle_airbnb/{table_name}.parquet"
+                )
                 _LOGGER.info(f"Inserted {table_name} for {self.name}")
 
         _LOGGER.info(f"Inserted all kaggle_airbnb tables for {self.name}")

@@ -7,7 +7,7 @@ from typing import Annotated, ClassVar, Literal, cast, get_args
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
-from pydantic import DirectoryPath, PositiveInt, field_validator
+from pydantic import DirectoryPath, Field, PositiveInt, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TableName = Annotated[str, "Table name"]
@@ -220,6 +220,9 @@ class Settings(BaseSettings):
     system: str
     benchmark_threads: PositiveInt | None = None
     benchmark_memory_gb: PositiveInt | None = None
+    duckdb_storage_mode: Literal["native", "parquet"] = "native"
+    duckdb_async_threads: PositiveInt = 10
+    duckdb_read_ahead_depth: int = Field(default=-1, ge=-1)
     run_note: str | None = None
     minimum_free_disk_gb: PositiveInt = 40
     operation_timeout_seconds: PositiveInt | None = None

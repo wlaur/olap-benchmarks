@@ -30,11 +30,14 @@ def execute_clickbench_query(lf: pl.LazyFrame, query_name: str) -> pl.LazyFrame:
                 pl.col("ResolutionWidth").mean(),
             )
         case "Q3":
-            return lf.select((pl.col("UserID").cast(pl.Decimal(38, 0)).sum() / pl.len()).cast(pl.Float64))
+            user_id = pl.col("UserID")
+            return lf.select(
+                (user_id.cast(pl.Decimal(38, 0)).sum() / user_id.count().replace(0, None)).cast(pl.Float64)
+            )
         case "Q4":
             return lf.select(pl.col("UserID").n_unique().cast(pl.Int64))
         case "Q5":
-            return lf.select(pl.col("SearchPhrase").n_unique().cast(pl.Int64))
+            return lf.select(pl.col("SearchPhrase").drop_nulls().n_unique().cast(pl.Int64))
         case "Q6":
             return lf.select(
                 pl.col("EventDate").min().alias("min_event_date"),

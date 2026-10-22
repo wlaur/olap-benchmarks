@@ -52,12 +52,12 @@ def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
             if not wide_name.startswith(f"wide{metrics}_"):
                 continue
             eav_name = wide_name.replace("wide", "eav", 1)
-            wide_result = con.execute((QUERIES_DIRECTORY / f"{wide_name}.sql").read_text()).pl()
-            eav_result = con.execute((QUERIES_DIRECTORY / f"{eav_name}.sql").read_text()).pl()
+            wide_result = con.sql((QUERIES_DIRECTORY / f"{wide_name}.sql").read_text()).pl()
+            eav_result = con.sql((QUERIES_DIRECTORY / f"{eav_name}.sql").read_text()).pl()
             expected = build_answer_metadata(wide_result)["answer_hash"]
             override = QUERIES_DIRECTORY / "arc" / f"{wide_name}.sql"
             if override.is_file():
-                arc_result = con.execute(override.read_text()).pl()
+                arc_result = con.sql(override.read_text()).pl()
                 assert build_answer_metadata(arc_result)["answer_hash"] == expected, wide_name
             clickhouse_override = QUERIES_DIRECTORY / "clickhouse" / f"{wide_name}.sql"
             if wide_name.endswith("_12_all_metrics"):
@@ -67,9 +67,9 @@ def test_all_queries_agree_between_layouts_and_polars(metrics: int) -> None:
                     f"FROM wide{metrics}", "FROM source"
                 ).replace("arrayCount(x -> isNotNull(x), measurements)", "list_count(measurements)").replace(
                     "arraySum(arrayMap(x -> ifNull(toFloat64(x), 0), measurements))",
-                    "list_sum(list_transform(measurements, x -> COALESCE(CAST(x AS DOUBLE), 0)))",
+                    "list_sum(list_transform(measurements, lambda x: COALESCE(CAST(x AS DOUBLE), 0)))",
                 )
-                clickhouse_result = con.execute(sql).pl()
+                clickhouse_result = con.sql(sql).pl()
                 assert build_answer_metadata(clickhouse_result)["answer_hash"] == expected, wide_name
             for frame, name in ((wide, wide_name), (eav, eav_name)):
                 result = execute_time_series_metrics_query(frame.lazy(), name).collect()

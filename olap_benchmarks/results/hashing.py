@@ -120,6 +120,7 @@ def build_answer_metadata(df: pl.DataFrame) -> dict[str, Any]:
     metadata: dict[str, Any] = {
         "answer_rows": row_count,
         "answer_columns": column_count,
+        "answer_schema": [[name, str(dtype)] for name, dtype in df.schema.items()],
         "answer_cells": cell_count,
         "answer_hash_version": ANSWER_HASH_VERSION,
     }

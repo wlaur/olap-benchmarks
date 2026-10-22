@@ -259,8 +259,8 @@ def reference_database() -> Generator[duckdb.DuckDBPyConnection]:
 def test_incremental_queries_match_raw_references_across_partial_insert_blocks(
     reference_database: duckdb.DuckDBPyConnection, engine: str, query_name: str
 ) -> None:
-    expected = reference_database.execute((REFERENCES / f"{query_name}.sql").read_text()).pl()
-    actual = reference_database.execute((SUITE / "queries" / engine / f"{query_name}.sql").read_text()).pl()
+    expected = reference_database.sql((REFERENCES / f"{query_name}.sql").read_text()).pl()
+    actual = reference_database.sql((SUITE / "queries" / engine / f"{query_name}.sql").read_text()).pl()
     assert expected.height > 0
     assert build_answer_metadata(actual)["answer_hash"] == build_answer_metadata(expected)["answer_hash"]
 

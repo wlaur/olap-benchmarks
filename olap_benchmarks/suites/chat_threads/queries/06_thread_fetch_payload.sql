@@ -5,9 +5,9 @@
 select
     seq,
     json_extract_string(content, '$.parts[0].text') as text_part,
-    coalesce(list_sum(list_transform(json_extract_string(content, '$.parts[*].source.data'), x -> strlen(x))), 0)
+    coalesce(list_sum(list_transform(json_extract_string(content, '$.parts[*].source.data'), lambda x: strlen(x))), 0)
         + coalesce(
-            list_sum(list_transform(json_extract_string(content, '$.parts[*].content[*].source.data'), x -> strlen(x))),
+            list_sum(list_transform(json_extract_string(content, '$.parts[*].content[*].source.data'), lambda x: strlen(x))),
             0
         ) as attachment_bytes
 from chat_message

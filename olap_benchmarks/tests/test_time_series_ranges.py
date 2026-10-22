@@ -35,8 +35,8 @@ def test_ranges_match_layouts_and_native_polars_at_filter_boundaries(metrics: in
                 continue
             query = RANGE_QUERIES[int(wide_name.split("_", 2)[1]) - 1]
             eav_name = wide_name.replace("wide", "eav", 1)
-            wide_result = con.execute((QUERIES_DIRECTORY / f"{wide_name}.sql").read_text()).pl()
-            eav_result = con.execute((QUERIES_DIRECTORY / f"{eav_name}.sql").read_text()).pl()
+            wide_result = con.sql((QUERIES_DIRECTORY / f"{wide_name}.sql").read_text()).pl()
+            eav_result = con.sql((QUERIES_DIRECTORY / f"{eav_name}.sql").read_text()).pl()
             for frame, name, expected in ((wide, wide_name, wide_result), (eav, eav_name, eav_result)):
                 actual = execute_time_series_ranges_query(frame.lazy(), name).collect()
                 assert build_answer_metadata(actual)["answer_hash"] == build_answer_metadata(expected)["answer_hash"]
@@ -111,7 +111,7 @@ def test_calculation_preserves_nulls_alignment_and_both_branches() -> None:
         for family, frame in (("wide100", wide), ("eav100", eav)):
             con.register(family, frame)
             name = f"{family}_13_calc_10_metrics_1d"
-            sql_result = con.execute((QUERIES_DIRECTORY / f"{name}.sql").read_text()).pl()
+            sql_result = con.sql((QUERIES_DIRECTORY / f"{name}.sql").read_text()).pl()
             native_result = execute_time_series_ranges_query(frame.lazy(), name).collect()
             for result in (sql_result, native_result):
                 assert build_answer_metadata(result)["answer_hash"] == build_answer_metadata(expected)["answer_hash"]

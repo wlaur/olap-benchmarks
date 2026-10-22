@@ -73,3 +73,65 @@ def test_doris_mounts_signal_wrapper_for_both_roles() -> None:
     assert stop_backend == "docker stop --timeout 120 doris-be-benchmark"
     assert restart_frontend == "docker restart --timeout 120 doris-fe-benchmark"
     assert start_backend == backend
+
+
+@pytest.mark.parametrize("role", ["fe", "be"])
+def test_heap_configuration_preserves_non_heap_jvm_options_and_is_idempotent(tmp_path: Path, role: str) -> None:
+    config = tmp_path / "fe/conf/fe.conf"
+    config.parent.mkdir(parents=True)
+    original = (
+        "LOG_DIR = ${DORIS_HOME}/log\n"
+        'JAVA_OPTS_FOR_JDK_17="-Dfile.encoding=UTF-8 -Xmx8192m -Xms8192m '
+        "-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=$LOG_DIR "
+        "-Xlog:gc*:$LOG_DIR/fe.gc.log.$CUR_DATE:time,uptime:filecount=10,filesize=50M "
+        '--add-opens=java.base/java.lang=ALL-UNNAMED"\n'
+        "query_port = 9030\n"
+    )
+    config.write_text(original)
+    initializer = tmp_path / "initialize.sh"
+    initializer.write_text("exit 0\n")
+    environment = {
+        **os.environ,
+        "DORIS_HOME": str(tmp_path),
+        "OLAP_DORIS_FE_HEAP_INITIAL_MB": "1024",
+        "OLAP_DORIS_FE_HEAP_MAXIMUM_MB": "4096",
+    }
+    for _ in range(2):
+        completed = subprocess.run(
+            ["bash", str(ENTRYPOINT), role, str(initializer)], env=environment, check=False, timeout=5
+        )
+        assert completed.returncode == 0
+        expected = original.replace("-Xmx8192m", "-Xmx4096m").replace("-Xms8192m", "-Xms1024m")
+        assert config.read_text() == (expected if role == "fe" else original)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        'JAVA_OPTS="-Xmx8192m -Xms8192m"',
+        'JAVA_OPTS_FOR_JDK_17="-Xmx8192m"',
+        'JAVA_OPTS_FOR_JDK_17="-Xmx8192m -Xmx4096m -Xms8192m"',
+        'JAVA_OPTS_FOR_JDK_17="-Xmx8192m -Xms8192m"\nJAVA_OPTS_FOR_JDK_17="-Xmx8192m -Xms8192m"',
+    ],
+)
+def test_unsupported_heap_configuration_stops_before_initializer(tmp_path: Path, options: str) -> None:
+    config = tmp_path / "fe/conf/fe.conf"
+    config.parent.mkdir(parents=True)
+    config.write_text(options + "\n")
+    initializer = tmp_path / "initialize.sh"
+    initializer.write_text(f"touch '{tmp_path / 'initialized'}'\n")
+    completed = subprocess.run(
+        ["bash", str(ENTRYPOINT), "fe", str(initializer)],
+        env={
+            **os.environ,
+            "DORIS_HOME": str(tmp_path),
+            "OLAP_DORIS_FE_HEAP_INITIAL_MB": "1024",
+            "OLAP_DORIS_FE_HEAP_MAXIMUM_MB": "4096",
+        },
+        check=False,
+        capture_output=True,
+        timeout=5,
+    )
+    assert completed.returncode == 2
+    assert not (tmp_path / "initialized").exists()
+    assert config.read_text() == options + "\n"

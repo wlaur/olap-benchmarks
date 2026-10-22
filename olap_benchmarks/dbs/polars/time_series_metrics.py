@@ -47,7 +47,10 @@ def execute_time_series_metrics_query(source: pl.LazyFrame, query_name: str) -> 
             frame = (
                 source.filter(pl.col("metric_name").is_in(names))
                 .group_by("time")
-                .agg(pl.col("value").filter(pl.col("metric_name") == name).first().alias(name) for name in names)
+                .agg(
+                    pl.col("value").filter(pl.col("metric_name") == name).cast(pl.Float64).max().alias(name)
+                    for name in names
+                )
             )
         else:
             frame = source.filter(pl.col("metric_name") == metric_name(1)).select(

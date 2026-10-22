@@ -37,6 +37,9 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_RESULTS_DIRECTORY`  | DuckDB results databases (`<revision>.db`)           |
 | `OLAP_BENCHMARKS_BENCHMARK_THREADS` | Optional CPU budget for containers, DuckDB threads and metrics-suite ClickHouse queries; set `POLARS_MAX_THREADS` before Python starts to bound client threads |
 | `OLAP_BENCHMARKS_BENCHMARK_MEMORY_GB` | Optional container and DuckDB memory budget in GiB |
+| `OLAP_BENCHMARKS_DUCKDB_STORAGE_MODE` | `native` (default) or read-only `parquet`; separate stores are required |
+| `OLAP_BENCHMARKS_DUCKDB_ASYNC_THREADS` | DuckDB I/O worker count, separate from compute threads (default 10) |
+| `OLAP_BENCHMARKS_DUCKDB_READ_AHEAD_DEPTH` | DuckDB read-ahead depth; `-1` uses memory-governed read-ahead |
 | `OLAP_BENCHMARKS_RUN_NOTE` | Run context recorded in `metadata.options.note` |
 | `OLAP_BENCHMARKS_MINIMUM_FREE_DISK_GB` | Disk reserve in GiB (default 40), checked before container startup and once per second during operations |
 | `OLAP_BENCHMARKS_OPERATION_TIMEOUT_SECONDS` | Optional wall-clock limit per operation; terminates an unresponsive benchmark process |
@@ -51,8 +54,9 @@ directory (see `olap config` for the resolved values). Environment variables ove
 | `OLAP_BENCHMARKS_MONETDB_CONSTRAINED_APPEND` | `auto` (default) stages bounded COPY windows and validates constrained targets once; use `direct` only for a diagnostic comparison or a measured server/workload exception |
 
 Doris shares the configured budget between its two containers: the frontend gets
-10% of the CPU allowance and the backend gets 90%; each gets half the memory.
-For 10 CPUs and 24 GiB, this is FE 1 CPU / 12 GiB and BE 9 CPUs / 12 GiB.
+10% of the CPU allowance and the backend gets 90%; the frontend gets 25% of
+memory and the backend gets 75%. For 10 CPUs and 24 GiB, this is FE 1 CPU /
+6 GiB and BE 9 CPUs / 18 GiB, with the FE heap set to 1 GiB initially and 4 GiB maximum.
 The allocation is recorded in run options, and swap is capped at the same memory
 limit for each container.
 
@@ -260,6 +264,10 @@ current profile is **`resident-hot-v1`**:
   restart); embedded engines (DuckDB, Polars) are reopened because every operation runs in a fresh
   process. The operating-system page cache is not dropped between operations or iterations, so the
   measured iterations read resident data: the profile measures hot latency, not cold storage reads.
+- **Result reuse.** Doris explicitly disables SQL-result and aggregate-query caches on both
+  Python and ConnectorX sessions, and publication requires before/after readbacks. Data, index,
+  and predicate caches remain available, consistent with the hot profile and ClickHouse's
+  predicate-cache default. This is not a cache-free execution profile.
 - **Timed boundary.** End-to-end client latency: `perf_counter` around the connector's `fetch()`,
   from sending the query until the full result is materialised as a Polars DataFrame, stored as
   `run_step.metadata.duration_ms`. Driver, transfer and conversion time are included; answer
@@ -412,7 +420,12 @@ its WAL. Final is the last disk reading of the run, which the sampler always tak
 finish time; a WAL that peaked mid-run and was checkpointed away shows a high peak and a
 small final.
 
-These are metric schema v7 semantics (v6 stored the cgroup charge as `server_mem_mb` and
+Metric schema v8 includes required external Parquet files in the store total for
+Polars and DuckDB Parquet mode, counting each file once. The recorded external
+baseline is already part of `disk_mb`; do not add it again. Temporary staging and
+spill are excluded from this total and need separate observations.
+
+The memory and WAL columns retain v7 semantics (v6 stored the cgroup charge as `server_mem_mb` and
 had no WAL split; v5 sampled every column on one shared ~0.3–0.5 Hz schedule; v4 renamed
 to `server_mem_mb`) and must not be compared as identical measurements with v2/v3
 client-memory data. Runs recorded before v7 keep their charge in `server_charge_mb` and
@@ -474,8 +487,12 @@ profile, recorded commits with clean trees and one system snapshot, and every co
 digest per image (the same one for all runs of an engine). MonetDB runs must additionally use the ADBC
 driver and have clean session baselines. The error lists every offending cell.
 
-The published file is compacted, and `manifest.json` records its
-`results_db_sha256` and `results_db_bytes`. With `--merge`, runs are merged into
+The published file is compacted to the explicit DuckDB `v1.4.0` storage
+compatibility target so the browser's separately released WASM engine can read
+it. Benchmark stores and ordinary results compaction use DuckDB 2.0 format.
+The publication manifest records the format, minimum reader and writer engine
+in `results_db_format`, as well as `results_db_sha256` and `results_db_bytes`.
+With `--merge`, runs are merged into
 the already-published file instead of replacing it: the revision's runs replace
 every published run of the same cell (system, db, db_version, db_driver, suite,
 suite_scale_factor, operation), and everything else is kept. A merge accepts different
@@ -504,13 +521,21 @@ uv run olap publish --revision 2026-10-expanded --campaign \
 ```
 
 **`results.db` is not committed.** It is large and rewritten on every publish, so
-git would keep every version forever. It ships as the `results.db` asset on the
-`data` release: `--upload` replaces that asset via the GitHub CLI and triggers
-the Pages workflow (`gh workflow run pages.yml --ref main`), and the site
-build fetches it with `bun run fetch-data` (the Pages workflow runs this before
-`bun run build`, then `bun run verify-data`, which fails the build unless the asset's size and SHA-256 match
-`results_db_bytes` and `results_db_sha256` in `manifest.json`). The
-small `manifest.json`, `queries.json` and `suites.json` stay in git.
+git would keep every version forever. It ships as `results-{sha256}.db` on the
+existing `data` release. `--upload` verifies the local file against the manifest's
+`results_db_bytes` and `results_db_sha256` before any GitHub call and uploads only
+that hash-named asset. Older release assets remain available. Upload first, then
+merge the matching `manifest.json`, `queries.json`, `suites.json` and required site
+code into `main`; that merge triggers the normal Pages workflow. Uploading does
+not dispatch a deployment against a different branch's manifest.
+
+`bun run fetch-data` derives the release asset name from the committed manifest's
+SHA-256, checks its required storage contract, and downloads to a temporary file.
+It verifies size and hash before atomically replacing local `results.db`; a failed
+download leaves the existing local database intact. There is no fallback to the
+old fixed-name release asset. Pages also runs `bun run verify-data`, schema checks,
+and browser reader tests before uploading the built site. The small JSON metadata
+files stay in git.
 
 A fresh clone therefore needs the database before the site will run:
 
@@ -545,8 +570,8 @@ uv run olap publish --revision metrics-working --merge
 
 `matrix run` loads and cleans up one engine at a time. Suite filters never run other
 suites. Merge keeps all published cells absent from the revision. Validate the complete
-staged set before uploading; commit the new manifest together with the code needed to
-read the new suite, then upload the asset. The site's build verifies that manifest.
+staged set before uploading; upload the hash-named asset, then merge the new manifest
+together with the code needed to read the new suite. The site's build verifies that manifest.
 
 ### Selected-metric range workloads
 
@@ -673,6 +698,17 @@ To benchmark a new version: edit its entry in `versions.toml` (or `pyproject.tom
 and `uv lock` for DuckDB and Polars), run `olap versions --check`, rerun the
 affected cells (`olap matrix status` lists them as stale), and publish. Old-version
 runs remain in the results database until `olap results prune --stale-versions`.
+
+DuckDB's Python engine, the site's native Node code generator and its browser
+WASM bundle have separate releases. The Python and Node tools use DuckDB 2.0;
+a WASM package version is not the version of its embedded engine. Verify the
+instantiated browser engine and its ability to read the exported file before
+changing the publication format. Opening an older benchmark store with 2.0
+does not upgrade its layout: rebuild stores for a new storage comparison.
+DuckDB 2.0's asynchronous Parquet I/O is distinct from the browser's
+`AsyncDuckDB` worker interface. Regular compute threads, the I/O worker pool
+and read-ahead settings must be recorded separately; local resident-hot results
+do not establish the speedup for remote object storage.
 
 ## Results schema migrations
 
