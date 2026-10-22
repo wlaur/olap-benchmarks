@@ -287,6 +287,18 @@ def _hard_abort(session: Session, *, start: int = 1, clients: int = 1, phase: st
     return run_id
 
 
+def _late_failure(session: Session, *, phase: str = "measured", result: str | None = "timeout") -> int:
+    run_id = _hard_abort(session, phase=phase)
+    run = session.get(Run, run_id)
+    assert run is not None and run.finished_at is not None
+    step = _step(session, run_id, phase=phase)
+    step.status, step.result_status = "failed", result
+    step.finished_at = run.finished_at + timedelta(microseconds=292_133)
+    step.error_type, step.error_message = "OperationalError", "canceling statement due to user request"
+    step.metadata_json = {**(step.metadata_json or {}), "duration_ms": 1.0, "request_status": result}
+    return run_id
+
+
 def test_campaign_retains_separate_client_duration_seed_and_manifest_variants(tmp_path: Path) -> None:
     def add(session: Session) -> None:
         _analytical(session, start=1)
@@ -550,6 +562,187 @@ def test_failed_runs_retain_unfinished_requests_and_unknown_readback(tmp_path: P
                 }
     finally:
         engine.dispose()
+
+
+def test_postgres_cancellation_preserves_late_native_timeout_and_inflight_requests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(PINS, "postgres", "fixture-version")
+    monkeypatch.setitem(DRIVERS, "postgres", None)
+    started = datetime(2026, 10, 22, 13, 11, 11, 64_373)
+    aborted = datetime(2026, 10, 22, 13, 11, 59, 355_522)
+    request_started = datetime(2026, 10, 22, 13, 11, 14, 64_356)
+    request_finished = datetime(2026, 10, 22, 13, 11, 59, 647_655)
+    duration = 45_577.638791000936
+
+    def add(session: Session) -> None:
+        _normal(session, db="postgres")
+        run_id = _analytical(session, clients=16, status="failed", db="postgres")
+
+        def change(run: Run, metadata: Metadata) -> None:
+            run.started_at, run.finished_at = started, aborted
+            run.error_type, run.error_message = "KeyboardInterrupt", ""
+            metadata["execution"] = {
+                "mode": "container",
+                "container_images": {"server": "fixture:latest"},
+                "container_image_digests": {"server": "fixture@sha256:" + "a" * 64},
+            }
+
+        _edit(session, run_id, change)
+        queries = _queries("postgres")
+        for client in (*range(12), 13):
+            name = balanced_query_order([query.name for query in queries], 99, client)[0]
+            metadata: Metadata = {
+                "request_id": f"client-{client}:warmup:0",
+                "client_id": client,
+                "phase": "warmup",
+                "sequence": 0,
+                "query_sha256": next(sha256_text(query.query) for query in queries if query.name == name),
+            }
+            if client == 13:
+                metadata.update(duration_ms=duration, request_status="timeout")
+            session.add(
+                RunStep(
+                    run_id=run_id,
+                    step_type="query",
+                    step_name="analytical_request",
+                    query_name=name,
+                    status="failed" if client == 13 else "running",
+                    result_status="timeout" if client == 13 else None,
+                    started_at=request_started,
+                    finished_at=request_finished if client == 13 else None,
+                    error_type="OperationalError" if client == 13 else None,
+                    error_message="(psycopg.errors.QueryCanceled) canceling statement due to user request"
+                    if client == 13
+                    else None,
+                    metadata_json=metadata,
+                )
+            )
+
+    path = _db(tmp_path, add)
+    before = path.read_bytes()
+    _validate(path, cells=[*CELLS, MatrixCell("postgres", "tpc_h", 10, "select")])
+    assert path.read_bytes() == before
+    engine = get_results_engine(db_path=path)
+    try:
+        with Session(engine) as session:
+            run = session.scalar(select(Run).where(Run.operation == "analytical"))
+            assert run is not None and run.started_at == started and run.finished_at == aborted
+            evidence = (run.metadata_json or {})["analytical"]
+            assert (
+                not {"overall", "per_query", "warmup_summary", "actual_elapsed_seconds", "drain_seconds"}
+                & evidence.keys()
+            )
+            assert evidence["measurement_started_at"] is None and evidence["measurement_finished_at"] is None
+            assert "warmup_finished_at" not in evidence
+            requests = session.scalars(select(RunStep).where(RunStep.run_id == run.id)).all()
+            assert len(requests) == 13 and sum(step.status == "running" for step in requests) == 12
+            failed = next(step for step in requests if step.status == "failed")
+            assert failed.started_at == request_started and failed.finished_at == request_finished
+            assert failed.result_status == "timeout" and failed.row_count is None
+            assert (failed.metadata_json or {})["duration_ms"] == duration
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("phase", ["warmup", "measured"])
+@pytest.mark.parametrize("result", [None, "error", "timeout"])
+@pytest.mark.parametrize("delay_seconds", [0, 30])
+def test_failed_runs_allow_unscored_errors_after_failure_marker_without_extending_elapsed(
+    tmp_path: Path, phase: str, result: str | None, delay_seconds: int
+) -> None:
+    def add(session: Session) -> None:
+        run_id = _late_failure(session, phase=phase, result=result)
+        step = _step(session, run_id, phase=phase)
+        assert step.finished_at is not None
+        step.finished_at += timedelta(seconds=delay_seconds)
+
+    path = _db(tmp_path, add)
+    before = path.read_bytes()
+    _validate(path)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "completed_run",
+        "running_run",
+        "unfinished_run",
+        "run_error_type",
+        "run_error_message",
+        "after_cutoff",
+        "successful_request",
+        "rows",
+        "answer",
+        "error_type",
+        "error_message",
+        "request_status",
+        "duration",
+        "excess_duration",
+    ],
+)
+def test_late_failures_require_terminal_run_failure_and_unscored_request_evidence(tmp_path: Path, problem: str) -> None:
+    def add(session: Session) -> None:
+        run_id = _late_failure(session)
+        step = _step(session, run_id)
+
+        def change(run: Run, _metadata: Metadata) -> None:
+            request = deepcopy(step.metadata_json or {})
+            if problem == "completed_run":
+                run.status, run.error_type, run.error_message = "completed", None, None
+            elif problem == "running_run":
+                run.status = "running"
+            elif problem == "unfinished_run":
+                run.finished_at = None
+            elif problem == "run_error_type":
+                run.error_type = None
+            elif problem == "run_error_message":
+                run.error_message = None
+            elif problem == "after_cutoff":
+                assert run.finished_at is not None
+                step.started_at = run.finished_at + timedelta(microseconds=1)
+            elif problem == "successful_request":
+                step.status, step.result_status, step.row_count = "completed", "ok", 1
+                step.error_type, step.error_message = None, None
+                request.update(**deepcopy(ANSWER), request_status="completed")
+            elif problem == "rows":
+                step.row_count = 0
+            elif problem == "answer":
+                request["answer_hash"] = None
+            elif problem == "error_type":
+                step.error_type = " "
+            elif problem == "error_message":
+                step.error_message = None
+            elif problem == "request_status":
+                request["request_status"] = "completed"
+            elif problem == "duration":
+                request["duration_ms"] = -1
+            else:
+                assert step.finished_at is not None
+                request["duration_ms"] = (step.finished_at - step.started_at).total_seconds() * 1000 + 100
+            step.metadata_json = request
+
+        _edit(session, run_id, change)
+
+    with pytest.raises(PublishValidationError, match="unfinished|terminal|explicit run error|exceeds|unscored"):
+        _validate(_db(tmp_path, add))
+
+
+@pytest.mark.parametrize("phase", ["warmup", "measured"])
+def test_late_failures_still_respect_explicit_phase_completion(tmp_path: Path, phase: str) -> None:
+    def add(session: Session) -> None:
+        run_id = _late_failure(session, phase=phase)
+
+        def change(run: Run, metadata: Metadata) -> None:
+            assert run.finished_at is not None
+            boundary = "warmup_finished_at" if phase == "warmup" else "measurement_finished_at"
+            metadata["analytical"][boundary] = run.finished_at.replace(tzinfo=UTC).isoformat()
+
+        _edit(session, run_id, change)
+
+    with pytest.raises(PublishValidationError, match="contradictory request timestamps"):
+        _validate(_db(tmp_path, add))
 
 
 @pytest.mark.parametrize(

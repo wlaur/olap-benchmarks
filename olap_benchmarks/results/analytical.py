@@ -500,10 +500,24 @@ def _request_problems(
             and "duration_ms" not in meta
             and "request_status" not in meta
         )
+        duration = meta.get("duration_ms")
+        unscored_failure = (
+            request.status == "failed"
+            and request.result in (None, "error", "timeout")
+            and _text(request.error_type)
+            and request.error_message is not None
+            and request.rows is None
+            and not any(key.startswith("answer_") for key in meta)
+            and (duration is None or _number(duration))
+            and meta.get("request_status") in (None, request.result)
+        )
+        # Cancelled workers can return explicit errors after the run's failure marker.
         valid_times = (
             inflight and run.started_at <= request.started <= finished
             if request.finished is None
-            else run.started_at <= request.started <= request.finished <= finished
+            else run.started_at <= request.started <= finished
+            and request.started <= request.finished
+            and (request.finished <= finished or (run.status == "failed" and unscored_failure))
         )
         if (
             not valid_times
@@ -520,7 +534,6 @@ def _request_problems(
             problems.append(f"step {request.id} has unfinished or contradictory request timestamps")
         else:
             client_requests[client].append(request)
-        duration = meta.get("duration_ms")
         if (
             _number(duration)
             and request.finished is not None
@@ -560,14 +573,7 @@ def _request_problems(
                 if phase == "warmup":
                     successful_warmups[client].add(sequence)
         elif request.status == "failed" and request.result in (None, "error", "timeout"):
-            if (
-                not _text(request.error_type)
-                or request.error_message is None
-                or request.rows is not None
-                or any(key.startswith("answer_") for key in meta)
-                or (duration is not None and not _number(duration))
-                or meta.get("request_status") not in (None, request.result)
-            ):
+            if not unscored_failure:
                 problems.append(f"step {request.id} lacks an explicit, unscored request failure")
             if request.result is None:
                 unknown_phases.add(phase)
