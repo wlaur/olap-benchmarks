@@ -4,6 +4,8 @@ test("home compares fixed families and opens the selected explorer", async ({ pa
   const errors: string[] = []
   page.on("pageerror", (error) => errors.push(error.message))
   await page.goto("#/")
+  await expect(page.getByRole("heading", { name: "Overall database ranking" })).toBeVisible()
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Compare by workload family" })).toBeVisible()
   await page.getByRole("button", { name: "ClickBench", exact: true }).click()
   await expect(
@@ -24,6 +26,7 @@ test("home compares fixed families and opens the selected explorer", async ({ pa
 
 test("home publication scores remain fixed when engines are hidden", async ({ page }) => {
   await page.goto("#/")
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   await page.getByRole("button", { name: "ClickBench", exact: true }).click()
   const scores = page
     .locator("[data-comparison-engine]")
@@ -63,6 +66,7 @@ test("score headers and evidence fit desktop, iPad and mobile widths", async ({
   page,
 }, testInfo) => {
   await page.goto("#/")
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   await page.getByRole("button", { name: "RTABench", exact: true }).click()
   await expect(
     page.getByText("31 fixed performance queries · 31 coverage positions · raw track"),
@@ -90,10 +94,17 @@ test("score headers and evidence fit desktop, iPad and mobile widths", async ({
   }
 })
 
-test("family weights do not create a query-count-weighted overall ranking", async ({ page }) => {
+test("workload drilldown retains strict family eligibility and selected scale", async ({
+  page,
+}) => {
   await page.goto("#/")
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   await page.getByText("Comparison policy", { exact: true }).click()
-  await expect(page.getByText(/no overall ranking is published/)).toBeVisible()
+  await expect(
+    page.getByText(
+      /Strict family eligibility and latency ratios remain separate from the overall index/,
+    ),
+  ).toBeVisible()
   await page.getByRole("button", { name: "Time Series", exact: true }).click()
   await page.getByRole("button", { name: "SF 10", exact: true }).click()
   await expect(page.getByRole("button", { name: "SF 10", exact: true })).toHaveAttribute(

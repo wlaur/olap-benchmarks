@@ -19,6 +19,7 @@ test("rendered eligibility retains fixed coverage, exclusions and execution unkn
 }) => {
   await usePublicationFixture(page, fixture.buffer)
   await page.goto("#/")
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   const engine = (db: string) =>
     page.getByRole("listitem", { name: `${db} comparison`, exact: true })
   await expect(engine("fast").locator("[data-publication-score]")).toHaveText("1.00×")

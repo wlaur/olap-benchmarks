@@ -86,6 +86,7 @@ test("analytical runs retain qualified latency, failures and drilldown without a
 }, testInfo) => {
   await usePublicationFixture(page, fixture.buffer)
   await page.goto("#/")
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   const section = page.getByRole("region", { name: "Analytical concurrency evidence", exact: true })
   await expect(section).toBeVisible()
   const rows = section.locator("[data-analytical-run]")
@@ -144,6 +145,7 @@ test("publications with no analytical runs have no visible analytical section", 
 }) => {
   await usePublicationFixture(page, empty.buffer)
   await page.goto("#/")
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
   await expect(page.getByRole("listitem", { name: "fast comparison", exact: true })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Analytical concurrency evidence" })).toHaveCount(
     0,

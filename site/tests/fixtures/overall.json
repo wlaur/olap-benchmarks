@@ -1,0 +1,20 @@
+{
+  "results_db_sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+  "policy": "bounded-log-utility-v1",
+  "families": 11,
+  "queries": 871,
+  "within_workload_pairs": 207,
+  "rows": [
+    { "db": "duckdb", "score": 88.9, "coverage": 100, "band": [1, 1], "capped": 0 },
+    { "db": "clickhouse", "score": 73.7, "coverage": 100, "band": [2, 2], "capped": 1 },
+    { "db": "starrocks", "score": 57.4, "coverage": 81.7, "band": [3, 4], "capped": 1 },
+    { "db": "monetdb", "score": 51.3, "coverage": 74.9, "band": [3, 4], "capped": 17 },
+    { "db": "polars", "score": 29.6, "coverage": 45.5, "band": [5, 8], "capped": 0 },
+    { "db": "postgres", "score": 27.7, "coverage": 75.1, "band": [5, 9], "capped": 50 },
+    { "db": "doris", "score": 26.3, "coverage": 45.2, "band": [5, 10], "capped": 4 },
+    { "db": "questdb", "score": 26.0, "coverage": 44.6, "band": [6, 9], "capped": 14 },
+    { "db": "timescaledb", "score": 25.9, "coverage": 66.1, "band": [6, 9], "capped": 21 },
+    { "db": "arc", "score": 20.9, "coverage": 43.8, "band": [9, 10], "capped": 28 },
+    { "db": "tdengine", "score": 5.5, "coverage": 9.1, "band": [11, 11], "capped": 0 }
+  ]
+}

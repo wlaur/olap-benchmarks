@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 
 import { compareFamily } from "../lib/observations"
+import { aggregateOverview } from "../lib/overall"
 import { useComparisonData } from "./useComparisonData"
 
 export function useHomeOverview(system: string | null) {
@@ -18,8 +19,17 @@ export function useHomeOverview(system: string | null) {
         : [],
     [data, system],
   )
+  const aggregation = useMemo(() => {
+    try {
+      return { overall: aggregateOverview(families), error: null }
+    } catch (cause: unknown) {
+      return { overall: aggregateOverview([]), error: String(cause) }
+    }
+  }, [families])
   return {
     families,
+    overall: aggregation.overall,
+    overallError: aggregation.error,
     loading,
     error,
     retrospective: data?.manifest.retrospective ?? null,
