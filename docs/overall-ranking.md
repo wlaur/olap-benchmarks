@@ -171,11 +171,9 @@ and an updated pinned acceptance fixture.
 
 Middle ranks depend materially on reasonable method choices. At tested caps
 of 150 and above, PostgreSQL overtakes Polars; at 1,000, PostgreSQL is fifth and
-TimescaleDB sixth. A domain-balanced alternative puts Doris fifth. An
-exploratory query-bootstrap check gives overlapping rank ranges within 6–9 for
-PostgreSQL, Doris, QuestDB and TimescaleDB. These are **method and workload-mix
-sensitivity checks**, not measurement confidence intervals. Query resampling
-does not supply independent campaign repetitions.
+TimescaleDB sixth. A domain-balanced alternative puts Doris fifth. These are
+**method and workload-mix sensitivity checks**, not measurement confidence
+intervals or independent campaign repetitions.
 
 This is a custom scalar publication policy. A geometric mean over only
 successful families compares different workload sets; assigning failures an
@@ -213,6 +211,7 @@ The following checks keep the same observations and denominators:
 | Cap 100 (published) | Polars, PostgreSQL, Doris, QuestDB, TimescaleDB, Arc | 0 / 207 |
 | Cap 1,000 | PostgreSQL, TimescaleDB, Polars, Doris, QuestDB, Arc | 0 / 207 |
 | Four equal domain weights, cap 100 | Doris, Polars, PostgreSQL, TimescaleDB, QuestDB, Arc | 0 / 207 |
+| Add 10 ms to each timing, cap 100 | PostgreSQL, TimescaleDB, Polars, QuestDB, Arc, Doris | 5 / 207 |
 
 The domain check assigns one quarter each to time series (Time Series, Metrics,
 Ranges, Device Telemetry), events (RTABench, ClickBench), documents (JSONBench,
@@ -239,6 +238,14 @@ not a confidence interval. Adapter coverage, layouts and tuning effort are
 unequal; preparation and resource-enforcement scopes also differ. The index
 cannot isolate execution kernels, predict production workloads or establish a
 general memory-efficiency ranking.
+
+In this publication, 512 of 871 positions (59%) have a fastest median below
+10 ms; DuckDB sets 356 of those. The diagnostic 10 ms offset shrinks the
+DuckDB–ClickHouse index gap from 15.2 to 6.4 points while preserving the first
+four positions and TDengine last. It also reverses five strict within-workload
+comparisons. The offset is not adopted: it substitutes an assumed deployment
+overhead for the recorded timings. Its sensitivity illustrates how strongly
+small fetches influence this particular workload mix.
 
 One frozen campaign asymmetry affects PostgreSQL and TimescaleDB TPC-DS. At SF1,
 Q11 was an explicit campaign exclusion and the completed partial runs can earn

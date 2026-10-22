@@ -31,6 +31,7 @@ export function HomeScoreTable() {
     overview.families[0]
   const cell = active?.scales.find((entry) => entry.scale === selectedScale) ?? active?.scales[0]
   const loading = systemLoading || overview.loading
+  const overallUnavailable = view === "overall" && overview.overallError !== null
   const error = overview.error ?? systemError ?? (view === "overall" ? overview.overallError : null)
   const engines =
     view === "overall"
@@ -84,7 +85,12 @@ export function HomeScoreTable() {
           </ChartFrame>
         </div>
       ) : error ? (
-        <NoticeStrip tone="warning">Failed to load comparison: {error}</NoticeStrip>
+        <NoticeStrip tone="warning">
+          {overallUnavailable
+            ? "Overall index unavailable for this system"
+            : "Failed to load comparison"}
+          : {error}
+        </NoticeStrip>
       ) : overview.families.length > 0 ? (
         <>
           <details className="text-xs text-slate-400">

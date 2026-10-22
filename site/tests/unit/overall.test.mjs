@@ -705,6 +705,34 @@ describe("bounded logarithmic overall query utility", () => {
       expect(engine(result, db)).toMatchObject({ rank: 1, rankRange: [1, 3] })
   })
 
+  test("ties use the displayed toFixed value at a half-decimal boundary", () => {
+    const a = family("a", 1, [1], { weight: 23 }),
+      b = family("b", 1, [1], { weight: 1977 }),
+      result = score(
+        [a, b],
+        [
+          run("ref", a),
+          run("peer", a),
+          run("ref", b),
+          run("peer", b),
+          run("boundary", a),
+          run("nearby", a, [100 ** (1 - 1.14 / 1.15)]),
+        ],
+      )
+    expect(engine(result, "boundary").score).toBe(1.15)
+    expect(engine(result, "boundary").score.toFixed(1)).toBe("1.1")
+    expect(engine(result, "nearby").score.toFixed(1)).toBe("1.1")
+    expect(engine(result, "boundary").rank).toBe(3)
+    expect(engine(result, "nearby").rank).toBe(3)
+  })
+
+  test("a ranked zero-credit result sorts before unranked evidence gaps", () => {
+    const f = family("a", 1),
+      result = score([f], [run("ref", f), run("peer", f), run("z-capped", f, [100])])
+    expect(engine(result, "z-capped")).toMatchObject({ score: 0, coverage: 100, rank: 3 })
+    expect(result.rows.at(-1).db).toBe("unmeasured")
+  })
+
   test("scored contributions remain bounded by fixed weighted coverage", () => {
     const a = family("a", 3, [1, 10]),
       b = family("b", 2)

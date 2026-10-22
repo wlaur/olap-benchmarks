@@ -83,6 +83,6 @@ test("publication scope stays visible across the results pages", async ({ page }
     const notice = page.getByRole("alert").filter({ has: report })
     await expect(notice).toContainText(`${publication.select_cohorts} query runs`)
     await expect(notice).toContainText(`${publication.partial_select_cohorts} are partial`)
-    await expect(notice).toContainText("Partial coverage is reported separately")
+    await expect(notice).toContainText("Coverage and comparison rules are shown with each result")
   }
 })

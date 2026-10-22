@@ -184,7 +184,7 @@ test("overall verification errors are visible while workload evidence remains ac
     })
     await page.goto("#/")
     await expect(
-      page.getByRole("alert").filter({ hasText: "Failed to load comparison" }),
+      page.getByRole("alert").filter({ hasText: "Overall index unavailable for this system" }),
     ).toContainText("Run exists for an unregistered scale")
     await expect(page.locator("[data-overall-score]")).toHaveCount(0)
     await page.getByRole("button", { name: "By workload", exact: true }).click()

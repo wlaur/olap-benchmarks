@@ -66,8 +66,8 @@ function bounded(value: number): number {
 }
 
 function rankOf(score: number, scores: readonly number[]): number {
-  const shown = Math.round(score * 10)
-  return 1 + scores.filter((other) => Math.round(other * 10) > shown).length
+  const shown = Number(score.toFixed(1))
+  return 1 + scores.filter((other) => Number(other.toFixed(1)) > shown).length
 }
 
 export function aggregateOverview(overview: readonly FamilyOverview[]): OverallRanking {
@@ -268,7 +268,10 @@ export function aggregateOverview(overview: readonly FamilyOverview[]): OverallR
       0,
     ),
     rows: rows.sort(
-      (a, b) => Math.round(b.score * 10) - Math.round(a.score * 10) || a.db.localeCompare(b.db),
+      (a, b) =>
+        Number(b.score.toFixed(1)) - Number(a.score.toFixed(1)) ||
+        Number(a.rank === null) - Number(b.rank === null) ||
+        a.db.localeCompare(b.db),
     ),
   }
 }
