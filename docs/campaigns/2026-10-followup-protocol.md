@@ -67,6 +67,30 @@ gates; they do not establish exact-schema equivalence or universal correctness.
 Unresolved mismatches block the affected performance comparison. The existing
 ClickBench Q28 semantic exclusion remains visible in coverage and query detail.
 
+### Ordering-evidence amendment after the first SF10 cohort
+
+The first DuckDB TPC-DS SF10 SELECT, run 589, completed all 99 queries but the
+order-sensitive `canonical-v11` hashes varied for Q18, Q65 and Q71. Six full-data
+diagnostic repetitions of each query retained identical row multisets. The
+varying rows have equal declared ORDER BY keys: Q18's four projected dimensions,
+Q65's store name/item description, and Q71's amount/brand ID/hour. The SQL does
+not prescribe an order inside those ties. This is not evidence of a wrong
+answer.
+
+Before measuring the other SF10 engines, introduce a separate, versioned hash
+policy for those three query identities. Normalize only the order within
+consecutive equal ORDER BY key groups, retaining every row and duplicate, all
+values, and the sequence of distinct key groups. Changed LIMIT-boundary row
+membership must still disagree. Record the policy and key positions with the
+answer evidence. Default hashes and all timed SQL remain unchanged; no query
+is excluded from coverage or the performance set.
+
+Run 589 remains retained as the initial diagnostic observation. Repeat the
+complete DuckDB SF10 SELECT under the corrected evidence policy; the other
+five completed DuckDB cells and the original 99 cells need no rerun for this
+change. This amendment follows observed evidence and is not presented as part
+of the original premeasurement declaration.
+
 ## Analytical streams
 
 Measure TPC-H SF10 for DuckDB, Polars, PostgreSQL and ClickHouse at 1, 4 and 16

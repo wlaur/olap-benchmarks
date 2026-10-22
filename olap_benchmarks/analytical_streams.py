@@ -19,6 +19,7 @@ from sqlalchemy import text
 
 from .limits import start_query_watchdog
 from .profile import BenchmarkProfile
+from .query_registry import ANSWER_ORDER_KEYS
 from .results.hashing import build_answer_metadata
 from .run_metadata import digest_hashes, sha256_text
 from .settings import DatabaseName, get_settings
@@ -399,7 +400,12 @@ def execute_analytical_request(
                 duration_ms = (perf_counter() - t0) * 1_000
                 if watchdog is not None:
                     watchdog.unlink(missing_ok=True)
-        answer = build_answer_metadata(frame)
+        order_keys = (
+            ANSWER_ORDER_KEYS.get((worker._current_suite, query.name)) if worker._current_suite is not None else None
+        )
+        answer = (
+            build_answer_metadata(frame) if order_keys is None else build_answer_metadata(frame, order_keys=order_keys)
+        )
         worker._finish_timed_step(
             step, "completed", "query", row_count=frame.height, duration_ms=duration_ms, metadata={**metadata, **answer}
         )

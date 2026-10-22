@@ -18,6 +18,12 @@ The JOB candidate is exactly `upstream/fkindexes.sql`; no precomputed join or
 aggregate results are allowed. A faster selected query alone does not justify
 an overall workload claim.
 
+Before observing the first PostgreSQL JOB timings, fix representative plan and
+paired-control queries to `1a`, `6a`, `17a` and `28a`. Those controls supplement
+the complete 113-query answer and final measurement requirements; they do not
+replace the fixed workload. Telemetry controls remain queries 02 and 03 at both
+declared scales.
+
 Use at most three candidate patterns and twenty minutes of live diagnostics per
 engine/suite across scales, following the existing bounded protocol. Record
 unchanged plans, noisy controls, failed correctness gates and rejected physical

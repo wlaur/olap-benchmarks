@@ -97,3 +97,28 @@ fixtures. Database code generation matches the selected asset schema. The
 original published asset still matches its declared SHA-256 and byte length.
 Full-scale outcomes belong in the follow-up campaign report once measurement
 and publication validation finish.
+
+## First full-data checks and ordering evidence
+
+The first DuckDB batch completed telemetry SF1/SF10, all 113 JOB queries, both
+JSON tracks, all 22 common-Parquet queries and all 99 TPC-DS SF10 queries.
+The five raw/prepared JSON pairs agree, and common-Parquet hashes agree with
+the retained DuckDB TPC-H SF10 answers.
+
+TPC-DS Q18/Q65/Q71 exposed SQL-permitted output-order ties at SF10. Six full-data
+repetitions per query had one row-multiset hash each, while their ordered hashes
+varied. Applying `canonical-v11-ordered-ties-v1` produced one hash per query
+without changing SQL or row membership. The policy preserves distinct-key-group
+order, values and duplicate counts, and does not equate different LIMIT-boundary
+memberships. Its registry covers only those three query identities. Static
+review verified their complete order keys and output positions across all
+registered SQL contracts; dedicated tests cover the failure cases.
+
+The [protocol amendment](2026-10-followup-protocol.md#ordering-evidence-amendment-after-the-first-sf10-cohort)
+retains the initial run 589 diagnostically and requires a complete DuckDB SF10
+SELECT replacement before ranking. The other five completed cells and the
+original 99 measurements retain their evidence.
+
+After the scoped hashing change, repository-wide Ruff and Pyright passed again;
+the full non-live suite passed 1,933 tests, with one skipped and fourteen live
+tests excluded. The separate static review found no actionable defect.

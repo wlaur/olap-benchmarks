@@ -25,6 +25,7 @@ from ..limits import query_deadline, start_query_watchdog
 from ..metrics.sampler import SAMPLING_INTERVAL_SECONDS, start_metric_sampler
 from ..metrics.storage import RunStatus, Storage, WriterMessage
 from ..profile import BENCHMARK_PROFILE, BenchmarkProfile
+from ..query_registry import ANSWER_ORDER_KEYS
 from ..results.hashing import build_answer_metadata
 from ..run_metadata import (
     ExecutionMode,
@@ -714,13 +715,17 @@ class Database(BaseModel, ABC):
                 self._query_watchdog_path.unlink(missing_ok=True)
             self._pop_active_step(step_id)
 
+        order_keys = (
+            ANSWER_ORDER_KEYS.get((self._current_suite, query_name)) if self._current_suite is not None else None
+        )
+        answer = build_answer_metadata(df) if order_keys is None else build_answer_metadata(df, order_keys=order_keys)
         self._finish_timed_step(
             step_id=step_id,
             status="completed",
             step_type="query",
             row_count=df.shape[0],
             duration_ms=1_000 * duration_seconds,
-            metadata=build_answer_metadata(df),
+            metadata=answer,
         )
 
         return df, duration_seconds
