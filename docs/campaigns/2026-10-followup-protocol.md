@@ -1,9 +1,10 @@
 # October publication follow-up protocol
 
-This protocol is recorded before follow-up measurements. It extends the existing
-macOS campaign with workloads and evidence; it does not repeat the 99 original
-SELECT cells to implement the publication policy. Linux replication and new
-database engines are outside this pass.
+The initial protocol was recorded before follow-up measurements. Ordering
+amendments below explicitly record later observations and policy changes. The
+protocol extends the existing macOS campaign with workloads and evidence; it
+does not repeat the 99 original SELECT cells to implement the publication
+policy. Linux replication and new database engines are outside this pass.
 
 Execution modes remain those of the original campaign: server databases use
 their pinned ARM64 Docker containers on the macOS host; DuckDB and Polars run
@@ -90,6 +91,34 @@ complete DuckDB SF10 SELECT under the corrected evidence policy; the other
 five completed DuckDB cells and the original 99 cells need no rerun for this
 change. This amendment follows observed evidence and is not presented as part
 of the original premeasurement declaration.
+
+### Q44 amendment after the first ClickHouse SF10 cohort
+
+The selected ClickHouse TPC-DS SF10 SELECT, run 604, subsequently exposed Q44
+order variation. Its complete ten-row outputs show only the two rank-8 rows
+swapping positions, with identical ranks and product names. The final ORDER BY
+uses only `asceding.rnk`, projected at zero-based output position 0. Six further
+full-data repetitions each on DuckDB and ClickHouse had identical exact Python
+row multisets, including duplicate counts, and one shared ordered-ties hash.
+These later repetitions were themselves order-stable; the observed variation
+is retained in run 604's log. Driver schemas remain recorded separately.
+
+Add only `("tpc_ds", "44"): (0,)` to the existing
+`canonical-v11-ordered-ties-v1` registry, making four entries with Q18/Q65/Q71.
+Apply the same consecutive full-key tie-group normalization, preserving all
+rows, duplicates and values, distinct-group order and LIMIT membership. Default
+`canonical-v11`, all other query identities and all timed SQL remain unchanged.
+Static review of all 99 queries also identified 25 other candidates with
+complete projected order keys, but no observed instability justifies adding
+them. Q36/Q70/Q86 have hidden conditional order expressions and remain outside
+this projected-key policy.
+
+Retain DuckDB run 591 and ClickHouse run 604 as diagnostics, alongside run 589.
+After committing the validated combined source, the parent must rerun both
+complete 99-query DuckDB and ClickHouse TPC-DS SF10 SELECT workloads under the
+four-entry policy before selecting replacements. These full reruns are pending;
+the other completed cells and all 99 original baseline cells need no rerun.
+This second amendment follows measurement and is not a premeasurement claim.
 
 ## Analytical streams
 

@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 
 from .. import analytical_streams
-from ..dbs import get_databases
+from ..dbs import Database, get_databases
 from ..matrix import MatrixCell
 from ..metrics.storage import Storage
 from ..query_registry import (
@@ -21,6 +21,7 @@ from ..results.cells import CellStatus, format_matrix_status
 from ..results.hashing import build_answer_metadata
 from ..settings import SUITE_NAMES, SUITE_SPECS, DatabaseName, SuiteName
 from ..suites import BenchmarkSuite
+from ..suites.tpc_ds.config import TpcDs
 from .test_benchmark_profile import ProfileDatabase, RecordingStorage
 
 
@@ -98,9 +99,10 @@ def test_clickbench_q28_is_the_only_answer_comparison_exclusion() -> None:
     assert list(ANSWER_COMPARISON_EXCLUSIONS) == [("clickbench", "Q28", None)]
 
 
-def test_answer_order_keys_are_scoped_to_three_tpcds_queries() -> None:
+def test_answer_order_keys_are_scoped_to_four_tpcds_queries() -> None:
     assert ANSWER_ORDER_KEYS == {
         ("tpc_ds", "18"): (1, 2, 3, 0),
+        ("tpc_ds", "44"): (0,),
         ("tpc_ds", "65"): (0, 1),
         ("tpc_ds", "71"): (4, 0, 2),
     }
@@ -146,18 +148,38 @@ def test_answer_order_keys_match_each_registered_engine_sql(
         assert body.startswith(projection), f"{db_name}:{query_name} has different output positions"
 
 
+@pytest.mark.parametrize(("db_name", "database"), list(get_databases().items()))
+def test_tpcds_q44_sql_contract_for_each_registered_engine(db_name: DatabaseName, database: Database) -> None:
+    suite_class = database.suite_registry().get("tpc_ds", TpcDs)
+    suite = suite_class(db=database, name="tpc_ds", scale_factor=10)
+    sql = " ".join(suite.load_query("44").lower().split())
+    body, separator, actual_order = sql.rpartition(" order by ")
+
+    assert body.startswith(
+        "select asceding.rnk, i1.i_product_name best_performing, i2.i_product_name worst_performing from "
+    ), f"{db_name}:44 has different output positions"
+    assert separator, f"{db_name}:44 needs an explicit ORDER BY contract"
+    assert actual_order == "asceding.rnk limit 100;", f"{db_name}:44 has a different ORDER BY contract"
+
+
 @pytest.mark.parametrize("analytical", [False, True], ids=["select", "analytical"])
 @pytest.mark.parametrize(
     ("suite_name", "query_name", "keys"),
     [
         ("tpc_ds", "18", (1, 2, 3, 0)),
+        ("tpc_ds", "44", (0,)),
         ("tpc_ds", "65", (0, 1)),
         ("tpc_ds", "71", (4, 0, 2)),
         ("tpc_ds", "01", None),
+        ("tpc_ds", "36", None),
+        ("tpc_ds", "70", None),
+        ("tpc_ds", "86", None),
         ("clickbench", "18", None),
+        ("clickbench", "44", None),
         ("clickbench", "65", None),
         ("clickbench", "71", None),
         (None, "18", None),
+        (None, "44", None),
     ],
 )
 def test_answer_order_policy_applies_in_both_execution_paths(
@@ -198,6 +220,8 @@ def test_answer_order_policy_applies_in_both_execution_paths(
     if keys is not None:
         assert metadata["answer_order_key_indices"] == list(keys)
         assert metadata["answer_hash"] == build_answer_metadata(frame.reverse(), keys)["answer_hash"]
+    else:
+        assert metadata["answer_hash"] != build_answer_metadata(frame.reverse())["answer_hash"]
 
 
 def test_matrix_status_shows_declared_unsupported_queries_on_select_cells() -> None:

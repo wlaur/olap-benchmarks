@@ -1,8 +1,9 @@
 # Follow-up validation evidence
 
 This records correctness and lifecycle gates for the
-[declared follow-up](2026-10-followup-protocol.md). These checks precede the
-publication measurements. Tiny fixture durations are not benchmark results.
+[declared follow-up](2026-10-followup-protocol.md), plus explicitly identified
+ordering evidence observed after measurement. Initial fixture checks precede
+the publication measurements. Tiny fixture durations are not benchmark results.
 Only the parent starts engines, one at a time, using isolated stores. Server
 databases retain their original ARM64 Docker execution; DuckDB and Polars retain
 their embedded execution. No additional macOS builds or separate OS comparison
@@ -110,8 +111,8 @@ repetitions per query had one row-multiset hash each, while their ordered hashes
 varied. Applying `canonical-v11-ordered-ties-v1` produced one hash per query
 without changing SQL or row membership. The policy preserves distinct-key-group
 order, values and duplicate counts, and does not equate different LIMIT-boundary
-memberships. Its registry covers only those three query identities. Static
-review verified their complete order keys and output positions across all
+memberships. At that point the registry covered only those three query
+identities. Static review verified their complete order keys and output positions across all
 registered SQL contracts; dedicated tests cover the failure cases.
 
 The [protocol amendment](2026-10-followup-protocol.md#ordering-evidence-amendment-after-the-first-sf10-cohort)
@@ -132,3 +133,54 @@ container then started, read the five canonical region rows through `file()`,
 and reported Docker mount `RW=false`. Query SQL, input files and resource limits
 remain unchanged. Ruff, Pyright and 53 targeted tests passed for this startup
 correction. Preserve the unsuccessful startup log separately from the retry.
+
+### Q44 evidence and fourth registry entry
+
+The selected ClickHouse TPC-DS SF10 SELECT, run 604, exposed a further permitted
+tie in Q44. `results/followup-logs/clickhouse-tpc_ds-sf10.log`, lines 3433–3504,
+prints all ten rows for the warmup and three measured iterations. Only the two
+rank-8 rows swap positions; the ranks, both product-name values, duplicate
+counts and membership remain identical. The final SQL orders solely by
+`asceding.rnk`, the first projected column.
+
+The parent then retained six new full-data repetitions from each engine in
+`data/temp/q44-duckdb-evidence.log` and
+`data/temp/q44-clickhouse-evidence.log`, with all twelve complete frames under
+`results/followup-tuning/q44-order/*.arrow`. Exact Python row-multiset `Counter`
+comparison passed for every frame against the DuckDB reference, covering the
+integer ranks and both string values without hash precision conversion. All
+twelve frames retain the rank-8 tie and share the policy hash
+`blake2b128:34a9b2b80f7306aaafe2f06d94bcadcb`. These diagnostics themselves
+returned a stable row order; they do not independently reproduce the swap.
+ClickHouse reports `asceding.rnk` as `UInt64`; DuckDB reports `rnk` as `Int64`.
+Those schema differences remain recorded, so value agreement is not a claim
+of exact-schema equivalence or universal correctness.
+
+A static audit of all 99 query SQL contracts found Q44's complete final order
+key projected at index 0. Tests check Q44's projection and final ORDER BY/LIMIT
+across all eleven registered engines' SQL resolution paths, using registered
+TPC-DS implementations where available and the shared suite otherwise. This
+static check does not establish native support for engines without a registered
+TPC-DS suite. The 25 other complete-projected-key candidates had no observed
+instability and remain outside the minimal policy. Q36/Q70/Q86 have hidden
+conditional order expressions and explicit negative execution-path guards.
+
+The registry now contains only Q18/Q44/Q65/Q71. The existing
+`canonical-v11-ordered-ties-v1` algorithm and default `canonical-v11` are
+unchanged. Registry tests check both SELECT and analytical paths, including
+unchanged default ordering for Q36/Q70/Q86 and identities outside TPC-DS;
+existing hash tests cover full-key grouping, separated groups, values,
+duplicates and LIMIT-boundary membership.
+
+The [second protocol amendment](2026-10-followup-protocol.md#q44-amendment-after-the-first-clickhouse-sf10-cohort)
+retains runs 591 and 604 diagnostically and requires complete DuckDB and
+ClickHouse 99-query SF10 SELECT reruns after the validated combined source is
+committed. Those replacements remain pending. No original baseline cohort is
+rerun for this policy change.
+
+With engines paused, repository-wide Ruff format checking and lint passed,
+strict Pyright reported zero errors and warnings, and the focused registry and
+hashing tests passed all 215 cases on Python 3.14.3. An offline reread of the
+twelve retained Arrow frames also confirmed exact `Counter` agreement, the
+rank-8 tie, one shared policy hash and both preserved schemas. No engine was
+started or benchmark rerun for these implementation checks.

@@ -78,6 +78,7 @@ ANSWER_COMPARISON_EXCLUSIONS: dict[tuple[SuiteName, str, DatabaseName | None], s
 
 ANSWER_ORDER_KEYS: dict[tuple[SuiteName, str], tuple[int, ...]] = {
     ("tpc_ds", "18"): (1, 2, 3, 0),
+    ("tpc_ds", "44"): (0,),
     ("tpc_ds", "65"): (0, 1),
     ("tpc_ds", "71"): (4, 0, 2),
 }

@@ -73,3 +73,39 @@ and rerun the complete 22-query SF10 SELECT before replacing cohort 601. The
 other ClickHouse workloads and the original 99 measurements are unaffected.
 Successful controls do not establish an overall workload speedup; the complete
 replacement cohort and answer comparison provide the publication evidence.
+
+## PostgreSQL and TimescaleDB telemetry: retain the original traversal
+
+Reject the proposed internal descending-device traversal at both declared
+scales. Exact original/candidate rows and schemas agree, including the empty
+and latest-row-NULL fixtures, but the performance and plan gates do not support
+adoption across scales. No telemetry SQL or physical design changes follow
+these diagnostics; completed SELECT cohorts 608/610 and 614/616 stand.
+
+The following are diagnostic median fetch times in milliseconds, from six
+observations per form in three original/candidate/candidate/original blocks.
+They are separate from the publication's three-iteration SELECT medians.
+
+| Engine | Query | SF1 original / candidate | SF10 original / candidate | Decision |
+| --- | --- | --- | --- | --- |
+| PostgreSQL | 02 latest per device | 158.9 / 143.7 | 611.9 / 1496.3 | Reject: the modest small-scale improvement reverses at SF10 |
+| PostgreSQL | 03 latest in region | No paired controls | No paired controls | Reject at plan gate: the same bitmap scan and inner sort remain, with an additional outer sort |
+| TimescaleDB | 02 latest per device | 65.7 / 72.8 | 370.7 / 442.9 | Reject: slower at both scales |
+| TimescaleDB | 03 latest in region | 37.3 / 45.5 | 149.8 / 195.8 | Reject: slower at both scales |
+
+PostgreSQL Q02 replaces a sequential scan and sort with a backward primary-key
+scan. At SF10 the original uses a parallel scan with Gather Merge, and the
+backward index traversal loses substantially. TimescaleDB's original plans use
+SkipScan over the compressed chunks; the candidate replaces that access with
+columnar scans and per-chunk sorting. Avoiding one apparent sort does not imply
+less total work.
+
+PostgreSQL diagnostics ran from 10:17:31 to 10:18:32 UTC on October 22;
+TimescaleDB diagnostics ran from 10:20:05 to 10:21:07 UTC. Each engine's two
+scales share its twenty-minute allowance. Both used the same ten-CPU/24-GiB
+container settings, a separate 28-GiB client RSS guard, 45-second session query
+limits and 60-second external process deadlines. Runtime settings, plans,
+input fingerprints, exact comparison results, storage and Timescale compression
+readback are retained in `results/followup-tuning/{postgres,timescaledb}-telemetry.json`
+and their accompanying directories. No recorded timeout or wrong answer was
+discarded. These bounded controls do not establish confidence intervals.
