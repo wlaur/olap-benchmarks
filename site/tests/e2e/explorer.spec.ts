@@ -18,7 +18,7 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   await page.getByRole("combobox", { name: "Benchmark suite" }).click()
   await page.getByRole("option", { name: "ClickBench", exact: true }).click()
 
-  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
   await page.getByText("Change analysis").click()
   await expect(page.getByRole("button", { name: /Compare databases/ })).toHaveAttribute(
     "aria-pressed",
@@ -26,25 +26,10 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   )
   await expect(page.getByText("Databases to compare")).toBeVisible()
   await expect(page.getByText("Fixed environment")).toBeVisible()
-  await expect(page.getByText("Score across 43 queries")).toBeVisible()
-  await expect(page.getByText("Best suite score")).toBeVisible()
-  await expect(page.getByText("Larger score → wider bar · lower is better")).toBeVisible()
+  await expect(
+    page.getByText(/42 fixed performance queries · 43 coverage positions./),
+  ).toBeVisible()
   await expect(page.getByText("Shorter bars are faster").first()).toBeVisible()
-
-  const overallScores = await page
-    .locator("[data-score-ranking-row] [data-score]")
-    .evaluateAll((elements) =>
-      elements.map((element) => Number((element as HTMLElement).dataset.score)),
-    )
-  expect(overallScores.length).toBeGreaterThan(1)
-  expect(overallScores[0]).toBeLessThanOrEqual(overallScores.at(-1) ?? 0)
-  const relativeScoreWidths = await page
-    .locator("[data-score-ranking-row] [data-score-bar]")
-    .evaluateAll((elements) =>
-      elements.map((element) => Number((element as HTMLElement).dataset.scoreBar)),
-    )
-  expect(relativeScoreWidths[0]).toBeLessThan(relativeScoreWidths.at(-1) ?? 0)
-  expect(relativeScoreWidths.at(-1)).toBe(1)
 
   const runtimeScroll = page.locator("[data-query-runtime-scroll]")
   const runtimeScrollState = await runtimeScroll.evaluate((element) => ({

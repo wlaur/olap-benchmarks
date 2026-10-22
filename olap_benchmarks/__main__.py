@@ -1,11 +1,13 @@
 import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import cyclopts
 from setproctitle import setproctitle
 
+from .analytical_streams import AnalyticalConfig, AnalyticalSuite, validate_analytical_config
 from .dbs import get_databases
 from .inputs import drop_page_cache, fingerprint_input_directory
 from .limits import check_disk_space
@@ -37,6 +39,7 @@ from .results import (
     publish as publish_results,
 )
 from .results.cells import CellStatus, format_matrix_status, format_table, load_runs, matrix_status
+from .results.comparison import write_comparison_manifest
 from .results.publishing import PublishValidationError
 from .results.resource_usage import (
     describe_run_resource_usage,
@@ -58,9 +61,11 @@ from .settings import (
     format_suite_data_directory_name,
     get_settings,
     resolve_dbs,
+    resolve_suite_scale_factor,
     resolve_suite_scale_factors,
     resolve_suites,
     setup_stdout_logging,
+    suite_input_directory,
 )
 from .suites import ManualPreparationRequired, get_suite_preparer
 from .utils import run_shell
@@ -107,11 +112,15 @@ def _start_db(db_instance: "Database") -> None:
     db_instance.wait_until_accessible()
 
 
-def _stop_db(db_instance: "Database") -> None:
+def _stop_db(db_instance: "Database", *, check: bool = False) -> None:
     db_instance.close_connection()
+    failures: list[str] = []
     for command in db_instance.stop_commands:
         _LOGGER.info(f"Stopping {db_instance.name}: {command}")
-        run_shell(command)
+        if run_shell(command) != 0:
+            failures.append(command)
+    if check and failures:
+        raise RuntimeError(f"Engine shutdown is unconfirmed; failed stop commands: {failures}")
 
 
 def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor: int) -> None:
@@ -148,7 +157,7 @@ def _cleanup_db_files(db_name: DatabaseName, suite_name: SuiteName, scale_factor
 
 
 def _check_and_hash_input_data(suite_name: SuiteName, scale_factor: int) -> None:
-    input_dir = get_settings().input_data_directory / format_suite_data_directory_name(suite_name, scale_factor)
+    input_dir = suite_input_directory(suite_name, scale_factor)
 
     if not input_dir.is_dir() or not any(input_dir.iterdir()):
         raise SystemExit(
@@ -338,6 +347,93 @@ def run_benchmark_groups(
 
 
 @app.command
+def analytical(
+    db: DatabaseName,
+    suite: AnalyticalSuite,
+    clients: Literal[1, 4, 16] = 1,
+    duration_seconds: float = 60,
+    revision: Revision = "default",
+    scale_factor: int | None = None,
+    seed: int = 0,
+    setup: bool = False,
+    cleanup: bool = False,
+) -> None:
+    """Measure opt-in immutable analytical streams, separately from resident-hot SELECT.
+
+    Supports duckdb, polars, postgres and clickhouse with their existing TPC-H, TPC-DS and
+    ClickBench registrations. Every client warms the selected query manifest once before the
+    synchronized measurement. Duration stops new requests; in-flight full fetches drain.
+
+    Requires benchmark_threads=10, benchmark_memory_gb=24, client_memory_limit_gb=28 and
+    operation_timeout_seconds greater than the duration, with room for warmup/drain.
+    Polars needs POLARS_MAX_THREADS=10 set before process startup. Its native allocator has
+    no separate 24 GiB cap; the sampled 28 GiB process RSS guard is its memory enforcement.
+    Budgets are shared across clients and their actual enforcement scopes are recorded.
+
+    Input files must already be prepared. Starts/stops the owned engine automatically.
+    --setup populates existing suite data first in a separate, serial operation; otherwise
+    uses the existing populated store. --cleanup removes the store after confirmed shutdown.
+    Optional query_timeout_seconds watchdogs abort the entire operation, not individual
+    requests; the operation watchdog also bounds warmup and draining. Hard aborts can leave
+    request steps unfinished; the run is marked failed before returning.
+
+    Request evidence and overall/per-query counts, throughput and sample-qualified latency
+    summaries live under metadata_json.analytical. These runs never enter default matrices
+    or resident-hot SELECT medians. PostgreSQL uses its native psycopg fetch path to retain
+    one connection per worker; Polars has independent worker state and one shared native pool.
+    """
+    config = AnalyticalConfig(clients, duration_seconds, seed)
+    database = get_databases()[db]
+    validate_analytical_config(database, config)
+    resolved_scale = resolve_suite_scale_factor(suite, scale_factor)
+    if suite not in database.suite_registry():
+        raise ValueError(f"{db} does not support {suite}")
+    _check_and_hash_input_data(suite, resolved_scale)
+    build_repository_provenance()
+    database._current_suite = suite
+    database._current_suite_scale_factor = resolved_scale
+    database._page_cache_dropped = False
+    writer = start_writer_process(revision=revision)
+    failure: BaseException | None = None
+    try:
+        _start_db(database)
+        database.close_connection()
+        if setup:
+            run_operation(database, suite, "populate", resolved_scale, writer.queue, writer.result_queue)
+        run_operation(
+            database, suite, "analytical", resolved_scale, writer.queue, writer.result_queue, analytical=config
+        )
+    except BaseException as exc:
+        failure = exc
+    finally:
+        try:
+            _stop_db(database, check=True)
+            if cleanup:
+                _cleanup_db_files(db, suite, resolved_scale)
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note(f"engine cleanup also failed: {type(exc).__name__}: {exc}")
+        try:
+            writer.close()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
+            else:
+                failure.add_note(f"results writer cleanup also failed: {type(exc).__name__}: {exc}")
+        if failure is not None:
+            try:
+                mark_running_runs_failed(
+                    revision=revision, error_type=type(failure).__name__, error_message=str(failure)
+                )
+            except BaseException as exc:
+                failure.add_note(f"marking interrupted runs failed also failed: {type(exc).__name__}: {exc}")
+    if failure is not None:
+        raise failure
+
+
+@app.command
 def prepare(suite: SuiteArg, scale_factor: int | None = None) -> None:
     """Generate input data files for a benchmark suite (e.g. Parquet files)."""
     for suite_name, resolved_scale_factor in _resolve_suite_scale_factor_pairs(suite, scale_factor):
@@ -480,11 +576,16 @@ def publish(
     accepted for a merge, with each run's original provenance preserved.
 
     With `--campaign --report-url URL`, replace the dataset with all registered engine/suite/scale
-    combinations. Every combination must have a nonempty completed select cohort with one warmup
-    and three measured iterations. Explicitly skipped queries and failed or missing non-select
+    combinations. Every combination must have a latest terminal SELECT attempt, completed or failed,
+    recording the complete current four-iteration plan. Completed cohorts require full iteration
+    validation. Failed attempts retain explicit errors and recorded outcomes; missing positions
+    remain unknown. Explicitly skipped queries and failed or missing non-select
     operations are allowed and disclosed. Measurements may span clean commits; their original
     provenance is retained. Invalid diagnostics are excluded. The linked report must explain
     methodology, corrections and resource limits. This mode cannot be combined with `--merge`.
+    Campaigns also retain analytical-stream attempts separately, selecting the latest terminal
+    attempt per recorded configuration. Unfinished attempts and contradictory evidence block
+    publication. Analytical runs never enter resident-hot SELECT scores.
 
     With `--upload`, the verified database is uploaded as results-{sha256}.db to the `data`
     GitHub release. Merge the matching manifest and site metadata into main to trigger the
@@ -625,6 +726,16 @@ def delete_cmd(
 def query(sql: str, revision: Revision = "default") -> None:
     """Run a SQL query against the results database."""
     query_results(sql, revision=revision)
+
+
+@results_app.command
+def publication_metadata(
+    output_directory: Path = Path("site/public/data"),
+    annotations_path: Path | None = None,
+) -> None:
+    """Refresh comparison metadata without changing the published measurements."""
+    destination = write_comparison_manifest(output_directory, annotations_path=annotations_path)
+    print(f"Wrote {destination}")
 
 
 @results_app.command

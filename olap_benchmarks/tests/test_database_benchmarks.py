@@ -239,9 +239,12 @@ def test_database_benchmarks_resolves_all_suites() -> None:
 
     benchmarks = db.benchmarks
 
-    # jsonbench and chat_threads are registered per database rather than in the base registry,
-    # because each engine needs its own json ingest path and query dialect
-    assert set(benchmarks) == set(get_args(SuiteName)) - {"jsonbench", "chat_threads"}
+    assert set(benchmarks) == set(get_args(SuiteName)) - {
+        "jsonbench",
+        "chat_threads",
+        "parquet_analytics",
+        "json_representation",
+    }
     assert benchmarks["time_series"].db is db
     assert benchmarks["time_series"].scale_factor == 1
     assert benchmarks["tpc_h"].scale_factor == 10
@@ -318,8 +321,9 @@ def test_tpc_scale_factors_are_validated() -> None:
     assert resolve_suite_scale_factor("tpc_h", 50) == 50
     with pytest.raises(ValueError, match="supports scale factors: 10, 50"):
         resolve_suite_scale_factor("tpc_h", 1)
-    with pytest.raises(ValueError, match="supports scale factors: 1"):
-        resolve_suite_scale_factor("tpc_ds", 10)
+    assert resolve_suite_scale_factor("tpc_ds", 10) == 10
+    with pytest.raises(ValueError, match="supports scale factors: 1, 10"):
+        resolve_suite_scale_factor("tpc_ds", 100)
     with pytest.raises(ValueError, match="fixed scale factor of 1"):
         resolve_suite_scale_factor("clickbench", 10)
 

@@ -19,10 +19,12 @@ import signal
 from multiprocessing import Queue, get_context
 from multiprocessing.process import BaseProcess
 from pathlib import Path
+from tempfile import mkdtemp
 from time import monotonic, sleep
 
 import psutil
 
+from .analytical_streams import AnalyticalConfig, validate_analytical_config
 from .dbs import Database, get_databases
 from .limits import check_disk_space, expired_query
 from .metrics.storage import WriterMessage
@@ -57,6 +59,7 @@ def _operation_entrypoint(
     start_command: str | None,
     page_cache_dropped: bool,
     query_watchdog_path: Path,
+    analytical: AnalyticalConfig | None = None,
 ) -> None:
     os.setsid()
     db_instance = get_databases()[db_name]
@@ -64,10 +67,19 @@ def _operation_entrypoint(
     db_instance._current_suite_scale_factor = scale_factor
     db_instance._last_start_command = start_command
     db_instance._page_cache_dropped = page_cache_dropped
-    if operation == "select":
+    if operation in ("select", "analytical"):
         db_instance._query_watchdog_path = query_watchdog_path
+    db_instance._analytical_config = analytical
     db_instance.set_queues(queue, result_queue)
-    db_instance.benchmark(suite, operation, scale_factor=scale_factor)
+    try:
+        db_instance.benchmark(suite, operation, scale_factor=scale_factor)
+    finally:
+        if operation == "analytical":
+            try:
+                db_instance.close_connection()
+            finally:
+                if db_instance.name == "clickhouse":
+                    db_instance.reset_session()
 
 
 def _stop_operation(process: BaseProcess) -> None:
@@ -136,41 +148,59 @@ def run_operation(
     scale_factor: int,
     queue: "Queue[WriterMessage]",
     result_queue: "Queue[object]",
+    *,
+    analytical: AnalyticalConfig | None = None,
 ) -> None:
+    if operation == "analytical":
+        if analytical is None:
+            raise ValueError("Analytical operation needs explicit stream configuration")
+        validate_analytical_config(db_instance, analytical)
+    elif analytical is not None:
+        raise ValueError("Stream configuration is only valid for the analytical operation")
     check_disk_space()
     configure_polars_spill()
     settings = get_settings()
     query_watchdog_path = settings.temporary_directory / f"query-watchdog-{os.getpid()}.json"
     query_watchdog_path.unlink(missing_ok=True)
-    process = get_context("spawn").Process(
-        target=_operation_entrypoint,
-        args=(
-            db_instance.name,
-            suite,
-            operation,
-            scale_factor,
-            queue,
-            result_queue,
-            db_instance._last_start_command,
-            db_instance._page_cache_dropped,
-            query_watchdog_path,
-        ),
-        name=f"olap-{db_instance.name}-{suite}-{operation}",
-        daemon=False,
-    )
-    process.start()
+    if operation == "analytical":
+        query_watchdog_path = Path(
+            mkdtemp(prefix=f"analytical-watchdog-{os.getpid()}-", dir=settings.temporary_directory)
+        )
+    process: BaseProcess | None = None
     deadline = (
         monotonic() + settings.operation_timeout_seconds if settings.operation_timeout_seconds is not None else None
     )
     try:
+        process = get_context("spawn").Process(
+            target=_operation_entrypoint,
+            args=(
+                db_instance.name,
+                suite,
+                operation,
+                scale_factor,
+                queue,
+                result_queue,
+                db_instance._last_start_command,
+                db_instance._page_cache_dropped,
+                query_watchdog_path,
+                analytical,
+            ),
+            name=f"olap-{db_instance.name}-{suite}-{operation}",
+            daemon=False,
+        )
+        process.start()
         while process.is_alive():
             process.join(timeout=1)
             if not process.is_alive():
                 break
             check_disk_space()
-            query_name = expired_query(query_watchdog_path, settings.query_timeout_seconds)
-            if query_name is not None:
-                raise TimeoutError(f"Query {query_name} exceeded {settings.query_timeout_seconds} seconds")
+            watchdogs = (
+                query_watchdog_path.glob("client-*.json") if operation == "analytical" else (query_watchdog_path,)
+            )
+            for watchdog in watchdogs:
+                query_name = expired_query(watchdog, settings.query_timeout_seconds)
+                if query_name is not None:
+                    raise TimeoutError(f"Query {query_name} exceeded {settings.query_timeout_seconds} seconds")
             if deadline is not None and monotonic() > deadline:
                 raise TimeoutError(f"{operation} on {db_instance.name}/{suite} exceeded operation time budget")
             if settings.client_memory_limit_gb is not None and process.pid is not None:
@@ -186,10 +216,14 @@ def run_operation(
                 f"failed in its benchmark process (exit code {process.exitcode})"
             )
     except BaseException:
-        try:
-            _stop_operation(process)
-        except BaseException:
-            _LOGGER.exception("Failed to clean up benchmark operation process %s", process.pid)
+        if process is not None:
+            try:
+                _stop_operation(process)
+            except BaseException:
+                _LOGGER.exception("Failed to clean up benchmark operation process %s", process.pid)
         raise
     finally:
-        query_watchdog_path.unlink(missing_ok=True)
+        if operation == "analytical":
+            shutil.rmtree(query_watchdog_path)
+        else:
+            query_watchdog_path.unlink(missing_ok=True)

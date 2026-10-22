@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from ...inputs import fingerprint_input_directory
 from ...run_metadata import sha256_text
 from ...settings import REPO_ROOT
+from ...suites.join_order.schema import JOB_TABLES
 from ...suites.kaggle_airbnb.config import KAGGLE_AIRBNB_TABLES
 from ...suites.rtabench.config import RTABENCH_SCHEMAS
 from ...suites.time_series.config import TimeSeries
@@ -96,7 +97,7 @@ def schema_digest(db: DuckDB) -> str | None:
 
 def planned_sources(db: DuckDB) -> dict[str, Path]:
     suite = db.benchmarks[db.current_suite]
-    match db.current_suite:
+    match str(db.current_suite):
         case "time_series":
             return dict(cast("TimeSeries[DuckDB]", suite).dataset_files())
         case "time_series_metrics" | "time_series_ranges":
@@ -105,16 +106,22 @@ def planned_sources(db: DuckDB) -> dict[str, Path]:
             tables = KAGGLE_AIRBNB_TABLES
         case "rtabench":
             tables = tuple(RTABENCH_SCHEMAS)
-        case "tpc_h":
+        case "tpc_h" | "parquet_analytics":
             tables = TPCH_TABLES
         case "tpc_ds":
             tables = TPCDS_TABLES
+        case "join_order":
+            tables = JOB_TABLES
+        case "device_telemetry":
+            tables = ("telemetry_device", "telemetry_reading")
         case "clickbench":
             tables = ("hits",)
         case "chat_threads":
             tables = ("chat_thread", "chat_message")
-        case "jsonbench":
+        case "jsonbench" | "json_representation":
             return {}
+        case _:
+            raise NotImplementedError(f"No DuckDB planned source mapping for {db.current_suite}")
     return {table: db.input_directory / f"{table}.parquet" for table in tables}
 
 

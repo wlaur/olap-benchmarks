@@ -9,10 +9,12 @@ import { QuietButton } from "../components/controls/Control"
 import { ControlSelect, ControlSelectSkeleton } from "../components/controls/ControlSelect"
 import { PanelCard, PanelHeader } from "../components/layout/Panel"
 import { CampaignNotice } from "../components/methodology/ComparisonScopeNotices"
+import { EngineComparison } from "../components/methodology/EngineComparison"
 import { BodyText, MetaLabel, SectionTitle } from "../components/Typography"
 import { useCatalogData } from "../hooks/useCatalogData"
 import { isBenchmarkSuiteId } from "../lib/benchmarks"
 import { buildCatalogSuiteSummary, getSqlDialects } from "../lib/catalog"
+import { compareFamily } from "../lib/observations"
 import { useAppStore } from "../stores/useAppStore"
 
 export function CatalogPage() {
@@ -25,9 +27,9 @@ export function CatalogPage() {
   const summaries = useMemo(
     () =>
       benchmarkDefinitions.map((definition) =>
-        buildCatalogSuiteSummary(definition, catalog.dimensions, catalog.queriesManifest),
+        buildCatalogSuiteSummary(definition, catalog.dimensions, catalog.data?.manifest ?? null),
       ),
-    [benchmarkDefinitions, catalog.dimensions, catalog.queriesManifest],
+    [benchmarkDefinitions, catalog.dimensions, catalog.data],
   )
   const requestedSuite = searchParams.get("suite") ?? undefined
   const selectedSuiteId = isBenchmarkSuiteId(requestedSuite, benchmarkDefinitions)
@@ -53,6 +55,21 @@ export function CatalogPage() {
   const systems = unique(catalog.dimensions.map((row) => row.system))
   const databases = unique(catalog.dimensions.map((row) => row.db))
   const explorerScale = selectedSummary?.scales[0] ?? 1
+  const selectedSystem = useAppStore((state) => state.selectedSystem)
+  const family =
+    catalog.data?.manifest.families.find(
+      (entry) => entry.suite === selectedSuiteId && entry.track === "raw",
+    ) ?? catalog.data?.manifest.families.find((entry) => entry.suite === selectedSuiteId)
+  const evidenceRows =
+    family && catalog.data && selectedSystem
+      ? compareFamily(
+          family,
+          explorerScale,
+          selectedSystem,
+          catalog.data.runs,
+          catalog.data.manifest,
+        )
+      : []
 
   function handleSuiteSelect(suiteId: string) {
     setSearchParams({ suite: suiteId }, { replace: true })
@@ -176,7 +193,7 @@ export function CatalogPage() {
               <div className="min-w-0">
                 <MetaLabel>Availability</MetaLabel>
                 <SectionTitle as="h2" className="mt-1">
-                  Result coverage
+                  Recorded execution coverage
                 </SectionTitle>
                 <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
                   {selectedSummary?.databases.length ?? 0} databases ·{" "}
@@ -184,8 +201,9 @@ export function CatalogPage() {
                   {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
                 </p>
                 <BodyText className="mt-1 text-xs leading-5 text-slate-500">
-                  A check means results are available, though some queries may be missing; open
-                  Explorer to see the coverage.
+                  A check means a run is recorded, including partial or failed execution. It does
+                  not establish full query coverage or performance eligibility. Registration
+                  identifies adapter implementation; missing results leave execution unknown.
                 </BodyText>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -215,6 +233,20 @@ export function CatalogPage() {
             {showCoverage ? (
               <div className="mt-3 border-t border-border-subtle pt-3">
                 <CatalogCoverageMatrix summary={selectedSummary} loading={loading} />
+                {family ? (
+                  <details className="mt-4 text-xs text-slate-400">
+                    <summary className="cursor-pointer">
+                      Query evidence · {family.title} · SF {explorerScale} · {selectedSystem}
+                    </summary>
+                    <div className="mt-3">
+                      <EngineComparison
+                        rows={evidenceRows}
+                        family={family}
+                        eligibleCount={evidenceRows.filter((row) => row.eligible).length}
+                      />
+                    </div>
+                  </details>
+                ) : null}
               </div>
             ) : null}
           </PanelCard>

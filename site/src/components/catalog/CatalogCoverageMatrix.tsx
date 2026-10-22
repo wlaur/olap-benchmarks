@@ -38,7 +38,7 @@ export function CatalogCoverageMatrix({
                 className="max-w-[55%] truncate text-right text-xs text-slate-500"
                 title={database.versions.join(", ")}
               >
-                {database.versions.length > 0 ? database.versions.join(", ") : "No results"}
+                {database.versions.length > 0 ? database.versions.join(", ") : "Version unknown"}
               </span>
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -56,8 +56,12 @@ export function CatalogCoverageMatrix({
                         <Check className="h-3 w-3 text-emerald-300" strokeWidth={2} />
                         {systems.length}
                       </>
+                    ) : !database.implemented ? (
+                      "Adapter unimplemented"
+                    ) : database.registeredScales.includes(scale) ? (
+                      "Execution unknown"
                     ) : (
-                      "No result"
+                      "Scale not registered"
                     )}
                   </span>
                 )
@@ -112,7 +116,13 @@ export function CatalogCoverageMatrix({
                           {systems.length} {systems.length === 1 ? "system" : "systems"}
                         </span>
                       ) : (
-                        <span className="text-slate-700">-</span>
+                        <span className="text-slate-500">
+                          {!database.implemented
+                            ? "Adapter unimplemented"
+                            : database.registeredScales.includes(scale)
+                              ? "Execution unknown"
+                              : "Scale not registered"}
+                        </span>
                       )}
                     </td>
                   )

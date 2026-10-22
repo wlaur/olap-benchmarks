@@ -153,7 +153,7 @@ def _monetdb_problems(con: duckdb.DuckDBPyConnection, *, campaign: bool = False)
         from run r
         where r.db = 'monetdb'
           and r.status in ('completed', 'failed')
-          and not ({str(campaign).lower()} and r.status = 'failed' and r.operation <> 'select')
+          and not ({str(campaign).lower()} and r.status = 'failed')
           and (
             (
               select count(*)
@@ -273,14 +273,14 @@ def validate_publishable_runs(
             problems.append(_listing("Declared cells without a run", missing))
 
         not_completed = [
-            run.label
-            for cell, run in latest.items()
-            if run is not None and run.status != "completed" and (not campaign or cell.operation == "select")
+            run.label for run in latest.values() if run is not None and run.status != "completed" and not campaign
         ]
         if not_completed:
             problems.append(_listing("Declared cells whose latest run did not complete", not_completed))
 
         declared_ids = {run.id for run in latest.values() if run is not None}
+        if campaign:
+            declared_ids.update(run.id for run in runs if run.operation == "analytical")
         extra = [run.label for run in runs if run.id not in declared_ids]
         if extra:
             problems.append(
@@ -302,9 +302,16 @@ def validate_publishable_runs(
             ]
             problems.append(_listing("A published set must come from exactly one repository commit", by_commit))
 
-        profiles = sorted({run.benchmark_profile for run in runs})
+        from .analytical import ANALYTICAL_PROFILE_ID, analytical_run_problems
+
+        normal_runs = [
+            run
+            for run in runs
+            if not (campaign and run.operation == "analytical" and run.benchmark_profile == ANALYTICAL_PROFILE_ID)
+        ]
+        profiles = sorted({run.benchmark_profile for run in normal_runs})
         if profiles != [BENCHMARK_PROFILE.id]:
-            counts = Counter(run.benchmark_profile for run in runs)
+            counts = Counter(run.benchmark_profile for run in normal_runs)
             listed = [f"{profile}: {counts[profile]} run(s)" for profile in profiles]
             title = f"A published set must follow exactly one benchmark profile, {BENCHMARK_PROFILE.id}"
             problems.append(_listing(title, listed))
@@ -326,6 +333,8 @@ def validate_publishable_runs(
         problems.extend(_query_step_problems(con))
         problems.extend(_monetdb_problems(con, campaign=campaign))
         problems.extend(_doris_cache_problems(con))
+        if campaign:
+            problems.extend(analytical_run_problems(con, runs))
     finally:
         con.close()
 
@@ -334,7 +343,7 @@ def validate_publishable_runs(
 
         validate_campaign_runs(db_path, cells, pins=pins, drivers=drivers)
 
-    report = validate_results(db_path=db_path, pins=pins)
+    report = validate_results(db_path=db_path, pins=pins, include_failed=campaign)
     if not report.ok:
         problems.append(f"Answer validation failed:\n{report.format()}")
 

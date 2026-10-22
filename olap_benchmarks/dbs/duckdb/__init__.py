@@ -15,8 +15,14 @@ from ...metrics.measure import get_paths_size_mb
 from ...settings import DatabaseName, Operation, SuiteName, TableName, get_settings
 from ...suites import BenchmarkSuite
 from ...suites.chat_threads.config import ChatThreads
+from ...suites.json_representation.config import SUITE_NAME as JSON_REPRESENTATION
+from ...suites.json_representation.config import JSONRepresentation
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
 from ...suites.kaggle_airbnb.config import KaggleAirbnb
+from ...suites.parquet_analytics.config import SUITE_NAME as PARQUET_ANALYTICS
+from ...suites.parquet_analytics.config import ParquetAnalytics
+from ...suites.parquet_analytics.config import source_directory as parquet_source_directory
+from ...suites.parquet_analytics.contract import manifest_metadata
 from ...suites.rtabench.config import RTABench
 from .. import Database, ParquetEpochColumns, apply_parquet_epoch_columns
 from ..utils import normalize_columns, require_columns, tracked_commit
@@ -159,7 +165,19 @@ class DuckDB(Database):
 
     @property
     def storage_mode(self) -> StorageMode:
+        if self._current_suite == PARQUET_ANALYTICS:
+            return "parquet"
+        if self._current_suite == JSON_REPRESENTATION:
+            return "native"
         return get_settings().duckdb_storage_mode
+
+    @property
+    def input_directory(self) -> Path:
+        if self._current_suite == PARQUET_ANALYTICS:
+            return parquet_source_directory(self.current_suite_scale_factor)
+        if self._current_suite == JSON_REPRESENTATION:
+            return get_jsonbench_input_files(self.current_suite_scale_factor)[0].parent
+        return super().input_directory
 
     @property
     def storage(self) -> Storage:
@@ -212,6 +230,11 @@ class DuckDB(Database):
             **super().run_options,
             "memory_limit_bytes": memory_gb * 1024**3 if memory_gb is not None else None,
             "duckdb_storage": self.storage_options,
+            **(
+                {"physical_representation": manifest_metadata(self.database_directory)}
+                if self._current_suite in (PARQUET_ANALYTICS, JSON_REPRESENTATION)
+                else {}
+            ),
             "duckdb_runtime": {"requested": self.connection_config, "before": self.runtime_metadata()},
             "storage_accounting": {
                 "version": 1,
@@ -321,6 +344,13 @@ class DuckDB(Database):
 
     def verify_storage_readiness(self) -> None:
         self.storage.verify()
+        self._verify_representation()
+
+    def _verify_representation(self) -> None:
+        if self._current_suite == PARQUET_ANALYTICS:
+            cast(ParquetAnalytics[DuckDB], self.benchmarks[PARQUET_ANALYTICS]).verify_representation()
+        elif self._current_suite == JSON_REPRESENTATION:
+            cast(JSONRepresentation[DuckDB], self.benchmarks[JSON_REPRESENTATION]).verify_representation()
 
     def finalize_populate(self) -> None:
         self.storage.finalize()
@@ -336,6 +366,7 @@ class DuckDB(Database):
         self.verify_runtime_configuration(self._runtime_before)
         if self._current_operation != "populate":
             manifest = self.storage.verify()
+            self._verify_representation()
             if self._current_operation in ("mutate", "concurrent"):
                 self._require_native_writes()
                 manifest.dirty = True
@@ -351,6 +382,11 @@ class DuckDB(Database):
             "options": {
                 **self._recorded_options,
                 "duckdb_storage": self.storage_options,
+                **(
+                    {"physical_representation": manifest_metadata(self.database_directory)}
+                    if self._current_suite in (PARQUET_ANALYTICS, JSON_REPRESENTATION)
+                    else {}
+                ),
                 "duckdb_runtime": {
                     "requested": self.connection_config,
                     "before": self._runtime_before,
@@ -531,4 +567,6 @@ class DuckDB(Database):
             "chat_threads": ChatThreads,
             "kaggle_airbnb": DuckDBAirbnb,
             "rtabench": DuckDBRTABench,
+            PARQUET_ANALYTICS: ParquetAnalytics,
+            JSON_REPRESENTATION: JSONRepresentation,
         }

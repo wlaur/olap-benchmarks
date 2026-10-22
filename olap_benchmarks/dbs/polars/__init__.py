@@ -19,6 +19,9 @@ from ...suites.clickbench.config import (
     Clickbench,
 )
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, write_jsonbench_input_file
+from ...suites.parquet_analytics.config import SUITE_NAME as PARQUET_ANALYTICS
+from ...suites.parquet_analytics.config import ParquetAnalytics, source_directory
+from ...suites.parquet_analytics.contract import manifest_metadata
 from ...suites.time_series_metrics.config import TimeSeriesMetrics
 from ...suites.time_series_ranges.config import TimeSeriesRanges
 from ...suites.tpc_h.config import TPCH_TABLES, TpcH
@@ -119,6 +122,26 @@ class Polars(Database):
     connection_string: str = ""
 
     @property
+    def input_directory(self) -> Path:
+        if self._current_suite == PARQUET_ANALYTICS:
+            return source_directory(self.current_suite_scale_factor)
+        return super().input_directory
+
+    def verify_storage_readiness(self) -> None:
+        if self._current_suite == PARQUET_ANALYTICS:
+            cast(ParquetAnalytics[Polars], self.benchmarks[PARQUET_ANALYTICS]).verify_representation()
+
+    def before_benchmark_operation(self) -> None:
+        if self._current_operation != "populate":
+            self.verify_storage_readiness()
+
+    def _executed_query_metadata(self) -> dict[str, Any] | None:
+        metadata = super()._executed_query_metadata()
+        if self._current_suite != PARQUET_ANALYTICS:
+            return metadata
+        return {**(metadata or {}), "options": self.run_options}
+
+    @property
     def start(self) -> None:
         return None
 
@@ -142,11 +165,11 @@ class Polars(Database):
         references = {path for path in directory.glob("*.parquet") if path.is_symlink()}
         if self._current_operation == "populate":
             sources: Mapping[TableName, Path]
-            match self.current_suite:
+            match str(self.current_suite):
                 case "time_series_metrics" | "time_series_ranges":
                     suite = cast(PolarsTimeSeriesMetrics, self.benchmarks[self.current_suite])
                     sources = suite.dataset_files()
-                case "tpc_h":
+                case "tpc_h" | "parquet_analytics":
                     sources = {table: self.input_directory / f"{table}.parquet" for table in TPCH_TABLES}
                 case "clickbench":
                     sources = {"hits": self.input_directory / "hits.parquet"}
@@ -179,6 +202,14 @@ class Polars(Database):
         external = self._metric_external_files
         return {
             **super().run_options,
+            **(
+                {
+                    "physical_representation": manifest_metadata(self.database_directory),
+                    "query_execution": "native Polars LazyFrame TPC-H expressions; SQL is the semantic specification",
+                }
+                if self._current_suite == PARQUET_ANALYTICS
+                else {}
+            ),
             "storage_accounting": {
                 "version": 1,
                 "additional_imported_store_path": self.database_directory.resolve().as_posix(),
@@ -225,7 +256,7 @@ class Polars(Database):
         if self.current_query_name is None:
             raise RuntimeError("Polars query execution requires a current query name")
 
-        match self.current_suite:
+        match str(self.current_suite):
             case "time_series_metrics":
                 table = self.current_query_name.split("_", 1)[0]
                 lf = execute_time_series_metrics_query(self._scan_table(table), self.current_query_name)
@@ -236,7 +267,7 @@ class Polars(Database):
                 lf = self._execute_jsonbench_query(self.current_query_name)
             case "clickbench":
                 lf = execute_clickbench_query(self._scan_table("hits"), self.current_query_name)
-            case "tpc_h":
+            case "tpc_h" | "parquet_analytics":
                 lf = execute_tpc_h_query(
                     {table_name: self._scan_table(table_name) for table_name in TPCH_TABLES},
                     self.current_query_name,
@@ -361,6 +392,7 @@ class Polars(Database):
             "clickbench": PolarsClickbench,
             "jsonbench": PolarsJSONBench,
             "tpc_h": PolarsTpcH,
+            PARQUET_ANALYTICS: ParquetAnalytics,
             "time_series_metrics": PolarsTimeSeriesMetrics,
             "time_series_ranges": PolarsTimeSeriesRanges,
         }

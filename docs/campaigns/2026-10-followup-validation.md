@@ -1,0 +1,99 @@
+# Follow-up validation evidence
+
+This records correctness and lifecycle gates for the
+[declared follow-up](2026-10-followup-protocol.md). These checks precede the
+publication measurements. Tiny fixture durations are not benchmark results.
+Only the parent starts engines, one at a time, using isolated stores. Server
+databases retain their original ARM64 Docker execution; DuckDB and Polars retain
+their embedded execution. No additional macOS builds or separate OS comparison
+are introduced by these checks.
+
+## Input preparation
+
+Device Telemetry contains 484,318 readings at SF1 and 4,863,454 at SF10, with
+1,000 and 5,000 devices respectively. Its deterministic generator, nullable
+metrics and fixture oracle are covered by offline tests.
+
+The pinned original JOB archive produced 21 tables and 74,190,187 rows.
+Preparation and subsequent reuse verified every input fingerprint, schema,
+row count and text-width constraint. The archive acquisition checksum is frozen;
+upstream supplied no independent checksum. See the
+[suite provenance](../../olap_benchmarks/suites/join_order/README.md).
+
+TPC-DS SF10 preparation produced all 24 canonical tables. Common Parquet
+Analytics reuses the eight original TPC-H SF10 files after validating their
+schemas, footer row counts and representation contract. JSON Representation
+reuses the existing JSONBench SF10 inputs.
+
+## Engine execution fixture gates
+
+| Workload | Native engines checked | Scope and oracle |
+| --- | --- | --- |
+| JOB | DuckDB, ClickHouse, PostgreSQL, MonetDB, StarRocks | All 113 queries on populated and empty fixtures, including native ingestion; SQLite reference and selected hand-checked goldens |
+| Device Telemetry | DuckDB, ClickHouse, PostgreSQL, TimescaleDB | All 18 queries against the Python fixture oracle; TimescaleDB checked before and after compression |
+| JSON Representation | ClickHouse | Five raw/prepared query pairs on populated and empty fixtures through the shared loading path; DuckDB reference with lossless timestamp-unit normalization |
+| Doris TPC-H | Doris 4.1.5 | All 22 queries on populated and empty canonical-typed fixtures against DuckDB; exact row counts and full persisted/cached column-statistics readiness |
+| Doris TPC-DS | Doris 4.1.5 | All 99 queries on populated and empty canonical-typed fixtures against DuckDB; native loading and strict column-statistics readiness |
+
+DuckDB JSON fixture tests also compare all raw/prepared variants offline.
+Fixture agreement establishes the tested cases, not universal correctness or
+full-data preparation. Full-scale JSON loading and common-file query execution
+remain separate gates until their results are recorded here.
+
+JOB required four DuckDB alias renames and two StarRocks quoted output aliases.
+Canonical upstream files remain unchanged. Doris TPC-H Q13 required explicit
+derived-column aliases. TPC-DS native investigation identified singleton sample
+deviation, NULL ordering, alias case, grouping-dependent sorting, calendar-day
+arithmetic and empty-input ROLLUP differences. Explicit timed SQL adaptations
+passed the complete populated/empty fixture before measurement; no answer is
+repaired after execution. Nonempty grouping sets are combined with a scalar
+grand total before ranking, preserving the empty-input row and duplicate
+grouping rows. Additional offline fixtures cover NULLs, duplicates, filtering,
+rank ties and limits.
+
+The Doris fixture first generates tiny data, then inserts it into the repository's
+canonical DuckDB DDL before exporting and comparing. This matters because the
+extension generator has different types for some address columns and a different
+spelling for the store tax column. Comparing unnormalized generator schemas
+would incorrectly attribute those differences to Doris.
+
+## Analytical lifecycle gates
+
+The real analytical CLI is exercised with canonical-typed tiny TPC-H inputs,
+all 22 queries, 1/4/16 clients and a one-second issuing window. These runs use
+isolated inputs, stores and results under `data/fixtures/`; they are excluded
+from the follow-up publication revision. They check independent workers,
+runtime readback, synchronized release, request evidence and cleanup. Their
+throughput and latency have no publication meaning.
+
+DuckDB, Polars, PostgreSQL and ClickHouse passed all three client counts. All
+22 observed query hashes agree across the latest runs from all four engines.
+ClickHouse's first gate rejected a runtime readback discrepancy before warmup:
+the settings table reports `auto(10)` while numeric `getSetting('max_threads')`
+reports ten effective threads. The probe now retains both representations and
+validates the effective value. The container CPU quota remains ten.
+
+The fixture also exposed ClickHouse's zero-valued SUM over an empty matching
+input in Q17, against the canonical NULL. New analytical and common-Parquet
+tracks explicitly use `aggregate_functions_null_for_empty=1`; the native
+analytical fixture then agrees with its peers. This setting change applies to
+the new tracks. Existing resident-hot TPC-H measurements remain unchanged.
+Offline failure tests additionally cover partial-store
+rejection, cancellation, worker initialization, request deadlines and watchdog
+cleanup. A real CLI negative test also rejected a store with its orders removed
+before starting analytical warmup. Engine execution success does not establish cache-hit behavior, which remains
+uninstrumented.
+
+## Verification boundary
+
+Before the first full-scale follow-up measurement, repository-wide Ruff
+formatting/lint and strict Pyright passed. The non-live pytest suite passed
+1,876 tests, with one skipped and fourteen live tests excluded. Separately
+scheduled engine execution checks are described above.
+
+Bun formatting, lint, types and production build passed, along with 33 unit
+tests and 23 browser tests including publication-reader and desktop/mobile/iPad
+fixtures. Database code generation matches the selected asset schema. The
+original published asset still matches its declared SHA-256 and byte length.
+Full-scale outcomes belong in the follow-up campaign report once measurement
+and publication validation finish.

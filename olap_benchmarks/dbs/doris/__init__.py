@@ -3,6 +3,8 @@ import logging
 import subprocess
 import uuid
 from collections.abc import Mapping
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from time import perf_counter, sleep
 from typing import Any, ClassVar, Literal, cast
@@ -19,7 +21,9 @@ from ...suites import BenchmarkSuite
 from ...suites.clickbench.config import Clickbench
 from ...suites.jsonbench.config import JSONBench, get_jsonbench_input_files, iter_jsonbench_input_lines
 from ...suites.rtabench.config import RTABench
-from .. import Database
+from ...suites.tpc_ds.config import TpcDs
+from ...suites.tpc_h.config import TpcH
+from .. import Database, ParquetEpochColumns
 from ..utils import normalize_columns
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,6 +40,8 @@ DORIS_HOST = "localhost"
 DORIS_USER = "root"
 DORIS_PASSWORD = ""
 DORIS_DATABASE = "benchmark"
+DORIS_STATISTICS_TIMEOUT_SECONDS = 60.0
+DORIS_STATISTICS_POLL_SECONDS = 1.0
 
 DORIS_RESULT_CACHE_VARIABLES = (
     "enable_sql_cache",
@@ -66,6 +72,83 @@ def _verify_result_cache_settings(settings: Mapping[str, object]) -> None:
     }
     if unexpected:
         raise RuntimeError(f"Doris result caches must be disabled: {unexpected}")
+
+
+type DorisStatisticsRows = list[dict[str, str | None]]
+
+
+def _statistics_rows(frame: pl.DataFrame) -> DorisStatisticsRows:
+    return [{key: str(value) if value is not None else None for key, value in row.items()} for row in frame.to_dicts()]
+
+
+def _statistics_number(value: str | None, *, integral: bool = False) -> Decimal:
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid statistics number: {value!r}") from exc
+    if not number.is_finite() or number < 0 or (integral and number != number.to_integral_value()):
+        raise ValueError(f"Invalid statistics number: {value!r}")
+    return number
+
+
+def _verify_column_statistics(
+    table: str,
+    expected_rows: int,
+    expected_columns: set[str],
+    overview_rows: DorisStatisticsRows,
+    collected_rows: DorisStatisticsRows,
+    cached_rows: DorisStatisticsRows,
+) -> None:
+    if len(overview_rows) != 1:
+        raise ValueError("Expected one table statistics overview")
+    overview = overview_rows[0]
+    _statistics_number(overview.get("row_count"), integral=True)
+    columns = {column.strip() for column in str(overview.get("columns")).removeprefix("[").removesuffix("]").split(",")}
+    if not {f"{table}:{column}" for column in expected_columns} <= columns:
+        raise ValueError("Table overview is missing canonical columns")
+    analyzed_at = datetime.fromisoformat(str(overview.get("last_analyze_time")))
+    if analyzed_at < datetime.fromisoformat(str(overview.get("updated_time"))):
+        raise ValueError("Table was updated after analysis")
+    updated_rows = _statistics_number(overview.get("updated_rows"), integral=True)
+    if overview.get("new_partition") != "false" or overview.get("user_inject") != "false":
+        raise ValueError("Statistics have new partitions or were manually injected")
+
+    numeric_fields = ("count", "ndv", "num_null", "data_size", "avg_size_byte")
+    collected: dict[str, dict[str, str | None]] = {}
+    for source, rows in (("collected", collected_rows), ("cached", cached_rows)):
+        if len(rows) != len(expected_columns) or {row.get("column_name") for row in rows} != expected_columns:
+            raise ValueError(f"{source} statistics do not cover every canonical column exactly once")
+        for row in rows:
+            name = str(row["column_name"])
+            if row.get("index_name") != table:
+                raise ValueError(f"{source} statistics have the wrong index for {name}")
+            if row.get("method") != "FULL" or row.get("type") != "FUNDAMENTALS" or row.get("trigger") != "MANUAL":
+                raise ValueError(f"{source} statistics are not manual full fundamentals for {name}")
+            numbers = {field: _statistics_number(row.get(field)) for field in numeric_fields}
+            if numbers["count"] != expected_rows:
+                raise ValueError(
+                    f"{source} count {numbers['count']} differs from actual rows {expected_rows} for {name}"
+                )
+            nulls = _statistics_number(row.get("num_null"), integral=True)
+            if nulls > expected_rows or (numbers["ndv"] == 0) != (nulls == expected_rows):
+                raise ValueError(f"{source} null count or distinct count is invalid for {name}")
+            if datetime.fromisoformat(str(row.get("updated_time"))) < analyzed_at:
+                raise ValueError(f"{source} statistics predate the last analysis for {name}")
+            if _statistics_number(row.get("update_rows"), integral=True) != updated_rows:
+                raise ValueError(f"{source} statistics predate table updates for {name}")
+            for field in ("last_analyze_row_count", "last_analyze_version"):
+                _statistics_number(row.get(field), integral=True)
+            if nulls < expected_rows and any(row.get(field) in (None, "N/A") for field in ("min", "max")):
+                raise ValueError(f"{source} statistics have no bounds for {name}")
+            if source == "collected":
+                collected[name] = row
+            else:
+                persisted = collected[name]
+                if any(numbers[field] != _statistics_number(persisted.get(field)) for field in numeric_fields) or any(
+                    row.get(field) != persisted.get(field)
+                    for field in ("min", "max", "updated_time", "last_analyze_row_count", "last_analyze_version")
+                ):
+                    raise ValueError(f"Cached statistics differ from collected statistics for {name}")
 
 
 def _doris_connection_string() -> str:
@@ -182,6 +265,18 @@ class DorisRTABench(RTABench["Doris"]):
         self.db.insert(df, table_name, partitions=partitions)
 
 
+class DorisTpcH(TpcH["Doris"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+
+class DorisTpcDs(TpcDs["Doris"]):
+    @property
+    def fetch_kwargs(self) -> dict[str, Any]:
+        return {"method": "python"}
+
+
 class Doris(Database):
     name: DatabaseName = "doris"
     supports_arm64_containers: ClassVar[bool] = True
@@ -223,6 +318,19 @@ class Doris(Database):
         memory_limits_mb = self.container_memory_limits_mb
         return {
             **super().run_options,
+            **(
+                {
+                    "select_fetch_method": "python",
+                    "relational_storage_policy": "duplicate-key-single-replica-v1",
+                    "relational_load_policy": "source-parquet-strict-zero-filter-v1",
+                    "relational_statistics_policy": "full-synchronous-v1",
+                    "relational_statistics_readiness_policy": "full-columns-fe-cache-v1",
+                    "relational_statistics_readiness_timeout_seconds": DORIS_STATISTICS_TIMEOUT_SECONDS,
+                    "relational_stream_load_timeout_seconds": 3600,
+                }
+                if self._current_suite in ("tpc_h", "tpc_ds")
+                else {}
+            ),
             "container_budget_policy": "combined-fe25-be75-v2",
             "frontend_heap_policy": "fe-conf-jdk17-v1",
             "frontend_heap_limits_mb": self.frontend_heap_limits_mb,
@@ -427,9 +535,80 @@ class Doris(Database):
 
     def before_benchmark_operation(self) -> None:
         self._record_cache_settings("doris_cache_settings_before")
+        if self._current_operation in ("select", "analytical"):
+            self.verify_storage_readiness()
 
     def after_benchmark_operation(self) -> None:
         self._record_cache_settings("doris_cache_settings_after")
+
+    def finalize_populate(self) -> None:
+        if self._current_suite not in ("tpc_h", "tpc_ds"):
+            return
+        suite = self.benchmarks[self.current_suite]
+        for table in suite.expected_table_row_counts():
+            with self.phase_context("doris_analyze", table_name=table):
+                self.execute(f"ANALYZE TABLE `{table}` WITH SYNC")
+        self._verify_relational_statistics()
+
+    def verify_storage_readiness(self) -> None:
+        if self._current_operation != "populate":
+            self._verify_relational_statistics()
+
+    def _verify_relational_statistics(self) -> None:
+        if self._current_suite not in ("tpc_h", "tpc_ds"):
+            return
+        suite = self.benchmarks[self.current_suite]
+        for table, expected_rows in suite.expected_table_row_counts().items():
+            step_id = self._start_step("phase", "doris_statistics_readiness", table_name=table)
+            evidence: dict[str, object] = {"expected_rows": expected_rows}
+            try:
+                actual_rows = self.get_row_count(table)
+                evidence["actual_rows"] = actual_rows
+                if actual_rows != expected_rows:
+                    raise RuntimeError(f"Doris actual row count differs for {table}: {evidence}")
+                expected_columns = set(
+                    pl.scan_parquet(suite.input_data_directory / f"{table}.parquet").collect_schema()
+                )
+                if not expected_columns:
+                    raise RuntimeError(f"Doris source schema has no columns for {table}")
+                evidence["expected_columns"] = sorted(expected_columns)
+                layout = self.fetch(f"SHOW CREATE TABLE `{table}`", method="python")
+                evidence["create_table_sql"] = str(layout.item(0, 1))
+                started = perf_counter()
+                deadline = started + DORIS_STATISTICS_TIMEOUT_SECONDS
+                attempts = 0
+                while True:
+                    attempts += 1
+                    evidence["readiness_attempts"] = attempts
+                    overview = _statistics_rows(self.fetch(f"SHOW TABLE STATS `{table}`", method="python"))
+                    evidence["statistics"] = overview
+                    collected = _statistics_rows(self.fetch(f"SHOW COLUMN STATS `{table}`", method="python"))
+                    evidence["column_statistics"] = collected
+                    cached = _statistics_rows(self.fetch(f"SHOW COLUMN CACHED STATS `{table}`", method="python"))
+                    evidence["cached_column_statistics"] = cached
+                    evidence["readiness_elapsed_seconds"] = perf_counter() - started
+                    try:
+                        _verify_column_statistics(table, expected_rows, expected_columns, overview, collected, cached)
+                    except ValueError as exc:
+                        remaining = deadline - perf_counter()
+                        if remaining <= 0:
+                            raise RuntimeError(
+                                f"Doris statistics are missing, stale or invalid for {table}: {exc}"
+                            ) from exc
+                        sleep(min(DORIS_STATISTICS_POLL_SECONDS, remaining))
+                    else:
+                        break
+            except BaseException as exc:
+                self._finish_step(
+                    step_id,
+                    status="failed",
+                    step_type="phase",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    metadata=evidence,
+                )
+                raise
+            self._finish_step(step_id, status="completed", step_type="phase", metadata=evidence)
 
     def fetch(
         self,
@@ -655,6 +834,32 @@ class Doris(Database):
             for parquet_path in parquet_paths:
                 parquet_path.unlink(missing_ok=True)
 
+    def insert_parquet(
+        self,
+        path: Path,
+        table: TableName,
+        primary_key: str | list[str] | None = None,
+        not_null: str | list[str] | None = None,
+        *,
+        epoch_columns: ParquetEpochColumns | None = None,
+    ) -> None:
+        if self._current_suite not in ("tpc_h", "tpc_ds"):
+            super().insert_parquet(path, table, primary_key, not_null, epoch_columns=epoch_columns)
+            return
+        if primary_key is not None or not_null is not None or epoch_columns is not None:
+            raise ValueError("Doris TPC loads use the canonical schema and unmodified source Parquet")
+        self.stream_load_file(
+            table,
+            path,
+            {
+                "format": "parquet",
+                "columns": ",".join(pl.scan_parquet(path).collect_schema().names()),
+                "strict_mode": "true",
+                "max_filter_ratio": "0",
+                "timeout": "3600",
+            },
+        )
+
     def upsert(self, df: pl.DataFrame, table: TableName, primary_key: str | list[str]) -> None:
         raise NotImplementedError("Doris upsert is not wired for the initial ClickBench/JSONBench scope")
 
@@ -666,4 +871,6 @@ class Doris(Database):
             "clickbench": DorisClickbench,
             "jsonbench": DorisJSONBench,
             "rtabench": DorisRTABench,
+            "tpc_h": DorisTpcH,
+            "tpc_ds": DorisTpcDs,
         }

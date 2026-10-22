@@ -54,6 +54,9 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
     name: SuiteName
     scale_factor: int = Field(default=1, ge=1)
 
+    def verify_input_data(self) -> None:
+        pass
+
     @property
     def data_directory_name(self) -> str:
         return format_suite_data_directory_name(self.name, self.scale_factor)
@@ -335,6 +338,14 @@ class BenchmarkSuite[DBT: Database](BaseModel, ABC):
 
 def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None]:
     match suite:
+        case "parquet_analytics":
+            from .parquet_analytics.config import prepare_data as prepare_parquet_data
+
+            return lambda: prepare_parquet_data(scale_factor)
+        case "json_representation":
+            from .json_representation.config import prepare_data as prepare_json_representation
+
+            return lambda: prepare_json_representation(scale_factor)
         case "time_series_metrics":
             from .time_series_metrics.config import prepare_data as prepare_metrics_data
 
@@ -373,5 +384,13 @@ def get_suite_preparer(suite: SuiteName, scale_factor: int) -> Callable[[], None
             return lambda: prepare_scaled_data(scale_factor)
         case "tpc_ds":
             from .tpc_ds.config import prepare_data as prepare_scaled_data
+
+            return lambda: prepare_scaled_data(scale_factor)
+        case "join_order":
+            from .join_order.config import prepare_data as prepare_static_data
+
+            return prepare_static_data
+        case "device_telemetry":
+            from .device_telemetry.config import prepare_data as prepare_scaled_data
 
             return lambda: prepare_scaled_data(scale_factor)

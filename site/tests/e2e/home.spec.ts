@@ -1,127 +1,113 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
-test("home scores load and link into the production explorer", async ({ page }) => {
-  const consoleErrors: string[] = []
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text())
-  })
-
+test("home compares fixed families and opens the selected explorer", async ({ page }) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
   await page.goto("#/")
-
-  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
-  await expect(page.getByRole("cell", { name: /duckdb/i }).first()).toBeVisible()
-
-  await page.getByRole("button", { name: "ClickBench SF1" }).click()
+  await expect(page.getByRole("heading", { name: "Compare by workload family" })).toBeVisible()
+  await page.getByRole("button", { name: "ClickBench", exact: true }).click()
+  await expect(
+    page.getByText("42 fixed performance queries · 43 coverage positions · raw track"),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("listitem", { name: "postgres comparison", exact: true }),
+  ).toContainText("documented incomplete preparation")
+  await page.getByRole("button", { name: "Open explorer", exact: true }).click()
   await expect(page).toHaveURL(/\/explorer\/clickbench\?.*scale=1/)
-  await expect(page).toHaveURL(/system=macbook-m4-pro/)
-  await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
-  await expect(page.getByText("Score across 43 queries")).toBeVisible()
-  expect(consoleErrors).toEqual([])
+  await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
+  await expect(
+    page.getByText(/42 fixed performance queries · 43 coverage positions\./),
+  ).toBeVisible()
+  await expect(page.getByRole("combobox", { name: "Query" })).toBeVisible()
+  expect(errors).toEqual([])
 })
 
-test("findings open the intended databases, scale, query and SQL", async ({ page }) => {
+test("home publication scores remain fixed when engines are hidden", async ({ page }) => {
   await page.goto("#/")
-  const links = await page.locator('a[href^="#/explorer/"]').evaluateAll((anchors) =>
-    anchors.map((anchor) => ({
-      text: anchor.textContent ?? "",
-      href: anchor.getAttribute("href") ?? "",
+  await page.getByRole("button", { name: "ClickBench", exact: true }).click()
+  const scores = page
+    .locator("[data-comparison-engine]")
+    .filter({ has: page.locator("[data-publication-score]") })
+  await expect(scores.first()).toBeVisible()
+  const original = await scores.evaluateAll((rows) =>
+    rows.map((row) => ({
+      key: row.getAttribute("data-comparison-engine")!,
+      score: row.querySelector("[data-publication-score]")!.getAttribute("data-publication-score"),
     })),
   )
-  expect(links.length).toBeGreaterThan(0)
-
-  for (const link of links) {
-    await test.step(link.text, async () => {
-      await page.goto("#/")
-      await page.getByRole("link", { name: link.text, exact: true }).click()
-      const [path, search] = link.href.split("?")
-      const expected = new URLSearchParams(search)
-      await expect(page.getByRole("heading", { name: "Database ranking" })).toBeVisible()
-      await expect(page).toHaveURL((url) => {
-        const [actualPath, actualSearch] = url.hash.split("?")
-        const actual = new URLSearchParams(actualSearch)
-        return (
-          actualPath === path &&
-          [...expected].every(([key, value]) =>
-            key === "databases"
-              ? actual.get(key)?.split(",").sort().join(",") === value.split(",").sort().join(",")
-              : actual.get(key) === value,
-          )
-        )
-      })
-      const databases = expected.get("databases")?.split(",")
-      if (databases) {
-        await expect(page.locator("[data-score-ranking-row]")).toHaveCount(databases.length)
-      }
-      const query = expected.get("query")
-      if (query) {
-        await expect(page.getByRole("combobox", { name: "Query" })).toContainText(query)
-      }
-      const sqlDatabase = expected.get("sql_database")
-      if (sqlDatabase) {
-        await expect(page.locator('button[data-sql-variant][aria-pressed="true"]')).toHaveText(
-          new RegExp(sqlDatabase, "i"),
-        )
-      }
-    })
+  expect(original.length).toBeGreaterThan(1)
+  await page.getByText("Visible engines", { exact: true }).click()
+  const hiddenDb = JSON.parse(original[0]!.key)[0]
+  await page.getByRole("button", { name: hiddenDb, exact: true }).click()
+  for (const row of original.slice(1)) {
+    await expect(
+      page
+        .locator("[data-comparison-engine]")
+        .filter({ has: page.locator(`[data-publication-score="${row.score}"]`) })
+        .first(),
+    ).toBeVisible()
   }
+  expect(
+    await scores.evaluateAll((rows) =>
+      rows.map((row) => ({
+        key: row.getAttribute("data-comparison-engine"),
+        score: row
+          .querySelector("[data-publication-score]")!
+          .getAttribute("data-publication-score"),
+      })),
+    ),
+  ).toEqual(original.slice(1))
 })
 
-test("score headers stay inside their columns at desktop and iPad widths", async ({ page }) => {
-  const consoleErrors: string[] = []
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text())
-  })
-
+test("score headers and evidence fit desktop, iPad and mobile widths", async ({
+  page,
+}, testInfo) => {
   await page.goto("#/")
-  await expect(page.getByRole("cell", { name: /duckdb/i }).first()).toBeVisible()
-  for (const width of [1920, 1440, 1366, 1194, 1180, 1024]) {
-    await test.step(`${width}px`, async () => {
-      await page.setViewportSize({ width, height: 900 })
-      await expect(page.locator("table")).toBeVisible()
-      await expectHeadersToFit(page)
-      await expectNoHorizontalPageOverflow(page)
-      const scroll = await page.locator("table").evaluate((table) => {
-        const scroller = table.parentElement!
-        scroller.scrollLeft = scroller.scrollWidth
-        return { offset: scroller.scrollLeft, max: scroller.scrollWidth - scroller.clientWidth }
-      })
-      expect(scroll.offset).toBe(scroll.max)
-      await expectHeadersToFit(page)
-      await page.locator("table").evaluate((table) => {
-        table.parentElement!.scrollLeft = 0
-      })
-    })
-  }
-
-  for (const width of [834, 820, 768, 390]) {
+  await page.getByRole("button", { name: "RTABench", exact: true }).click()
+  await expect(
+    page.getByText("31 fixed performance queries · 31 coverage positions · raw track"),
+  ).toBeVisible()
+  await page.getByRole("button", { name: /RTABench prepared aggregates/ }).click()
+  await expect(
+    page.getByText("10 fixed performance queries · 10 coverage positions · prepared track"),
+  ).toBeVisible()
+  await page.getByRole("button", { name: "ClickBench", exact: true }).click()
+  for (const width of [1920, 1440, 1194, 1024, 834, 768, 390]) {
     await page.setViewportSize({ width, height: 900 })
-    await expect(page.locator("table")).toBeHidden()
-    await expect(page.getByRole("list", { name: "Suite scores by database" })).toBeVisible()
-    await expect(page.getByRole("listitem", { name: /duckdb scores/i })).toBeVisible()
+    await expect(page.getByRole("list", { name: "Family engine comparison" })).toBeVisible()
     await expectNoHorizontalPageOverflow(page)
+    const card = page.getByRole("listitem", { name: "duckdb comparison", exact: true })
+    await card.getByText(/Run context & preparation/).click()
+    await expect(card.getByText("Input fingerprint", { exact: true })).toBeVisible()
+    await expectNoHorizontalPageOverflow(page)
+    await card.getByText(/Run context & preparation/).click()
+    if ([1440, 1024, 390].includes(width)) {
+      await page.locator("main").evaluate((main) => {
+        main.scrollTop = 0
+      })
+      await page.screenshot({ path: testInfo.outputPath(`family-${width}.png`) })
+    }
   }
-  expect(consoleErrors).toEqual([])
 })
 
-async function expectHeadersToFit(page: import("@playwright/test").Page) {
-  const overflow = await page.locator("thead th").evaluateAll((cells) => {
-    return cells.flatMap((cell) => {
-      const bounds = cell.getBoundingClientRect()
-      const range = document.createRange()
-      range.selectNodeContents(cell)
-      const outside = [...range.getClientRects()].some(
-        (rect) => rect.left < bounds.left - 1 || rect.right > bounds.right + 1,
-      )
-      return outside ? [cell.textContent] : []
-    })
-  })
-  expect(overflow).toEqual([])
-}
+test("family weights do not create a query-count-weighted overall ranking", async ({ page }) => {
+  await page.goto("#/")
+  await page.getByText("Comparison policy", { exact: true }).click()
+  await expect(page.getByText(/no overall ranking is published/)).toBeVisible()
+  await page.getByRole("button", { name: "Time Series", exact: true }).click()
+  await page.getByRole("button", { name: "SF 10", exact: true }).click()
+  await expect(page.getByRole("button", { name: "SF 10", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
+  await page.getByRole("button", { name: "Open explorer", exact: true }).click()
+  await expect(page).toHaveURL(/scale=10/)
+})
 
-async function expectNoHorizontalPageOverflow(page: import("@playwright/test").Page) {
-  const dimensions = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }))
-  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
+async function expectNoHorizontalPageOverflow(page: Page) {
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+  ).toBeLessThanOrEqual(0)
 }

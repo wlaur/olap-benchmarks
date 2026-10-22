@@ -113,6 +113,7 @@ def _add_run(
         metadata_json={
             "repository": {"commit": commit, "dirty": dirty, "diff_sha256": "x" if dirty else None},
             "execution": execution,
+            "plan": {"query_names": ["0000_test"]},
         },
     )
     session.add(run)
@@ -138,7 +139,7 @@ def _add_run(
                     run_id=run.id,
                     step_type="query",
                     step_name="query",
-                    query_name="q1",
+                    query_name="0000_test",
                     iteration=iteration,
                     started_at=started_at,
                     finished_at=started_at,

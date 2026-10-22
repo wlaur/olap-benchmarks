@@ -49,15 +49,36 @@ _COLUMN_STORE_SUITES: tuple[SuitePlan, ...] = (
     SuitePlan("clickbench", 1),
 )
 
+_DEVICE_TELEMETRY_SUITES = (SuitePlan("device_telemetry", 1), SuitePlan("device_telemetry", 10))
+_JOIN_ORDER_SUITES = (SuitePlan("join_order", 1),)
+_LARGER_TPC_DS = (SuitePlan("tpc_ds", 10),)
+_REPRESENTATION_SUITES = (SuitePlan("parquet_analytics", 10), SuitePlan("json_representation", 10))
+
 # The intended benchmark matrix. A new engine gets one entry here, listing only the suites it is
 # meant to run (an engine does not have to cover every suite).
 MATRIX: dict[DatabaseName, EnginePlan] = {
-    "clickhouse": EnginePlan(published=True, suites=_COLUMN_STORE_SUITES),
-    "duckdb": EnginePlan(published=True, suites=_COLUMN_STORE_SUITES),
+    "clickhouse": EnginePlan(
+        published=True,
+        suites=_COLUMN_STORE_SUITES
+        + _DEVICE_TELEMETRY_SUITES
+        + _JOIN_ORDER_SUITES
+        + _LARGER_TPC_DS
+        + _REPRESENTATION_SUITES,
+    ),
+    "duckdb": EnginePlan(
+        published=True,
+        suites=_COLUMN_STORE_SUITES
+        + _DEVICE_TELEMETRY_SUITES
+        + _JOIN_ORDER_SUITES
+        + _LARGER_TPC_DS
+        + _REPRESENTATION_SUITES,
+    ),
     # no JSONBench queries
     "monetdb": EnginePlan(
         published=True,
-        suites=tuple(plan for plan in _COLUMN_STORE_SUITES if plan.suite != "jsonbench"),
+        suites=tuple(plan for plan in _COLUMN_STORE_SUITES if plan.suite != "jsonbench")
+        + _JOIN_ORDER_SUITES
+        + _LARGER_TPC_DS,
     ),
     "polars": EnginePlan(
         published=True,
@@ -67,19 +88,25 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
             SuitePlan("clickbench", 1),
             SuitePlan("time_series_metrics", 1),
             SuitePlan("time_series_ranges", 1),
+            SuitePlan("parquet_analytics", 10),
         ),
     ),
     "postgres": EnginePlan(
         published=False,
         suites=_default_scale(
             "time_series", "chat_threads", "rtabench", "kaggle_airbnb", "tpc_ds", "tpc_h", "jsonbench", "clickbench"
-        ),
+        )
+        + _DEVICE_TELEMETRY_SUITES
+        + _JOIN_ORDER_SUITES
+        + _LARGER_TPC_DS,
     ),
     "timescaledb": EnginePlan(
         published=False,
         suites=_default_scale(
             "time_series", "chat_threads", "rtabench", "kaggle_airbnb", "tpc_ds", "tpc_h", "jsonbench", "clickbench"
-        ),
+        )
+        + _DEVICE_TELEMETRY_SUITES
+        + _LARGER_TPC_DS,
     ),
     "questdb": EnginePlan(
         published=False,
@@ -87,7 +114,9 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
     ),
     "starrocks": EnginePlan(
         published=False,
-        suites=_default_scale("time_series", "rtabench", "kaggle_airbnb", "tpc_ds", "tpc_h", "jsonbench", "clickbench"),
+        suites=_default_scale("time_series", "rtabench", "kaggle_airbnb", "tpc_ds", "tpc_h", "jsonbench", "clickbench")
+        + _JOIN_ORDER_SUITES
+        + _LARGER_TPC_DS,
     ),
     "arc": EnginePlan(
         published=True,
@@ -95,7 +124,8 @@ MATRIX: dict[DatabaseName, EnginePlan] = {
     ),
     "doris": EnginePlan(
         published=False,
-        suites=_default_scale("rtabench", "jsonbench", "clickbench"),
+        suites=_default_scale("rtabench", "jsonbench", "clickbench")
+        + (SuitePlan("tpc_h", 10), SuitePlan("tpc_h", 50), SuitePlan("tpc_ds", 1), SuitePlan("tpc_ds", 10)),
     ),
     "tdengine": EnginePlan(published=True, suites=_default_scale("time_series_ranges")),
 }

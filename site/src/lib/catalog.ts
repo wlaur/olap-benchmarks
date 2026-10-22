@@ -1,9 +1,12 @@
 import type { BenchmarkDefinition } from "./benchmarks"
-import type { CatalogRunDimension, QueriesManifest, QuerySqlEntry } from "./types"
+import type { ComparisonManifest } from "./comparison"
+import type { CatalogRunDimension, QuerySqlEntry } from "./types"
 
 export interface CatalogDatabaseCoverage {
   database: string
   versions: string[]
+  registeredScales: number[]
+  implemented: boolean
   systemsByScale: Map<number, string[]>
 }
 
@@ -20,12 +23,17 @@ export interface CatalogSuiteSummary {
 export function buildCatalogSuiteSummary(
   definition: BenchmarkDefinition,
   dimensions: readonly CatalogRunDimension[],
-  queriesManifest: QueriesManifest,
+  comparison: ComparisonManifest | null,
 ): CatalogSuiteSummary {
   const suiteRows = dimensions.filter((row) => row.suite === definition.id)
-  const allDatabases = unique(dimensions.map((row) => row.db)).sort()
+  const allDatabases = unique([
+    ...dimensions.map((row) => row.db),
+    ...(comparison?.registrations.map((entry) => entry.db) ?? []),
+  ]).sort()
   const scales = unique([
-    ...definition.supportedScaleFactors,
+    ...(comparison?.families
+      .filter((family) => family.suite === definition.id)
+      .flatMap((family) => family.scale_factors) ?? []),
     ...suiteRows.map((row) => row.suite_scale_factor),
   ]).sort((a, b) => a - b)
   const databases = allDatabases.map((database) => {
@@ -43,6 +51,23 @@ export function buildCatalogSuiteSummary(
 
     return {
       database,
+      registeredScales: unique(
+        comparison?.registrations
+          .filter(
+            (entry) =>
+              entry.db === database &&
+              entry.suite === definition.id &&
+              entry.operations.includes("select"),
+          )
+          .flatMap((entry) => entry.scale_factors) ?? [],
+      ),
+      implemented:
+        comparison?.registrations.some(
+          (entry) =>
+            entry.db === database &&
+            entry.suite === definition.id &&
+            entry.operations.includes("select"),
+        ) ?? false,
       versions: unique(
         databaseRows.map((row) =>
           row.db_driver === null ? row.db_version : `${row.db_version} · ${row.db_driver}`,
@@ -60,7 +85,13 @@ export function buildCatalogSuiteSummary(
 
   return {
     definition,
-    queryNames: Object.keys(queriesManifest[definition.queriesKey] ?? {}),
+    queryNames: comparison
+      ? unique(
+          comparison.families
+            .filter((family) => family.suite === definition.id)
+            .flatMap((family) => family.coverage_query_names),
+        )
+      : [],
     scales,
     systems: unique(suiteRows.map((row) => row.system)).sort(),
     databases,
