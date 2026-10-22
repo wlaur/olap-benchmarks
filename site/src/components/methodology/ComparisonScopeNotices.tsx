@@ -17,7 +17,7 @@ export function CampaignNotice({ className }: { className?: string }) {
     <NoticeStrip tone="warning" className={className}>
       <span className="font-semibold text-slate-100">{publication.title}</span> includes{" "}
       {publication.select_cohorts} query runs, of which {publication.partial_select_cohorts} are
-      partial. Partial coverage is reported separately from eligible performance.{" "}
+      partial. Coverage and comparison rules are shown with each result.{" "}
       <a
         href={publication.report_url}
         target="_blank"

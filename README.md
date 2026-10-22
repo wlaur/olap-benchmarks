@@ -545,6 +545,14 @@ old fixed-name release asset. Pages also runs `bun run verify-data`, schema chec
 and browser reader tests before uploading the built site. The small JSON metadata
 files stay in git.
 
+The Pages build also reproduces the overall ranking from the browser reader
+against `site/tests/fixtures/overall.json`. For a new data publication, review
+the ranking, coverage, sensitivity bands and within-workload order checks,
+then update that SHA-bound fixture and [ranking documentation](docs/overall-ranking.md)
+with the matching metadata. A changed dataset fails deployment until its
+expected evidence is reviewed. Changes to the canonical families, queries,
+scales or weights require a ranking-policy revision.
+
 A fresh clone therefore needs the database before the site will run:
 
 ```bash

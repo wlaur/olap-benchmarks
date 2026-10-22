@@ -31,8 +31,8 @@ export default defineConfig({
     },
     {
       name: "ipad-webkit",
-      testMatch: "home.spec.ts",
-      grep: /score headers/,
+      testMatch: ["home.spec.ts", "overall.spec.ts"],
+      grep: /score headers|overall rows and contributions fit/,
       use: {
         browserName: "webkit",
         viewport: { width: 1024, height: 1366 },

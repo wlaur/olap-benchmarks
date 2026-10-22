@@ -102,6 +102,22 @@ export function median(values: readonly number[]): number | null {
   return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2
 }
 
+export function runPerformanceProblems(
+  run: RunObservation,
+  annotations: readonly ComparisonAnnotation[],
+): string[] {
+  const problems: string[] = []
+  if (run.status !== "completed") problems.push(`run ${run.status}`)
+  if (run.metadata.invalidation !== null && run.metadata.invalidation !== undefined)
+    problems.push("run invalidated")
+  if (run.error) problems.push("run error recorded")
+  if (string(record(run.metadata.input).manifest_sha256) === null)
+    problems.push("input fingerprint unknown")
+  if (annotations.some((entry) => entry.preparation === "incomplete"))
+    problems.push("documented incomplete preparation")
+  return problems
+}
+
 function string(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null
 }
@@ -300,14 +316,7 @@ export function compareFamily(
             ? "SELECT adapter unimplemented in registration snapshot"
             : "no recorded run; execution unknown",
         )
-      if (run && run.status !== "completed") reasons.push(`run ${run.status}`)
-      if (run && run.metadata.invalidation !== null && run.metadata.invalidation !== undefined)
-        reasons.push("run invalidated")
-      if (run?.error) reasons.push("run error recorded")
-      if (run && string(record(run.metadata.input).manifest_sha256) === null)
-        reasons.push("input fingerprint unknown")
-      if (annotations.some((entry) => entry.preparation === "incomplete"))
-        reasons.push("documented incomplete preparation")
+      if (run) reasons.push(...runPerformanceProblems(run, annotations))
       if (run && performance.some((query) => !query.complete))
         reasons.push(
           `${performance.filter((query) => !query.complete).length}/${family.query_names.length} performance queries incomplete or blocked`,
