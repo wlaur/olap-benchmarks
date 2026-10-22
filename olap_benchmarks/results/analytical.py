@@ -456,7 +456,7 @@ def _request_problems(
     issued_clients: set[int] = set()
     positions: dict[tuple[int, str], list[int]] = defaultdict(list)
     successful_warmups: dict[int, set[int]] = defaultdict(set)
-    request_times: dict[int, list[tuple[datetime, datetime]]] = defaultdict(list)
+    request_times: dict[int, list[tuple[datetime, datetime | None]]] = defaultdict(list)
     samples: list[RequestSample] = []
     unknown_phases: set[str] = set()
     clients, seed = cast(int, evidence["clients"]), cast(int, evidence["workload_seed"])
@@ -484,12 +484,28 @@ def _request_problems(
         order = balanced_query_order(names, seed, client)
         if request.name != order[sequence % len(order)] or (phase == "warmup" and sequence >= len(names)):
             problems.append(f"step {request.id} violates the recorded seeded query schedule")
+        inflight = (
+            run.status == "failed"
+            and request.status == "running"
+            and request.result is None
+            and request.finished is None
+            and request.rows is None
+            and request.error_type is None
+            and request.error_message is None
+            and not any(key.startswith("answer_") for key in meta)
+            and "duration_ms" not in meta
+            and "request_status" not in meta
+        )
+        valid_times = (
+            inflight and run.started_at <= request.started <= finished
+            if request.finished is None
+            else run.started_at <= request.started <= request.finished <= finished
+        )
         if (
-            request.finished is None
-            or not run.started_at <= request.started <= request.finished <= finished
-            or (phase == "warmup" and start is not None and request.finished > start)
+            not valid_times
+            or (phase == "warmup" and start is not None and (request.finished is None or request.finished > start))
             or (phase == "measured" and start is not None and request.started < start)
-            or (phase == "measured" and end is not None and request.finished > end)
+            or (phase == "measured" and end is not None and (request.finished is None or request.finished > end))
         ):
             problems.append(f"step {request.id} has unfinished or contradictory request timestamps")
         else:
@@ -517,6 +533,9 @@ def _request_problems(
         issued_clients.add(client)
         if phase == "measured" and stop is not None and request.started >= stop:
             problems.append(f"step {request.id} was issued after the analytical deadline")
+        if inflight:
+            unknown_phases.add(phase)
+            continue
         if request.status == "completed" and request.result == "ok":
             if (
                 not _answer_valid(request)
@@ -550,7 +569,11 @@ def _request_problems(
             problems.append(f"step {request.id} has an invalid analytical outcome ({request.status}/{request.result})")
     if any(sorted(values) != list(range(len(values))) for values in positions.values()):
         problems.append("analytical request sequences contain duplicates or gaps")
-    if any(left[1] > right[0] for times in request_times.values() for left, right in pairwise(sorted(times))):
+    if any(
+        left[1] is None or left[1] > right[0]
+        for times in request_times.values()
+        for left, right in pairwise(sorted(times, key=lambda interval: interval[0]))
+    ):
         problems.append("analytical client requests overlap despite the closed-loop load model")
     if (run.status == "completed" or any(phase == "measured" for _, phase in positions)) and any(
         successful_warmups.get(client, set()) != set(range(len(names))) for client in range(clients)
@@ -709,6 +732,9 @@ def analytical_run_problems(con: duckdb.DuckDBPyConnection, runs: Sequence[Store
             continue
         if snapshot_system != run.system:
             problems.append(f"{run.label}: missing or contradictory original system snapshot")
+        if run.status not in ("completed", "failed"):
+            problems.append(f"{run.label}: unfinished analytical run")
+            continue
         if finished is None or finished < run.started_at:
             problems.append(f"{run.label}: missing or contradictory terminal timestamp")
             continue

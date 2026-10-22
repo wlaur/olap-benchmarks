@@ -260,6 +260,33 @@ def _step(session: Session, run_id: int, *, phase: str = "measured") -> RunStep:
     )
 
 
+def _hard_abort(session: Session, *, start: int = 1, clients: int = 1, phase: str = "measured") -> int:
+    run_id = _analytical(session, start=start, clients=clients)
+
+    def change(run: Run, metadata: Metadata) -> None:
+        run.status, run.error_type, run.error_message = "failed", "TimeoutError", "operation watchdog expired"
+        previous = metadata["analytical"]
+        evidence = analytical_metadata(AnalyticalConfig(clients, 60, 99), _queries(), {})
+        if phase == "measured":
+            for key in ("measurement_started_at", "stop_issuing_at", "warmup_started_at", "warmup_finished_at"):
+                evidence[key] = previous[key]
+        metadata["analytical"] = evidence
+
+    _edit(session, run_id, change)
+    for step in session.scalars(select(RunStep).where(RunStep.run_id == run_id)).all():
+        metadata = step.metadata_json or {}
+        if metadata.get("phase") == phase and metadata.get("sequence") == 0:
+            step.status, step.result_status, step.finished_at, step.row_count = "running", None, None, None
+            step.metadata_json = {
+                key: value
+                for key, value in metadata.items()
+                if key in {"request_id", "client_id", "phase", "sequence", "query_sha256"}
+            }
+        elif phase == "warmup":
+            session.delete(step)
+    return run_id
+
+
 def test_campaign_retains_separate_client_duration_seed_and_manifest_variants(tmp_path: Path) -> None:
     def add(session: Session) -> None:
         _analytical(session, start=1)
@@ -479,6 +506,205 @@ def test_hard_aborted_requests_retain_unknown_outcomes_without_summaries(tmp_pat
         engine.dispose()
 
 
+@pytest.mark.parametrize("clients", [1, 16])
+@pytest.mark.parametrize("phase", ["warmup", "measured"])
+def test_failed_runs_retain_unfinished_requests_and_unknown_readback(tmp_path: Path, clients: int, phase: str) -> None:
+    path = _db(tmp_path, lambda session: _hard_abort(session, clients=clients, phase=phase))
+    before = path.read_bytes()
+    assert _selected(path) == {1, 2, 3}
+    _validate(path)
+    assert path.read_bytes() == before
+    engine = get_results_engine(db_path=path)
+    try:
+        with Session(engine) as session:
+            run = session.get(Run, 3)
+            assert run is not None and run.status == "failed" and run.finished_at is not None
+            assert run.error_type == "TimeoutError" and run.error_message == "operation watchdog expired"
+            evidence = (run.metadata_json or {})["analytical"]
+            assert (
+                not {
+                    "overall",
+                    "per_query",
+                    "warmup_summary",
+                    "actual_elapsed_seconds",
+                    "drain_seconds",
+                    "budget",
+                    "worker_runtime",
+                }
+                & evidence.keys()
+            )
+            requests = session.scalars(
+                select(RunStep).where(RunStep.run_id == run.id, RunStep.status == "running")
+            ).all()
+            assert len(requests) == clients
+            for request in requests:
+                assert request.result_status is None and request.finished_at is None and request.row_count is None
+                assert request.error_type is None and request.error_message is None
+                assert run.started_at <= request.started_at <= run.finished_at
+                assert set(request.metadata_json or {}) == {
+                    "request_id",
+                    "client_id",
+                    "phase",
+                    "sequence",
+                    "query_sha256",
+                }
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "completed_run",
+        "running_run",
+        "unfinished_run",
+        "run_error_type",
+        "run_error_message",
+        "before_run",
+        "after_run",
+        "finished_request",
+        "completed_request",
+        "failed_request",
+        "result",
+        "rows",
+        "error_type",
+        "error_message",
+        "duration",
+        "null_duration",
+        "answer",
+        "null_answer",
+        "request_status",
+        "null_request_status",
+        "measurement_end",
+    ],
+)
+def test_unfinished_requests_reject_contradictory_outcomes_or_missing_terminal_failure(
+    tmp_path: Path, problem: str
+) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session)
+        step = _step(session, run_id)
+
+        def change(run: Run, metadata: Metadata) -> None:
+            request = deepcopy(step.metadata_json or {})
+            if problem == "completed_run":
+                run.status, run.error_type, run.error_message = "completed", None, None
+            elif problem == "running_run":
+                run.status = "running"
+            elif problem == "unfinished_run":
+                run.finished_at = None
+            elif problem == "run_error_type":
+                run.error_type = None
+            elif problem == "run_error_message":
+                run.error_message = None
+            elif problem == "before_run":
+                step.started_at = run.started_at - timedelta(microseconds=1)
+            elif problem == "after_run":
+                assert run.finished_at is not None
+                step.started_at = run.finished_at + timedelta(microseconds=1)
+            elif problem == "finished_request":
+                step.finished_at = run.finished_at
+            elif problem == "completed_request":
+                step.status = "completed"
+            elif problem == "failed_request":
+                step.status = "failed"
+            elif problem == "result":
+                step.result_status = "ok"
+            elif problem == "rows":
+                step.row_count = 0
+            elif problem == "error_type":
+                step.error_type = "TimeoutError"
+            elif problem == "error_message":
+                step.error_message = ""
+            elif problem in ("duration", "null_duration"):
+                request["duration_ms"] = 0 if problem == "duration" else None
+            elif problem in ("answer", "null_answer"):
+                request["answer_hash"] = ANSWER["answer_hash"] if problem == "answer" else None
+            elif problem in ("request_status", "null_request_status"):
+                request["request_status"] = "completed" if problem == "request_status" else None
+            else:
+                metadata["analytical"]["measurement_finished_at"] = step.started_at.replace(tzinfo=UTC).isoformat()
+            step.metadata_json = request
+
+        _edit(session, run_id, change)
+
+    with pytest.raises(PublishValidationError, match="unfinished|terminal|explicit run error|analytical outcome"):
+        _validate(_db(tmp_path, add))
+
+
+@pytest.mark.parametrize(
+    ("phase", "summary"),
+    [("warmup", "warmup_summary"), ("measured", "overall"), ("measured", "per_query")],
+)
+@pytest.mark.parametrize("claim", ["empty", "zero", "qps", "latency"])
+def test_unknown_request_phases_cannot_claim_partial_or_complete_summaries(
+    tmp_path: Path, phase: str, summary: str, claim: str
+) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session, phase=phase)
+        step = _step(session, run_id, phase=phase)
+
+        def change(_run: Run, metadata: Metadata) -> None:
+            value: Metadata = {
+                "empty": {},
+                "zero": {"offered": 0, "completed": 0, "errors": 0, "timeouts": 0},
+                "qps": {"throughput_per_second": 0},
+                "latency": {"latency_ms": {"n": 0}},
+            }[claim]
+            metadata["analytical"][summary] = {str(step.query_name): value} if summary == "per_query" else value
+
+        _edit(session, run_id, change)
+
+    with pytest.raises(PublishValidationError, match=f"{summary} summary contradicts"):
+        _validate(_db(tmp_path, add))
+
+
+@pytest.mark.parametrize("problem", ["sequence", "schedule", "overlap_before", "overlap_after"])
+def test_unfinished_requests_preserve_seeded_order_and_closed_loop_checks(tmp_path: Path, problem: str) -> None:
+    def add(session: Session) -> None:
+        run_id = _hard_abort(session)
+        step = _step(session, run_id)
+        order = balanced_query_order([query.name for query in _queries()], 99, 0)
+        if problem == "sequence":
+            step.metadata_json = {**(step.metadata_json or {}), "sequence": 1, "request_id": "client-0:measured:1"}
+        elif problem == "schedule":
+            step.query_name = order[1]
+            step.metadata_json = {
+                **(step.metadata_json or {}),
+                "query_sha256": next(sha256_text(query.query) for query in _queries() if query.name == order[1]),
+            }
+        elif problem == "overlap_before":
+            warmups = session.scalars(
+                select(RunStep).where(RunStep.run_id == run_id, RunStep.status == "completed")
+            ).all()
+            last = max(warmups, key=lambda request: request.started_at)
+            assert last.finished_at is not None
+            step.started_at = last.finished_at - timedelta(microseconds=1)
+            _edit(session, run_id, lambda _run, metadata: metadata["analytical"].update(measurement_started_at=None))
+        else:
+            session.add(
+                RunStep(
+                    run_id=run_id,
+                    step_type="query",
+                    step_name="analytical_request",
+                    query_name=order[1],
+                    status="running",
+                    started_at=step.started_at + timedelta(milliseconds=1),
+                    metadata_json={
+                        **(step.metadata_json or {}),
+                        "sequence": 1,
+                        "request_id": "client-0:measured:1",
+                        "query_sha256": next(
+                            sha256_text(query.query) for query in _queries() if query.name == order[1]
+                        ),
+                    },
+                )
+            )
+
+    with pytest.raises(PublishValidationError, match="sequences|seeded query schedule|requests overlap"):
+        _validate(_db(tmp_path, add))
+
+
 @pytest.mark.parametrize("conflict", ["hash", "rows"])
 @pytest.mark.parametrize("within_stream", [False, True])
 def test_answer_conflicts_block_analytical_publication(tmp_path: Path, conflict: str, within_stream: bool) -> None:
@@ -537,7 +763,7 @@ def test_campaign_publication_preserves_analytical_track_and_original_provenance
         _analytical(session, clients=1)
         _analytical(session, start=2, clients=4)
         _analytical(session, start=3, clients=16)
-        _analytical(session, start=4, status="failed")
+        _hard_abort(session, start=4)
 
     source = _db(tmp_path / "source", add)
     original = source.read_bytes()
@@ -560,6 +786,12 @@ def test_campaign_publication_preserves_analytical_track_and_original_provenance
         with Session(engine) as session:
             runs = session.scalars(select(Run).where(Run.operation == "analytical").order_by(Run.id)).all()
             assert [(run.id, run.status) for run in runs] == [(4, "completed"), (5, "completed"), (6, "failed")]
+            failed = runs[-1]
+            evidence = (failed.metadata_json or {})["analytical"]
+            assert "overall" not in evidence and "per_query" not in evidence and "worker_runtime" not in evidence
+            request = _step(session, failed.id)
+            assert request.status == "running" and request.result_status is None and request.finished_at is None
+            assert request.row_count is None and request.error_type is None and request.error_message is None
             assert all(run.system_snapshot_id == 1 for run in runs)
             assert all(
                 (run.metadata_json or {})["repository"] == {"commit": "analytical-commit", "dirty": False}
