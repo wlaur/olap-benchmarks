@@ -180,12 +180,11 @@ export function CatalogPage() {
                 </SectionTitle>
                 <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
                   {selectedSummary?.databases.length ?? 0} databases ·{" "}
-                  {selectedSummary?.systems.length ?? 0} completed{" "}
+                  {selectedSummary?.systems.length ?? 0}{" "}
                   {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
                 </p>
                 <BodyText className="mt-1 text-xs leading-5 text-slate-500">
-                  A checked cell means a completed select run exists; its query coverage may be
-                  partial. Open the explorer for measured and missing queries.
+                  A check marks a query run, not full coverage. Open Explorer for missing queries.
                 </BodyText>
               </div>
               <div className="flex flex-wrap gap-2">

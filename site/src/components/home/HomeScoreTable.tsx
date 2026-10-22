@@ -24,6 +24,12 @@ export function HomeScoreTable() {
   const systemLoading = useAppStore((s) => s.systemLoading)
   const overview = useHomeOverview(selectedSystem, benchmarkDefinitions)
 
+  function openSuite(suiteId: string, scale: number) {
+    const params = new URLSearchParams({ mode: "database", scale: String(scale) })
+    if (selectedSystem) params.set("system", selectedSystem)
+    navigate(`/explorer/${suiteId}?${params}`)
+  }
+
   const databaseColors = getDatabaseColors(overview.databases.map((database) => database.label))
   const suites =
     overview.suites.length > 0
@@ -49,10 +55,7 @@ export function HomeScoreTable() {
       <div className="border-b border-border-default px-5 py-4">
         <SectionTitle as="h2">Database ranking</SectionTitle>
         <BodyText className="mt-1">
-          Overall score across benchmark suites, relative to the fastest of the databases shown, so
-          scores shift when databases are added or removed. Lower is better; 1.0× means fastest on
-          every query. Missing results are penalized. Below each score is the absolute geometric
-          mean of the per-query median latency over the queries that database completed.{" "}
+          Latency and coverage. Lower is better; scores are not runtime multipliers.{" "}
           {selectedSystem ? (
             <>
               System: <span className="text-slate-200">{selectedSystem}</span>.
@@ -64,13 +67,11 @@ export function HomeScoreTable() {
             How scoring works
           </summary>
           <p className="mt-2 max-w-4xl leading-5">
-            Each suite score is the geometric mean of per-query latency ratios versus the fastest
-            database shown, with 10ms smoothing and missing queries penalized. Overall ordering is
-            the geometric mean across benchmark suites; smoke suites are shown but excluded. A
-            missing suite counts as that suite&apos;s worst recorded score. Latency is end-to-end
-            client latency, from sending the query until the result is a Polars DataFrame, as the
-            median of the measured iterations; the absolute figures cover only completed queries, so
-            compare them between databases with the same completed count.
+            Per-query ratios use the fastest database shown, with 10 ms added to each latency.
+            Missing queries count as 10 or twice the worst ratio, whichever is higher. Scores are
+            geometric means across queries, then suite/scale cells; missing cells take the worst
+            score. Airbnb is excluded. Scores change with the selection. Latency captions cover
+            completed queries only; compare matching query sets.
           </p>
         </details>
         <CampaignNotice className="mt-3" />
@@ -96,9 +97,7 @@ export function HomeScoreTable() {
                   <button
                     type="button"
                     className="cursor-pointer rounded-md px-1 text-right leading-tight text-slate-200 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
-                    onClick={() =>
-                      navigate(`/explorer/${suite.suiteId}?scale=${suite.suiteScaleFactor}`)
-                    }
+                    onClick={() => openSuite(suite.suiteId, suite.suiteScaleFactor)}
                     title={`Open ${suite.title} explorer`}
                   >
                     <span>{suite.title}</span>
@@ -210,9 +209,7 @@ export function HomeScoreTable() {
                       <div key={suite.key} className="min-w-0 rounded-md bg-surface-inset p-3">
                         <button
                           type="button"
-                          onClick={() =>
-                            navigate(`/explorer/${suite.suiteId}?scale=${suite.suiteScaleFactor}`)
-                          }
+                          onClick={() => openSuite(suite.suiteId, suite.suiteScaleFactor)}
                           className="block max-w-full truncate rounded-sm text-left text-xs font-medium text-slate-300 transition-colors outline-none hover:text-accent-300 focus-visible:ring-2 focus-visible:ring-slate-300/30"
                           title={`Open ${suite.title} explorer`}
                         >
@@ -263,7 +260,7 @@ function ScoreValue({ score, rank, align }: ScoreCellProps & { align: "left" | "
     return (
       <div className={cn(align === "right" ? "text-right" : "mt-2 text-left")}>
         <NumericText className="text-slate-500">—</NumericText>
-        <CaptionText className="mt-0.5 text-slate-500">not run</CaptionText>
+        <CaptionText className="mt-0.5 text-slate-500">no results</CaptionText>
       </div>
     )
   }
@@ -272,7 +269,7 @@ function ScoreValue({ score, rank, align }: ScoreCellProps & { align: "left" | "
   const coverageParts = [
     score.queryCount > 0 ? `${score.wins}/${score.queryCount} fastest` : "0 completed",
     score.failed > 0 ? `${score.failed} failed` : null,
-    score.neverCompleted > 0 ? `${score.neverCompleted} not run` : null,
+    score.neverCompleted > 0 ? `${score.neverCompleted} unmeasured` : null,
     score.latestSelectFailed && score.failed === 0 ? "latest failed" : null,
   ].filter(Boolean)
 

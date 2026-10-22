@@ -16,19 +16,16 @@ export function CampaignNotice({ className }: { className?: string }) {
   return (
     <NoticeStrip tone="warning" className={className}>
       <span className="font-semibold text-slate-100">{publication.title}</span>:{" "}
-      {publication.select_cohorts} completed SELECT cohorts; {publication.partial_select_cohorts}{" "}
-      have unsupported, skipped or unmeasured queries. Missing queries are penalized. Populate,
-      mutation and concurrency coverage may also be partial. Measurements span{" "}
-      {publication.source_commits.length} source commits.{" "}
+      {publication.select_cohorts} query runs, {publication.partial_select_cohorts} partial. Missing
+      results are penalized.{" "}
       <a
         href={publication.report_url}
         target="_blank"
         rel="noreferrer"
         className="text-accent-300 underline underline-offset-2 hover:text-accent-200"
       >
-        Campaign report
-      </a>{" "}
-      with coverage, exclusions and provenance.
+        Coverage &amp; exclusions
+      </a>
     </NoticeStrip>
   )
 }
@@ -49,16 +46,13 @@ export function ProfileScopeNotice({ className }: { className?: string }) {
 
   return (
     <NoticeStrip tone={scope.excluded.length > 0 ? "warning" : "info"} className={className}>
-      Benchmark profile <span className="font-mono text-slate-100">{id}</span>
+      <span className="font-mono text-slate-100">{id}</span>
       {warmupIterations !== null && measuredIterations !== null
-        ? `: ${warmupIterations} unscored warm-up and ${measuredIterations} measured iterations per query`
+        ? `: ${warmupIterations} warmup + ${measuredIterations} measured fetches per query`
         : null}
-      . Latency is end-to-end client latency, from sending the query until the result is a Polars
-      DataFrame, as the median of the measured iterations.
+      . Median includes transfer and conversion.
       {scope.excluded.length > 0
-        ? ` ${otherRuns} select ${otherRuns === 1 ? "run" : "runs"} recorded under ${scope.excluded
-            .map((profile) => profile.id)
-            .join(", ")} ${otherRuns === 1 ? "is" : "are"} not compared with it.`
+        ? ` ${otherRuns} ${otherRuns === 1 ? "run" : "runs"} from other profiles excluded.`
         : null}
     </NoticeStrip>
   )
@@ -75,8 +69,8 @@ export function SnapshotSpanWarning({
 
   return (
     <NoticeStrip tone="warning" className={className}>
-      The compared runs span {snapshotCount} system snapshots of this system (operating system,
-      Docker or hardware details changed between them), so their latencies may not be comparable.
+      {snapshotCount} system snapshots: OS, Docker or hardware changed. Latencies may not be
+      comparable.
     </NoticeStrip>
   )
 }
