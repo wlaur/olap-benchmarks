@@ -9,8 +9,7 @@ export function HomePage() {
       <header className="mx-auto max-w-4xl space-y-3">
         <DisplayTitle as="h1">OLAP Benchmarks</DisplayTitle>
         <BodyText className="max-w-2xl text-base">
-          The same analytical workloads run against multiple OLAP databases on the same machine,
-          measuring end-to-end query latency.
+          Analytical queries on one machine. Compare latency, coverage and SQL.
         </BodyText>
       </header>
       <HomeScoreTable />

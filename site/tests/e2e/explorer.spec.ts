@@ -26,7 +26,7 @@ test("explorer switches comparison modes and keeps query state in the URL", asyn
   )
   await expect(page.getByText("Databases to compare")).toBeVisible()
   await expect(page.getByText("Fixed environment")).toBeVisible()
-  await expect(page.getByText("Normalized suite score across 43 suite queries")).toBeVisible()
+  await expect(page.getByText("Score across 43 queries")).toBeVisible()
   await expect(page.getByText("Best suite score")).toBeVisible()
   await expect(page.getByText("Larger score → wider bar · lower is better")).toBeVisible()
   await expect(page.getByText("Shorter bars are faster").first()).toBeVisible()

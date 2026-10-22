@@ -337,8 +337,7 @@ export function ExplorerPage({
             Benchmark explorer
           </h1>
           <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
-            Start with a comparison question, then move from the suite result to individual queries
-            and SQL.
+            Compare query latency and SQL.
           </p>
         </div>
         <div className="min-w-0">
@@ -367,7 +366,7 @@ export function ExplorerPage({
               <Gauge className="h-4 w-4" strokeWidth={1.8} />
             </span>
             <div className="min-w-0">
-              <MetaLabel>Analysis setup</MetaLabel>
+              <MetaLabel>Comparison</MetaLabel>
               <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className="font-semibold text-slate-100">
                   {mode === "database" ? "Compare databases" : "Analyze one database"}
@@ -425,7 +424,7 @@ export function ExplorerPage({
                 <AnalysisField
                   icon={Database}
                   label="Databases to compare"
-                  helper="Select the engines that should compete in the suite ranking."
+                  helper="Same system and scale."
                 >
                   <ChoiceChips
                     options={selection.databaseOptions.map((database) => ({
@@ -692,15 +691,12 @@ export function ExplorerPage({
             <div className="border-t border-border-subtle pt-4">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <MetaLabel>Overall ranking</MetaLabel>
+                  <MetaLabel>Latency &amp; coverage</MetaLabel>
                   <p className="mt-1 text-sm font-medium text-slate-200">
-                    Normalized suite score across {scoredQueryCount} suite queries
+                    Score across {scoredQueryCount} queries
                   </p>
                   <p className="mt-1 max-w-3xl font-sans text-xs leading-5 text-slate-500">
-                    Geometric mean versus the fastest of the selected{" "}
-                    {getModePluralLabel(mode).toLowerCase()} per query, with 10ms smoothing and
-                    missing-query penalties. Scores are relative to this selection and change when
-                    it changes.
+                    10 ms smoothing; missing results penalized. Scores depend on the selection.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
@@ -723,10 +719,8 @@ export function ExplorerPage({
                 Query performance and SQL
               </SectionTitle>
               <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-slate-400">
-                Choose a query to compare its end-to-end latency and inspect the SQL used by each
-                database. Each latency is the median of the measured iterations, from sending the
-                query until the result is materialized as a Polars DataFrame; the warm-up iteration
-                is not scored.
+                Median fetch latency, including transfer and conversion. Select a query to see its
+                timings and SQL.
               </p>
             </div>
             <VirtualizedSelect
@@ -901,13 +895,8 @@ function AnalysisField({
 
 function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
   const leader = rows[0]
-  const last = rows.at(-1)
-  if (!leader || !last) return null
+  if (!leader) return null
   const scoredQueryCount = leader.queryCount + leader.missing
-  const scoreRange =
-    Number.isFinite(leader.score) && Number.isFinite(last.score) && leader.score > 0
-      ? last.score / leader.score
-      : null
 
   return (
     <div className="grid overflow-hidden rounded-md border border-border-subtle bg-surface-inset sm:grid-cols-3 sm:divide-x sm:divide-border-subtle">
@@ -917,11 +906,11 @@ function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
           Best suite score
         </div>
         <p className="mt-2 truncate text-xl font-semibold text-slate-50">{leader.label}</p>
-        <p className="mt-1 text-xs text-slate-400">{formatScore(leader.score)} normalized score</p>
+        <p className="mt-1 text-xs text-slate-400">{formatScore(leader.score)} score</p>
       </div>
       <div className="border-b border-border-subtle px-4 py-3 sm:border-b-0">
         <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Winning queries
+          Fastest medians
         </p>
         <p className="mt-2 text-xl font-semibold text-slate-50">
           {leader.wins}/{leader.queryCount}
@@ -935,11 +924,7 @@ function OverviewStats({ rows }: { rows: readonly ScoredComparisonRow[] }) {
           Scored workload
         </p>
         <p className="mt-2 text-xl font-semibold text-slate-50">{scoredQueryCount} queries</p>
-        <p className="mt-1 text-xs text-slate-400">
-          {scoreRange === null
-            ? "Missing results are penalized"
-            : `${scoreRange.toFixed(1)}× score spread; missing results penalized`}
-        </p>
+        <p className="mt-1 text-xs text-slate-400">Missing results are penalized</p>
       </div>
     </div>
   )
@@ -1338,7 +1323,7 @@ function QueryHeatmapRowsBlock({
               return (
                 <div
                   key={`${queryRow.query}-${row.id}`}
-                  aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "not run" : formatLatencyMs(value)}`}
+                  aria-label={`${queryRow.query}, ${row.label}: ${value === null ? "unmeasured" : formatLatencyMs(value)}`}
                   data-query={queryRow.query}
                   data-series={row.id}
                   className={cn(

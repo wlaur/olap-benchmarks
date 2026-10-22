@@ -223,6 +223,6 @@ export function geometricMean(values: readonly number[]): number | null {
 
 export function formatScore(score: number): string {
   if (!Number.isFinite(score)) return "—"
-  if (score < 100) return `${score.toFixed(1)}×`
-  return `${Math.round(score)}×`
+  if (score < 100) return score.toFixed(1)
+  return String(Math.round(score))
 }
