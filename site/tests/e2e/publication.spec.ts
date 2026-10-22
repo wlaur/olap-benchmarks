@@ -19,7 +19,7 @@ test("publication scope stays visible across the results pages", async ({ page }
     await expect(report).toHaveAttribute("href", publication.report_url)
     const notice = page.getByRole("alert").filter({ has: report })
     await expect(notice).toContainText(`${publication.select_cohorts} query runs`)
-    await expect(notice).toContainText(`${publication.partial_select_cohorts} partial`)
-    await expect(notice).toContainText("Missing results are penalized")
+    await expect(notice).toContainText(`${publication.partial_select_cohorts} are partial`)
+    await expect(notice).toContainText("penalties for missing results")
   }
 })

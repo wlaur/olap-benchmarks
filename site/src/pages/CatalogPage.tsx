@@ -184,7 +184,8 @@ export function CatalogPage() {
                   {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
                 </p>
                 <BodyText className="mt-1 text-xs leading-5 text-slate-500">
-                  A check marks a query run, not full coverage. Open Explorer for missing queries.
+                  A check means results are available, though some queries may be missing; open
+                  Explorer to see the coverage.
                 </BodyText>
               </div>
               <div className="flex flex-wrap gap-2">

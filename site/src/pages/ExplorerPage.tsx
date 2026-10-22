@@ -337,7 +337,7 @@ export function ExplorerPage({
             Benchmark explorer
           </h1>
           <p className="mt-2 max-w-3xl font-sans text-sm leading-6 text-slate-400">
-            Compare query latency and SQL.
+            Compare databases by query latency and inspect the SQL behind each result.
           </p>
         </div>
         <div className="min-w-0">
@@ -424,7 +424,7 @@ export function ExplorerPage({
                 <AnalysisField
                   icon={Database}
                   label="Databases to compare"
-                  helper="Same system and scale."
+                  helper="Compare databases on the same system and scale."
                 >
                   <ChoiceChips
                     options={selection.databaseOptions.map((database) => ({
@@ -696,7 +696,8 @@ export function ExplorerPage({
                     Score across {scoredQueryCount} queries
                   </p>
                   <p className="mt-1 max-w-3xl font-sans text-xs leading-5 text-slate-500">
-                    10 ms smoothing; missing results penalized. Scores depend on the selection.
+                    Scores use 10 ms smoothing and penalize missing results, so they change with the
+                    selection.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
@@ -719,8 +720,8 @@ export function ExplorerPage({
                 Query performance and SQL
               </SectionTitle>
               <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-slate-400">
-                Median fetch latency, including transfer and conversion. Select a query to see its
-                timings and SQL.
+                Choose a query to compare its SQL and median fetch time, including transfer and
+                conversion.
               </p>
             </div>
             <VirtualizedSelect

@@ -9,7 +9,8 @@ export function HomePage() {
       <header className="mx-auto max-w-4xl space-y-3">
         <DisplayTitle as="h1">OLAP Benchmarks</DisplayTitle>
         <BodyText className="max-w-2xl text-base">
-          Analytical queries on one machine. Compare latency, coverage and SQL.
+          These benchmarks compare analytical query performance across databases running on the same
+          machine.
         </BodyText>
       </header>
       <HomeScoreTable />

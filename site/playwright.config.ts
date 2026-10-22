@@ -29,5 +29,17 @@ export default defineConfig({
         viewport: { width: 1440, height: 900 },
       },
     },
+    {
+      name: "ipad-webkit",
+      testMatch: "home.spec.ts",
+      grep: /score headers/,
+      use: {
+        browserName: "webkit",
+        viewport: { width: 1024, height: 1366 },
+        isMobile: true,
+        hasTouch: true,
+        deviceScaleFactor: 2,
+      },
+    },
   ],
 })
