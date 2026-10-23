@@ -3,8 +3,8 @@ import { Fragment } from "react"
 import { useAnalyticalData } from "../../hooks/useAnalyticalData"
 import type { AnalyticalRun, AnalyticalSummary } from "../../lib/analytical"
 import { formatLatencyMs } from "../../lib/format"
-import { ChartFrame, NoticeStrip, PanelCard, PanelHeader } from "../layout/Panel"
-import { BodyText, MetaLabel, SectionTitle } from "../Typography"
+import { ChartFrame, NoticeStrip, PanelDisclosure } from "../layout/Panel"
+import { BodyText, MetaLabel } from "../Typography"
 
 const unknown = "Unknown"
 const integer = (value: number | null) => (value === null ? unknown : value.toLocaleString("en-US"))
@@ -169,17 +169,12 @@ export function AnalyticalEvidence() {
         aria-label="Analytical concurrency evidence"
         aria-busy={loading}
       >
-        <PanelCard className="space-y-3 p-4 sm:p-5">
-          <PanelHeader>
-            <div className="space-y-1">
-              <MetaLabel>Duration-based streams · analytical-streams-v1</MetaLabel>
-              <SectionTitle as="h2">Analytical concurrency evidence</SectionTitle>
-              <BodyText>
-                Closed-loop clients with one outstanding fetch each. Every retained run is shown,
-                including failed attempts.
-              </BodyText>
-            </div>
-          </PanelHeader>
+        <PanelDisclosure title="Analytical concurrency evidence">
+          <MetaLabel>Duration-based streams · analytical-streams-v1</MetaLabel>
+          <BodyText>
+            Closed-loop clients with one outstanding fetch each. Every retained run is shown,
+            including failed attempts.
+          </BodyText>
           <BodyText className="text-xs leading-5">
             Actual windows include drain, answer hashing and request logging; requested duration
             limits new requests. Warmup is excluded. Overall latency reflects each run’s achieved
@@ -275,7 +270,7 @@ export function AnalyticalEvidence() {
               </table>
             )}
           </ChartFrame>
-        </PanelCard>
+        </PanelDisclosure>
       </section>
     </>
   )

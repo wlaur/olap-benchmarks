@@ -5,8 +5,7 @@ import {
   type QueryObservation,
 } from "./observations"
 
-export const OVERALL_POLICY = "bounded-log-utility-v1"
-export const SLOWDOWN_CAP = 100
+export const OVERALL_POLICY = "relative-speed-v1"
 
 export interface FamilyOverview {
   family: ComparisonFamily
@@ -20,7 +19,6 @@ export interface OverallFamilyScore {
   score: number
   coverage: number
   scoredQueries: number
-  cappedQueries: number
   recordedCoverage: number
   totalQueries: number
   gaps: Record<string, number>
@@ -92,7 +90,6 @@ export function aggregateOverview(overview: readonly FamilyOverview[]): OverallR
           score: 0,
           coverage: 0,
           scoredQueries: 0,
-          cappedQueries: 0,
           recordedCoverage: 0,
           totalQueries: family.query_names.length * family.scale_factors.length,
           gaps: {} as Record<string, number>,
@@ -166,12 +163,10 @@ export function aggregateOverview(overview: readonly FamilyOverview[]): OverallR
           const query = usable.get(db)
           if (selected.has(db)) accumulator.recordedCoverage += queryWeight
           if (query) {
-            const ratio = query.medianS! / reference
-            const credit = Math.max(0, 1 - Math.log(ratio) / Math.log(SLOWDOWN_CAP))
+            const credit = reference / query.medianS!
             accumulator.score += queryWeight * credit
             accumulator.coverage += queryWeight
             accumulator.scoredQueries += 1
-            if (ratio >= SLOWDOWN_CAP) accumulator.cappedQueries += 1
             const runId = selected.get(db)!.run!.runId
             if (!accumulator.runIds.includes(runId)) accumulator.runIds.push(runId)
           } else {

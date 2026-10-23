@@ -97,16 +97,18 @@ function score(families, runs, extra) {
 
 const engine = (result, db) => result.rows.find((row) => row.db === db)
 
-describe("bounded logarithmic overall query utility", () => {
+describe("relative-speed overall score", () => {
   test.each([
-    [1, 100, 0, 1],
-    [10, 50, 0, 2],
-    [100, 0, 2, 2],
-    [1000, 0, 2, 2],
-  ])("a %px slowdown earns %p points with usable coverage", (ratio, points, capped, rank) => {
+    [1, 100, 1],
+    [2, 50, 2],
+    [4, 25, 2],
+    [10, 10, 2],
+    [100, 1, 2],
+    [1000, 0.1, 2],
+  ])("a %px slowdown earns %p points with usable coverage", (ratio, points, rank) => {
     const f = family(),
       result = score([f], [run("ref", f), run("peer", f, [ratio, ratio])])
-    expect(result.policy).toBe("bounded-log-utility-v1")
+    expect(result.policy).toBe("relative-speed-v1")
     expect(engine(result, "ref")).toMatchObject({ score: 100, coverage: 100, rank: 1 })
     expect(engine(result, "peer")).toMatchObject({
       score: points,
@@ -117,10 +119,9 @@ describe("bounded logarithmic overall query utility", () => {
       rank,
       rankRange: [rank, rank],
     })
-    expect(engine(result, "peer").families[0].cappedQueries).toBe(capped)
   })
 
-  test("extreme finite durations clamp utility without losing usable coverage", () => {
+  test("extreme finite durations retain usable coverage even when credit underflows", () => {
     const f = family("a", 1),
       result = score([f], [run("ref", f, [1e-300]), run("slow", f, [1e300])])
     expect(engine(result, "ref")).toMatchObject({ score: 100, coverage: 100 })
@@ -130,7 +131,6 @@ describe("bounded logarithmic overall query utility", () => {
       scoredQueries: 1,
       rank: 2,
     })
-    expect(engine(result, "slow").families[0].cappedQueries).toBe(1)
   })
 
   test("credits individually complete queries without discarding a partial suite", () => {
@@ -142,7 +142,7 @@ describe("bounded logarithmic overall query utility", () => {
     expect(data[0].scales[0].rows.find((r) => r.db === "partial").eligible).toBe(false)
     const result = aggregateOverview(data)
     expect(engine(result, "reference")).toMatchObject({ score: 100, coverage: 100 })
-    expect(engine(result, "slow")).toMatchObject({ score: 50, coverage: 100 })
+    expect(engine(result, "slow")).toMatchObject({ score: 10, coverage: 100 })
     expect(engine(result, "partial")).toMatchObject({
       score: 50,
       coverage: 50,
@@ -159,6 +159,21 @@ describe("bounded logarithmic overall query utility", () => {
       rank: null,
       rankRange: null,
     })
+  })
+
+  test("arithmetic relative speed can differ from the strict geometric workload order", () => {
+    const f = family()
+    const data = overview(
+      [f],
+      [run("reference", f), run("uneven", f, [1, 100]), run("steady", f, [4, 4])],
+    )
+    const strict = data[0].scales[0].rows
+    expect(strict.find((row) => row.db === "uneven").score).toBeCloseTo(10)
+    expect(strict.find((row) => row.db === "steady").score).toBeCloseTo(4)
+    const result = aggregateOverview(data)
+    expect(engine(result, "uneven").score).toBeCloseTo(50.5)
+    expect(engine(result, "steady").score).toBe(25)
+    expect(engine(result, "uneven").rank).toBeLessThan(engine(result, "steady").rank)
   })
 
   test("equal family votes prevent query counts from dominating; gaps retain their weight", () => {
@@ -215,15 +230,15 @@ describe("bounded logarithmic overall query utility", () => {
     )
     const row = engine(result, "partial")
     expect(row).toMatchObject({
-      score: 43.75,
+      score: 18.875,
       coverage: 87.5,
       recordedGapCoverage: 12.5,
       unmeasuredCoverage: 0,
       scoredQueries: 4,
       totalQueries: 5,
     })
-    expect(row.families[0]).toMatchObject({ score: 37.5, coverage: 75, cappedQueries: 1 })
-    expect(row.families[1]).toMatchObject({ score: 50, coverage: 100 })
+    expect(row.families[0]).toMatchObject({ score: 27.75, coverage: 75 })
+    expect(row.families[1]).toMatchObject({ score: 10, coverage: 100 })
     expect(result.queryCount).toBe(5)
   })
 
@@ -267,7 +282,7 @@ describe("bounded logarithmic overall query utility", () => {
       ref = run("ref", f),
       peer = run("peer", f, [10, 10])
     peer.queries.set("extra", run("x", f, [0.00001]).queries.get("Q1"))
-    expect(engine(score([f], [ref, peer]), "peer").score).toBe(50)
+    expect(engine(score([f], [ref, peer]), "peer").score).toBe(10)
   })
 
   test("a sole scorable run cannot establish a cell reference", () => {
@@ -308,8 +323,8 @@ describe("bounded logarithmic overall query utility", () => {
       peer = run("peer", f, [2, 1]),
       before = score([f], [fast, peer, run("withholding", f, [10, 10])]),
       after = score([f], [fast, peer, run("withholding", f, [null, 10])])
-    expect(engine(before, "withholding")).toMatchObject({ score: 50, rank: 3 })
-    expect(engine(after, "withholding")).toMatchObject({ score: 25, coverage: 50, rank: 3 })
+    expect(engine(before, "withholding")).toMatchObject({ score: 10, rank: 3 })
+    expect(engine(after, "withholding")).toMatchObject({ score: 5, coverage: 50, rank: 3 })
     for (const db of ["fast", "peer"]) expect(engine(after, db)).toEqual(engine(before, db))
   })
 
@@ -325,7 +340,7 @@ describe("bounded logarithmic overall query utility", () => {
         unmeasuredCoverage: 0,
         rank: null,
       })
-      expect(engine(result, "peer").score).toBe(50)
+      expect(engine(result, "peer").score).toBe(10)
     },
   )
 
@@ -389,7 +404,7 @@ describe("bounded logarithmic overall query utility", () => {
       unmeasuredCoverage: 0,
       rank: null,
     })
-    expect(engine(result, "peer").score).toBe(50)
+    expect(engine(result, "peer").score).toBe(10)
   })
 
   test.each(["failed", "running"])("a %s run cannot supply reference or score", (status) => {
@@ -406,7 +421,7 @@ describe("bounded logarithmic overall query utility", () => {
       scoredQueries: 0,
       rank: null,
     })
-    expect(engine(result, "peer").score).toBe(50)
+    expect(engine(result, "peer").score).toBe(10)
   })
 
   test("invalidation and run errors exclude the entire cell", () => {
@@ -424,7 +439,7 @@ describe("bounded logarithmic overall query utility", () => {
         unmeasuredCoverage: 0,
         rank: null,
       })
-      expect(engine(result, "peer").score).toBe(50)
+      expect(engine(result, "peer").score).toBe(10)
     }
   })
 
@@ -443,7 +458,7 @@ describe("bounded logarithmic overall query utility", () => {
       unmeasuredCoverage: 0,
       rank: null,
     })
-    expect(engine(result, "peer").score).toBe(50)
+    expect(engine(result, "peer").score).toBe(10)
   })
 
   test.each([undefined, null, {}, { manifest_sha256: "" }, { manifest_sha256: 42 }])(
@@ -461,7 +476,7 @@ describe("bounded logarithmic overall query utility", () => {
         rank: null,
       })
       expect(engine(result, "bad").families[0].gaps).toEqual({ "input fingerprint unknown": 2 })
-      expect(engine(result, "peer").score).toBe(50)
+      expect(engine(result, "peer").score).toBe(10)
     },
   )
 
@@ -546,7 +561,7 @@ describe("bounded logarithmic overall query utility", () => {
         evidenceReason: "result exceeds hash size limit",
       })
     expect(engine(aggregateOverview(data), "limited")).toMatchObject({
-      score: 50,
+      score: 10,
       coverage: 100,
       recordedGapCoverage: 0,
       scoredQueries: 2,
@@ -627,7 +642,8 @@ describe("bounded logarithmic overall query utility", () => {
     runs.push(run("partial", f, [100]), run("partial", f, [1], 10, { status: "failed" }))
     const result = score([f], runs),
       row = engine(result, "partial")
-    expect(row).toMatchObject({ score: 0, scoredQueries: 1, totalQueries: 3, rank: 3 })
+    expect(row.score).toBeCloseTo(1 / 3)
+    expect(row).toMatchObject({ scoredQueries: 1, totalQueries: 3, rank: 3 })
     expect(row.coverage).toBeCloseTo(100 / 3)
     expect(row.recordedGapCoverage).toBeCloseTo(100 / 3)
     expect(row.unmeasuredCoverage).toBeCloseTo(100 / 3)
@@ -641,7 +657,7 @@ describe("bounded logarithmic overall query utility", () => {
       result = score([f], [run("ref", f), run("peer", f, [10, 10])])
     const before = engine(result, "peer")
     const filtered = result.rows.filter((row) => row.db !== "ref").toReversed()
-    expect(filtered.find((row) => row.db === "peer")).toMatchObject({ score: 50, rank: 2 })
+    expect(filtered.find((row) => row.db === "peer")).toMatchObject({ score: 10, rank: 2 })
     expect(filtered.find((row) => row.db === "peer")).toBe(before)
     expect(before.rankRange).toEqual([2, 2])
   })
@@ -661,9 +677,9 @@ describe("bounded logarithmic overall query utility", () => {
         [f],
         [
           run("ref", f),
-          run("z-faster", f, [100 ** 0.4996]),
-          run("a-slower", f, [100 ** 0.4999]),
-          run("trailing", f, [100 ** 0.5006]),
+          run("z-faster", f, [100 / 50.04]),
+          run("a-slower", f, [100 / 50.01]),
+          run("trailing", f, [100 / 49.94]),
         ],
       )
     expect(engine(result, "z-faster").score).toBeCloseTo(50.04)
@@ -690,13 +706,13 @@ describe("bounded logarithmic overall query utility", () => {
           run("balanced", a, [10]),
           run("balanced", b, [10]),
           run("a-specialist", a),
-          run("a-specialist", b, [100 ** 0.9]),
-          run("b-specialist", a, [100 ** 0.9]),
+          run("a-specialist", b, [100]),
+          run("b-specialist", a, [100]),
           run("b-specialist", b),
         ],
       )
     expect(engine(result, "balanced")).toMatchObject({
-      score: 50,
+      score: 10,
       rank: 3,
       rankRange: [2, 3],
       unrankedOmissions: 0,
@@ -716,7 +732,7 @@ describe("bounded logarithmic overall query utility", () => {
           run("ref", b),
           run("peer", b),
           run("boundary", a),
-          run("nearby", a, [100 ** (1 - 1.14 / 1.15)]),
+          run("nearby", a, [1.15 / 1.14]),
         ],
       )
     expect(engine(result, "boundary").score).toBe(1.15)
@@ -726,10 +742,10 @@ describe("bounded logarithmic overall query utility", () => {
     expect(engine(result, "nearby").rank).toBe(3)
   })
 
-  test("a ranked zero-credit result sorts before unranked evidence gaps", () => {
+  test("a rounded-zero result with usable evidence sorts before unranked evidence gaps", () => {
     const f = family("a", 1),
-      result = score([f], [run("ref", f), run("peer", f), run("z-capped", f, [100])])
-    expect(engine(result, "z-capped")).toMatchObject({ score: 0, coverage: 100, rank: 3 })
+      result = score([f], [run("ref", f), run("peer", f), run("z-slow", f, [10000])])
+    expect(engine(result, "z-slow")).toMatchObject({ score: 0.01, coverage: 100, rank: 3 })
     expect(result.rows.at(-1).db).toBe("unmeasured")
   })
 

@@ -6,7 +6,8 @@ All publication databases remain listed, including those with partial or no
 comparable evidence. This index describes the selected measurements and harness;
 it does not establish a universal database winner or predict unmeasured capability.
 
-The policy is `bounded-log-utility-v1`, with slowdown cap `K = 100`. It is a
+The policy is `relative-speed-v1`. It replaces `bounded-log-utility-v1` with a
+direct relative-speed calculation and no slowdown cutoff. It is a
 retrospective index of existing measurements, not a measurement policy declared
 before the campaign. The dated campaign report's “no overall winner” statement
 remains a historical description of its original publication; this later index
@@ -80,182 +81,141 @@ prevents withholding a competitor's result from silently deleting the fastest
 database's credit. A revision that violates the rule requires resolution before
 publication.
 
-## Bounded log credit
+## Relative-speed points
 
 For each canonical query/scale, `t*` is the fastest usable median across the
-entire publication, **including usable queries in completed partial runs**.
-For a usable timing `t`, define:
+entire publication, including usable queries in completed partial runs. A usable
+timing `t` earns:
 
 ```text
-u(t) = clamp(1 - ln(t / t*) / ln(100), 0, 1)
-u    = 0 when the position is not usable
+Query points = 100 * t* / t
+Query points = 0 when the position is not usable
 ```
 
-The fastest observed result earns 100% query credit, a result taking 10 times
-as long earns 50%, and one taking 100 times as long or more earns zero. A usable
-result at or beyond the cap still counts toward usable coverage. Missing,
-unsupported, skipped, timed-out or correctness-blocked positions earn zero
-credit without an invented runtime or finite timeout penalty.
+The fastest result earns **100 points**, twice as slow earns **50**, ten times
+as slow earns **10**, and 100 times as slow earns **1**. There is no logarithm,
+tuned constant or cutoff. Missing, unsupported, skipped, timed-out or blocked
+positions earn zero without an invented runtime. Positive usable timings retain
+positive credit, apart from possible floating-point underflow at extreme ratios.
 
-Let `a(f)` be the declared family weight, `S(f)` its fixed scale set and `Q(f)`
-its fixed comparable-query set:
+Average query points within each scale, then scales within each family, then
+families using their published weights. Equivalently:
 
 ```text
 w(f,s,q) = a(f) / sum_f a(f) / |S(f)| / |Q(f)|
-
-Overall index(d) = 100 * sum_(f,s,q) w(f,s,q) * u(d,f,s,q)
+Overall score(d) = sum_(f,s,q) w(f,s,q) * query_points(d,f,s,q)
 ```
 
-This gives `0 <= index <= usable coverage <= 100`. An index of 80 means
-80 weighted query-credit points. It is not 80% correctness, 80% coverage or a
-runtime ratio to another database. Fixed weights prevent a specialist from
-receiving a perfect overall score for only its successful subset. The bounded
-curve limits the influence of extreme slowdowns; it deliberately assigns the
-same speed credit to a usable result beyond the cap and an evidence gap, while
-coverage and gap reasons preserve that distinction.
+Every engine retains the same fixed denominator. A specialist cannot earn a
+perfect overall score from its successful subset. Scores satisfy
+`0 <= score <= weighted usable coverage <= 100`. A score of 80 means 80 weighted
+relative-speed points; it is neither 80% correctness nor a latency multiplier.
+An engine with twice another's score need not finish the full workload twice
+as fast.
 
-## Coverage, ranks and drill-down
+## Overview and details
 
-Every canonical position belongs to exactly one coverage category, using the
-same weights as the index:
+The initial table shows rank, database, score and the count of usable query/scale
+positions out of the full 871. These counts are unweighted; families with more
+queries contribute more positions but receive no extra score weight. “Queries
+scored” does not mean independent correctness verification.
 
-- **Usable:** the query passes the measurement and comparison rules, including
-  valid timings that receive zero credit at the slowdown cap.
-- **Recorded gap:** a selected registered run exists, but this query is not
-  usable. This includes blocked runs, incomplete measurements and unstarted
-  positions within a selected run.
-- **Not measured:** no selected run exists, including unimplemented adapters or
-  registered adapters without a published run.
+Expand a database to see published versions, per-workload points, measurement
+gaps and contributing run IDs. Weighted coverage partitions the fixed workload:
 
-The three weighted percentages sum to 100 before display rounding. They measure
-evidence in this publication, not the database's underlying capabilities.
-Per-family details retain scores, coverage, query counts, gap reasons and
-contributing run IDs. The workload count means families with at least one usable
-query, rather than fully completed families.
+- **Usable:** the query passes the measurement and comparison rules.
+- **Recorded gap:** a selected registered run exists, but the query is unusable,
+  including blocked runs and unstarted queries in that run.
+- **No run:** no selected run exists, including unimplemented adapters.
 
-Rank by descending index, treating scores equal at the displayed **0.1-point
-precision** as ties. Ties share a competition rank (1, 1, 3); name ordering
-within a tie does not break it. A database with no usable evidence stays listed
-with zero index and coverage, without a rank. A database with usable evidence
-can be ranked even if all its timings receive zero speed credit. References,
-scores and ranks use the entire publication and do not change when engines are
-hidden.
+These percentages sum to 100 before rounding and describe published evidence,
+not underlying database capability. The workload count in the details means
+families with at least one usable query.
 
-The rank-sensitivity band is the minimum and maximum rank across the **full
-index plus all 11 leave-one-family-out calculations**. Each omission
-renormalizes the remaining family weights and applies the same display-precision
-tie rule. If an omission leaves a database with no usable evidence, that case is
-unranked and counted separately, not assigned a worst numeric rank. TDengine,
-measured in one weighted family, has such an omission. These bands describe
-dependence on the workload mix; they are not confidence intervals.
+Rank by descending score, treating scores equal at the displayed **0.1-point
+precision** as ties. Ties share a competition rank (1, 1, 3); alphabetical order
+within a tie does not break it. An engine with no usable evidence remains listed
+with zero points and no rank. A positive score rounding to 0.0 remains ranked.
+References, scores and ranks use the full publication; hiding engines changes
+none of them.
 
-The **By workload** view retains the strict family/scale latency comparison:
-every required comparable query must be usable, and its score is the geometric
-mean of median-latency ratios to the strict eligible reference set, with lower
-being better. Partial completed runs can earn overall credit without qualifying
-for that strict score. The two views have different inclusion rules and units;
-the overall index is not an across-suite latency multiplier.
+The details retain a rank-sensitivity check: the minimum and maximum rank across
+the full score and each leave-one-family-out calculation, renormalizing remaining
+weights. An omission leaving no usable results is unranked and counted separately.
+These are workload-mix sensitivity checks, not confidence intervals.
 
-## Retrospective selection and method sensitivity
+Concurrency measurements, campaign notes and measurement context are collapsed
+by default and remain available on the overview.
 
-`K = 100` was chosen after inspecting the frozen measurements, as the smallest
-power-of-ten cap preserving all 207 pairwise orders from the strict full-family
-comparisons. Tested caps from 70 upward had zero inversions; `K = 30` had four,
-and the earlier reciprocal-credit draft had 11. Agreement with those existing
-comparisons is a retrospective selection criterion, not independent validation
-of the resulting overall order. Freeze `K = 100` under this policy identifier
-for future use; do not retune it to preserve a preferred winner.
-The canonical families, query sets, scales and weights are also frozen under
-this policy. Changing their definitions requires an explicit policy revision
-and an updated pinned acceptance fixture.
+## Difference from workload comparisons and the previous policy
 
-Middle ranks depend materially on reasonable method choices. At tested caps
-of 150 and above, PostgreSQL overtakes Polars; at 1,000, PostgreSQL is fifth and
-TimescaleDB sixth. A domain-balanced alternative puts Doris fifth. These are
-**method and workload-mix sensitivity checks**, not measurement confidence
-intervals or independent campaign repetitions.
+The **By workload** view retains its strict family/scale latency comparison:
+every required query must be usable, and the geometric mean of median-latency
+ratios is lower-is-better. Partial completed runs can earn overall points without
+qualifying for that strict score.
 
-This is a custom scalar publication policy. A geometric mean over only
-successful families compares different workload sets; assigning failures an
-arbitrary duration invents timings. The chosen index instead retains every
-canonical weight and makes its speed/coverage tradeoff explicit. Other utility
-curves or domain weights can produce different defensible rankings.
+Relative-speed points use an arithmetic average of reciprocal latency ratios.
+This places more emphasis on queries close to the fastest result than the
+previous logarithmic policy. It can reverse the strict geometric workload order:
+ratios of 1× and 100× average 50.5 points, while two 4× results average 25 points,
+even though their geometric ratios are 10× and 4× respectively. Neither is the
+sum of query durations or elapsed run time.
 
-The reviewed frozen-data ranking is reproduced by
-[`site/tests/fixtures/overall.json`](../site/tests/fixtures/overall.json) and the
-application-reader test in `site/tests/e2e/overall.spec.ts`:
+On the frozen campaign, this policy differs from strict workload ordering in
+**11 of 207 eligible engine-pair comparisons**. The previous logarithmic policy
+was chosen retrospectively to avoid those differences. This revision explicitly
+prioritizes a directly explainable formula; it is not selected to preserve a
+preferred ranking. MonetDB overtakes StarRocks, and several middle positions
+change. Scores from the two policies must not be compared as performance changes.
+The canonical families, scales, queries and weights remain fixed; future changes
+require a new policy identifier and pinned acceptance fixture.
 
-| Rank | Database | Index | Usable / recorded gaps / no run (%) | Rank band |
-| --- | --- | ---: | --- | --- |
-| 1 | DuckDB | 88.9 | 100.0 / 0.0 / 0.0 | 1 |
-| 2 | ClickHouse | 73.7 | 100.0 / 0.0 / 0.0 | 2 |
-| 3 | StarRocks | 57.4 | 81.7 / 0.1 / 18.2 | 3–4 |
-| 4 | MonetDB | 51.3 | 74.9 / 6.9 / 18.2 | 3–4 |
-| 5 | Polars | 29.6 | 45.5 / 0.0 / 54.5 | 5–8 |
-| 6 | PostgreSQL | 27.7 | 75.1 / 24.9 / 0.0 | 5–9 |
-| 7 | Doris | 26.3 | 45.2 / 0.2 / 54.5 | 5–10 |
-| 8 | QuestDB | 26.0 | 44.6 / 0.9 / 54.5 | 6–9 |
-| 9 | TimescaleDB | 25.9 | 66.1 / 24.8 / 9.1 | 6–9 |
-| 10 | Arc | 20.9 | 43.8 / 1.7 / 54.5 | 9–10 |
-| 11 | TDengine | 5.5 | 9.1 / 0.0 / 90.9 | 11* |
+The frozen-data acceptance fixture is
+[site/tests/fixtures/overall.json](../site/tests/fixtures/overall.json). The
+application-reader test in `site/tests/e2e/overall.spec.ts` checks scores, coverage,
+rank sensitivity and the exact engine pairs whose workload order differs:
 
-`*` Dropping TDengine's sole measured family leaves it unranked. Displayed
-coverage parts may differ from 100 by 0.1 because of rounding. Ranks 5–10 are
-within nine index points; their order depends on the workload mix.
-
-The following checks keep the same observations and denominators:
-
-| Alternative | Ranks 5–10 | Strict within-workload order inversions |
-| --- | --- | ---: |
-| Cap 30 | Polars, QuestDB, Doris, PostgreSQL, Arc, TimescaleDB | 4 / 207 |
-| Cap 100 (published) | Polars, PostgreSQL, Doris, QuestDB, TimescaleDB, Arc | 0 / 207 |
-| Cap 1,000 | PostgreSQL, TimescaleDB, Polars, Doris, QuestDB, Arc | 0 / 207 |
-| Four equal domain weights, cap 100 | Doris, Polars, PostgreSQL, TimescaleDB, QuestDB, Arc | 0 / 207 |
-| Add 10 ms to each timing, cap 100 | PostgreSQL, TimescaleDB, Polars, QuestDB, Arc, Doris | 5 / 207 |
-
-The domain check assigns one quarter each to time series (Time Series, Metrics,
-Ranges, Device Telemetry), events (RTABench, ClickBench), documents (JSONBench,
-Chat Threads), and relational work (TPC-H, TPC-DS, JOB), divided equally among
-families within each domain. These groupings are another subjective choice.
-The cap and domain checks retain the first four database positions and TDengine
-last; the leave-one-family-out check allows StarRocks and MonetDB to exchange
-third and fourth. The new index is checked in the Pages build before deployment.
+| Rank | Database | Score / 100 | Queries scored / 871 |
+| --- | --- | ---: | ---: |
+| 1 | DuckDB | 79.9 | 871 |
+| 2 | ClickHouse | 41.1 | 871 |
+| 3 | MonetDB | 29.8 | 788 |
+| 4 | StarRocks | 28.5 | 787 |
+| 5 | Polars | 15.1 | 323 |
+| 6 | Doris | 11.7 | 319 |
+| 7 | QuestDB | 10.4 | 426 |
+| 8 | PostgreSQL | 8.2 | 622 |
+| 9 | Arc | 7.4 | 421 |
+| 10 | TimescaleDB | 6.7 | 509 |
+| 11 | TDengine | 1.9 | 120 |
 
 ## Measurement limits and reproduction
 
 The evidence is revision `2026-10-followup`, selected release asset **143,929,344
 bytes**, SHA-256
 `832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f`.
-The application calculates the index in `site/src/lib/overall.ts` using its
-shared reader and query observations; the comparison manifest fixes its scope.
-Results databases are release assets, not committed measurement files.
+The application calculates scores in `site/src/lib/overall.ts` using its shared
+reader and query observations. Results databases are release assets, never
+committed measurement files. Changing this score does not rerun benchmarks or
+alter recorded observations.
 
 This M4 Pro/macOS campaign uses warm caches and serial SELECT fetches. Timings
 include planning, driver transport, transfer and materialization. Tiny queries
-can therefore favor embedded engines. No 10 ms offset, latency floor or
-deployment-cost correction is applied. Three measured fetches provide a median,
-not a confidence interval. Adapter coverage, layouts and tuning effort are
-unequal; preparation and resource-enforcement scopes also differ. The index
-cannot isolate execution kernels, predict production workloads or establish a
-general memory-efficiency ranking.
+can favor embedded engines; no latency floor, deployment-cost adjustment or
+10 ms offset is applied. Three measured fetches provide a median, not a
+confidence interval. Adapter coverage, layouts and tuning effort are unequal;
+preparation and resource-enforcement scopes differ. The score cannot isolate
+execution kernels, predict production workloads or establish a general
+memory-efficiency ranking. The four time-series families plus RTABench carry
+5/11 of the weight, an explicit workload-mix choice.
 
-In this publication, 512 of 871 positions (59%) have a fastest median below
-10 ms; DuckDB sets 356 of those. The diagnostic 10 ms offset shrinks the
-DuckDB–ClickHouse index gap from 15.2 to 6.4 points while preserving the first
-four positions and TDengine last. It also reverses five strict within-workload
-comparisons. The offset is not adopted: it substitutes an assumed deployment
-overhead for the recorded timings. Its sensitivity illustrates how strongly
-small fetches influence this particular workload mix.
+One campaign asymmetry affects PostgreSQL and TimescaleDB TPC-DS: SF1 Q11 was
+an explicit exclusion, so completed partial runs may earn credit for the other
+98 positions. At SF10, the external Q11 watchdog failed the entire run, so all
+positions earn zero, including earlier completions. This policy retains that
+recorded distinction.
 
-One frozen campaign asymmetry affects PostgreSQL and TimescaleDB TPC-DS. At SF1,
-Q11 was an explicit campaign exclusion and the completed partial runs can earn
-credit for 98 of 99 positions. At SF10, the external Q11 watchdog failed the
-whole run, so all positions receive zero under the run-level rule, including
-earlier completed queries. Crediting those earlier SF10 completions instead
-would change each affected overall index by less than one point. This release
-accepts and documents that status asymmetry rather than rewriting the evidence.
-
-The [follow-up report](campaigns/2026-10-followup.md) records the campaign's
-tuning, replacements and limitations. Changing the asset, canonical queries,
-weights or policy can change the index; a difference between editions alone
-does not demonstrate a database speed improvement.
+The [follow-up report](campaigns/2026-10-followup.md) records tuning, replacements
+and limitations. Changes to the asset, query sets, weights or scoring policy can
+change the ranking; a difference between editions alone does not demonstrate a
+database speed improvement.

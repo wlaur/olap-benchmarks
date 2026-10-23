@@ -1,5 +1,26 @@
 import { expect, test, type Page } from "@playwright/test"
 
+test("home starts with scores and reveals supporting information on demand", async ({ page }) => {
+  await page.goto("#/")
+  const row = page.locator('[data-overall-engine="duckdb"]')
+  await expect(row.locator("[data-overall-score]")).toBeVisible()
+  await expect(row.locator("summary")).toContainText("871/871 queries scored")
+  await expect(row.locator("[data-overall-coverage]")).toBeHidden()
+  const concurrency = page.getByRole("table", {
+    name: "Analytical stream measurements",
+    includeHidden: true,
+  })
+  await expect(concurrency).toBeHidden()
+  await expect(page.getByText("October 2026 · M4 Pro", { exact: true })).toBeHidden()
+  await page.getByRole("heading", { name: "Analytical concurrency evidence", exact: true }).click()
+  await expect(concurrency).toBeVisible()
+  await page.getByRole("heading", { name: "About this campaign", exact: true }).click()
+  await expect(page.getByText("October 2026 · M4 Pro", { exact: true })).toBeVisible()
+  await row.locator("summary").focus()
+  await page.keyboard.press("Enter")
+  await expect(row.locator("[data-overall-coverage]")).toBeVisible()
+})
+
 test("home compares fixed families and opens the selected explorer", async ({ page }) => {
   const errors: string[] = []
   page.on("pageerror", (error) => errors.push(error.message))
