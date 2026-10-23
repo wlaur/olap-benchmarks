@@ -1,6 +1,8 @@
+import { ChevronDown } from "lucide-react"
 import type { CSSProperties, ReactNode } from "react"
 
 import { cn } from "../../lib/cn"
+import { SectionTitle } from "../Typography"
 
 export function PanelCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -17,6 +19,23 @@ export function PanelCard({ children, className }: { children: ReactNode; classN
 
 export function PanelHeader({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("flex items-start justify-between gap-3", className)}>{children}</div>
+}
+
+export function PanelDisclosure({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <PanelCard className="p-0">
+      <details className="group/panel">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-accent-300 focus-visible:ring-inset sm:p-5 [&::-webkit-details-marker]:hidden">
+          <SectionTitle as="h2">{title}</SectionTitle>
+          <ChevronDown
+            aria-hidden="true"
+            className="size-4 shrink-0 text-slate-400 transition-transform group-open/panel:rotate-180"
+          />
+        </summary>
+        <div className="space-y-3 border-t border-border-subtle p-4 sm:p-5">{children}</div>
+      </details>
+    </PanelCard>
+  )
 }
 
 export function ChartFrame({

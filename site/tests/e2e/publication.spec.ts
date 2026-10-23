@@ -65,13 +65,14 @@ test("published cohorts reconcile with fixed-family eligibility", async ({ page 
   }
 })
 
-test("publication scope stays visible across the results pages", async ({ page }) => {
+test("publication scope remains accessible across the results pages", async ({ page }) => {
   const response = await page.request.get("data/manifest.json")
   expect(response.ok()).toBe(true)
   const { publication } = (await response.json()) as { publication: Publication }
 
   for (const route of ["#/", "#/explorer/tpc_h?scale=50", "#/catalog?suite=tpc_h"]) {
     await page.goto(route)
+    if (route === "#/") await page.getByText("Measurement context", { exact: true }).click()
     const report = page.getByRole("link", { name: "Coverage & exclusions", exact: true })
     if (publication.kind === "matrix") {
       await expect(report).toHaveCount(0)

@@ -2,7 +2,7 @@ name: Deploy GH pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -54,9 +54,9 @@ jobs:
         working-directory: site
         run: bun run test:reader
 
-      - name: Verify the overall index against the reviewed publication
+      - name: Verify overall scores against the reviewed publication
         working-directory: site
-        run: bun run test:e2e tests/e2e/overall.spec.ts --project=chromium --grep "pinned overall index" --workers=1
+        run: bun run test:e2e tests/e2e/overall.spec.ts --project=chromium --grep @overall-publication --workers=1
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5.0.0

@@ -21,6 +21,9 @@ test("published analytical evidence keeps warmup failures unknown", async ({ pag
   page.on("pageerror", (error) => errors.push(error.message))
   await page.goto("#/")
   const section = page.getByRole("region", { name: "Analytical concurrency evidence", exact: true })
+  await section
+    .getByRole("heading", { name: "Analytical concurrency evidence", exact: true })
+    .click()
   await expect(section.locator("[data-analytical-run]")).toHaveCount(
     manifest.publication.analytical_runs,
   )
@@ -88,6 +91,9 @@ test("analytical runs retain qualified latency, failures and drilldown without a
   await page.goto("#/")
   await page.getByRole("button", { name: "By workload", exact: true }).click()
   const section = page.getByRole("region", { name: "Analytical concurrency evidence", exact: true })
+  await section
+    .getByRole("heading", { name: "Analytical concurrency evidence", exact: true })
+    .click()
   await expect(section).toBeVisible()
   const rows = section.locator("[data-analytical-run]")
   await expect(rows).toHaveCount(4)

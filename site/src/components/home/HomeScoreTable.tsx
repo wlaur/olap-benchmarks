@@ -54,7 +54,7 @@ export function HomeScoreTable() {
           </SectionTitle>
           <BodyText>
             {view === "overall"
-              ? "A 0–100 speed + coverage index, higher is better. Weighted coverage describes this publication and harness, not database capability."
+              ? "Per query: fastest = 100 points, twice as slow = 50, missing = 0. Higher is better."
               : "Performance, execution coverage and validation evidence answer different questions."}
           </BodyText>
         </div>
@@ -87,40 +87,17 @@ export function HomeScoreTable() {
       ) : error ? (
         <NoticeStrip tone="warning">
           {overallUnavailable
-            ? "Overall index unavailable for this system"
+            ? "Overall score unavailable for this system"
             : "Failed to load comparison"}
           : {error}
         </NoticeStrip>
       ) : overview.families.length > 0 ? (
         <>
-          <details className="text-xs text-slate-400">
-            <summary className="cursor-pointer">Visible engines</summary>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {engines.map((db) => (
-                <ControlChip
-                  key={db}
-                  selected={!hidden.includes(db)}
-                  aria-pressed={!hidden.includes(db)}
-                  onClick={() =>
-                    setHidden((current) =>
-                      current.includes(db)
-                        ? current.filter((entry) => entry !== db)
-                        : [...current, db],
-                    )
-                  }
-                >
-                  {db}
-                </ControlChip>
-              ))}
-            </div>
-          </details>
           {view === "overall" ? (
             <>
               <BodyText className="text-xs">
-                {overview.overall.familyCount} core workload families ·{" "}
-                {overview.overall.queryCount} fixed query positions · equal weight per family ·
-                scores and ranks stay fixed when engines are hidden. Fastest earns full credit, 10×
-                slower half, 100× slower zero.
+                {overview.overall.familyCount} equally weighted workloads ·{" "}
+                {overview.overall.queryCount} fixed query positions.
               </BodyText>
               <OverallRankingTable
                 rows={overview.overall.rows.filter((row) => !hidden.includes(row.db))}
@@ -187,6 +164,27 @@ export function HomeScoreTable() {
               />
             </>
           ) : null}
+          <details className="text-xs text-slate-400">
+            <summary className="cursor-pointer">Visible engines</summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {engines.map((db) => (
+                <ControlChip
+                  key={db}
+                  selected={!hidden.includes(db)}
+                  aria-pressed={!hidden.includes(db)}
+                  onClick={() =>
+                    setHidden((current) =>
+                      current.includes(db)
+                        ? current.filter((entry) => entry !== db)
+                        : [...current, db],
+                    )
+                  }
+                >
+                  {db}
+                </ControlChip>
+              ))}
+            </div>
+          </details>
         </>
       ) : (
         <BodyText>No recorded system is available.</BodyText>
@@ -198,27 +196,27 @@ export function HomeScoreTable() {
         {view === "overall" ? (
           <>
             <p className="mt-2">
-              Positive-weight raw workload families contribute equally, scales equally within each
-              family, and canonical queries equally within each scale. Query credit falls
-              logarithmically from 100 at the fastest usable median to 50 at 10× slower and zero at
-              100× slower. Missing or unusable evidence earns zero credit; no durations are
-              invented. This index is not a latency multiplier.
+              Each query earns 100 × fastest median / database median: 100 points for the fastest,
+              50 for twice as slow, 10 for ten times as slow. Missing or unusable results earn zero.
+              Average the points within each scale, then each workload, then across workloads using
+              their published weights. Every database keeps the same fixed denominator.
             </p>
             <p className="mt-2">
               Each scored query requires one successful warmup and three successful measured
               iterations from an otherwise valid completed run. Other missing queries do not discard
               that evidence. Failed runs, invalidation and documented incomplete preparation block
               the whole run. Conflicting answers, mixed inputs or fewer than two usable engines per
-              query block the overall ranking. Coverage uses the same weights: usable results,
-              recorded gaps, and positions with no run. A usable query can earn zero credit at the
-              100× cap. Workload breadth counts families with usable results.
+              query block the overall ranking. Query counts show usable results out of all fixed
+              query / scale combinations; they are not correctness percentages. Weighted coverage
+              and gap reasons are available in each database's details.
             </p>
             <p className="mt-2">
               Reference medians include complete queries from partial completed runs across the
               whole publication. Hiding databases never changes them. Prepared and smoke tracks and
-              zero-weight families are excluded. Rank bands remove one family at a time; they
-              describe sensitivity to the workload mix, not confidence intervals. The cap and equal
-              family weights are explicit policy choices.
+              zero-weight families are excluded. Scores describe the published speed and coverage,
+              not universal database capability or an overall latency multiplier. Equal family
+              weights are an explicit workload-mix choice. The details include rank sensitivity to
+              removing one workload; this is not a confidence interval.
             </p>
           </>
         ) : (
@@ -259,8 +257,13 @@ export function HomeScoreTable() {
           </p>
         ) : null}
       </details>
-      <CampaignNotice />
-      <ProfileScopeNotice />
+      <details className="text-xs leading-5 text-slate-400">
+        <summary className="cursor-pointer text-slate-300">Measurement context</summary>
+        <div className="mt-3 space-y-3">
+          <CampaignNotice />
+          <ProfileScopeNotice />
+        </div>
+      </details>
       <SnapshotSpanWarning snapshotCount={overview.snapshotCount} />
     </PanelCard>
   )
