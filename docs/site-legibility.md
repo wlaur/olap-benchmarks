@@ -118,3 +118,30 @@ and Catalog browser tests, including WebKit pointer selection, passed afterward.
 The full browser suite will run again before final acceptance. Fresh second-round
 Opus 5.5 and Astra xhigh simulations are active; the third round follows their
 findings and any resulting fixes.
+
+## Second simulated user round
+
+Both fresh models completed all six goals and requested a focused refinement.
+Opus used rendered text with a labelled mobile iframe after browser preview
+failures; Astra used an isolated browser fallback with verified mobile emulation.
+Both could explain the score and distinguish prior timeouts from current skips.
+
+Remaining findings were misleading completed-count captions, missing recorded
+skip reasons, timeout context absent in overall gap rows, mixed warmup/measured
+counts, opaque latency/date labels, and an unexplained ratio baseline. Astra also
+found a mobile drilldown that changed workload without returning the viewport to
+its result, and zero-completion Catalog rows that hid unsupported versus skipped
+outcomes.
+
+The next iteration labels completed queries without claiming every query finished,
+shows recorded execution reasons and sourced overall gap context, names the
+per-query reference median, and separates warmup from measured windows. Unknown
+cancellation causes remain unknown. Catalog names zero-completion outcomes and
+has a failure-reason disclosure. Workload drilldown scrolls and moves focus to the
+new result; explicit Home workload choices update the Explorer navigation target.
+The short formula/help remain below the ranking to keep supporting explanation
+out of the initial result; coverage is defined next to the headline.
+
+Validation passed 131 unit tests and all 50 browser tests, including the mobile
+navigation regression and WebKit. The third fresh Opus 5.5/Astra xhigh round is
+required before acceptance. Measurements and scoring invariants remain unchanged.

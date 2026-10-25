@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react"
 
 import { formatDatabaseName } from "../../lib/databaseNames"
+import type { FamilyEngineResult } from "../../lib/observations"
 import type { OverallEngineResult } from "../../lib/overall"
 import { QuietButton } from "../controls/Control"
 import { Disclosure } from "../layout/Disclosure"
@@ -80,7 +81,9 @@ export function OverallRankingTable({
   rows,
   familyCount,
   onSelectFamily,
+  evidenceByFamily,
 }: {
+  evidenceByFamily: ReadonlyMap<string, readonly FamilyEngineResult[]>
   rows: readonly OverallEngineResult[]
   familyCount: number
   onSelectFamily: (familyId: string) => void
@@ -167,6 +170,7 @@ export function OverallRankingTable({
                   row={row}
                   familyCount={familyCount}
                   onSelectFamily={onSelectFamily}
+                  evidenceByFamily={evidenceByFamily}
                 />
               </details>
             </div>
@@ -184,7 +188,9 @@ function EngineDetails({
   row,
   familyCount,
   onSelectFamily,
+  evidenceByFamily,
 }: {
+  evidenceByFamily: ReadonlyMap<string, readonly FamilyEngineResult[]>
   row: OverallEngineResult
   familyCount: number
   onSelectFamily: (familyId: string) => void
@@ -292,14 +298,44 @@ function EngineDetails({
                         data-overall-gap-group={group.label}
                         className="relative min-w-0 break-words"
                       >
-                        <span className="text-slate-100">{group.label}</span>:{" "}
-                        {group.reasons.map(([reason, count]) => `${reason} ${count}`).join(" · ")}
+                        {group.reasons
+                          .map(
+                            ([reason, count]) =>
+                              `${count} ${count === 1 ? "query" : "queries"}: ${reason}`,
+                          )
+                          .join(" · ")}
                       </li>
                     ))}
                   </ul>
                 ) : (
                   <span className="text-slate-400">No gaps</span>
                 )}
+                {Object.keys(family.gaps).length > 0
+                  ? [
+                      ...new Map(
+                        (evidenceByFamily.get(family.id) ?? [])
+                          .filter((candidate) => candidate.db === row.db && !candidate.eligible)
+                          .flatMap((candidate) => candidate.annotations)
+                          .map((note) => [note.summary, note]),
+                      ).values(),
+                    ].map((note) => (
+                      <p
+                        key={note.summary}
+                        className="mt-2 text-sm leading-6 [overflow-wrap:anywhere]"
+                      >
+                        <span className="text-slate-400">Recorded context (all queries): </span>
+                        {note.summary}{" "}
+                        <a
+                          href={note.evidence_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-accent-300 underline"
+                        >
+                          Source
+                        </a>
+                      </p>
+                    ))
+                  : null}
               </div>
             </li>
           ))}

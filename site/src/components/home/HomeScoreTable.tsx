@@ -1,4 +1,5 @@
 import { Layers3 } from "lucide-react"
+import { useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { useHomeOverview } from "../../hooks/useHomeOverview"
@@ -50,8 +51,10 @@ function familyLabel(family: ComparisonFamily): string {
 }
 
 export function HomeScoreTable() {
+  const panelRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const selectedSystem = useAppStore((state) => state.selectedSystem)
+  const setExplorerPath = useAppStore((state) => state.setExplorerPath)
   const systemLoading = useAppStore((state) => state.systemLoading)
   const systemError = useAppStore((state) => state.systemError)
   const overview = useHomeOverview(selectedSystem)
@@ -77,6 +80,17 @@ export function HomeScoreTable() {
       params.set("view", "workload")
       if (next.family) params.set("family", next.family)
       if (next.scale !== undefined) params.set("scale", String(next.scale))
+      const nextEntry = overview.families.find((entry) => entry.family.id === next.family) ?? active
+      const nextScale = next.scale ?? (next.family ? nextEntry?.scales[0]?.scale : cell?.scale)
+      if (nextEntry && nextScale !== undefined) {
+        const explorerParams = new URLSearchParams({
+          mode: "database",
+          family: nextEntry.family.id,
+          scale: String(nextScale),
+        })
+        if (selectedSystem) explorerParams.set("system", selectedSystem)
+        setExplorerPath(`/explorer/${nextEntry.family.suite}?${explorerParams}`)
+      }
     }
     setSearchParams(params)
   }
@@ -86,11 +100,17 @@ export function HomeScoreTable() {
   }
 
   return (
-    <PanelCard className="space-y-4 p-3 sm:space-y-5 sm:p-6">
+    <PanelCard
+      ref={panelRef}
+      role="region"
+      aria-labelledby="home-comparison-title"
+      tabIndex={-1}
+      className="space-y-4 p-3 sm:space-y-5 sm:p-6"
+    >
       <PanelHeader className="flex-wrap items-end">
         <div className="min-w-0 space-y-1">
           <MetaLabel>{selectedSystem ?? "System unknown"} · fixed SELECT workloads</MetaLabel>
-          <SectionTitle as="h2">
+          <SectionTitle as="h2" id="home-comparison-title">
             {view === "overall" ? "Overall database ranking" : "Compare one workload"}
           </SectionTitle>
         </div>
@@ -161,7 +181,21 @@ export function HomeScoreTable() {
           <OverallRankingTable
             rows={overview.overall.rows}
             familyCount={overview.overall.familyCount}
-            onSelectFamily={selectFamily}
+            evidenceByFamily={
+              new Map(
+                overview.families.map((entry) => [
+                  entry.family.id,
+                  entry.scales.flatMap((scaleCell) => scaleCell.rows),
+                ]),
+              )
+            }
+            onSelectFamily={(id) => {
+              selectFamily(id)
+              requestAnimationFrame(() => {
+                panelRef.current?.scrollIntoView({ block: "start", behavior: "auto" })
+                panelRef.current?.focus({ preventScroll: true })
+              })
+            }}
           />
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">

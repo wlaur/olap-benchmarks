@@ -4,6 +4,7 @@ import type { ComparisonAnnotation } from "../../lib/comparison"
 import { record } from "../../lib/comparison"
 import { formatLatencyMs } from "../../lib/format"
 import type { FamilyEngineResult, QueryObservation, RunObservation } from "../../lib/observations"
+import { executionIssues } from "../../lib/queryOutcomes"
 import { ChartFrame } from "../layout/Panel"
 import { CaptionText, MetaLabel, SecondaryText } from "../Typography"
 
@@ -117,6 +118,11 @@ export function QueryEvidence({
         <strong className="[overflow-wrap:anywhere] text-slate-100">{query.queryName}</strong>
         <span>{comparable ? "Performance set" : "Coverage only"}</span>
       </div>
+      {executionIssues([query]).map((issue) => (
+        <p key={issue.key} className="mt-2 text-amber-200">
+          {issue.status}: {issue.reason}
+        </p>
+      ))}
       <p className="mt-1">
         {query.warmup} warmup + {query.measured}/3 measured ·{" "}
         {query.medianS === null

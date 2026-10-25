@@ -165,6 +165,11 @@ test("home view, workload and scale survive reload, Back and shared links", asyn
   await expect(page).toHaveURL(/view=workload/)
   await selectWorkload(page, "ClickBench")
   await expect(page).toHaveURL(/family=clickbench/)
+  await expect(
+    page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("link", { name: "Explorer", exact: true }),
+  ).toHaveAttribute("href", /explorer\/clickbench\?/)
   await selectWorkload(page, "Time Series")
   await expect(page).toHaveURL(/family=time_series(&|$)/)
   await page.getByRole("button", { name: "SF 10", exact: true }).click()
@@ -194,6 +199,23 @@ test("home view, workload and scale survive reload, Back and shared links", asyn
   await expect(page).toHaveURL(/view=workload&family=clickbench/)
   await page.goBack()
   await expect(page.getByRole("heading", { name: "Overall database ranking" })).toBeVisible()
+})
+
+test("opening a workload from a scrolled mobile ranking brings its result into view", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("#/")
+  const row = page.locator('[data-overall-engine="monetdb"]')
+  await row.locator("summary").first().click()
+  await row.getByRole("button", { name: "Compare ClickBench by workload", exact: true }).click()
+  const result = page.getByRole("region", { name: "Compare one workload", exact: true })
+  await expect(result).toBeFocused()
+  const finding = page.locator("[data-comparison-lead]")
+  await expect(finding).toBeVisible()
+  const bounds = (await finding.boundingBox())!
+  expect(bounds.y).toBeGreaterThanOrEqual(0)
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(844)
 })
 
 async function expectNoHorizontalPageOverflow(page: Page) {

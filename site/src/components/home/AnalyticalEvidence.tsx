@@ -1,12 +1,16 @@
 import type { ReactNode } from "react"
 
 import { useAnalyticalData } from "../../hooks/useAnalyticalData"
+import type { AnalyticalRun, AnalyticalSummary } from "../../lib/analytical"
 import {
-  parseAnalyticalSummary,
-  type AnalyticalRun,
-  type AnalyticalSummary,
-} from "../../lib/analytical"
-import { qpsCause, stoppedOutcome, stoppedPhase } from "../../lib/analyticalOutcome"
+  cancellationNote,
+  percentileText,
+  qpsCause,
+  readableTime,
+  stoppedOutcome,
+  stoppedPhase,
+  warmupSummary,
+} from "../../lib/analyticalOutcome"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { formatLatencyMs } from "../../lib/format"
 import { useAppStore } from "../../stores/useAppStore"
@@ -63,21 +67,25 @@ function RunSummary({ run }: { run: AnalyticalRun }) {
   const completed = run.row.status === "completed"
   const phase = completed ? null : stoppedPhase(run)
   const cause = qpsCause(run)
-  const warmup =
-    run.recorded?.warmup_summary === undefined
-      ? null
-      : parseAnalyticalSummary(run.recorded.warmup_summary, null)
+  const cancellation = cancellationNote(run)
+  const warmup = completed ? null : warmupSummary(run)
   return (
     <div className="space-y-1" data-analytical-outcome>
       <LeadText className="font-semibold">
         {completed ? runOutcome(run).label : `${stoppedOutcome(run)}${phase ? ` ${phase}` : ""}`}
       </LeadText>
+      {cancellation ? (
+        <div data-analytical-cancellation>
+          <BodyText>{cancellation}</BodyText>
+        </div>
+      ) : null}
       {cause ? <BodyText>{cause}</BodyText> : null}
-      {!completed && warmup && warmup.offered !== null ? (
+      {warmup ? (
         <div data-analytical-warmup>
           <SecondaryText>
-            Warmup requests: {integer(warmup.completed)} of {integer(warmup.offered)} completed ·{" "}
-            {integer(warmup.errors)} errors · {integer(warmup.timeouts)} timed out
+            Warmup, excluded from results: {integer(warmup.completed)} of {integer(warmup.offered)}{" "}
+            requests completed · {integer(warmup.errors)} errors · {integer(warmup.timeouts)} timed
+            out
           </SecondaryText>
         </div>
       ) : null}
@@ -90,25 +98,31 @@ function analyticalTakeaway(runs: readonly AnalyticalRun[]): string {
 }
 
 function Latency({ summary }: { summary: AnalyticalSummary }) {
+  if (summary.samples === 0)
+    return <div className="text-slate-400">No completed requests, so no latency</div>
+  if (summary.samples === null && summary.percentiles.every(({ valueMs }) => valueMs === null))
+    return <div className="text-slate-400">Latency not recorded</div>
   return (
-    <div className="space-y-0.5 whitespace-nowrap">
-      {summary.percentiles.map((percentile, index) => (
-        <div
-          key={index}
-          title={
-            percentile.status === "insufficient_samples"
-              ? `insufficient_samples: n=${summary.samples}, minimum_n=${percentile.minimumN}`
-              : undefined
-          }
-        >
-          <span className="text-slate-400">p{[50, 95, 99][index]} </span>
-          {percentile.valueMs === null ? unknown : formatLatencyMs(percentile.valueMs)}
-          {percentile.status === "insufficient_samples" ? (
-            <span className="text-slate-400"> (&lt;{percentile.minimumN})</span>
-          ) : null}
-        </div>
-      ))}
-      <div className="text-slate-400">n={integer(summary.samples)}</div>
+    <div className="space-y-0.5">
+      {summary.percentiles.map((percentile, index) => {
+        const label = `p${[50, 95, 99][index]}`
+        const unavailable = percentileText(label, percentile)
+        return (
+          <div key={label} className={unavailable ? "text-slate-400" : "whitespace-nowrap"}>
+            {unavailable ?? (
+              <>
+                <span className="text-slate-400">{label} </span>
+                {formatLatencyMs(percentile.valueMs!)}
+              </>
+            )}
+          </div>
+        )
+      })}
+      <div className="text-slate-400">
+        {summary.samples === null
+          ? "Sample count not recorded"
+          : `${integer(summary.samples)} sample${summary.samples === 1 ? "" : "s"}`}
+      </div>
     </div>
   )
 }
@@ -132,7 +146,9 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function RunEvidence({ run }: { run: AnalyticalRun }) {
+function RunEvidence({ run, suiteTitle }: { run: AnalyticalRun; suiteTitle: string }) {
+  const measured = run.startedAt !== null
+  const notStarted = measured ? "" : " · measurement not started"
   const error = [run.row.error_type, run.row.error_message]
     .filter((value) => value?.trim())
     .join(": ")
@@ -141,23 +157,25 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
       <RunSummary run={run} />
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
         <Fact label="Workload">
-          {run.row.suite} · SF {run.row.suite_scale_factor} · {run.row.system}
+          {suiteTitle} · SF {run.row.suite_scale_factor} · {run.row.system}
         </Fact>
         <Fact label="Engine">
           {engineLabel(run)}
           {run.row.db_driver ? ` · ${run.row.db_driver}` : ""}
         </Fact>
-        <Fact label="Status">
+        <Fact label="Recorded status">
           {run.row.status || unknown} · run {run.row.id}
         </Fact>
-        <Fact label="Window actual / requested">
+        <Fact label="Measured window · actual / requested">
           {seconds(run.elapsedSeconds)} / {seconds(run.requestedSeconds)}
         </Fact>
-        <Fact label="Completed / offered">
+        <Fact label="Measured requests · completed / offered">
           {integer(run.overall.completed)} / {integer(run.overall.offered)}
+          {notStarted}
         </Fact>
-        <Fact label="Errors / timeouts">
+        <Fact label="Measured errors / timeouts">
           {integer(run.overall.errors)} / {integer(run.overall.timeouts)}
+          {notStarted}
         </Fact>
         <Fact label="Throughput">{qps(run.overall.qps)} QPS</Fact>
         <Fact label="Mixed-query latency">
@@ -165,8 +183,10 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
         </Fact>
       </dl>
       <SecondaryText>
-        Measurement: {run.startedAt ?? unknown} → {run.finishedAt ?? unknown}. Drain:{" "}
-        {seconds(run.drainSeconds)}. Run finished: {run.row.finished_at ?? unknown}.
+        {measured
+          ? `Measurement: ${readableTime(run.startedAt)} → ${readableTime(run.finishedAt) ?? unknown}. Drain: ${seconds(run.drainSeconds)}.`
+          : "Measurement never started."}{" "}
+        Run finished: {readableTime(run.row.finished_at) ?? unknown}.
       </SecondaryText>
       {error ? (
         <Disclosure title="Recorded run error">
@@ -264,10 +284,14 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
   )
 }
 
+function suiteName(run: AnalyticalRun, suiteTitles: ReadonlyMap<string, string>) {
+  return suiteTitles.get(run.row.suite) ?? run.row.suite
+}
+
 function groupRuns(runs: readonly AnalyticalRun[], suiteTitles: ReadonlyMap<string, string>) {
   const groups = new Map<string, AnalyticalRun[]>()
   for (const run of runs) {
-    const key = `${suiteTitles.get(run.row.suite) ?? run.row.suite} · SF ${run.row.suite_scale_factor} · ${run.row.system}`
+    const key = `${suiteName(run, suiteTitles)} · SF ${run.row.suite_scale_factor} · ${run.row.system}`
     groups.set(key, [...(groups.get(key) ?? []), run])
   }
   return [...groups].map(([title, entries]) => ({
@@ -369,7 +393,7 @@ export function AnalyticalEvidence() {
                                 trigger="Details"
                                 triggerLabel={`Run ${run.row.id} details`}
                               >
-                                <RunEvidence run={run} />
+                                <RunEvidence run={run} suiteTitle={suiteName(run, suiteTitles)} />
                               </DetailsDialog>
                             </td>
                           </tr>
@@ -394,10 +418,10 @@ export function AnalyticalEvidence() {
                   remain listed in each run&apos;s evidence.
                 </BodyText>
                 <BodyText>
-                  Latency uses completed samples and recorded nearest-rank summaries. Minimum n: p50
-                  ≥ 5, p95 ≥ 100, p99 ≥ 1,000. Unknown (&lt;minimum n) means insufficient_samples;
-                  other missing or invalid evidence stays Unknown. Thresholds do not establish
-                  percentile confidence or query correctness.
+                  Latency uses completed samples and recorded nearest-rank summaries. A percentile
+                  is shown only with enough samples: p50 needs 5, p95 needs 100 and p99 needs 1,000.
+                  Other missing or invalid evidence is shown as not recorded. Thresholds do not
+                  establish percentile confidence or query correctness.
                 </BodyText>
               </Disclosure>
               <CaptionText>

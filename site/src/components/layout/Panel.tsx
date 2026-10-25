@@ -1,12 +1,13 @@
 import { ChevronDown } from "lucide-react"
-import type { CSSProperties, ReactNode } from "react"
+import type { ComponentPropsWithRef, CSSProperties, ReactNode } from "react"
 
 import { cn } from "../../lib/cn"
 import { SectionTitle } from "../Typography"
 
-export function PanelCard({ children, className }: { children: ReactNode; className?: string }) {
+export function PanelCard({ children, className, ...props }: ComponentPropsWithRef<"div">) {
   return (
     <div
+      {...props}
       className={cn(
         "min-h-0 min-w-0 overflow-hidden rounded-lg border border-border-default bg-surface-raised p-3 shadow-[0_1px_0_rgba(255,255,255,0.025)_inset,0_12px_32px_-24px_rgba(0,0,0,0.9)]",
         className,

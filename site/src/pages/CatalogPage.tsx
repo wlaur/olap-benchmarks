@@ -6,6 +6,7 @@ import { CatalogCoverageMatrix } from "../components/catalog/CatalogCoverageMatr
 import { CatalogQueryList } from "../components/catalog/CatalogQueryList"
 import { QuietButton } from "../components/controls/Control"
 import { ControlSelect, ControlSelectSkeleton } from "../components/controls/ControlSelect"
+import { Disclosure } from "../components/layout/Disclosure"
 import { PanelCard, PanelDisclosure, PanelHeader } from "../components/layout/Panel"
 import { CampaignNotice } from "../components/methodology/ComparisonScopeNotices"
 import { Skeleton } from "../components/Skeleton"
@@ -246,6 +247,13 @@ export function CatalogPage() {
                                   </p>
                                   {run.outcome === "blocked" ? (
                                     <p>{run.comparisonBlockers.join(" · ")}</p>
+                                  ) : null}
+                                  {run.outcome === "failed" ? (
+                                    <Disclosure title="Failure reason" lazy>
+                                      <BodyText className="text-sm [overflow-wrap:anywhere]">
+                                        {run.failureReason ?? "Failure reason not recorded."}
+                                      </BodyText>
+                                    </Disclosure>
                                   ) : null}
                                   {summary.systems.length > 1 || scopedRuns.length > 1 ? (
                                     <p className="text-slate-400">

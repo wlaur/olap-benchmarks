@@ -86,6 +86,25 @@ function database(runs, policy = manifest) {
 }
 
 describe("catalog execution availability", () => {
+  test.each(["unsupported", "skipped"])(
+    "zero completed prepared queries retain the recorded %s outcome",
+    (status) => {
+      const run = observation()
+      for (const queryName of prepared.query_names)
+        run.queries.set(queryName, [
+          {
+            ...run.queries.get("orders")[0],
+            queryName,
+            status: "skipped",
+            resultStatus: status,
+            skipReason: "Recorded selection",
+          },
+        ])
+      const coverage = database([run]).families[1].runs[0]
+      expect(catalogRunAvailability(coverage)).toBe(`0/2 completed · 2 ${status}`)
+      expect(catalogRunAvailability(coverage)).not.toContain("Partial execution")
+    },
+  )
   test("separates raw completion from partial prepared execution using each family query set", () => {
     const result = database([observation()])
     expect(result.families[0].runs[0]).toMatchObject({

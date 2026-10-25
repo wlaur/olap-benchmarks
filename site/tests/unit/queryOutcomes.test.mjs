@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 
-import { describeQueryOutcome, queryOutcomeSummary } from "../../src/lib/queryOutcomes.ts"
+import {
+  describeQueryOutcome,
+  executionIssues,
+  queryOutcomeSummary,
+} from "../../src/lib/queryOutcomes.ts"
 
 const completedRun = { status: "completed" }
 const observation = (extra = {}) => ({
@@ -13,6 +17,31 @@ const observation = (extra = {}) => ({
 })
 
 describe("query presentation preserves evidence outcomes", () => {
+  test("execution reasons count affected queries once across repeated iterations", () => {
+    const skipped = (queryName) =>
+      observation({
+        queryName,
+        steps: Array.from({ length: 4 }, () => ({
+          resultStatus: "skipped",
+          skipReason: "Large inputs were not loaded for this run",
+        })),
+      })
+    const issues = executionIssues([
+      skipped("large_a"),
+      skipped("large_b"),
+      observation({
+        queryName: "slow",
+        steps: [{ resultStatus: "timeout", error: "Native deadline expired" }],
+      }),
+    ])
+    expect(issues).toHaveLength(2)
+    expect(issues[0]).toMatchObject({
+      status: "Skipped",
+      reason: "Large inputs were not loaded for this run",
+      names: ["large_a", "large_b"],
+    })
+    expect(issues[1]).toMatchObject({ status: "Timed out", names: ["slow"] })
+  })
   test("summary separates recorded medians from blocked evidence and absent singleton values", () => {
     const measured = describeQueryOutcome(observation(), completedRun, true, [])
     const blocked = describeQueryOutcome(observation(), { status: "failed" }, true, ["run failed"])

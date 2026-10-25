@@ -20,8 +20,39 @@ export function isCampaignExclusion(query: QueryObservation): boolean {
   return query.steps.some(
     (step) =>
       step.resultStatus === "skipped" &&
-      /excluded by campaign query_(include|exclude)/.test(step.skipReason ?? ""),
+      /excluded by campaign (query_(include|exclude)|tables)/.test(step.skipReason ?? ""),
   )
+}
+
+export function executionIssues(
+  queries: readonly QueryObservation[],
+): { key: string; status: string; reason: string; names: string[] }[] {
+  const issues = new Map<string, { key: string; status: string; reason: string; names: string[] }>()
+  const labels: Record<string, string> = {
+    wrong_result: "Wrong result",
+    timeout: "Timed out",
+    error: "Error",
+    unsupported: "Unsupported",
+    skipped: "Skipped",
+  }
+  for (const query of queries) {
+    const status = Object.keys(labels).find((candidateStatus) =>
+      query.steps.some((candidateStep) => candidateStep.resultStatus === candidateStatus),
+    )
+    if (!status) continue
+    const step = query.steps.find((candidateStep) => candidateStep.resultStatus === status)!
+    const reason =
+      step.skipReason === "table excluded by campaign tables"
+        ? "Required table excluded by the campaign's table selection."
+        : isCampaignExclusion(query)
+          ? "Excluded from this campaign's query selection; no execution attempted in this run."
+          : (step.skipReason ?? step.error ?? "Reason not recorded.")
+    const key = JSON.stringify([status, reason])
+    const issue = issues.get(key) ?? { key, status: labels[status]!, reason, names: [] }
+    issue.names.push(query.queryName)
+    issues.set(key, issue)
+  }
+  return [...issues.values()]
 }
 
 export function queryOutcomeSummary(

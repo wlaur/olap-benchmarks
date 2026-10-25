@@ -36,6 +36,7 @@ export interface CatalogRunCoverage {
   totalQueries: number
   queryOutcomes: string[]
   comparisonBlockers: string[]
+  failureReason: string | null
 }
 
 export interface CatalogFamilyCoverage {
@@ -123,6 +124,7 @@ export function buildCatalogSuiteSummary(
                 totalQueries: queries.length,
                 queryOutcomes: summarizeQueryOutcomes(queries),
                 comparisonBlockers,
+                failureReason: run.error,
               }
             }),
         })),
@@ -145,7 +147,15 @@ export function catalogTrackLabel(family: ComparisonFamily): string {
 }
 
 export function catalogRunAvailability(run: CatalogRunCoverage): string {
-  return `${CATALOG_OUTCOME_LABELS[run.outcome]} · ${run.completedQueries}/${run.totalQueries} queries`
+  if (run.outcome === "partial" && run.completedQueries === 0)
+    return `0/${run.totalQueries} completed${run.queryOutcomes.length ? ` · ${run.queryOutcomes.join(" · ")}` : " · execution evidence incomplete"}`
+  const label =
+    run.outcome === "failed" && /^TimeoutError\b/.test(run.failureReason ?? "")
+      ? "Run timed out"
+      : run.outcome === "failed" && /^KeyboardInterrupt\b/.test(run.failureReason ?? "")
+        ? "Run cancelled"
+        : CATALOG_OUTCOME_LABELS[run.outcome]
+  return `${label} · ${run.completedQueries}/${run.totalQueries} queries${run.outcome !== "complete" && run.queryOutcomes.length ? ` · ${run.queryOutcomes.join(" · ")}` : ""}`
 }
 
 export function catalogMissingAvailability(

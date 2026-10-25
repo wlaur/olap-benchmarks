@@ -1,8 +1,9 @@
 import type { ComparisonFamily } from "../../lib/comparison"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { runPerformanceProblems, type FamilyEngineResult } from "../../lib/observations"
-import { isCampaignExclusion } from "../../lib/queryOutcomes"
+import { executionIssues, isCampaignExclusion } from "../../lib/queryOutcomes"
 import { DetailsDialog } from "../layout/DetailsDialog"
+import { Disclosure } from "../layout/Disclosure"
 import { ChartFrame, StatusBadge, type StatusTone } from "../layout/Panel"
 import {
   BodyText,
@@ -145,7 +146,7 @@ export function EngineComparison({
         <SecondaryText>
           {summary.qualification}
           {rows.length !== cohort.length ? ` ${rows.length} databases shown.` : ""} Geometric mean
-          query-latency ratio; lower is better.
+          query-latency ratio; lower is better. Baseline: each query&apos;s fastest eligible median.
         </SecondaryText>
       </div>
       <ChartFrame className="@container p-0">
@@ -210,7 +211,7 @@ export function EngineComparison({
                     <NumericText>
                       {row.completed}/{row.total}
                     </NumericText>
-                    <span className="@[48rem]:sr-only"> all queries completed</span>
+                    <span className="@[48rem]:sr-only"> queries completed (all positions)</span>
                   </SecondaryText>
                   <div className="min-w-0">
                     <StatusBadge tone={outcome.tone}>{outcome.label}</StatusBadge>
@@ -241,6 +242,8 @@ export function EngineComparison({
 }
 
 function EngineDetails({ row, family }: { row: FamilyEngineResult; family: ComparisonFamily }) {
+  const campaignExclusions = row.queries.filter(isCampaignExclusion)
+  const issues = executionIssues(row.queries)
   return (
     <>
       {row.annotations.length > 0 ? (
@@ -261,15 +264,31 @@ function EngineDetails({ row, family }: { row: FamilyEngineResult; family: Compa
           ))}
         </div>
       ) : null}
-      {row.queries.some(isCampaignExclusion) ? (
+      {campaignExclusions.length > 0 ? (
         <BodyText className="text-sm">
           Skipped by campaign selection:{" "}
-          {row.queries
-            .filter(isCampaignExclusion)
-            .map((query) => query.queryName)
-            .join(", ")}
+          {campaignExclusions.length <= 4
+            ? campaignExclusions.map((query) => query.queryName).join(", ")
+            : `${campaignExclusions.length} queries`}
           . These queries were not retried in this run.
         </BodyText>
+      ) : null}
+      {issues.length > 0 ? (
+        <div className="space-y-2">
+          <MetaLabel>Recorded execution reasons</MetaLabel>
+          <ul className="space-y-2 text-sm leading-6 text-slate-200">
+            {issues.map((issue) => (
+              <li key={issue.key}>
+                {issue.names.length} {issue.status}: {issue.reason}
+                <Disclosure title="Affected queries" lazy>
+                  <BodyText className="text-sm [overflow-wrap:anywhere]">
+                    {issue.names.join(", ")}
+                  </BodyText>
+                </Disclosure>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         <div>
@@ -297,7 +316,7 @@ function EngineDetails({ row, family }: { row: FamilyEngineResult; family: Compa
             <CaptionText>
               {family.query_names.length} performance queries set the latency ratio.{" "}
               {family.coverage_query_names.length - family.query_names.length > 0
-                ? `${family.coverage_query_names.length - family.query_names.length} additional coverage positions are excluded from scoring.`
+                ? `${family.coverage_query_names.length - family.query_names.length} additional coverage ${family.coverage_query_names.length - family.query_names.length === 1 ? "position is" : "positions are"} excluded from scoring.`
                 : "All positions are performance queries."}
             </CaptionText>
             <CaptionText>{statusSummary(row)}</CaptionText>

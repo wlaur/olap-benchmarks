@@ -77,7 +77,36 @@ test("published analytical evidence keeps warmup failures unknown", async ({ pag
       await expect(dialog.locator("[data-analytical-outcome]")).toContainText(
         "QPS unknown: no measurement start recorded",
       )
-      await expect(dialog).toContainText("p50 Unknown")
+      const outcome = dialog.locator("[data-analytical-outcome]")
+      if (run.id === 670) {
+        await expect(outcome).toContainText(
+          "Warmup recorded 1 timeout; cancellation cause not recorded",
+        )
+        await expect(outcome.locator("[data-analytical-warmup]")).toHaveText(
+          "Warmup, excluded from results: 13 of 14 requests completed · 0 errors · 1 timed out",
+        )
+      }
+      if (run.id === 672)
+        await expect(dialog.locator("[data-analytical-cancellation]")).toHaveText(
+          "Cancellation cause not recorded",
+        )
+      if (run.id === 671)
+        await expect(dialog.locator("[data-analytical-cancellation]")).toHaveCount(0)
+      await expect(outcome).not.toContainText("caused")
+      await expect(dialog).toContainText(
+        `Measured errors / timeouts${run.overall.errors === null ? "Unknown / Unknown" : "0 / 0"} · measurement not started`,
+      )
+      await expect(dialog).toContainText("TPC-H · SF 10 · macbook-m4-pro")
+      await expect(dialog).not.toContainText("tpc_h")
+      await expect(
+        dialog.getByText(
+          /^Measurement never started\. Run finished: \d{1,2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}:\d{2}\.$/,
+        ),
+      ).toBeVisible()
+      await expect(dialog).toContainText(
+        run.overall.samples === 0 ? "No completed requests, so no latency" : "Latency not recorded",
+      )
+      await expect(dialog).not.toContainText("Unknown (<")
       await expect(dialog.getByText(expected[2])).toBeHidden()
       await dialog.getByText("Recorded run error", { exact: true }).click()
       await expect(dialog.getByText(new RegExp(`^${expected[2]}`))).toBeVisible()
@@ -130,7 +159,7 @@ test("analytical runs retain qualified latency, failures and drilldown without a
   await section.getByRole("button", { name: "Run 100 details" }).click()
   await expect(
     page.getByRole("dialog", { name: "Run 100 · DuckDB 1.5.6 · 1 client" }),
-  ).toContainText("p50 Unknown (<5)")
+  ).toContainText("p50 needs at least 5 samples")
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   const trigger = polars.getByRole("button", { name: "Run 101 details" })
@@ -138,7 +167,8 @@ test("analytical runs retain qualified latency, failures and drilldown without a
   await page.keyboard.press("Enter")
   const evidence = page.getByRole("dialog", { name: /^Run 101/ })
   await expect(evidence).toContainText("65.00s / 60.00s")
-  await expect(evidence).toContainText("p99 Unknown (<1000)")
+  await expect(evidence).toContainText("p99 needs at least 1,000 samples")
+  await expect(evidence).toContainText("Measured requests · completed / offered")
   await expect(evidence.getByText(/Full canonical manifest required: 3 queries/)).toBeVisible()
   const queryTable = evidence.getByRole("table", { name: "Run 101 per-query evidence" })
   await expect(queryTable).toBeHidden()

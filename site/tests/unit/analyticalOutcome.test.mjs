@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
 
 import { parseAnalyticalRun } from "../../src/lib/analytical.ts"
-import { qpsCause, stoppedOutcome, stoppedPhase } from "../../src/lib/analyticalOutcome.ts"
+import {
+  cancellationNote,
+  percentileText,
+  qpsCause,
+  readableTime,
+  stoppedOutcome,
+  stoppedPhase,
+  warmupSummary,
+} from "../../src/lib/analyticalOutcome.ts"
 import { analyticalMetadata } from "../fixtures/analytical.ts"
 
 function failed(analytical, error = {}) {
@@ -65,5 +73,40 @@ describe("stopped analytical run outcomes", () => {
   test("explains unknown QPS from the recorded window", () => {
     expect(qpsCause(failed(unstarted))).toBe("QPS unknown: no measurement start recorded")
     expect(qpsCause(failed(analyticalMetadata()))).toBeNull()
+  })
+
+  test("keeps warmup counts separate and the cancellation cause unknown", () => {
+    const warmup = {
+      ...unstarted,
+      warmup_summary: { offered: 14, completed: 13, errors: 0, timeouts: 1 },
+    }
+    const cancelled = failed(warmup, { error_type: "KeyboardInterrupt" })
+    expect(warmupSummary(cancelled)).toMatchObject({ offered: 14, completed: 13, timeouts: 1 })
+    expect(cancelled.overall.timeouts ?? 0).toBe(0)
+    expect(cancellationNote(cancelled)).toBe(
+      "Warmup recorded 1 timeout; cancellation cause not recorded",
+    )
+    expect(cancellationNote(failed(unstarted, { error_type: "KeyboardInterrupt" }))).toBe(
+      "Cancellation cause not recorded",
+    )
+    expect(cancellationNote(failed(warmup, { error_type: "TimeoutError" }))).toBeNull()
+    expect(warmupSummary(failed(unstarted))).toBeNull()
+  })
+
+  test("formats recorded times without microseconds or timezone guesses", () => {
+    expect(readableTime("2026-10-22 13:09:22.351291")).toBe("22 Oct 2026, 13:09:22")
+    expect(readableTime("2026-10-22T10:00:05+00:00")).toBe("22 Oct 2026, 10:00:05 UTC")
+    expect(readableTime("2026-10-22T10:00:05.5+0200")).toBe("22 Oct 2026, 10:00:05 UTC+02:00")
+    expect(readableTime(null)).toBeNull()
+  })
+
+  test("explains unavailable percentiles plainly", () => {
+    expect(
+      percentileText("p50", { valueMs: null, status: "insufficient_samples", minimumN: 5 }),
+    ).toBe("p50 needs at least 5 samples")
+    expect(percentileText("p99", { valueMs: null, status: "unknown", minimumN: 1000 })).toBe(
+      "p99 not recorded",
+    )
+    expect(percentileText("p95", { valueMs: 2, status: "available", minimumN: 100 })).toBeNull()
   })
 })
