@@ -14,8 +14,9 @@ test("home leads with a data-derived ranking and keeps supporting details closed
   const lead = page.locator("[data-overall-lead]")
   await expect(lead).toContainText("Top score: DuckDB · 79.9/100 · 100% weighted coverage")
   await expect(lead).toContainText("score 0")
+  await expect(lead).toContainText("100 = fastest query median · 50 = 2× slower")
   await expect(page.locator("[data-weighted-coverage-definition]")).toHaveText(
-    /^Weighted coverage: share of performance queries with a usable result/,
+    /^Coverage: usable performance queries, weighted like the score/,
   )
   const row = page.locator('[data-overall-engine="duckdb"]')
   await expect(row.locator("[data-overall-score]")).toBeVisible()

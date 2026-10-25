@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { ComparisonFamily } from "../../lib/comparison"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { runPerformanceProblems, type FamilyEngineResult } from "../../lib/observations"
@@ -124,11 +126,13 @@ export function EngineComparison({
   family,
   eligibleCount,
   cohortRows,
+  availability,
 }: {
   rows: readonly FamilyEngineResult[]
   family: ComparisonFamily
   eligibleCount: number
   cohortRows?: readonly FamilyEngineResult[]
+  availability?: ReactNode
 }) {
   const cohort = cohortRows ?? rows
   const summary = comparisonOutcomeSummary(cohort, family)
@@ -149,6 +153,7 @@ export function EngineComparison({
           query-latency ratio; lower is better. Baseline: each query&apos;s fastest eligible median.
         </SecondaryText>
       </div>
+      {availability}
       <ChartFrame className="@container p-0">
         <div
           aria-hidden="true"
@@ -215,6 +220,19 @@ export function EngineComparison({
                   </SecondaryText>
                   <div className="min-w-0">
                     <StatusBadge tone={outcome.tone}>{outcome.label}</StatusBadge>
+                    {row.queries.some(isCampaignExclusion)
+                      ? row.annotations
+                          .flatMap((note) =>
+                            note.summary
+                              .split(/(?<=[.!?])\s+/)
+                              .filter((sentence) => /\btimeouts?\b/i.test(sentence)),
+                          )
+                          .map((note) => (
+                            <CaptionText key={note} className="mt-1">
+                              Recorded note: {note}
+                            </CaptionText>
+                          ))
+                      : null}
                   </div>
                 </div>
                 <div className="shrink-0 justify-self-end">

@@ -1,10 +1,9 @@
-import { useState } from "react"
-
 import type { ComparisonAnnotation } from "../../lib/comparison"
 import { record } from "../../lib/comparison"
 import { formatLatencyMs } from "../../lib/format"
 import type { FamilyEngineResult, QueryObservation, RunObservation } from "../../lib/observations"
 import { executionIssues } from "../../lib/queryOutcomes"
+import { Disclosure } from "../layout/Disclosure"
 import { ChartFrame } from "../layout/Panel"
 import { CaptionText, MetaLabel, SecondaryText } from "../Typography"
 
@@ -28,10 +27,11 @@ export function RunContext({
   const options = record(metadata.options)
   const settings = record(metadata.settings)
   return (
-    <details className="min-w-0 text-sm leading-6 text-slate-300">
-      <summary className="flex min-h-10 cursor-pointer items-center rounded-md text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300/60">
-        Run context &amp; preparation{run ? ` · run ${run.runId}` : " · no recorded run"}
-      </summary>
+    <Disclosure
+      title={`Run context & preparation${run ? ` · run ${run.runId}` : " · no recorded run"}`}
+      className="min-w-0 text-sm leading-6 text-slate-300"
+      lazy
+    >
       <ChartFrame className="mt-1 space-y-3">
         <dl className="grid min-w-0 gap-x-5 gap-y-2 sm:grid-cols-2">
           {Object.entries({
@@ -89,7 +89,7 @@ export function RunContext({
           ))
         )}
       </ChartFrame>
-    </details>
+    </Disclosure>
   )
 }
 
@@ -135,10 +135,7 @@ export function QueryEvidence({
       {query.reasons.length > 0 ? (
         <p className="mt-1 text-amber-200">{query.reasons.join("; ")}</p>
       ) : null}
-      <details className="mt-1">
-        <summary className="flex min-h-10 cursor-pointer items-center rounded-md text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300/60">
-          Iterations, statuses &amp; hashes
-        </summary>
+      <Disclosure title="Iterations, statuses & hashes" className="mt-1" lazy>
         <div className="mt-1 space-y-2 font-mono text-sm [overflow-wrap:anywhere] break-words">
           {query.steps.length === 0
             ? "No iterations recorded"
@@ -154,7 +151,7 @@ export function QueryEvidence({
                 </p>
               ))}
         </div>
-      </details>
+      </Disclosure>
     </div>
   )
 }
@@ -166,30 +163,25 @@ export function EngineEvidence({
   row: FamilyEngineResult
   performanceQueries: readonly string[]
 }) {
-  const [expanded, setExpanded] = useState(false)
   return (
     <div className="min-w-0">
       <RunContext run={row.run} annotations={row.annotations} />
       {row.queries.length > 0 ? (
-        <details
+        <Disclosure
+          title="Query execution & validation evidence"
           className="text-sm leading-6 text-slate-300"
-          onToggle={(event) => setExpanded(event.currentTarget.open)}
+          lazy
         >
-          <summary className="flex min-h-10 cursor-pointer items-center rounded-md text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300/60">
-            Query execution &amp; validation evidence
-          </summary>
-          {expanded ? (
-            <div className="grid gap-2 py-2 sm:grid-cols-2">
-              {row.queries.map((query) => (
-                <QueryEvidence
-                  key={query.queryName}
-                  query={query}
-                  comparable={performanceQueries.includes(query.queryName)}
-                />
-              ))}
-            </div>
-          ) : null}
-        </details>
+          <div className="grid gap-2 py-2 sm:grid-cols-2">
+            {row.queries.map((query) => (
+              <QueryEvidence
+                key={query.queryName}
+                query={query}
+                comparable={performanceQueries.includes(query.queryName)}
+              />
+            ))}
+          </div>
+        </Disclosure>
       ) : null}
       <CaptionText className="mt-1">
         Hashes compare canonicalized answers. They do not prove exact schemas or agreement with an

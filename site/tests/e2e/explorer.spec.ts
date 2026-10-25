@@ -19,6 +19,7 @@ test("explorer leads with the workload result and keeps query details closed", a
   const dialog = page.getByRole("dialog", { name: "Query performance and SQL", exact: true })
   await expect(dialog).toBeVisible()
   await dialog.getByRole("combobox", { name: "Query to inspect", exact: true }).click()
+  await expect(dialog.getByRole("searchbox", { name: "Filter queries" })).toBeFocused()
   await dialog.getByRole("searchbox", { name: "Filter queries" }).fill("Q3")
   await dialog.getByRole("option", { name: "Q3", exact: true }).click()
   await expect(page).toHaveURL(/query=Q3/)
@@ -78,6 +79,19 @@ test("the Explorer navigation restores the last query and comparison", async ({ 
     .click()
   await expect(page).toHaveURL(/explorer\/clickbench.*query=Q9/)
   await expect(page.locator("[data-comparison-engine]")).toHaveCount(2)
+})
+
+test("changing a single-database workload keeps configuration open and selects its available scales", async ({
+  page,
+}) => {
+  await page.goto("#/explorer/clickbench?mode=scale&database=duckdb&scales=1")
+  await expect(page.locator('[data-query-engine="duckdb"]')).toHaveCount(1)
+  await page.getByText("Change comparison", { exact: true }).click()
+  await page.getByRole("combobox", { name: "Benchmark suite", exact: true }).click()
+  await page.getByRole("option", { name: "Time Series", exact: true }).click()
+  await expect(page).toHaveURL(/explorer\/time_series/)
+  await expect(page.getByRole("combobox", { name: "Benchmark suite", exact: true })).toBeVisible()
+  await expect(page.locator('[data-query-engine="duckdb"]')).toHaveCount(2)
 })
 
 test("same-route deep links restore the requested query and comparison state", async ({ page }) => {

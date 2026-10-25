@@ -6,6 +6,7 @@ import {
 } from "../../lib/catalog"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { BodyText } from "../Typography"
+import { CatalogRunContext } from "./CatalogRunContext"
 
 export function CatalogCoverageMatrix({ summary }: { summary: CatalogSuiteSummary }) {
   if (summary.scales.length === 0) return <BodyText>No published scales or recorded runs.</BodyText>
@@ -85,14 +86,12 @@ export function CatalogCoverageMatrix({ summary }: { summary: CatalogSuiteSummar
                                       <p className="font-medium text-slate-100">
                                         {catalogRunAvailability(run)}
                                       </p>
-                                      {run.queryOutcomes.length > 0 ? (
-                                        <p>{run.queryOutcomes.join(" · ")}</p>
-                                      ) : null}
                                       {run.comparisonBlockers.length > 0 ? (
                                         <p>
                                           Comparison blockers: {run.comparisonBlockers.join(" · ")}
                                         </p>
                                       ) : null}
+                                      <CatalogRunContext run={run} />
                                       <p className="break-words text-slate-400">
                                         {run.system} · {run.version} · run {run.runId}
                                       </p>

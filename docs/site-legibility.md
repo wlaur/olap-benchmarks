@@ -145,3 +145,41 @@ out of the initial result; coverage is defined next to the headline.
 Validation passed 131 unit tests and all 50 browser tests, including the mobile
 navigation regression and WebKit. The third fresh Opus 5.5/Astra xhigh round is
 required before acceptance. Measurements and scoring invariants remain unchanged.
+
+## Third simulated user round and final corrections
+
+Both models completed all six goals using real screenshots at desktop, 390 px and
+320 px after documented preview failures and isolated browser fallbacks. They
+confirmed readable factual results, understandable coverage, scoped Catalog
+tracks and discoverable timeout history. Their final findings were addressed
+before deployment.
+
+Opus found document scrolling outside the main region, route scroll carryover,
+missing preparation explanations, suite-switch selection loss and incomplete
+modal focus containment. Absolutely positioned accessibility text lacked a
+positioned ancestor; the application and main regions now contain it. The page
+stays at viewport height while only main content scrolls. Path changes reset the
+main scroller; query changes preserve it. Modal keyboard focus wraps internally,
+including query-picker transitions, and restores correctly. Query filters receive
+focus on opening. Suite changes keep configuration open and select available
+values for the varying dimension; absent-engine availability is next to the result.
+
+Astra found that the short score definition still required scrolling, mobile
+concurrency columns separated outcomes from engine names, and dialog prose
+inherited right alignment. The short per-query points definition is now beside
+the score, while the full method remains disclosed. A single semantic concurrency
+table adapts to readable cards at narrow widths and enlarged text; outcomes and
+44 px Details controls remain associated with each engine. Dialog prose is left
+aligned. Both corrective agents inspected their changes and closed their browsers.
+
+Catalog now exposes sourced preparation explanations on request. Historical
+timeout notes in workload rows quote selected-run annotations without relabelling
+current skips as observed timeouts. Evidence disclosures share visible chevrons.
+All 59 browser tests and 131 unit tests pass, including document bounds, mode and
+suite navigation, keyboard focus, mobile/touch behavior, 200% text and the frozen
+publication invariants. Type/lint/format/build and schema/checksum checks pass.
+The published asset and numeric scoring policy are unchanged by this UI work.
+
+These three paired rounds are agent simulations, not human usability research.
+The reviewed UI is ready for publication. Timeout recovery remains a separate,
+serial measurement phase; replacement measurements require their own validation.

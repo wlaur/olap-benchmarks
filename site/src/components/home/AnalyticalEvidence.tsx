@@ -343,55 +343,98 @@ export function AnalyticalEvidence() {
                 </SecondaryText>
               </div>
               {groupRuns(runs, suiteTitles).map((group) => (
-                <ChartFrame key={group.title} className="relative overflow-x-auto p-0">
+                <ChartFrame key={group.title} className="@container p-0">
                   <table
+                    role="table"
                     aria-label={`Analytical stream measurements · ${group.title}`}
-                    className="w-full min-w-[30rem] text-left text-sm leading-6 [&_td]:px-3 [&_td]:py-2 [&_td]:align-middle [&_th]:px-3 [&_th]:py-2"
+                    className="block w-full text-left text-sm leading-6 @[48rem]:table @[48rem]:[&_td]:px-3 @[48rem]:[&_td]:py-2 @[48rem]:[&_td]:align-middle @[48rem]:[&_th]:px-3 @[48rem]:[&_th]:py-2"
                   >
-                    <caption className="border-b border-border-default px-3 py-2 text-left">
+                    <caption className="block border-b border-border-default px-3 py-2 text-left [overflow-wrap:anywhere] @[48rem]:table-caption">
                       <ItemTitle>{group.title}</ItemTitle>
                     </caption>
-                    <thead className="text-slate-400">
-                      <tr>
-                        <th scope="col" className="font-medium">
+                    <thead role="rowgroup" className="sr-only text-slate-400 @[48rem]:not-sr-only">
+                      <tr role="row">
+                        <th role="columnheader" scope="col" className="font-medium">
                           Engine
                         </th>
-                        <th scope="col" className="text-right font-medium">
+                        <th role="columnheader" scope="col" className="text-right font-medium">
                           Clients
                         </th>
-                        <th scope="col" className="text-right font-medium">
+                        <th role="columnheader" scope="col" className="text-right font-medium">
                           QPS
                         </th>
-                        <th scope="col" className="font-medium">
+                        <th role="columnheader" scope="col" className="font-medium">
                           Outcome
                         </th>
-                        <th scope="col">
+                        <th role="columnheader" scope="col">
                           <span className="sr-only">Details</span>
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border-subtle text-slate-100">
+                    <tbody
+                      role="rowgroup"
+                      className="block divide-y divide-border-subtle text-slate-100 @[48rem]:table-row-group"
+                    >
                       {group.runs.map((run) => {
                         const outcome = runOutcome(run)
                         return (
-                          <tr key={run.row.id} data-analytical-run={run.row.id}>
-                            <th scope="row" className="font-medium">
+                          <tr
+                            key={run.row.id}
+                            role="row"
+                            data-analytical-run={run.row.id}
+                            className="grid grid-cols-1 items-center gap-x-4 gap-y-3 p-3 @[16rem]:grid-cols-2 @[48rem]:table-row @[48rem]:p-0"
+                          >
+                            <th
+                              role="rowheader"
+                              scope="row"
+                              className="col-span-full block min-w-0 font-medium [overflow-wrap:anywhere] @[48rem]:table-cell"
+                            >
                               {engineLabel(run)}
                             </th>
-                            <td className="text-right">
+                            <td
+                              role="cell"
+                              className="block min-w-0 @[48rem]:table-cell @[48rem]:text-right"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="block text-slate-400 @[48rem]:hidden"
+                              >
+                                Clients
+                              </span>
                               <NumericText>{integer(run.clients)}</NumericText>
                             </td>
-                            <td className="text-right" data-analytical-qps>
-                              <NumericText>{qps(run.overall.qps)}</NumericText>
+                            <td
+                              role="cell"
+                              className="block min-w-0 @[48rem]:table-cell @[48rem]:text-right"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="block text-slate-400 @[48rem]:hidden"
+                              >
+                                QPS
+                              </span>
+                              <span data-analytical-qps>
+                                <NumericText>{qps(run.overall.qps)}</NumericText>
+                              </span>
                             </td>
-                            <td>
+                            <td role="cell" className="block min-w-0 @[48rem]:table-cell">
+                              <span
+                                aria-hidden="true"
+                                className="block text-slate-400 @[48rem]:hidden"
+                              >
+                                Outcome
+                              </span>
                               <StatusBadge tone={outcome.tone}>{outcome.label}</StatusBadge>
                             </td>
-                            <td className="text-right">
+                            <td
+                              role="cell"
+                              className="block min-w-0 @[48rem]:table-cell @[48rem]:text-right"
+                            >
                               <DetailsDialog
                                 title={`Run ${run.row.id} · ${engineLabel(run)} · ${clientCount(run.clients)}`}
                                 trigger="Details"
                                 triggerLabel={`Run ${run.row.id} details`}
+                                triggerClassName="min-h-11 w-full @[48rem]:w-auto"
                               >
                                 <RunEvidence run={run} suiteTitle={suiteName(run, suiteTitles)} />
                               </DetailsDialog>

@@ -105,7 +105,7 @@ export function App() {
   )
 
   return (
-    <div className="flex h-dvh min-h-screen flex-col overflow-hidden bg-surface-primary text-slate-100">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-surface-primary text-slate-100">
       {navbar}
       {systemError ? (
         <NoticeStrip role="alert" tone="warning" className="mx-4 my-3 shrink-0">
@@ -116,7 +116,7 @@ export function App() {
         <Route
           path="/"
           element={
-            <main className="min-h-0 flex-1 overflow-y-auto">
+            <main key={location.pathname} className="relative min-h-0 flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-[76rem] px-3 sm:px-4 lg:px-6">
                 <HomePage />
               </div>
@@ -126,7 +126,10 @@ export function App() {
         <Route
           path="/explorer/:suiteId"
           element={
-            <main className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
+            <main
+              key={location.pathname}
+              className="relative flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5"
+            >
               <div className="mx-auto w-full max-w-[84rem]">
                 <ExplorerRoute
                   preferredSystem={selectedSystem}
@@ -141,7 +144,10 @@ export function App() {
         <Route
           path="/catalog"
           element={
-            <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5">
+            <main
+              key={location.pathname}
+              className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 lg:px-4 lg:py-5"
+            >
               <div className="mx-auto flex min-h-0 w-full max-w-[84rem] flex-1 flex-col">
                 <CatalogPage />
               </div>

@@ -143,6 +143,9 @@ export function ExplorerPage({
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [configurationOpen, setConfigurationOpen] = useState(
+    () => searchParams.get("configure") === "1",
+  )
   const [lastAnalyzedDatabase, setLastAnalyzedDatabase] = useState<string | null>(() =>
     searchParams.get("mode") !== "database" ? searchParams.get("database") : null,
   )
@@ -243,7 +246,13 @@ export function ExplorerPage({
   }))
   if (mode === "database")
     selectedQueryRows.sort((a, b) => (a.valueMs ?? Infinity) - (b.valueMs ?? Infinity))
-  const queryFinding = queryOutcomeSummary(selectedQueryRows)
+  const queryFinding =
+    selectedQueryRows.length === 2 &&
+    selectedQueryRows.every(
+      (row) => row.outcome.kind === "measured" && row.valueMs !== null && row.valueMs > 0,
+    )
+      ? `${selectedQueryRows[1]!.label} / ${selectedQueryRows[0]!.label}: ${(selectedQueryRows[1]!.valueMs! / selectedQueryRows[0]!.valueMs!).toFixed(2)}× recorded median latency`
+      : queryOutcomeSummary(selectedQueryRows)
   const queryDetailHeight = Math.min(380, Math.max(280, 80 + selectedQueryRows.length * 80))
   const nextSearchParams = (() => {
     if (!selection.ready || !selectedQuery) return ""
@@ -302,7 +311,12 @@ export function ExplorerPage({
   }
 
   function handleSuiteChange(nextSuiteId: string) {
-    navigate(`/explorer/${nextSuiteId}?${nextSearchParams || `mode=${mode}`}`)
+    const params = new URLSearchParams(nextSearchParams || `mode=${mode}`)
+    params.set("configure", "1")
+    if (mode === "scale") params.delete("scales")
+    if (mode === "version") params.delete("versions")
+    if (mode === "system") params.delete("systems")
+    navigate(`/explorer/${nextSuiteId}?${params}`)
   }
 
   function handleSingleDatabaseModeChange(nextMode: SingleDatabaseMode) {
@@ -383,6 +397,28 @@ export function ExplorerPage({
           ? `${formatDatabaseName(selection.database)} · ${selection.system} · SF ${selection.scale} · ${selection.versions.join(", ")}`
           : `${formatDatabaseName(selection.database)} ${selection.version} · SF ${selection.scale} · ${selection.systems.join(", ")}`
     : "Configure the comparison"
+
+  const unavailableEngines = publicationRows.some((row) => !row.run) ? (
+    <Disclosure
+      title={`${publicationRows.filter((row) => !row.run).length} without recorded results · ${publicationRows
+        .filter((row) => !row.run)
+        .map((row) => formatDatabaseName(row.db))
+        .join(", ")}`}
+      lazy
+    >
+      {publicationRows
+        .filter((row) => !row.run)
+        .map((row) => (
+          <BodyText key={row.key} className="text-sm">
+            {formatDatabaseName(row.db)}:{" "}
+            {row.registration === "unimplemented"
+              ? "adapter not implemented"
+              : "no recorded run; execution unknown"}
+            .
+          </BodyText>
+        ))}
+    </Disclosure>
+  ) : null
 
   const queryInspector =
     !showLoading && !error && displayRows.length > 0 ? (
@@ -531,7 +567,11 @@ export function ExplorerPage({
         </SegmentedButton>
       </div>
 
-      <details className="group overflow-hidden rounded-lg border border-border-default bg-surface-inset/60">
+      <details
+        open={configurationOpen}
+        onToggle={(event) => setConfigurationOpen(event.currentTarget.open)}
+        className="group overflow-hidden rounded-lg border border-border-default bg-surface-inset/60"
+      >
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 text-sm font-medium text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300 [&::-webkit-details-marker]:hidden">
           <span>Change comparison</span>
           <ChevronDown aria-hidden="true" className="size-4 group-open:rotate-180" />
@@ -850,28 +890,8 @@ export function ExplorerPage({
               family={family}
               eligibleCount={publicationRows.filter((row) => row.eligible).length}
               cohortRows={publicationRows}
+              availability={unavailableEngines}
             />
-            {publicationRows.some((row) => !row.run) ? (
-              <Disclosure
-                title={`${publicationRows.filter((row) => !row.run).length} without recorded results · ${publicationRows
-                  .filter((row) => !row.run)
-                  .map((row) => formatDatabaseName(row.db))
-                  .join(", ")}`}
-                lazy
-              >
-                {publicationRows
-                  .filter((row) => !row.run)
-                  .map((row) => (
-                    <BodyText key={row.key} className="text-sm">
-                      {formatDatabaseName(row.db)}:{" "}
-                      {row.registration === "unimplemented"
-                        ? "adapter not implemented"
-                        : "no recorded run; execution unknown"}
-                      .
-                    </BodyText>
-                  ))}
-              </Disclosure>
-            ) : null}
           </>
         ) : (
           <div className="space-y-4">

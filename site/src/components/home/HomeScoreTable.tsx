@@ -41,8 +41,7 @@ function overallLead(rows: readonly OverallEngineResult[]): {
   return { lead: `Top score: ${label(first)}`, qualification }
 }
 
-const WEIGHTED_COVERAGE =
-  "Weighted coverage: share of performance queries with a usable result, weighted like the score"
+const WEIGHTED_COVERAGE = "Coverage: usable performance queries, weighted like the score"
 
 function familyLabel(family: ComparisonFamily): string {
   const track = family.track === "raw" ? "" : ` · ${family.track} track`
@@ -173,6 +172,7 @@ export function HomeScoreTable() {
         <>
           <div className="space-y-1" data-overall-lead>
             <LeadText className="font-semibold">{summary.lead}</LeadText>
+            <SecondaryText>100 = fastest query median · 50 = 2× slower</SecondaryText>
             <SecondaryText>{summary.qualification}</SecondaryText>
             <div data-weighted-coverage-definition>
               <SecondaryText>{WEIGHTED_COVERAGE}</SecondaryText>
@@ -200,7 +200,6 @@ export function HomeScoreTable() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
               <SecondaryText>
-                Fastest median per query = 100 points, 2× slower = 50 ·{" "}
                 {overview.overall.familyCount} equally weighted workloads ·{" "}
                 {overview.overall.queryCount} performance queries across scales
               </SecondaryText>

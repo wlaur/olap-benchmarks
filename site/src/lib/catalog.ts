@@ -1,5 +1,5 @@
 import type { BenchmarkDefinition } from "./benchmarks"
-import type { ComparisonFamily, ComparisonManifest } from "./comparison"
+import type { ComparisonAnnotation, ComparisonFamily, ComparisonManifest } from "./comparison"
 import {
   matchingAnnotations,
   observeQuery,
@@ -37,6 +37,7 @@ export interface CatalogRunCoverage {
   queryOutcomes: string[]
   comparisonBlockers: string[]
   failureReason: string | null
+  context: ComparisonAnnotation[]
 }
 
 export interface CatalogFamilyCoverage {
@@ -98,10 +99,14 @@ export function buildCatalogSuiteSummary(
                 observeQuery(run, query, [], comparison),
               )
               const completedQueries = queries.filter((query) => query.executionComplete).length
-              const comparisonBlockers = runPerformanceProblems(
+              const context = matchingAnnotations(
                 run,
-                matchingAnnotations(run, database, definition.id, run.scale, comparison),
+                database,
+                definition.id,
+                run.scale,
+                comparison,
               )
+              const comparisonBlockers = runPerformanceProblems(run, context)
               const outcome: CatalogRunOutcome =
                 run.metadata.invalidation !== null && run.metadata.invalidation !== undefined
                   ? "invalidated"
@@ -125,6 +130,7 @@ export function buildCatalogSuiteSummary(
                 queryOutcomes: summarizeQueryOutcomes(queries),
                 comparisonBlockers,
                 failureReason: run.error,
+                context,
               }
             }),
         })),

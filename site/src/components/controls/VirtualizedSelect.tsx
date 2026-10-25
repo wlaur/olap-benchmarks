@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Code2, Search, X } from "lucide-react"
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -48,7 +49,9 @@ export function VirtualizedSelect({
   const listId = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
+  const focusSearch = useCallback((input: HTMLInputElement | null) => {
+    input?.focus()
+  }, [])
   const listRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState("")
@@ -128,7 +131,6 @@ export function VirtualizedSelect({
 
   useEffect(() => {
     if (!open) return
-    const frame = window.requestAnimationFrame(() => searchRef.current?.focus())
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node
@@ -139,7 +141,6 @@ export function VirtualizedSelect({
 
     document.addEventListener("pointerdown", handlePointerDown)
     return () => {
-      window.cancelAnimationFrame(frame)
       document.removeEventListener("pointerdown", handlePointerDown)
     }
   }, [open])
@@ -253,7 +254,7 @@ export function VirtualizedSelect({
                 <Search className="h-4 w-4 shrink-0" strokeWidth={1.8} />
                 <span className="sr-only">{filterPlaceholder}</span>
                 <input
-                  ref={searchRef}
+                  ref={focusSearch}
                   type="text"
                   name={`${listId}-filter`}
                   role="searchbox"

@@ -217,3 +217,129 @@ test("publications with no analytical runs show an explicit empty disclosure", a
     page.getByText("No analytical runs recorded for this publication.", { exact: true }),
   ).toBeVisible()
 })
+
+test.describe("analytical row layout", () => {
+  test.use({ hasTouch: true })
+
+  test("keeps each run together at narrow widths and with enlarged text", async ({
+    page,
+  }, testInfo) => {
+    await usePublicationFixture(page, fixture.buffer)
+    await page.goto("#/")
+    const section = page.getByRole("region", {
+      name: "Analytical concurrency evidence",
+      exact: true,
+    })
+    const table = section.getByRole("table", { name: /^Analytical stream measurements/ })
+    await expect(table).toBeHidden()
+    await section
+      .getByRole("heading", { name: "Analytical concurrency evidence", exact: true })
+      .click()
+    await expect(table).toHaveCount(1)
+    const rows = table.locator("[data-analytical-run]")
+    await expect(rows).toHaveCount(4)
+    await expect(table.getByRole("columnheader")).toHaveText([
+      "Engine",
+      "Clients",
+      "QPS",
+      "Outcome",
+      "Details",
+    ])
+
+    for (const { width, textSize } of [
+      { width: 1440, textSize: 100 },
+      { width: 390, textSize: 100 },
+      { width: 320, textSize: 100 },
+      { width: 390, textSize: 200 },
+      { width: 320, textSize: 200 },
+    ]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.evaluate((size) => {
+        document.documentElement.style.fontSize = `${size}%`
+      }, textSize)
+      await expect(rows).toHaveCount(4)
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await expect(section.getByText("Duration-based streams", { exact: false })).toBeHidden()
+      const unknown = table.locator('[data-analytical-run="103"]')
+      await expect(unknown.getByRole("rowheader")).toHaveText("DuckDB 1.4.9")
+      await expect(unknown.getByRole("cell").nth(0)).toContainText("Unknown")
+      await expect(unknown.locator("[data-analytical-qps]")).toHaveText("Unknown")
+      await expect(unknown.getByText("Failed", { exact: true })).toBeVisible()
+      await expect(table.locator('[data-analytical-run="102"]')).toContainText("Cancelled")
+      await expect(table.locator('[data-analytical-run="101"]')).toContainText("Completed")
+
+      for (const row of await rows.all()) {
+        const bounds = await row.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+          const cells = [...element.querySelectorAll<HTMLElement>(":scope > th, :scope > td")]
+          return {
+            left: rect.left,
+            right: rect.right,
+            viewport: innerWidth,
+            scrollWidth: element.scrollWidth,
+            clientWidth: element.clientWidth,
+            cells: cells.map((cell) => {
+              const box = cell.getBoundingClientRect()
+              return {
+                text: cell.textContent,
+                left: box.left,
+                right: box.right,
+                top: box.top,
+                bottom: box.bottom,
+                scrollWidth: cell.scrollWidth,
+                clientWidth: cell.clientWidth,
+              }
+            }),
+          }
+        })
+        expect(bounds.left).toBeGreaterThanOrEqual(0)
+        expect(bounds.right).toBeLessThanOrEqual(bounds.viewport)
+        expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1)
+        for (const [index, cell] of bounds.cells.entries()) {
+          expect(cell.left, cell.text ?? "cell").toBeGreaterThanOrEqual(bounds.left)
+          expect(cell.right, cell.text ?? "cell").toBeLessThanOrEqual(bounds.right + 1)
+          expect(cell.scrollWidth, cell.text ?? "cell").toBeLessThanOrEqual(cell.clientWidth + 1)
+          for (const next of bounds.cells.slice(index + 1)) {
+            const overlapWidth = Math.min(cell.right, next.right) - Math.max(cell.left, next.left)
+            const overlapHeight = Math.min(cell.bottom, next.bottom) - Math.max(cell.top, next.top)
+            expect(overlapWidth <= 1 || overlapHeight <= 1).toBe(true)
+          }
+        }
+        const button = row.getByRole("button", { name: /^Run \d+ details$/ })
+        const target = await button.boundingBox()
+        expect(target!.width).toBeGreaterThanOrEqual(44)
+        expect(target!.height).toBeGreaterThanOrEqual(44)
+        expect(target!.x).toBeGreaterThanOrEqual(bounds.left)
+        expect(target!.x + target!.width).toBeLessThanOrEqual(bounds.right + 1)
+        if (width === 1440) {
+          await expect(row.getByRole("cell").nth(0)).toHaveCSS("text-align", "right")
+          await expect(row.getByRole("cell").nth(1)).toHaveCSS("text-align", "right")
+        }
+      }
+      const trigger = unknown.getByRole("button", { name: "Run 103 details" })
+      if (textSize === 200) {
+        await unknown.getByRole("rowheader").scrollIntoViewIfNeeded()
+        await page.screenshot({
+          path: testInfo.outputPath(`analytical-rows-${width}-${textSize}-engine.png`),
+        })
+        await trigger.scrollIntoViewIfNeeded()
+        await expect(trigger).toBeInViewport({ ratio: 1 })
+        await page.screenshot({
+          path: testInfo.outputPath(`analytical-rows-${width}-${textSize}-action.png`),
+        })
+      } else {
+        await table.screenshot({
+          path: testInfo.outputPath(`analytical-rows-${width}-${textSize}.png`),
+        })
+      }
+      if (width === 1440) await trigger.click()
+      else await trigger.tap()
+      const dialog = page.getByRole("dialog", { name: /^Run 103/ })
+      await expect(dialog).toBeVisible()
+      await expect(dialog.getByRole("table", { name: "Run 103 per-query evidence" })).toBeHidden()
+      await page.keyboard.press("Escape")
+      await expect(dialog).toBeHidden()
+      await expect(trigger).toBeFocused()
+    }
+  })
+})
