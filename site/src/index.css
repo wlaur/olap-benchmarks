@@ -3,13 +3,13 @@
 
 @theme {
   --color-surface-primary: #070a0f;
-  --color-surface-raised: #111722;
+  --color-surface-raised: #121a27;
   --color-surface-inset: #0b1018;
-  --color-surface-elevated: #182232;
+  --color-surface-elevated: #1c2738;
 
-  --color-border-subtle: rgba(148, 163, 184, 0.15);
-  --color-border-default: rgba(148, 163, 184, 0.3);
-  --color-border-strong: rgba(148, 163, 184, 0.48);
+  --color-border-subtle: rgba(148, 163, 184, 0.2);
+  --color-border-default: rgba(148, 163, 184, 0.34);
+  --color-border-strong: rgba(148, 163, 184, 0.52);
 
   --color-text-primary: #f4f7fb;
   --color-text-secondary: #d3dce8;
@@ -22,7 +22,7 @@
   --color-slate-300: #b8c5d5;
   --color-slate-400: #9dacbf;
   --color-slate-500: #7f8fa6;
-  --color-slate-600: #536176;
+  --color-slate-600: #687891;
 
   --color-accent-200: #dceaff;
   --color-accent-300: #a8c8ff;
@@ -41,8 +41,17 @@
     margin: 0;
     background: var(--color-surface-primary);
     font-family:
-      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-      monospace;
+      ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
     font-feature-settings:
       "liga" 0,
       "calt" 0;
@@ -87,6 +96,17 @@
 
 .animate-panel-enter {
   animation: panel-enter 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .panel-scrollbar {
@@ -142,7 +162,7 @@
 .tok-comment,
 .tok-lineComment,
 .tok-blockComment {
-  color: #5c6370;
+  color: #9dacbf;
   font-style: italic;
 }
 .tok-typeName,

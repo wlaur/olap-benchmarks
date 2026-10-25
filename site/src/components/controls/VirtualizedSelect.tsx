@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Code2, Search, X } from "lucide-react"
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -48,13 +49,16 @@ export function VirtualizedSelect({
   const listId = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
+  const focusSearch = useCallback((input: HTMLInputElement | null) => {
+    input?.focus()
+  }, [])
   const listRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
   const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null)
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
   const selectedOption = options.find((option) => option.value === value)
   const filteredOptions = useMemo(() => {
     const normalizedFilter = filter.trim().toLocaleLowerCase()
@@ -127,7 +131,6 @@ export function VirtualizedSelect({
 
   useEffect(() => {
     if (!open) return
-    const frame = window.requestAnimationFrame(() => searchRef.current?.focus())
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node
@@ -138,7 +141,6 @@ export function VirtualizedSelect({
 
     document.addEventListener("pointerdown", handlePointerDown)
     return () => {
-      window.cancelAnimationFrame(frame)
       document.removeEventListener("pointerdown", handlePointerDown)
     }
   }, [open])
@@ -156,6 +158,7 @@ export function VirtualizedSelect({
 
   function openMenu() {
     if (disabled) return
+    setPortalContainer(triggerRef.current?.closest("dialog") ?? document.body)
     setFilter("")
     setOpen(true)
   }
@@ -211,7 +214,7 @@ export function VirtualizedSelect({
         onKeyDown={handleTriggerKeyDown}
         className={cn(
           "group flex min-h-11 min-w-0 items-center gap-3 rounded-md border border-border-strong bg-surface-primary px-3 text-left transition-colors outline-none",
-          "hover:border-slate-500 hover:bg-surface-inset focus-visible:border-accent-400/70 focus-visible:ring-2 focus-visible:ring-accent-400/15 disabled:cursor-not-allowed disabled:opacity-50",
+          "hover:border-slate-500 hover:bg-surface-inset focus-visible:border-accent-300 focus-visible:ring-2 focus-visible:ring-accent-300/60 disabled:cursor-not-allowed disabled:opacity-50",
           open && "border-accent-400/60 ring-2 ring-accent-400/10",
           className,
         )}
@@ -220,9 +223,7 @@ export function VirtualizedSelect({
           {icon ?? <Code2 className="h-3.5 w-3.5" strokeWidth={1.8} />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.625rem] font-semibold tracking-[0.16em] text-slate-500 uppercase">
-            {label}
-          </span>
+          <span className="block text-sm font-medium text-slate-400">{label}</span>
           <span
             className="block truncate text-sm font-medium text-slate-100"
             title={selectedOption?.label}
@@ -230,7 +231,7 @@ export function VirtualizedSelect({
             {selectedOption?.label ?? "Select an option"}
           </span>
         </span>
-        <span className="hidden shrink-0 text-[0.6875rem] text-slate-500 sm:inline">
+        <span className="hidden shrink-0 text-sm text-slate-400 sm:inline">
           {options.length} options
         </span>
         <ChevronDown
@@ -253,7 +254,7 @@ export function VirtualizedSelect({
                 <Search className="h-4 w-4 shrink-0" strokeWidth={1.8} />
                 <span className="sr-only">{filterPlaceholder}</span>
                 <input
-                  ref={searchRef}
+                  ref={focusSearch}
                   type="text"
                   name={`${listId}-filter`}
                   role="searchbox"
@@ -266,14 +267,14 @@ export function VirtualizedSelect({
                   onChange={(event) => setFilter(event.target.value)}
                   onKeyDown={handleSearchKeyDown}
                   placeholder={filterPlaceholder}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-600"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
                 />
                 {filter ? (
                   <button
                     type="button"
                     aria-label="Clear filter"
                     onClick={() => setFilter("")}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-surface-raised hover:text-slate-200"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-surface-raised hover:text-slate-200"
                   >
                     <X className="h-3.5 w-3.5" strokeWidth={1.8} />
                   </button>
@@ -314,14 +315,14 @@ export function VirtualizedSelect({
                               ? "border-accent-400 bg-accent-400/10 text-slate-50"
                               : active
                                 ? "border-transparent bg-surface-raised text-slate-100"
-                                : "border-transparent text-slate-400",
+                                : "border-transparent text-slate-300",
                           )}
                           style={{ top: optionIndex * ITEM_HEIGHT, height: ITEM_HEIGHT }}
                         >
                           <Code2
                             className={cn(
                               "h-3.5 w-3.5 shrink-0",
-                              selected ? "text-accent-300" : "text-slate-600",
+                              selected ? "text-accent-300" : "text-slate-500",
                             )}
                             strokeWidth={1.8}
                           />
@@ -345,14 +346,14 @@ export function VirtualizedSelect({
                 )}
               </div>
 
-              <div className="flex h-[34px] items-center justify-between border-t border-border-default px-3 text-[0.6875rem] text-slate-500">
+              <div className="flex min-h-9 items-center justify-between border-t border-border-default px-3 text-sm text-slate-400">
                 <span>
                   {filteredOptions.length}/{options.length} matches
                 </span>
                 <span className="hidden sm:inline">↑↓ navigate · enter select · esc close</span>
               </div>
             </div>,
-            document.body,
+            portalContainer ?? document.body,
           )
         : null}
     </>

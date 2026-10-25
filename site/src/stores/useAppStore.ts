@@ -16,6 +16,8 @@ interface AppSlice {
   systemLoading: boolean
   systemError: string | null
   setSelectedSystem: (system: string | null) => void
+  explorerPath: string
+  setExplorerPath: (path: string) => void
   loadSystems: () => Promise<void>
 }
 
@@ -28,6 +30,8 @@ export const useAppStore = create<AppSlice>()(
 
       systems: [],
       selectedSystem: null,
+      explorerPath: "/explorer/time_series",
+      setExplorerPath: (explorerPath) => set({ explorerPath }),
       systemLoading: true,
       systemError: null,
 
@@ -69,6 +73,7 @@ export const useAppStore = create<AppSlice>()(
       version: STORE_VERSION,
       partialize: (state) => ({
         selectedSystem: state.selectedSystem,
+        explorerPath: state.explorerPath,
       }),
     },
   ),

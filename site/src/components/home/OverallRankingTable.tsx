@@ -1,165 +1,361 @@
 import { ChevronDown } from "lucide-react"
 
+import { formatDatabaseName } from "../../lib/databaseNames"
+import type { FamilyEngineResult } from "../../lib/observations"
 import type { OverallEngineResult } from "../../lib/overall"
 import { QuietButton } from "../controls/Control"
+import { Disclosure } from "../layout/Disclosure"
 import { ChartFrame } from "../layout/Panel"
-import { BodyText, MetaLabel, NumericText } from "../Typography"
+import { CaptionText, ItemTitle, MetaLabel, NumericText, SecondaryText } from "../Typography"
+
+const GRID =
+  "sm:grid sm:grid-cols-[2rem_minmax(8rem,12rem)_minmax(0,1fr)_4.5rem_minmax(8rem,10rem)_1.25rem] sm:items-center sm:gap-x-3"
+
+const CONTRIBUTION_GRID =
+  "sm:grid sm:grid-cols-[minmax(0,12rem)_4rem_7rem_minmax(0,1fr)] sm:items-start"
+
+const GAP_GROUPS = [
+  {
+    label: "Measured failures",
+    match: (reason: string) =>
+      ["timeout", "error", "wrong result", "Answer conflict"].includes(reason),
+  },
+  {
+    label: "Unsupported or skipped",
+    match: (reason: string) => ["unsupported", "skipped", "Comparison excluded"].includes(reason),
+  },
+  {
+    label: "Not run",
+    match: (reason: string) => ["Not measured", "Adapter unimplemented"].includes(reason),
+  },
+  { label: "Run failed, blocked or incomplete", match: () => true },
+] as const
+
+export function groupGaps(gaps: Readonly<Record<string, number>>) {
+  const groups = new Map<string, [string, number][]>()
+  for (const [reason, count] of Object.entries(gaps)) {
+    const label = GAP_GROUPS.find((group) => group.match(reason))!.label
+    groups.set(label, [...(groups.get(label) ?? []), [reason, count]])
+  }
+  return GAP_GROUPS.flatMap(({ label }) => {
+    const reasons = groups.get(label)
+    return reasons ? [{ label, reasons }] : []
+  })
+}
+
+export function CoverageMeter({ row }: { row: OverallEngineResult }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-2 w-full overflow-hidden rounded-full bg-surface-elevated"
+    >
+      <div className="h-full bg-sky-300" style={{ width: `${row.coverage}%` }} />
+      <div className="h-full bg-amber-300" style={{ width: `${row.recordedGapCoverage}%` }} />
+    </div>
+  )
+}
+
+export function CoverageLegend() {
+  return (
+    <CaptionText as="div" className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" className="size-2.5 rounded-full bg-sky-300" />
+        Usable
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" className="size-2.5 rounded-full bg-amber-300" />
+        Run, no usable result
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          aria-hidden="true"
+          className="size-2.5 rounded-full bg-surface-elevated ring-1 ring-border-strong"
+        />
+        Not run
+      </span>
+    </CaptionText>
+  )
+}
 
 export function OverallRankingTable({
   rows,
   familyCount,
   onSelectFamily,
+  evidenceByFamily,
 }: {
+  evidenceByFamily: ReadonlyMap<string, readonly FamilyEngineResult[]>
   rows: readonly OverallEngineResult[]
   familyCount: number
   onSelectFamily: (familyId: string) => void
 }) {
   return (
     <ChartFrame className="p-0">
-      <div
-        aria-hidden="true"
-        className="grid grid-cols-[1.5rem_minmax(0,1fr)_5rem] items-center gap-3 border-b border-border-default px-3 py-2 sm:grid-cols-[2rem_minmax(0,1fr)_12rem] sm:px-4"
-      >
+      <div aria-hidden="true" className={`hidden ${GRID} border-b border-border-default px-4 py-2`}>
         <MetaLabel>#</MetaLabel>
         <MetaLabel>Database</MetaLabel>
-        <MetaLabel className="text-right tracking-normal whitespace-nowrap">Score / 100</MetaLabel>
+        <MetaLabel className="sm:col-span-2">Score · 0–100, higher is better</MetaLabel>
+        <MetaLabel>Weighted coverage</MetaLabel>
+        <span />
       </div>
       <div
         role="list"
         aria-label="Overall database ranking"
         className="divide-y divide-border-subtle"
       >
-        {rows.map((row) => (
-          <div
-            key={row.db}
-            role="listitem"
-            aria-label={`${row.db} overall ranking`}
-            data-overall-engine={row.db}
-          >
-            <details className="group">
-              <summary className="grid cursor-pointer list-none grid-cols-[1.5rem_minmax(0,1fr)_5rem] items-center gap-3 px-3 py-3 outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-accent-300 focus-visible:ring-inset sm:grid-cols-[2rem_minmax(0,1fr)_12rem] sm:px-4 [&::-webkit-details-marker]:hidden">
-                <NumericText className="text-slate-400">
-                  <span className="sr-only">Rank </span>
-                  <span data-overall-rank={row.rank ?? "unranked"}>{row.rank ?? "—"}</span>
-                </NumericText>
-                <div className="flex min-w-0 items-center gap-2">
-                  <ChevronDown
-                    aria-hidden="true"
-                    className="size-3.5 shrink-0 text-slate-500 transition-transform group-open:rotate-180"
-                  />
-                  <div className="min-w-0 sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-3">
-                    <strong className="block text-sm break-words text-slate-100">{row.db}</strong>
-                    <span className="block text-[11px] text-slate-400">
-                      {row.scoredQueries === 0
-                        ? "No comparable results"
-                        : `${row.scoredQueries}/${row.totalQueries} queries scored`}
-                    </span>
+        {rows.map((row) => {
+          const name = formatDatabaseName(row.db)
+          const coverage = (
+            <>
+              <span data-overall-weighted-coverage={row.coverage}>{row.coverage.toFixed(0)}%</span>
+              <span className="sm:sr-only"> weighted coverage</span>
+            </>
+          )
+          return (
+            <div
+              key={row.db}
+              role="listitem"
+              aria-label={`${name} overall ranking`}
+              data-overall-engine={row.db}
+            >
+              <details className="group">
+                <summary
+                  className={`flex min-h-14 cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-accent-300/60 focus-visible:ring-inset sm:px-4 ${GRID} [&::-webkit-details-marker]:hidden`}
+                >
+                  <div className="flex min-w-0 flex-[1_1_9rem] items-baseline gap-3 sm:contents">
+                    <NumericText className="shrink-0 text-base text-slate-300">
+                      <span className="sr-only">Rank </span>
+                      <span data-overall-rank={row.rank ?? "unranked"}>{row.rank ?? "—"}</span>
+                    </NumericText>
+                    <ItemTitle className="min-w-0 [overflow-wrap:anywhere] sm:[overflow-wrap:break-word]">
+                      {name}
+                    </ItemTitle>
                   </div>
-                </div>
-                <div className="flex items-center justify-end gap-3">
                   <div
                     aria-hidden="true"
-                    className="hidden h-1.5 flex-1 overflow-hidden rounded-full bg-surface-elevated sm:block"
+                    className="hidden h-2.5 overflow-hidden rounded-full bg-surface-elevated sm:block"
                   >
                     <div
-                      className="h-full rounded-full bg-slate-400"
+                      className="h-full rounded-full bg-slate-200"
                       style={{ width: `${row.score}%` }}
                     />
                   </div>
-                  <NumericText className="w-12 text-right text-base font-semibold">
+                  <NumericText className="ml-auto shrink-0 text-right text-lg font-semibold sm:ml-0">
                     <span className="sr-only">Score </span>
                     <span data-overall-score={row.score}>{row.score.toFixed(1)}</span>
                     <span className="sr-only"> out of 100</span>
-                  </NumericText>
-                </div>
-              </summary>
-              <div className="space-y-3 border-t border-border-subtle px-3 py-3 sm:pr-4 sm:pl-16">
-                <BodyText className="text-xs leading-5">
-                  {row.versions.length > 0
-                    ? `Published versions: ${row.versions.join(", ")}. `
-                    : ""}
-                  {row.workloadsWithData}/{familyCount} workloads have usable results. Reference
-                  medians include complete queries from partial completed runs.
-                </BodyText>
-                <BodyText className="text-xs leading-5">
-                  Weighted coverage: usable{" "}
-                  <span data-overall-coverage={row.coverage}>{row.coverage.toFixed(1)}%</span>
-                  {" · "}recorded gaps{" "}
-                  <span data-overall-recorded-gaps={row.recordedGapCoverage}>
-                    {row.recordedGapCoverage.toFixed(1)}%
-                  </span>
-                  {" · "}no run{" "}
-                  <span data-overall-no-run={row.unmeasuredCoverage}>
-                    {row.unmeasuredCoverage.toFixed(1)}%
-                  </span>
-                  . These describe evidence in this publication, not database capability.
-                </BodyText>
-                <BodyText className="text-xs leading-5">
-                  {row.rankRange
-                    ? `Rank sensitivity: ${row.rankRange[0]}–${row.rankRange[1]} across the full score and one-workload omissions. This is not a confidence interval.`
-                    : "Rank sensitivity unavailable without comparable results."}
-                  {row.unrankedOmissions > 0
-                    ? ` ${row.unrankedOmissions} workload omission${row.unrankedOmissions === 1 ? " leaves" : "s leave"} no scored results and no rank.`
-                    : ""}
-                </BodyText>
-                <ul
-                  aria-label={`${row.db} workload contributions`}
-                  className="divide-y divide-border-subtle"
-                >
-                  {row.families.map((family) => (
-                    <li
-                      key={family.id}
-                      data-overall-family={family.id}
-                      className="grid min-w-0 gap-2 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)]"
+                    <span
+                      aria-hidden="true"
+                      className="text-sm font-normal text-slate-400 sm:hidden"
                     >
-                      <div className="min-w-0">
-                        <QuietButton
-                          size="xs"
-                          className="max-w-full text-left whitespace-normal"
-                          aria-label={`Compare ${family.title} by workload`}
-                          onClick={() => onSelectFamily(family.id)}
-                        >
-                          {family.title}
-                        </QuietButton>
-                      </div>
-                      <div className="text-xs leading-5 text-slate-300">
-                        <p>
-                          Score{" "}
-                          <NumericText className="text-xs">{family.score.toFixed(1)}</NumericText>
-                          {" / 100 · "}
-                          {family.scoredQueries}/{family.totalQueries} queries scored
-                        </p>
-                      </div>
-                      <div className="min-w-0 text-xs leading-5 break-words text-slate-400">
-                        <p>
-                          {Object.entries(family.gaps).length > 0
-                            ? Object.entries(family.gaps)
-                                .map(([reason, count]) => `${reason}: ${count}`)
-                                .join(" · ")
-                            : "No evidence gaps"}
-                        </p>
-                        <p>
-                          {family.recordedRunIds.length > 0
-                            ? `Recorded run IDs: ${family.recordedRunIds.join(", ")}`
-                            : "No recorded run IDs"}
-                        </p>
-                        <p>
-                          {family.runIds.length > 0
-                            ? `Scored run IDs: ${family.runIds.join(", ")}`
-                            : "No scored run IDs"}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </details>
-          </div>
-        ))}
+                      /100
+                    </span>
+                  </NumericText>
+                  <div
+                    data-overall-coverage-summary
+                    className="order-last flex min-w-0 basis-full flex-wrap items-center gap-x-2 gap-y-1 sm:order-none sm:flex-nowrap"
+                  >
+                    <SecondaryText as="span" className="min-w-0 sm:w-10 sm:shrink-0 sm:text-right">
+                      {coverage}
+                    </SecondaryText>
+                    <div className="min-w-16 flex-1">
+                      <CoverageMeter row={row} />
+                    </div>
+                  </div>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180 sm:justify-self-end"
+                  />
+                </summary>
+                <EngineDetails
+                  row={row}
+                  familyCount={familyCount}
+                  onSelectFamily={onSelectFamily}
+                  evidenceByFamily={evidenceByFamily}
+                />
+              </details>
+            </div>
+          )
+        })}
       </div>
       {rows.length === 0 ? (
-        <BodyText className="p-3">All engines are hidden. Scores and ranks are retained.</BodyText>
+        <SecondaryText className="p-4">No databases have overall results.</SecondaryText>
       ) : null}
     </ChartFrame>
+  )
+}
+
+function EngineDetails({
+  row,
+  familyCount,
+  onSelectFamily,
+  evidenceByFamily,
+}: {
+  evidenceByFamily: ReadonlyMap<string, readonly FamilyEngineResult[]>
+  row: OverallEngineResult
+  familyCount: number
+  onSelectFamily: (familyId: string) => void
+}) {
+  const name = formatDatabaseName(row.db)
+  return (
+    <div className="space-y-4 border-t border-border-subtle bg-surface-primary/40 px-3 py-4 sm:px-4 sm:pl-16">
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <MetaLabel as="dt">Weighted coverage</MetaLabel>
+          <dd className="mt-1 space-y-0.5 text-sm leading-6 text-slate-200">
+            <p>
+              Usable <span data-overall-coverage={row.coverage}>{row.coverage.toFixed(1)}%</span>
+            </p>
+            <p>
+              Run, no usable result{" "}
+              <span data-overall-recorded-gaps={row.recordedGapCoverage}>
+                {row.recordedGapCoverage.toFixed(1)}%
+              </span>
+            </p>
+            <p>
+              Not run{" "}
+              <span data-overall-no-run={row.unmeasuredCoverage}>
+                {row.unmeasuredCoverage.toFixed(1)}%
+              </span>
+            </p>
+          </dd>
+        </div>
+        <div>
+          <MetaLabel as="dt">Performance queries scored (unweighted)</MetaLabel>
+          <dd className="mt-1 text-sm leading-6 text-slate-200" data-overall-queries>
+            {row.scoredQueries} of {row.totalQueries}
+          </dd>
+        </div>
+        <div>
+          <MetaLabel as="dt">Workloads with usable results</MetaLabel>
+          <dd className="mt-1 text-sm leading-6 text-slate-200">
+            {row.workloadsWithData} of {familyCount}
+          </dd>
+        </div>
+        <div>
+          <MetaLabel as="dt">Rank sensitivity</MetaLabel>
+          <dd className="mt-1 text-sm leading-6 text-slate-200">
+            {row.rankRange
+              ? `Ranks ${row.rankRange[0]}–${row.rankRange[1]} when any one workload is omitted (not a confidence interval).`
+              : "Unavailable without comparable results."}
+            {row.unrankedOmissions > 0
+              ? ` ${row.unrankedOmissions} workload omission${row.unrankedOmissions === 1 ? " leaves" : "s leave"} no scored results and no rank.`
+              : ""}
+          </dd>
+        </div>
+      </dl>
+      <CaptionText>
+        Coverage describes evidence in this publication, not database capability. Reference medians
+        include complete queries from partial completed runs.
+        {row.versions.length > 0 ? ` Published versions: ${row.versions.join(", ")}.` : ""}
+      </CaptionText>
+      <div>
+        <div
+          aria-hidden="true"
+          className={`hidden ${CONTRIBUTION_GRID} border-b border-border-subtle pb-2`}
+        >
+          <MetaLabel>Workload</MetaLabel>
+          <MetaLabel className="text-right">Score</MetaLabel>
+          <MetaLabel className="text-right">Performance queries scored</MetaLabel>
+          <MetaLabel>Gaps</MetaLabel>
+        </div>
+        <ul
+          aria-label={`${name} workload contributions`}
+          className="divide-y divide-border-subtle text-sm leading-6 text-slate-200"
+        >
+          {row.families.map((family) => (
+            <li
+              key={family.id}
+              data-overall-family={family.id}
+              className={`relative grid grid-cols-1 gap-x-3 gap-y-1 py-2 ${CONTRIBUTION_GRID}`}
+            >
+              <div className="min-w-0">
+                <QuietButton
+                  size="xs"
+                  className="text-left whitespace-normal"
+                  aria-label={`Compare ${family.title} by workload`}
+                  onClick={() => onSelectFamily(family.id)}
+                >
+                  {family.title}
+                </QuietButton>
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-3 sm:contents">
+                <NumericText className="sm:text-right">
+                  <span className="sm:sr-only">Score </span>
+                  {family.score.toFixed(1)}
+                </NumericText>
+                <span className="whitespace-nowrap sm:text-right" data-overall-family-queries>
+                  {family.scoredQueries}/{family.totalQueries}
+                  <span className="sm:sr-only"> performance queries</span>
+                </span>
+              </div>
+              <div className="relative min-w-0 text-slate-300">
+                <span className="sr-only">Gaps: </span>
+                {Object.keys(family.gaps).length > 0 ? (
+                  <ul className="space-y-1">
+                    {groupGaps(family.gaps).map((group) => (
+                      <li
+                        key={group.label}
+                        data-overall-gap-group={group.label}
+                        className="relative min-w-0 break-words"
+                      >
+                        {group.reasons
+                          .map(
+                            ([reason, count]) =>
+                              `${count} ${count === 1 ? "query" : "queries"}: ${reason}`,
+                          )
+                          .join(" · ")}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-slate-400">No gaps</span>
+                )}
+                {Object.keys(family.gaps).length > 0
+                  ? [
+                      ...new Map(
+                        (evidenceByFamily.get(family.id) ?? [])
+                          .filter((candidate) => candidate.db === row.db && !candidate.eligible)
+                          .flatMap((candidate) => candidate.annotations)
+                          .map((note) => [note.summary, note]),
+                      ).values(),
+                    ].map((note) => (
+                      <p
+                        key={note.summary}
+                        className="mt-2 text-sm leading-6 [overflow-wrap:anywhere]"
+                      >
+                        <span className="text-slate-400">Recorded context (all queries): </span>
+                        {note.summary}{" "}
+                        <a
+                          href={note.evidence_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-accent-300 underline"
+                        >
+                          Source
+                        </a>
+                      </p>
+                    ))
+                  : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Disclosure title="Run IDs by workload" lazy={false}>
+        <ul className="space-y-1 text-sm leading-6 text-slate-300">
+          {row.families.map((family) => (
+            <li key={family.id}>
+              <span className="text-slate-100">{family.title}</span>:{" "}
+              {family.runIds.length > 0
+                ? `Scored run IDs ${family.runIds.join(", ")}`
+                : "No scored run IDs"}
+              {family.recordedRunIds.length > 0
+                ? ` · recorded run IDs ${family.recordedRunIds.join(", ")}`
+                : " · no recorded run IDs"}
+            </li>
+          ))}
+        </ul>
+      </Disclosure>
+    </div>
   )
 }

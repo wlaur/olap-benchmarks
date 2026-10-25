@@ -34,7 +34,7 @@ export function SqlCodeView({
       >
         {lines.map((line, index) => (
           <Fragment key={index}>
-            <span className="pr-3 pl-4 text-right text-[#475569] tabular-nums select-none">
+            <span className="pr-3 pl-4 text-right text-slate-400 tabular-nums select-none">
               {index + 1}
             </span>
             <span

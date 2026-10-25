@@ -72,7 +72,9 @@ test("publication scope remains accessible across the results pages", async ({ p
 
   for (const route of ["#/", "#/explorer/tpc_h?scale=50", "#/catalog?suite=tpc_h"]) {
     await page.goto(route)
-    if (route === "#/") await page.getByText("Measurement context", { exact: true }).click()
+    if (route.startsWith("#/catalog"))
+      await page.getByText("Workload and publication context", { exact: true }).click()
+    else await page.getByRole("button", { name: "Measurement context", exact: true }).click()
     const report = page.getByRole("link", { name: "Coverage & exclusions", exact: true })
     if (publication.kind === "matrix") {
       await expect(report).toHaveCount(0)
@@ -81,7 +83,7 @@ test("publication scope remains accessible across the results pages", async ({ p
 
     await expect(report).toBeVisible()
     await expect(report).toHaveAttribute("href", publication.report_url)
-    const notice = page.getByRole("alert").filter({ has: report })
+    const notice = page.getByRole("note").filter({ has: report })
     await expect(notice).toContainText(`${publication.select_cohorts} query runs`)
     await expect(notice).toContainText(`${publication.partial_select_cohorts} are partial`)
     await expect(notice).toContainText("Coverage and comparison rules are shown with each result")

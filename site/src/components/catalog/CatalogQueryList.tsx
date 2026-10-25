@@ -1,21 +1,20 @@
-import { Code2, Search } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Search } from "lucide-react"
+import { useMemo, useState } from "react"
 
 import { getSqlDialects } from "../../lib/catalog"
-import { cn } from "../../lib/cn"
+import { formatDatabaseName } from "../../lib/databaseNames"
 import type { QuerySqlEntry } from "../../lib/types"
-import { SegmentedButton } from "../controls/Control"
+import { QuietButton, SegmentedButton } from "../controls/Control"
+import { DetailsDialog } from "../layout/DetailsDialog"
 import { ChartFrame } from "../layout/Panel"
-import { Skeleton } from "../Skeleton"
 import { SqlCodeView } from "../SqlCodeView"
-import { MetaLabel } from "../Typography"
+import { BodyText, SectionTitle } from "../Typography"
 
 export function CatalogQueryList({
   queryNames,
   selectedQuery,
   selectedDialect,
   sqlEntry,
-  loading,
   onSelectQuery,
   onSelectDialect,
 }: {
@@ -23,160 +22,95 @@ export function CatalogQueryList({
   selectedQuery: string
   selectedDialect: string
   sqlEntry: QuerySqlEntry | undefined
-  loading: boolean
   onSelectQuery: (query: string) => void
   onSelectDialect: (dialect: string) => void
 }) {
   const [filter, setFilter] = useState("")
-  const queryListRef = useRef<HTMLDivElement>(null)
-  const selectedQueryRef = useRef<HTMLButtonElement>(null)
   const filteredQueries = useMemo(() => {
-    const normalizedFilter = filter.trim().toLowerCase()
-    if (!normalizedFilter) return queryNames
-    return queryNames.filter((queryName) => queryName.toLowerCase().includes(normalizedFilter))
+    const normalized = filter.trim().toLowerCase()
+    return queryNames.filter((name) => name.toLowerCase().includes(normalized))
   }, [filter, queryNames])
   const dialects = getSqlDialects(sqlEntry)
-  const selectedSql = resolveSql(sqlEntry, selectedDialect)
+  const sql = selectedDialect === "base" ? sqlEntry?.sql : sqlEntry?.db_overrides[selectedDialect]
 
-  useEffect(() => {
-    const list = queryListRef.current
-    const selected = selectedQueryRef.current
-    if (!list || !selected) return
-    const centeredTop =
-      selected.offsetTop - list.offsetTop - (list.clientHeight - selected.clientHeight) / 2
-    list.scrollTop = Math.max(0, centeredTop)
-  }, [filteredQueries, selectedQuery])
-
-  if (loading) {
-    return (
-      <div className="grid gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
-        <Skeleton className="h-80 w-full rounded-lg" />
-        <Skeleton className="h-80 w-full rounded-lg" />
-      </div>
-    )
-  }
+  if (queryNames.length === 0)
+    return <BodyText>No query definitions are published for this workload.</BodyText>
 
   return (
-    <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
-      <ChartFrame className="flex min-h-0 flex-col p-3">
-        <label className="flex min-w-0 items-center gap-2 border-b border-border-default px-1 pb-2 text-slate-400 focus-within:border-slate-500 focus-within:text-slate-300">
-          <Search className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+    <div className="grid min-w-0 gap-4 md:grid-cols-2">
+      <ChartFrame className="space-y-3">
+        <label className="flex min-h-11 items-center gap-2 rounded-md border border-border-default px-3 focus-within:ring-2 focus-within:ring-accent-300">
+          <Search className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
           <span className="sr-only">Filter queries</span>
           <input
             type="search"
-            name="catalog-query-filter"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Filter queries"
-            className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-600"
+            className="min-w-0 flex-1 bg-transparent text-base text-slate-100 outline-none placeholder:text-slate-400"
           />
-          <span className="shrink-0 text-xs text-slate-500 tabular-nums">
-            {filteredQueries.length}/{queryNames.length}
-          </span>
         </label>
-
+        <p role="status" className="text-sm text-slate-400">
+          {filteredQueries.length} of {queryNames.length} queries
+        </p>
         {filteredQueries.length > 0 ? (
           <div
-            ref={queryListRef}
-            className="panel-scrollbar mt-2 max-h-56 min-h-0 space-y-1 overflow-y-auto pr-1 lg:max-h-[32rem]"
+            role="group"
+            aria-label="Query selection"
+            className="panel-scrollbar max-h-80 space-y-2 overflow-y-auto p-1"
           >
-            {filteredQueries.map((queryName) => {
-              const selected = queryName === selectedQuery
-              return (
-                <button
-                  key={queryName}
-                  ref={selected ? selectedQueryRef : undefined}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onSelectQuery(queryName)}
-                  className={cn(
-                    "flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs font-medium transition-colors outline-none",
-                    "focus-visible:border-slate-300/60 focus-visible:ring-2 focus-visible:ring-slate-300/15",
-                    selected
-                      ? "border-border-strong bg-surface-elevated text-slate-50"
-                      : "border-transparent text-slate-400 hover:bg-surface-raised hover:text-slate-200",
-                  )}
-                >
-                  <Code2
-                    className={cn(
-                      "h-3.5 w-3.5 shrink-0",
-                      selected ? "text-accent-300" : "text-slate-600",
-                    )}
-                    strokeWidth={1.8}
-                  />
-                  <span className="truncate" title={queryName}>
-                    {queryName}
-                  </span>
-                </button>
-              )
-            })}
+            {filteredQueries.map((query) => (
+              <SegmentedButton
+                key={query}
+                selected={selectedQuery === query}
+                aria-pressed={selectedQuery === query}
+                onClick={() => onSelectQuery(query)}
+                className="min-h-11 w-full justify-start px-3 py-2 text-left text-sm [overflow-wrap:anywhere]"
+              >
+                {query}
+              </SegmentedButton>
+            ))}
           </div>
         ) : (
-          <p className="py-8 text-center text-sm text-slate-500">No matching queries.</p>
+          <div className="space-y-3">
+            <BodyText>No matching queries.</BodyText>
+            <QuietButton onClick={() => setFilter("")}>Clear query filter</QuietButton>
+          </div>
         )}
       </ChartFrame>
-
-      <ChartFrame className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden p-3 sm:p-4">
-        <div className="mb-3 shrink-0 space-y-3">
-          <div>
-            <MetaLabel>Query SQL</MetaLabel>
-            <p
-              className="mt-1 truncate text-base font-semibold text-slate-100"
-              title={selectedQuery}
-            >
-              {selectedQuery || "Select a query"}
-            </p>
+      <ChartFrame className="space-y-3">
+        <SectionTitle as="h3" className="[overflow-wrap:anywhere]">
+          {selectedQuery}
+        </SectionTitle>
+        <BodyText className="text-sm">SQL and database dialects open on request.</BodyText>
+        <DetailsDialog key={selectedQuery} title={`SQL · ${selectedQuery}`} trigger="View SQL">
+          <div role="group" aria-label="SQL dialect" className="mb-4 flex flex-wrap gap-2">
+            {dialects.map((dialect) => (
+              <SegmentedButton
+                key={dialect}
+                selected={selectedDialect === dialect}
+                aria-pressed={selectedDialect === dialect}
+                onClick={() => onSelectDialect(dialect)}
+                className="min-h-11 text-sm"
+              >
+                {dialect === "base" ? "Base SQL" : formatDatabaseName(dialect)}
+              </SegmentedButton>
+            ))}
           </div>
-          {dialects.length > 0 ? (
-            <div
-              className="panel-scrollbar flex gap-1.5 overflow-x-auto pb-1"
-              aria-label="SQL dialect"
-            >
-              {dialects.map((dialect) => (
-                <SegmentedButton
-                  key={dialect}
-                  selected={selectedDialect === dialect}
-                  aria-pressed={selectedDialect === dialect}
-                  onClick={() => onSelectDialect(dialect)}
-                  size="sm"
-                  className="shrink-0 rounded-md"
-                >
-                  {formatDialectName(dialect)}
-                </SegmentedButton>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border-subtle bg-surface-primary/40">
-          <SqlCodeView
-            code={selectedSql}
-            wrapLines
-            className="min-h-[20rem] text-xs leading-relaxed"
-          />
-        </div>
+          {sql ? (
+            <ChartFrame className="p-0">
+              <SqlCodeView
+                code={sql}
+                wrapLines
+                fillHeight={false}
+                className="text-sm leading-relaxed"
+              />
+            </ChartFrame>
+          ) : (
+            <BodyText>SQL is not available for this query and dialect.</BodyText>
+          )}
+        </DetailsDialog>
       </ChartFrame>
     </div>
   )
-}
-
-function resolveSql(entry: QuerySqlEntry | undefined, dialect: string) {
-  if (!entry) return "-- SQL is not available for this query."
-  if (dialect === "base") return entry.sql ?? "-- Base SQL is not available for this query."
-  return entry.db_overrides[dialect] ?? entry.sql ?? "-- SQL is not available for this dialect."
-}
-
-function formatDialectName(dialect: string) {
-  const labels: Record<string, string> = {
-    base: "Base SQL",
-    clickhouse: "ClickHouse",
-    datafusion: "DataFusion",
-    duckdb: "DuckDB",
-    monetdb: "MonetDB",
-    postgres: "PostgreSQL",
-    questdb: "QuestDB",
-    starrocks: "StarRocks",
-    tdengine: "TDengine",
-    timescaledb: "TimescaleDB",
-  }
-  return labels[dialect] ?? dialect
 }

@@ -6,7 +6,7 @@ export function CampaignNotice({ className }: { className?: string }) {
   const { publication, error } = usePublication()
   if (error) {
     return (
-      <NoticeStrip tone="warning" className={className}>
+      <NoticeStrip tone="warning" role="alert" className={className}>
         Failed to load publication context: {error}
       </NoticeStrip>
     )
@@ -34,7 +34,7 @@ export function ProfileScopeNotice({ className }: { className?: string }) {
   const { scope, error } = useProfileScope()
   if (error) {
     return (
-      <NoticeStrip tone="warning" className={className}>
+      <NoticeStrip tone="warning" role="alert" className={className}>
         Failed to load benchmark profile: {error}
       </NoticeStrip>
     )
