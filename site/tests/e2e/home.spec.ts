@@ -14,6 +14,9 @@ test("home leads with a data-derived ranking and keeps supporting details closed
   const lead = page.locator("[data-overall-lead]")
   await expect(lead).toContainText("Top score: DuckDB · 79.9/100 · 100% weighted coverage")
   await expect(lead).toContainText("score 0")
+  await expect(page.locator("[data-weighted-coverage-definition]")).toHaveText(
+    /^Weighted coverage: share of performance queries with a usable result/,
+  )
   const row = page.locator('[data-overall-engine="duckdb"]')
   await expect(row.locator("[data-overall-score]")).toBeVisible()
   await expect(row.locator("summary").first()).toContainText("100% weighted coverage")
@@ -37,6 +40,9 @@ test("home leads with a data-derived ranking and keeps supporting details closed
   const dialog = page.getByRole("dialog", { name: "Overall ranking method" })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText(/^Each query earns 100 × fastest median/)).toBeVisible()
+  await expect(
+    dialog.getByText(/^Weighted coverage is the share of performance queries/),
+  ).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(dialog).toBeHidden()
   await expect(method).toBeFocused()
@@ -45,6 +51,12 @@ test("home leads with a data-derived ranking and keeps supporting details closed
   await expect(concurrency).toBeVisible()
   await page.getByRole("heading", { name: "About this campaign", exact: true }).click()
   await expect(page.getByText("October 2026 · M4 Pro", { exact: true })).toBeVisible()
+  const about = page.locator("section", { has: page.getByText("October 2026 · M4 Pro") }).last()
+  const notes = await about.locator(".prose").innerText()
+  expect(notes.split(/\s+/).length).toBeLessThanOrEqual(220)
+  expect(notes).not.toMatch(/\b(has the lowest|leads|regressed)\b/)
+  await expect(about.getByRole("link", { name: "Full method" })).toBeVisible()
+  await expect(about.getByRole("link", { name: "follow-up report" })).toBeVisible()
 })
 
 test("home compares fixed families and opens the selected explorer", async ({ page }) => {
@@ -54,9 +66,13 @@ test("home compares fixed families and opens the selected explorer", async ({ pa
   await expect(page.getByRole("heading", { name: "Overall database ranking" })).toBeVisible()
   await page.getByRole("button", { name: "By workload", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Compare one workload" })).toBeVisible()
-  await selectWorkload(page, "ClickBench")
+  await page.getByRole("combobox", { name: "Workload" }).click()
+  const clickbench = page.getByRole("option", { name: "ClickBench", exact: true })
+  await expect(clickbench).toHaveAccessibleDescription(/web-traffic hits dataset/)
+  await clickbench.click()
+  await expect(page.getByRole("combobox", { name: "Workload" })).not.toContainText("web-traffic")
   await expect(
-    page.getByText("42 fixed performance queries · 43 coverage positions · raw track"),
+    page.getByText("42 performance queries · 43 execution queries · raw track"),
   ).toBeVisible()
   await expect(page.locator("[data-comparison-lead]")).toContainText("Lowest latency ratio:")
   await expect(
@@ -94,11 +110,11 @@ test("score headers and evidence fit desktop, iPad and mobile widths", async ({
   await page.getByRole("button", { name: "By workload", exact: true }).click()
   await selectWorkload(page, "RTABench")
   await expect(
-    page.getByText("31 fixed performance queries · 31 coverage positions · raw track"),
+    page.getByText("31 performance queries · 31 execution queries · raw track"),
   ).toBeVisible()
   await selectWorkload(page, /RTABench prepared aggregates/)
   await expect(
-    page.getByText("10 fixed performance queries · 10 coverage positions · prepared track"),
+    page.getByText("10 performance queries · 10 execution queries · prepared track"),
   ).toBeVisible()
   await selectWorkload(page, "ClickBench")
   for (const width of [1920, 1440, 1194, 1024, 834, 768, 390]) {
@@ -126,12 +142,8 @@ test("workload drilldown retains strict family eligibility and selected scale", 
 }) => {
   await page.goto("#/")
   await page.getByRole("button", { name: "By workload", exact: true }).click()
-  await page.getByRole("button", { name: "How strict ratios work" }).click()
-  await expect(
-    page
-      .getByRole("dialog", { name: "Strict workload comparison method" })
-      .getByText(/Strict family eligibility and latency ratios remain separate/),
-  ).toBeVisible()
+  await page.getByRole("button", { name: "How workload ratios work" }).click()
+  await expect(page.getByRole("dialog", { name: "Workload comparison method" })).toBeVisible()
   await page.keyboard.press("Escape")
   await selectWorkload(page, "Time Series")
   await page.getByRole("button", { name: "SF 10", exact: true }).click()
@@ -141,6 +153,47 @@ test("workload drilldown retains strict family eligibility and selected scale", 
   )
   await page.getByRole("button", { name: "Open in Explorer", exact: true }).click()
   await expect(page).toHaveURL(/scale=10/)
+})
+
+test("home view, workload and scale survive reload, Back and shared links", async ({ page }) => {
+  await page.goto("#/")
+  await expect(page.getByRole("button", { name: "Overall", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
+  await page.getByRole("button", { name: "By workload", exact: true }).click()
+  await expect(page).toHaveURL(/view=workload/)
+  await selectWorkload(page, "ClickBench")
+  await expect(page).toHaveURL(/family=clickbench/)
+  await selectWorkload(page, "Time Series")
+  await expect(page).toHaveURL(/family=time_series(&|$)/)
+  await page.getByRole("button", { name: "SF 10", exact: true }).click()
+  await expect(page).toHaveURL(/view=workload&family=time_series&scale=10/)
+  await page.reload()
+  await expect(page.getByRole("combobox", { name: "Workload" })).toContainText("Time Series")
+  await expect(page.getByRole("button", { name: "SF 10", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
+  await page.goBack()
+  await expect(page.getByRole("button", { name: "SF 1", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
+  await page.getByRole("button", { name: "Overall", exact: true }).click()
+  await expect(page).not.toHaveURL(/view=/)
+  await expect(page.getByRole("heading", { name: "Overall database ranking" })).toBeVisible()
+  await page.goBack()
+  await expect(page.getByRole("heading", { name: "Compare one workload" })).toBeVisible()
+
+  await page.goto("#/?view=workload&family=clickbench")
+  await expect(page.getByRole("combobox", { name: "Workload" })).toContainText("ClickBench")
+  await page.goto("#/")
+  await page.locator('[data-overall-engine="monetdb"] summary').first().click()
+  await page.getByRole("button", { name: "Compare ClickBench by workload", exact: true }).click()
+  await expect(page).toHaveURL(/view=workload&family=clickbench/)
+  await page.goBack()
+  await expect(page.getByRole("heading", { name: "Overall database ranking" })).toBeVisible()
 })
 
 async function expectNoHorizontalPageOverflow(page: Page) {

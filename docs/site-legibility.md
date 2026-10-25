@@ -80,3 +80,41 @@ Fresh Opus 5.5 and Astra xhigh sessions perform the separately requested simulat
 first-time-user tests from the site home page. They receive goals and the site
 address, without source access or a map of controls. Their findings and subsequent
 fixes will be recorded after the browser sessions finish.
+
+## First simulated user round
+
+Both models tested six ordinary goals through the rendered interface, without
+source access or a supplied navigation map. Opus completed four goals and partly
+completed two; Astra completed all six. Opus could inspect text and keyboard
+behavior but reported hidden-tab screenshot and pointer limitations and used a
+labelled iframe for narrow layout. Astra used an isolated browser fallback after
+repeated preview timeouts and verified desktop and mobile viewport dimensions.
+These are agent simulations, not human usability research.
+
+Both found the timeout explanation too deeply nested, weighted coverage undefined
+near its result, and Catalog's combined execution counts confusing beside the
+separate raw/prepared result tracks. Opus additionally found internal exception
+names in concurrency outcomes, mismatched-looking denominators, and narrative
+campaign notes. Astra found that horizontally scrolling gap reasons separated
+from their workload names on mobile.
+
+The response exposes sourced explanations in the first engine dialog, labels
+campaign skips without converting them into observed timeouts, and names all-query
+execution versus performance-query denominators. Coverage has an adjacent
+explanation; Catalog separates family/scale execution and comparison blocks.
+Concurrency uses plain outcome labels with raw evidence disclosed. Campaign notes
+are short factual references. Mobile contributions keep workload names with gap
+reasons. Workload menus include purposes; Home selections are URL-backed, and
+Explorer navigation restores the previous context.
+
+The user requested two further rounds with both models, with fixes between them.
+Those second and third rounds remain required before UI acceptance and deployment.
+
+First-round verification passed 125 unit tests, site type/lint/format/build and
+publication identity checks. The final dropdown adjustment removes Radix's
+scroll-button focus/automatic scrolling behavior; the viewport retains ordinary
+wheel, touch and keyboard scrolling with an options count. All 19 affected Home
+and Catalog browser tests, including WebKit pointer selection, passed afterward.
+The full browser suite will run again before final acceptance. Fresh second-round
+Opus 5.5 and Astra xhigh simulations are active; the third round follows their
+findings and any resulting fixes.

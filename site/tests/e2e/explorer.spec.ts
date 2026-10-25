@@ -57,11 +57,27 @@ test("database selection survives a round trip through single-database analysis"
   await expect(page.locator("[data-comparison-engine]")).toHaveCount(3)
   await page.getByRole("button", { name: "Analyze one database", exact: true }).click()
   await expect(page.getByRole("list", { name: "Recorded query outcomes" })).toBeVisible()
+  await expect(page.locator('[data-query-engine="duckdb"]')).toHaveCount(2)
   await page.getByRole("button", { name: "Compare databases", exact: true }).click()
   await expect(page.locator("[data-comparison-engine]")).toHaveCount(3)
   await expect(page).toHaveURL(/databases=clickhouse%2Cduckdb%2Cmonetdb/)
   await page.goto("#/explorer/time_series?mode=database&databases=duckdb")
   await expect(page.getByText(/^1 database ·/)).toBeVisible()
+})
+
+test("the Explorer navigation restores the last query and comparison", async ({ page }) => {
+  await page.goto("#/explorer/clickbench?mode=database&query=Q9&databases=duckdb,monetdb")
+  await expect(page.locator("[data-comparison-engine]")).toHaveCount(2)
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Home", exact: true })
+    .click()
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Explorer", exact: true })
+    .click()
+  await expect(page).toHaveURL(/explorer\/clickbench.*query=Q9/)
+  await expect(page.locator("[data-comparison-engine]")).toHaveCount(2)
 })
 
 test("same-route deep links restore the requested query and comparison state", async ({ page }) => {

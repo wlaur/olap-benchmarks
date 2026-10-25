@@ -1,4 +1,9 @@
-import { CATALOG_OUTCOME_LABELS, type CatalogSuiteSummary } from "../../lib/catalog"
+import {
+  catalogMissingAvailability,
+  catalogRunAvailability,
+  catalogTrackLabel,
+  type CatalogSuiteSummary,
+} from "../../lib/catalog"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { BodyText } from "../Typography"
 
@@ -8,8 +13,9 @@ export function CatalogCoverageMatrix({ summary }: { summary: CatalogSuiteSummar
   return (
     <>
       <BodyText className="max-w-prose text-sm">
-        Each entry is a recorded run. Query counts describe complete execution evidence within the
-        full coverage set, including queries excluded from performance comparisons.
+        Each entry is a recorded run within one track. Query counts describe complete execution
+        evidence within that track’s coverage set, including queries excluded from performance
+        comparisons. Run and preparation blockers do not erase completed query evidence.
       </BodyText>
       <div
         role="region"
@@ -49,40 +55,62 @@ export function CatalogCoverageMatrix({ summary }: { summary: CatalogSuiteSummar
                 >
                   {formatDatabaseName(database.database)}
                 </th>
-                {summary.scales.map((scale) => {
-                  const runs = database.runs.filter((run) => run.scale === scale)
-                  return (
-                    <td
-                      key={scale}
-                      className="min-w-64 border-b border-border-subtle px-3 py-4 align-top text-slate-300"
-                    >
-                      {runs.length > 0 ? (
-                        <ul className="space-y-4">
-                          {runs.map((run) => (
-                            <li key={run.runId} className="space-y-1" data-catalog-run={run.runId}>
-                              <p className="font-medium text-slate-100">
-                                {CATALOG_OUTCOME_LABELS[run.outcome]} · {run.completedQueries}/
-                                {run.totalQueries} queries
+                {summary.scales.map((scale) => (
+                  <td
+                    key={scale}
+                    className="min-w-64 border-b border-border-subtle px-3 py-4 align-top text-slate-300"
+                  >
+                    <div className="space-y-4">
+                      {database.families
+                        .filter(({ family }) => family.scale_factors.includes(scale))
+                        .map(({ family, runs }) => {
+                          const scopedRuns = runs.filter((run) => run.scale === scale)
+                          return (
+                            <div
+                              key={family.id}
+                              data-catalog-family={family.id}
+                              className="space-y-2"
+                            >
+                              <p className="font-semibold text-slate-100">
+                                {catalogTrackLabel(family)}
                               </p>
-                              {run.queryOutcomes.length > 0 ? (
-                                <p>{run.queryOutcomes.join(" · ")}</p>
-                              ) : null}
-                              <p className="break-words text-slate-400">
-                                {run.system} · {run.version} · run {run.runId}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : !database.implemented ? (
-                        "Adapter unimplemented"
-                      ) : database.registeredScales.includes(scale) ? (
-                        "No recorded run · execution unknown"
-                      ) : (
-                        "Scale not registered"
-                      )}
-                    </td>
-                  )
-                })}
+                              {scopedRuns.length > 0 ? (
+                                <ul className="space-y-4">
+                                  {scopedRuns.map((run) => (
+                                    <li
+                                      key={run.runId}
+                                      className="space-y-1"
+                                      data-catalog-run={run.runId}
+                                    >
+                                      <p className="font-medium text-slate-100">
+                                        {catalogRunAvailability(run)}
+                                      </p>
+                                      {run.queryOutcomes.length > 0 ? (
+                                        <p>{run.queryOutcomes.join(" · ")}</p>
+                                      ) : null}
+                                      {run.comparisonBlockers.length > 0 ? (
+                                        <p>
+                                          Comparison blockers: {run.comparisonBlockers.join(" · ")}
+                                        </p>
+                                      ) : null}
+                                      <p className="break-words text-slate-400">
+                                        {run.system} · {run.version} · run {run.runId}
+                                      </p>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                catalogMissingAvailability(database, scale)
+                              )}
+                            </div>
+                          )
+                        })}
+                      {!database.families.some(({ family }) => family.scale_factors.includes(scale))
+                        ? "No published track at this scale"
+                        : null}
+                    </div>
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

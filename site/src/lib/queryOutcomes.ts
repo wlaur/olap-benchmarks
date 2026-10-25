@@ -16,6 +16,14 @@ export interface QueryOutcome {
   detail: string
 }
 
+export function isCampaignExclusion(query: QueryObservation): boolean {
+  return query.steps.some(
+    (step) =>
+      step.resultStatus === "skipped" &&
+      /excluded by campaign query_(include|exclude)/.test(step.skipReason ?? ""),
+  )
+}
+
 export function queryOutcomeSummary(
   rows: readonly { valueMs: number | null; outcome: QueryOutcome }[],
 ): string {
@@ -54,7 +62,12 @@ export function describeQueryOutcome(
     ["skipped", "skipped", "Skipped"],
   ] as const) {
     const step = query.steps.find((entry) => entry.resultStatus === status)
-    if (step) return { kind, label, detail: step.error ?? step.skipReason ?? label }
+    if (step)
+      return {
+        kind,
+        label: status === "skipped" && isCampaignExclusion(query) ? "Skipped by campaign" : label,
+        detail: step.error ?? step.skipReason ?? label,
+      }
   }
   if (runProblems.length > 0 || run?.status !== "completed")
     return {

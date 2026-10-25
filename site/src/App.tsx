@@ -70,6 +70,9 @@ function ExplorerRoute({
 }
 
 export function App() {
+  const location = useLocation()
+  const explorerPath = useAppStore((s) => s.explorerPath)
+  const setExplorerPath = useAppStore((s) => s.setExplorerPath)
   const benchmarkDefinitions = useAppStore((s) => s.benchmarkDefinitions)
   const suitesLoading = useAppStore((s) => s.suitesLoading)
   const suitesError = useAppStore((s) => s.suitesError)
@@ -86,12 +89,18 @@ export function App() {
     loadSystems()
   }, [loadSuites, loadSystems])
 
+  useEffect(() => {
+    if (location.pathname.startsWith("/explorer/"))
+      setExplorerPath(location.pathname + location.search)
+  }, [location.pathname, location.search, setExplorerPath])
+
   const navbar = (
     <Navbar
       systems={systems}
       selectedSystem={selectedSystem}
       onSelectSystem={setSelectedSystem}
       isSystemLoading={loading}
+      explorerPath={explorerPath}
     />
   )
 

@@ -8,6 +8,7 @@ interface NavbarProps {
   selectedSystem: string | null
   onSelectSystem: (system: string) => void
   isSystemLoading?: boolean
+  explorerPath: string
 }
 
 const activeNavClass =
@@ -20,6 +21,7 @@ export function Navbar({
   selectedSystem,
   onSelectSystem,
   isSystemLoading = false,
+  explorerPath,
 }: NavbarProps) {
   const location = useLocation()
   const isExplorerActive = location.pathname.startsWith("/explorer")
@@ -59,7 +61,7 @@ export function Navbar({
               Home
             </NavLink>
             <NavLink
-              to="/explorer/time_series"
+              to={explorerPath}
               className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium transition sm:px-3 ${
                 isExplorerActive ? activeNavClass : inactiveNavTextClass
               }`}

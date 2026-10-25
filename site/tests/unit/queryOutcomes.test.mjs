@@ -36,6 +36,16 @@ describe("query presentation preserves evidence outcomes", () => {
       kind: "not-run",
     })
   })
+  test("a campaign exclusion keeps its skipped state without becoming an observed timeout", () => {
+    const query = observation({
+      steps: [{ resultStatus: "skipped", skipReason: "excluded by campaign query_exclude" }],
+      complete: false,
+    })
+    expect(describeQueryOutcome(query, completedRun, true, [])).toMatchObject({
+      kind: "skipped",
+      label: "Skipped by campaign",
+    })
+  })
   test.each([
     ["timeout", "timeout", "Timed out"],
     ["unsupported", "unsupported", "Unsupported"],

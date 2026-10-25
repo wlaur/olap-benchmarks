@@ -1,7 +1,12 @@
 import type { ReactNode } from "react"
 
 import { useAnalyticalData } from "../../hooks/useAnalyticalData"
-import type { AnalyticalRun, AnalyticalSummary } from "../../lib/analytical"
+import {
+  parseAnalyticalSummary,
+  type AnalyticalRun,
+  type AnalyticalSummary,
+} from "../../lib/analytical"
+import { qpsCause, stoppedOutcome, stoppedPhase } from "../../lib/analyticalOutcome"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { formatLatencyMs } from "../../lib/format"
 import { useAppStore } from "../../stores/useAppStore"
@@ -28,7 +33,11 @@ const unknown = "Unknown"
 const integer = (value: number | null) => (value === null ? unknown : value.toLocaleString("en-US"))
 const seconds = (value: number | null) => (value === null ? unknown : `${value.toFixed(2)}s`)
 const qps = (value: number | null) =>
-  value === null ? unknown : value.toLocaleString("en-US", { maximumSignificantDigits: 4 })
+  value === null
+    ? unknown
+    : value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const clientCount = (value: number | null) =>
+  value === null ? "clients unknown" : `${integer(value)} client${value === 1 ? "" : "s"}`
 const gib = (value: number | null) =>
   value === null ? unknown : `${(value / 1024 ** 3).toFixed(1)} GiB`
 
@@ -39,7 +48,7 @@ function engineLabel(run: AnalyticalRun) {
 function runOutcome(run: AnalyticalRun): { label: string; tone: StatusTone } {
   if (run.row.status !== "completed")
     return {
-      label: `${run.row.status || unknown}${run.row.error_type ? `: ${run.row.error_type}` : ""}`,
+      label: stoppedOutcome(run),
       tone: run.row.status === "failed" ? "failure" : "neutral",
     }
   const { errors, timeouts } = run.overall
@@ -48,6 +57,32 @@ function runOutcome(run: AnalyticalRun): { label: string; tone: StatusTone } {
   if (errors > 0 || timeouts > 0)
     return { label: `Completed · ${errors} errors, ${timeouts} timeouts`, tone: "warning" }
   return { label: "Completed", tone: "positive" }
+}
+
+function RunSummary({ run }: { run: AnalyticalRun }) {
+  const completed = run.row.status === "completed"
+  const phase = completed ? null : stoppedPhase(run)
+  const cause = qpsCause(run)
+  const warmup =
+    run.recorded?.warmup_summary === undefined
+      ? null
+      : parseAnalyticalSummary(run.recorded.warmup_summary, null)
+  return (
+    <div className="space-y-1" data-analytical-outcome>
+      <LeadText className="font-semibold">
+        {completed ? runOutcome(run).label : `${stoppedOutcome(run)}${phase ? ` ${phase}` : ""}`}
+      </LeadText>
+      {cause ? <BodyText>{cause}</BodyText> : null}
+      {!completed && warmup && warmup.offered !== null ? (
+        <div data-analytical-warmup>
+          <SecondaryText>
+            Warmup requests: {integer(warmup.completed)} of {integer(warmup.offered)} completed ·{" "}
+            {integer(warmup.errors)} errors · {integer(warmup.timeouts)} timed out
+          </SecondaryText>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function analyticalTakeaway(runs: readonly AnalyticalRun[]): string {
@@ -103,6 +138,7 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
     .join(": ")
   return (
     <>
+      <RunSummary run={run} />
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
         <Fact label="Workload">
           {run.row.suite} · SF {run.row.suite_scale_factor} · {run.row.system}
@@ -132,7 +168,11 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
         Measurement: {run.startedAt ?? unknown} → {run.finishedAt ?? unknown}. Drain:{" "}
         {seconds(run.drainSeconds)}. Run finished: {run.row.finished_at ?? unknown}.
       </SecondaryText>
-      {error ? <SecondaryText>Recorded run error: {error}</SecondaryText> : null}
+      {error ? (
+        <Disclosure title="Recorded run error">
+          <SecondaryText className="font-mono break-words">{error}</SecondaryText>
+        </Disclosure>
+      ) : null}
       {run.limitations.length > 0 ? (
         <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-amber-200">
           {run.limitations.map((limitation) => (
@@ -147,50 +187,52 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
         skips change the workload. Manifest hashes identify recorded SQL; coverage alone does not
         establish equivalent inputs, semantics or correctness.
       </SecondaryText>
-      <div className="relative overflow-x-auto">
-        <table
-          aria-label={`Run ${run.row.id} per-query evidence`}
-          className="w-full text-left text-sm leading-6 [&_td]:p-2 [&_td]:align-top [&_th]:p-2 [&_th]:font-medium [&_th]:text-slate-300"
-        >
-          <thead>
-            <tr>
-              <th scope="col">Query / manifest</th>
-              <th scope="col">Offered</th>
-              <th scope="col">Completed</th>
-              <th scope="col">Errors / timeouts</th>
-              <th scope="col">QPS</th>
-              <th scope="col">Completed latency</th>
-            </tr>
-          </thead>
-          <tbody className="text-slate-200">
-            {run.queries.map((query) => (
-              <tr key={query.name} className="border-t border-border-subtle">
-                <th scope="row" className="max-w-80 break-words">
-                  <span className="text-slate-50">{query.name}</span> · {query.manifestStatus}
-                  {query.hash ? (
-                    <div title={query.hash} className="font-mono">
-                      SQL sha256 {query.hash.slice(0, 12)}…
-                    </div>
-                  ) : null}
-                  {query.skip ? <div>{query.skip}</div> : null}
-                </th>
-                <td>{integer(query.summary.offered)}</td>
-                <td>{integer(query.summary.completed)}</td>
-                <td>
-                  {integer(query.summary.errors)} / {integer(query.summary.timeouts)}
-                </td>
-                <td>{qps(query.summary.qps)}</td>
-                <td>
-                  <Latency summary={query.summary} />
-                </td>
+      <Disclosure title="Per-query attempts" meta={`${run.queries.length} queries`}>
+        <div className="relative overflow-x-auto">
+          <table
+            aria-label={`Run ${run.row.id} per-query evidence`}
+            className="w-full text-left text-sm leading-6 [&_td]:p-2 [&_td]:align-top [&_th]:p-2 [&_th]:font-medium [&_th]:text-slate-300"
+          >
+            <thead>
+              <tr>
+                <th scope="col">Query / manifest</th>
+                <th scope="col">Offered</th>
+                <th scope="col">Completed</th>
+                <th scope="col">Errors / timeouts</th>
+                <th scope="col">QPS</th>
+                <th scope="col">Completed latency</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {run.queries.length === 0 ? (
-          <SecondaryText className="p-2">Per-query evidence unknown.</SecondaryText>
-        ) : null}
-      </div>
+            </thead>
+            <tbody className="text-slate-200">
+              {run.queries.map((query) => (
+                <tr key={query.name} className="border-t border-border-subtle">
+                  <th scope="row" className="max-w-80 break-words">
+                    <span className="text-slate-50">{query.name}</span> · {query.manifestStatus}
+                    {query.hash ? (
+                      <div title={query.hash} className="font-mono">
+                        SQL sha256 {query.hash.slice(0, 12)}…
+                      </div>
+                    ) : null}
+                    {query.skip ? <div>{query.skip}</div> : null}
+                  </th>
+                  <td>{integer(query.summary.offered)}</td>
+                  <td>{integer(query.summary.completed)}</td>
+                  <td>
+                    {integer(query.summary.errors)} / {integer(query.summary.timeouts)}
+                  </td>
+                  <td>{qps(query.summary.qps)}</td>
+                  <td>
+                    <Latency summary={query.summary} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {run.queries.length === 0 ? (
+            <SecondaryText className="p-2">Per-query evidence unknown.</SecondaryText>
+          ) : null}
+        </div>
+      </Disclosure>
       <Disclosure title="Recorded budget scope">
         <SecondaryText>{run.budget.scope ?? unknown}</SecondaryText>
         <SecondaryText>
@@ -323,7 +365,7 @@ export function AnalyticalEvidence() {
                             </td>
                             <td className="text-right">
                               <DetailsDialog
-                                title={`Run ${run.row.id} · ${engineLabel(run)} · ${integer(run.clients)} clients`}
+                                title={`Run ${run.row.id} · ${engineLabel(run)} · ${clientCount(run.clients)}`}
                                 trigger="Details"
                                 triggerLabel={`Run ${run.row.id} details`}
                               >

@@ -106,6 +106,10 @@ test("overall rows and contributions fit desktop, iPad and mobile widths", async
   await page.goto("#/")
   const row = page.locator('[data-overall-engine="postgres"]')
   await expect(row.locator("[data-overall-score]")).toHaveText("8.2")
+  await expect(page.getByText("Score · 0–100, higher is better", { exact: true })).toBeVisible()
+  await expect(row.locator("summary").first()).toHaveAccessibleName(
+    /^Rank 8 PostgreSQL Score 8\.2 out of 100 75% weighted coverage$/,
+  )
   for (const width of [1440, 1024, 834, 768, 640, 390]) {
     await page.setViewportSize({ width, height: 1000 })
     await expect(row.locator("[data-overall-coverage]")).toBeHidden()
@@ -114,6 +118,25 @@ test("overall rows and contributions fit desktop, iPad and mobile widths", async
     await expect(row).toContainText("partial completed runs")
     await expect(row).toContainText("run failed")
     await expect(row).toContainText("Scored run IDs")
+    await expect(row).toContainText("Performance queries scored")
+    for (const family of await row.locator("[data-overall-family]").all()) {
+      const name = (await family.getByRole("button").boundingBox())!
+      const queries = (await family.locator("[data-overall-family-queries]").boundingBox())!
+      const gaps = family.locator("[data-overall-gap-group]").first()
+      if (width < 640) {
+        await expect(family.locator("[data-overall-family-queries]")).toContainText(
+          "performance queries",
+        )
+        expect(queries.y).toBeGreaterThanOrEqual(name.y + name.height - 1)
+      }
+      if ((await gaps.count()) === 0) continue
+      const gap = (await gaps.boundingBox())!
+      expect(gap.x + gap.width, "gap reason fits without horizontal scrolling").toBeLessThanOrEqual(
+        width + 0.5,
+      )
+      if (width < 640) expect(gap.y).toBeGreaterThanOrEqual(queries.y)
+      else expect(Math.abs(gap.y - name.y)).toBeLessThanOrEqual(12)
+    }
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

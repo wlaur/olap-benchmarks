@@ -1,11 +1,11 @@
 import { Layers3 } from "lucide-react"
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { useHomeOverview } from "../../hooks/useHomeOverview"
 import type { ComparisonFamily } from "../../lib/comparison"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import type { OverallEngineResult } from "../../lib/overall"
+import { suiteDescriptions } from "../../lib/suiteDescriptions"
 import { useAppStore } from "../../stores/useAppStore"
 import { QuietButton, SegmentedButton } from "../controls/Control"
 import { ControlSelect } from "../controls/ControlSelect"
@@ -40,6 +40,9 @@ function overallLead(rows: readonly OverallEngineResult[]): {
   return { lead: `Top score: ${label(first)}`, qualification }
 }
 
+const WEIGHTED_COVERAGE =
+  "Weighted coverage: share of performance queries with a usable result, weighted like the score"
+
 function familyLabel(family: ComparisonFamily): string {
   const track = family.track === "raw" ? "" : ` · ${family.track} track`
   const weight = family.weight > 0 ? "" : " · not in overall score"
@@ -52,9 +55,11 @@ export function HomeScoreTable() {
   const systemLoading = useAppStore((state) => state.systemLoading)
   const systemError = useAppStore((state) => state.systemError)
   const overview = useHomeOverview(selectedSystem)
-  const [view, setView] = useState<"overall" | "workload">("overall")
-  const [familyId, setFamilyId] = useState("")
-  const [selectedScale, setSelectedScale] = useState<number | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get("view") === "workload" ? "workload" : "overall"
+  const familyId = searchParams.get("family") ?? ""
+  const scaleParam = Number(searchParams.get("scale"))
+  const selectedScale = Number.isFinite(scaleParam) && scaleParam > 0 ? scaleParam : null
   const active =
     overview.families.find((entry) => entry.family.id === familyId) ??
     overview.families.find((entry) => entry.family.track === "raw") ??
@@ -65,10 +70,19 @@ export function HomeScoreTable() {
   const error = overview.error ?? systemError ?? (view === "overall" ? overview.overallError : null)
   const summary = overallLead(overview.overall.rows)
 
+  function update(next: { view: "overall" | "workload"; family?: string; scale?: number }) {
+    const params = new URLSearchParams(searchParams)
+    for (const key of ["view", "family", "scale"]) params.delete(key)
+    if (next.view === "workload") {
+      params.set("view", "workload")
+      if (next.family) params.set("family", next.family)
+      if (next.scale !== undefined) params.set("scale", String(next.scale))
+    }
+    setSearchParams(params)
+  }
+
   function selectFamily(id: string) {
-    setFamilyId(id)
-    setSelectedScale(null)
-    setView("workload")
+    update({ view: "workload", family: id })
   }
 
   return (
@@ -85,14 +99,20 @@ export function HomeScoreTable() {
             <SegmentedButton
               selected={view === "overall"}
               aria-pressed={view === "overall"}
-              onClick={() => setView("overall")}
+              onClick={() => update({ view: "overall" })}
             >
               Overall
             </SegmentedButton>
             <SegmentedButton
               selected={view === "workload"}
               aria-pressed={view === "workload"}
-              onClick={() => setView("workload")}
+              onClick={() =>
+                update({
+                  view: "workload",
+                  family: familyId || undefined,
+                  scale: selectedScale ?? undefined,
+                })
+              }
             >
               By workload
             </SegmentedButton>
@@ -134,6 +154,9 @@ export function HomeScoreTable() {
           <div className="space-y-1" data-overall-lead>
             <LeadText className="font-semibold">{summary.lead}</LeadText>
             <SecondaryText>{summary.qualification}</SecondaryText>
+            <div data-weighted-coverage-definition>
+              <SecondaryText>{WEIGHTED_COVERAGE}</SecondaryText>
+            </div>
           </div>
           <OverallRankingTable
             rows={overview.overall.rows}
@@ -145,7 +168,7 @@ export function HomeScoreTable() {
               <SecondaryText>
                 Fastest median per query = 100 points, 2× slower = 50 ·{" "}
                 {overview.overall.familyCount} equally weighted workloads ·{" "}
-                {overview.overall.queryCount} query positions
+                {overview.overall.queryCount} performance queries across scales
               </SecondaryText>
               <CoverageLegend />
             </div>
@@ -163,6 +186,7 @@ export function HomeScoreTable() {
               options={overview.families.map(({ family }) => ({
                 value: family.id,
                 label: familyLabel(family),
+                description: suiteDescriptions[family.suite]?.purpose,
               }))}
               icon={<Layers3 className="size-3.5" strokeWidth={1.8} />}
               labelMode="always"
@@ -176,7 +200,7 @@ export function HomeScoreTable() {
                     key={scale}
                     selected={cell.scale === scale}
                     aria-pressed={cell.scale === scale}
-                    onClick={() => setSelectedScale(scale)}
+                    onClick={() => update({ view: "workload", family: active.family.id, scale })}
                   >
                     SF {scale}
                   </SegmentedButton>
@@ -210,9 +234,9 @@ export function HomeScoreTable() {
             ) : null}
           </div>
           <SecondaryText>
-            {active.family.query_names.length} fixed performance queries ·{" "}
-            {active.family.coverage_query_names.length} coverage positions · {active.family.track}{" "}
-            track. Strict ratios use different units and eligibility from the overall 0–100 score.
+            {active.family.query_names.length} performance queries ·{" "}
+            {active.family.coverage_query_names.length} execution queries · {active.family.track}{" "}
+            track. Latency ratios use different units and eligibility from the overall 0–100 score.
           </SecondaryText>
           <EngineComparison
             rows={cell.rows}
@@ -239,9 +263,13 @@ function OverallMethod() {
         from an otherwise valid completed run. Other missing queries do not discard that evidence.
         Failed runs, invalidation and documented incomplete preparation block the whole run.
         Conflicting answers, mixed inputs or fewer than two usable engines per query block the
-        overall ranking. Query counts show usable results out of all fixed query / scale
-        combinations; they are not correctness percentages. Weighted coverage and gap reasons are
-        available in each database&apos;s details.
+        overall ranking.
+      </BodyText>
+      <BodyText>
+        Weighted coverage is the share of performance queries with a usable result, averaged with
+        the same scale and workload weights as the score. Unweighted counts show usable results out
+        of all performance query / scale combinations; neither is a correctness percentage. Gap
+        reasons are in each database&apos;s details.
       </BodyText>
       <BodyText>
         Reference medians include complete queries from partial completed runs across the whole

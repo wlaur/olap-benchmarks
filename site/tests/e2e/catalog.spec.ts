@@ -38,11 +38,13 @@ test("catalog leads with availability and keeps SQL, coverage and context closed
   await expect(page.getByRole("link", { name: "Workload source" })).not.toBeVisible()
 
   await expect(page.locator('[data-catalog-engine="partial"]')).toContainText(
-    "Partial execution: 1",
+    "SF 1 · Partial execution · 1/3 queries",
   )
-  await expect(page.locator('[data-catalog-engine="latestfailed"]')).toContainText("Failed run: 1")
+  await expect(page.locator('[data-catalog-engine="latestfailed"]')).toContainText(
+    "Failed run · 0/3 queries",
+  )
   await expect(page.locator('[data-catalog-engine="invalidated"]')).toContainText(
-    "Invalidated run: 1",
+    "Invalidated run · 2/3 queries",
   )
   await expect(page.locator('[data-catalog-engine="missing"]')).toContainText("No recorded run")
   await expect(page.locator('[data-catalog-engine="missing"]')).not.toContainText("unsupported")
@@ -73,13 +75,100 @@ test("catalog recognizes complete execution without turning it into correctness"
     })),
   })
   await page.goto("#/catalog?suite=clickbench")
-  await expect(page.locator('[data-catalog-engine="fast"]')).toContainText("Complete execution: 1")
+  await expect(page.locator('[data-catalog-engine="fast"]')).toContainText(
+    "Complete execution · 2/2 queries",
+  )
   await expect(page.locator('[data-catalog-engine="partial"]')).toContainText(
-    "Partial execution: 1",
+    "Partial execution · 1/2 queries",
   )
   await expect(
     page.getByText(/Complete execution does not establish correctness or ranking eligibility/),
   ).toBeVisible()
+})
+
+test("catalog separates raw and prepared execution and retains run and preparation blockers", async ({
+  page,
+}) => {
+  const raw = { ...comparisonFixture.families[0]!, coverage_query_names: ["Q1", "Q2"] }
+  await usePublicationFixture(page, fixture.buffer, {
+    ...comparisonFixture,
+    families: [
+      raw,
+      {
+        ...raw,
+        id: "clickbench_prepared",
+        title: "Prepared fixture",
+        track: "prepared",
+        weight: 0,
+        query_names: ["Q1", "Q28"],
+        coverage_query_names: ["Q1", "Q28"],
+      },
+    ],
+  })
+  await page.goto("#/catalog?suite=clickbench")
+  const fast = page.locator('[data-catalog-engine="fast"]')
+  await expect(fast.locator('[data-catalog-family="clickbench"]')).toContainText(
+    "Raw track · 2 queries",
+  )
+  await expect(fast.locator('[data-catalog-family="clickbench"]')).toContainText(
+    "SF 1 · Complete execution · 2/2 queries",
+  )
+  await expect(fast.locator('[data-catalog-family="clickbench_prepared"]')).toContainText(
+    "Prepared track · 2 queries",
+  )
+  await expect(fast.locator('[data-catalog-family="clickbench_prepared"]')).toContainText(
+    "SF 1 · Partial execution · 1/2 queries",
+  )
+  const preparation = page.locator('[data-catalog-engine="preparation"]')
+  await expect(preparation).toContainText("Comparison blocked · 2/2 queries")
+  await expect(preparation).toContainText("documented incomplete preparation")
+  await expect(preparation).not.toContainText("Complete execution")
+  const failed = page.locator('[data-catalog-engine="latestfailed"]')
+  await expect(failed).toContainText("Failed run · 0/2 queries")
+  await expect(failed).not.toContainText("Complete execution")
+  await expect(page.locator("details[open]")).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Explore results" })).toHaveAttribute(
+    "href",
+    /family=clickbench&/,
+  )
+  await disclosure(page, "Coverage by scale and system").click()
+  const coverage = page.getByRole("region", { name: "Coverage by database and scale" })
+  await expect(coverage.locator('[data-catalog-run="1"]')).toHaveCount(2)
+  await expect(coverage.locator('[data-catalog-run="7"]').first()).toContainText(
+    "documented incomplete preparation",
+  )
+})
+
+test("catalog suite menu shows purpose descriptions while keeping the selected trigger concise", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await usePublicationFixture(page, fixture.buffer)
+  await page.goto("#/catalog?suite=clickbench")
+  const suite = page.getByRole("combobox", { name: "Suite" })
+  await expect(suite).toContainText("ClickBench")
+  await suite.click()
+  const option = page.getByRole("option", { name: "ClickBench", exact: true })
+  await expect(
+    option.getByText("Analytical queries from ClickBench over its web-traffic hits dataset."),
+  ).toBeVisible()
+  await expect(option).toHaveAccessibleDescription(
+    "Analytical queries from ClickBench over its web-traffic hits dataset.",
+  )
+  const descriptionBounds = await option
+    .getByText("Analytical queries from ClickBench over its web-traffic hits dataset.")
+    .evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+      width: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }))
+  expect(descriptionBounds.height).toBeGreaterThan(descriptionBounds.lineHeight)
+  expect(descriptionBounds.scrollWidth).toBeLessThanOrEqual(descriptionBounds.width)
+  await expectNoHorizontalPageOverflow(page)
+  await page.keyboard.press("Escape")
+  await expect(suite).toBeFocused()
+  await expect(suite).not.toContainText("web-traffic")
 })
 
 test("catalog SQL requires a request and preserves query and dialect deep links", async ({

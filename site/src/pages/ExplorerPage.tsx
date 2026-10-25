@@ -45,6 +45,7 @@ import {
   type RunObservation,
 } from "../lib/observations"
 import { describeQueryOutcome, queryOutcomeSummary, type QueryOutcome } from "../lib/queryOutcomes"
+import { suiteDescriptions } from "../lib/suiteDescriptions"
 import type { ExplorerQueryMetric, QuerySqlEntry } from "../lib/types"
 
 type ComparisonMode = "database" | "scale" | "version" | "system"
@@ -142,6 +143,9 @@ export function ExplorerPage({
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [lastAnalyzedDatabase, setLastAnalyzedDatabase] = useState<string | null>(() =>
+    searchParams.get("mode") !== "database" ? searchParams.get("database") : null,
+  )
   const mode = parseComparisonMode(searchParams.get("mode"))
   const [singleDatabaseMode, setSingleDatabaseMode] = useState<SingleDatabaseMode>(() =>
     mode === "database" ? "scale" : mode,
@@ -291,6 +295,7 @@ export function ExplorerPage({
   }
   function updateRawSelection(update: Partial<RawSelection>, nextMode: ComparisonMode = mode) {
     const changes: Record<string, string | null> = { mode: nextMode }
+    if (nextMode !== "database" && update.database) setLastAnalyzedDatabase(update.database)
     for (const [key, value] of Object.entries(update))
       changes[key] = value === null ? null : Array.isArray(value) ? value.join(",") : String(value)
     updateUrl(changes)
@@ -329,15 +334,43 @@ export function ExplorerPage({
     )
   }
   function handleAnalyzeOneDatabase() {
-    const nextMode =
-      getVaryingOptionCount(singleDatabaseMode, singleDatabaseSelections.get(singleDatabaseMode)) >
-      1
-        ? singleDatabaseMode
-        : (SINGLE_DATABASE_MODES.find(
-            (candidate) =>
-              getVaryingOptionCount(candidate.id, singleDatabaseSelections.get(candidate.id)) > 1,
-          )?.id ?? singleDatabaseMode)
-    handleSingleDatabaseModeChange(nextMode)
+    const database = selection.databaseOptions.includes(lastAnalyzedDatabase ?? "")
+      ? lastAnalyzedDatabase!
+      : (publicationRows
+          .filter(
+            (row) => row.eligible && row.score !== null && selection.databases.includes(row.db),
+          )
+          .sort((a, b) => a.score! - b.score!)[0]?.db ?? selection.database)
+    const targets = SINGLE_DATABASE_MODES.map(({ id }) => ({
+      mode: id,
+      selection: resolveSelection({
+        mode: id,
+        variants,
+        raw: { ...rawSelection, database },
+        preferredSystem,
+        defaultScale: suiteDefinition.defaultScaleFactor,
+      }),
+    }))
+    const target =
+      targets.find(
+        (candidate) =>
+          candidate.mode === singleDatabaseMode &&
+          getVaryingOptionCount(candidate.mode, candidate.selection) > 1,
+      ) ??
+      targets.find((candidate) => getVaryingOptionCount(candidate.mode, candidate.selection) > 1) ??
+      targets[0]!
+    setSingleDatabaseMode(target.mode)
+    updateRawSelection(
+      {
+        database,
+        databases: rawSelection.databases.length ? rawSelection.databases : selection.databases,
+        scales: target.mode === "scale" ? target.selection.scaleOptions : rawSelection.scales,
+        versions:
+          target.mode === "version" ? target.selection.versionOptions : rawSelection.versions,
+        systems: target.mode === "system" ? target.selection.systemOptions : rawSelection.systems,
+      },
+      target.mode,
+    )
   }
 
   const showLoading = loading
@@ -515,6 +548,7 @@ export function ExplorerPage({
               options={benchmarkDefinitions.map((definition) => ({
                 value: definition.id,
                 label: definition.title,
+                description: suiteDescriptions[definition.id]?.purpose,
               }))}
               icon={<FlaskConical className="h-3 w-3" strokeWidth={1.8} />}
               labelMode="hidden"

@@ -13,10 +13,7 @@ export function HomePage() {
       </DisplayTitle>
       <HomeScoreTable />
       <AnalyticalEvidence />
-      <PanelDisclosure
-        title="About this campaign"
-        meta="Campaign notes, notable results and how to read them"
-      >
+      <PanelDisclosure title="About this campaign" meta="Method, exclusions and sources">
         <MarkdownContent content={homeContent} />
       </PanelDisclosure>
     </section>

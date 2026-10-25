@@ -1,9 +1,21 @@
 import type { BenchmarkDefinition } from "./benchmarks"
 import type { ComparisonFamily, ComparisonManifest } from "./comparison"
-import { observeQuery, type QueryObservation, type RunObservation } from "./observations"
+import {
+  matchingAnnotations,
+  observeQuery,
+  runPerformanceProblems,
+  type QueryObservation,
+  type RunObservation,
+} from "./observations"
 import type { QuerySqlEntry } from "./types"
 
-export type CatalogRunOutcome = "complete" | "partial" | "failed" | "invalidated" | "incomplete"
+export type CatalogRunOutcome =
+  | "complete"
+  | "partial"
+  | "failed"
+  | "invalidated"
+  | "incomplete"
+  | "blocked"
 
 export const CATALOG_OUTCOME_LABELS: Record<CatalogRunOutcome, string> = {
   complete: "Complete execution",
@@ -11,6 +23,7 @@ export const CATALOG_OUTCOME_LABELS: Record<CatalogRunOutcome, string> = {
   failed: "Failed run",
   invalidated: "Invalidated run",
   incomplete: "Incomplete run",
+  blocked: "Comparison blocked",
 }
 
 export interface CatalogRunCoverage {
@@ -22,13 +35,19 @@ export interface CatalogRunCoverage {
   completedQueries: number
   totalQueries: number
   queryOutcomes: string[]
+  comparisonBlockers: string[]
+}
+
+export interface CatalogFamilyCoverage {
+  family: ComparisonFamily
+  runs: CatalogRunCoverage[]
 }
 
 export interface CatalogDatabaseCoverage {
   database: string
   registeredScales: number[]
   implemented: boolean
-  runs: CatalogRunCoverage[]
+  families: CatalogFamilyCoverage[]
 }
 
 export interface CatalogSuiteSummary {
@@ -69,37 +88,44 @@ export function buildCatalogSuiteSummary(
         database,
         registeredScales: unique(registrations.flatMap((entry) => entry.scale_factors)),
         implemented: registrations.length > 0,
-        runs: suiteRuns
-          .filter((run) => run.db === database)
-          .map((run) => {
-            const coverageNames = unique(
-              families
-                .filter((family) => family.scale_factors.includes(run.scale))
-                .flatMap((family) => family.coverage_query_names),
-            )
-            const queries = coverageNames.map((query) => observeQuery(run, query, [], comparison))
-            const completedQueries = queries.filter((query) => query.executionComplete).length
-            const outcome: CatalogRunOutcome =
-              run.metadata.invalidation !== null && run.metadata.invalidation !== undefined
-                ? "invalidated"
-                : run.status === "failed" || run.error !== null
-                  ? "failed"
-                  : run.status !== "completed"
-                    ? "incomplete"
-                    : queries.length > 0 && completedQueries === queries.length
-                      ? "complete"
-                      : "partial"
-            return {
-              runId: run.runId,
-              system: run.system,
-              scale: run.scale,
-              version: run.driver === null ? run.version : `${run.version} · ${run.driver}`,
-              outcome,
-              completedQueries,
-              totalQueries: queries.length,
-              queryOutcomes: summarizeQueryOutcomes(queries),
-            }
-          }),
+        families: families.map((family) => ({
+          family,
+          runs: suiteRuns
+            .filter((run) => run.db === database && family.scale_factors.includes(run.scale))
+            .map((run) => {
+              const queries = family.coverage_query_names.map((query) =>
+                observeQuery(run, query, [], comparison),
+              )
+              const completedQueries = queries.filter((query) => query.executionComplete).length
+              const comparisonBlockers = runPerformanceProblems(
+                run,
+                matchingAnnotations(run, database, definition.id, run.scale, comparison),
+              )
+              const outcome: CatalogRunOutcome =
+                run.metadata.invalidation !== null && run.metadata.invalidation !== undefined
+                  ? "invalidated"
+                  : run.status === "failed" || run.error !== null
+                    ? "failed"
+                    : run.status !== "completed"
+                      ? "incomplete"
+                      : comparisonBlockers.length > 0
+                        ? "blocked"
+                        : queries.length > 0 && completedQueries === queries.length
+                          ? "complete"
+                          : "partial"
+              return {
+                runId: run.runId,
+                system: run.system,
+                scale: run.scale,
+                version: run.driver === null ? run.version : `${run.version} · ${run.driver}`,
+                outcome,
+                completedQueries,
+                totalQueries: queries.length,
+                queryOutcomes: summarizeQueryOutcomes(queries),
+                comparisonBlockers,
+              }
+            }),
+        })),
       }
     })
 
@@ -110,20 +136,26 @@ export function buildCatalogSuiteSummary(
     systems: unique(suiteRuns.map((run) => run.system)).sort(),
     families,
     databases,
-    recordedDatabaseCount: databases.filter((database) => database.runs.length > 0).length,
+    recordedDatabaseCount: unique(suiteRuns.map((run) => run.db)).length,
   }
 }
 
-export function catalogAvailability(database: CatalogDatabaseCoverage): string {
-  if (database.runs.length === 0) {
-    return database.implemented ? "No recorded run" : "Adapter unimplemented"
-  }
-  return Object.entries(CATALOG_OUTCOME_LABELS)
-    .flatMap(([outcome, label]) => {
-      const count = database.runs.filter((run) => run.outcome === outcome).length
-      return count === 0 ? [] : [`${label}: ${count}`]
-    })
-    .join(" · ")
+export function catalogTrackLabel(family: ComparisonFamily): string {
+  return `${family.track[0]!.toUpperCase()}${family.track.slice(1)} track`
+}
+
+export function catalogRunAvailability(run: CatalogRunCoverage): string {
+  return `${CATALOG_OUTCOME_LABELS[run.outcome]} · ${run.completedQueries}/${run.totalQueries} queries`
+}
+
+export function catalogMissingAvailability(
+  database: CatalogDatabaseCoverage,
+  scale: number,
+): string {
+  if (!database.implemented) return "Adapter unimplemented"
+  return database.registeredScales.includes(scale)
+    ? "No recorded run · execution unknown"
+    : "Scale not registered"
 }
 
 export function getSqlDialects(entry: QuerySqlEntry | undefined): string[] {

@@ -61,12 +61,29 @@ test("published analytical evidence keeps warmup failures unknown", async ({ pag
       expect(run.overall.qps).toBeNull()
       expect(run.overall.completed ?? 0).toBe(0)
       expect(run.overall.percentiles.every((percentile) => percentile.valueMs === null)).toBe(true)
+      const expected = {
+        670: ["Cancelled", "Cancelled during warmup", "KeyboardInterrupt"],
+        671: ["Timed out", "Timed out during warmup", "TimeoutError"],
+        672: ["Cancelled", "Cancelled", "KeyboardInterrupt"],
+      }[run.id]!
       await expect(row.locator("[data-analytical-qps]")).toHaveText("Unknown")
-      await expect(row).toContainText("failed")
+      await expect(row).toContainText(expected[0])
+      await expect(row).not.toContainText(expected[2])
       await row.getByRole("button", { name: `Run ${run.id} details` }).click()
-      const dialog = page.getByRole("dialog")
+      const dialog = page.getByRole("dialog", {
+        name: `Run ${run.id} · PostgreSQL 18.6 · ${run.clients} client${run.clients === 1 ? "" : "s"}`,
+      })
+      await expect(dialog.locator("[data-analytical-outcome] > p").first()).toHaveText(expected[1])
+      await expect(dialog.locator("[data-analytical-outcome]")).toContainText(
+        "QPS unknown: no measurement start recorded",
+      )
       await expect(dialog).toContainText("p50 Unknown")
-      await expect(dialog.getByText(/Recorded run error:/)).toBeVisible()
+      await expect(dialog.getByText(expected[2])).toBeHidden()
+      await dialog.getByText("Recorded run error", { exact: true }).click()
+      await expect(dialog.getByText(new RegExp(`^${expected[2]}`))).toBeVisible()
+      await expect(
+        dialog.getByRole("table", { name: `Run ${run.id} per-query evidence` }),
+      ).toBeHidden()
       await page.keyboard.press("Escape")
       await expect(dialog).toBeHidden()
     } else {
@@ -103,14 +120,17 @@ test("analytical runs retain qualified latency, failures and drilldown without a
   await expect(section.getByText("2/4 runs completed", { exact: true })).toBeVisible()
   const polars = section.locator('[data-analytical-run="101"]')
   await expect(polars).toContainText("Polars 1.35.0")
-  await expect(polars).toContainText("1.846")
+  await expect(polars).toContainText("1.85")
   await expect(polars).toContainText("Completed")
-  await expect(section.locator('[data-analytical-run="102"]')).toContainText("failed")
+  await expect(section.locator('[data-analytical-run="102"]')).toContainText("Cancelled")
+  await expect(section.locator('[data-analytical-run="103"]')).toContainText("Failed")
   await expect(section.locator('[data-analytical-run="103"] [data-analytical-qps]')).toHaveText(
     "Unknown",
   )
   await section.getByRole("button", { name: "Run 100 details" }).click()
-  await expect(page.getByRole("dialog")).toContainText("p50 Unknown (<5)")
+  await expect(
+    page.getByRole("dialog", { name: "Run 100 · DuckDB 1.5.6 · 1 client" }),
+  ).toContainText("p50 Unknown (<5)")
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   const trigger = polars.getByRole("button", { name: "Run 101 details" })
@@ -120,8 +140,10 @@ test("analytical runs retain qualified latency, failures and drilldown without a
   await expect(evidence).toContainText("65.00s / 60.00s")
   await expect(evidence).toContainText("p99 Unknown (<1000)")
   await expect(evidence.getByText(/Full canonical manifest required: 3 queries/)).toBeVisible()
-  await expect(evidence.getByText(/unsupported: Documented analytical fixture skip/)).toBeVisible()
   const queryTable = evidence.getByRole("table", { name: "Run 101 per-query evidence" })
+  await expect(queryTable).toBeHidden()
+  await evidence.getByText("Per-query attempts", { exact: true }).click()
+  await expect(evidence.getByText(/unsupported: Documented analytical fixture skip/)).toBeVisible()
   await expect(queryTable.getByRole("row").filter({ hasText: "Q1" })).toContainText("120")
   await expect(queryTable.getByRole("row", { name: /^Q2 ·/ })).toContainText("0 / 0")
   await evidence.getByText("Recorded budget scope", { exact: true }).click()

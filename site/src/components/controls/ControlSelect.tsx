@@ -1,13 +1,14 @@
 import * as Select from "@radix-ui/react-select"
-import { Check, ChevronDown, ChevronUp } from "lucide-react"
-import { useRef, useState, type ReactNode } from "react"
+import { Check, ChevronDown } from "lucide-react"
+import { useId, useRef, useState, type ReactNode } from "react"
 
 import { cn } from "../../lib/cn"
 import { Skeleton } from "../Skeleton"
 
-interface ControlSelectOption {
+export interface ControlSelectOption {
   value: string
   label: string
+  description?: string
 }
 
 interface ControlSelectProps {
@@ -45,6 +46,7 @@ export function ControlSelect({
   labelMode = "responsive",
 }: ControlSelectProps) {
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const descriptionId = useId()
   const [portalContainer, setPortalContainer] = useState<HTMLElement | undefined>(undefined)
   const labelClass =
     labelMode === "always" ? "inline" : labelMode === "responsive" ? "hidden md:inline" : "hidden"
@@ -85,16 +87,30 @@ export function ControlSelect({
         <Select.Content
           position="popper"
           sideOffset={10}
-          className={cn(CONTENT_CLASS, menuClassName)}
+          className={cn(
+            CONTENT_CLASS,
+            options.some((option) => option.description) && "w-[min(40rem,calc(100vw-2rem))]",
+            menuClassName,
+          )}
         >
-          <Select.ScrollUpButton className="flex h-8 items-center justify-center text-slate-500">
-            <ChevronUp className="h-4 w-4" strokeWidth={1.8} />
-          </Select.ScrollUpButton>
-          <Select.Viewport className="space-y-1">
-            {options.map((option) => (
-              <Select.Item key={option.value} value={option.value} className={ITEM_CLASS}>
-                <span className="min-w-0 [overflow-wrap:anywhere] whitespace-normal">
+          <Select.Viewport className="min-h-0 space-y-1" style={{ scrollbarWidth: "thin" }}>
+            {options.map((option, index) => (
+              <Select.Item
+                key={option.value}
+                value={option.value}
+                className={ITEM_CLASS}
+                aria-describedby={option.description ? `${descriptionId}-${index}` : undefined}
+              >
+                <span className="min-w-0 flex-1 [overflow-wrap:anywhere] whitespace-normal">
                   <Select.ItemText>{option.label}</Select.ItemText>
+                  {option.description ? (
+                    <span
+                      id={`${descriptionId}-${index}`}
+                      className="mt-1 block text-sm leading-relaxed font-normal whitespace-normal text-slate-400"
+                    >
+                      {option.description}
+                    </span>
+                  ) : null}
                 </span>
                 <Select.ItemIndicator className="absolute right-3 inline-flex items-center text-slate-300">
                   <Check className="h-4 w-4" strokeWidth={2} />
@@ -102,9 +118,14 @@ export function ControlSelect({
               </Select.Item>
             ))}
           </Select.Viewport>
-          <Select.ScrollDownButton className="flex h-8 items-center justify-center text-slate-500">
-            <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
-          </Select.ScrollDownButton>
+          {options.length > 4 ? (
+            <div
+              aria-hidden="true"
+              className="shrink-0 border-t border-border-subtle px-3 py-2 text-sm text-slate-400"
+            >
+              {options.length} options · scroll to browse
+            </div>
+          ) : null}
         </Select.Content>
       </Select.Portal>
     </Select.Root>

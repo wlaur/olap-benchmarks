@@ -10,6 +10,9 @@ import { CaptionText, ItemTitle, MetaLabel, NumericText, SecondaryText } from ".
 const GRID =
   "sm:grid sm:grid-cols-[2rem_minmax(8rem,12rem)_minmax(0,1fr)_4.5rem_minmax(8rem,10rem)_1.25rem] sm:items-center sm:gap-x-3"
 
+const CONTRIBUTION_GRID =
+  "sm:grid sm:grid-cols-[minmax(0,12rem)_4rem_7rem_minmax(0,1fr)] sm:items-start"
+
 const GAP_GROUPS = [
   {
     label: "Measured failures",
@@ -87,8 +90,7 @@ export function OverallRankingTable({
       <div aria-hidden="true" className={`hidden ${GRID} border-b border-border-default px-4 py-2`}>
         <MetaLabel>#</MetaLabel>
         <MetaLabel>Database</MetaLabel>
-        <MetaLabel>Score /100</MetaLabel>
-        <MetaLabel className="text-right">Score</MetaLabel>
+        <MetaLabel className="sm:col-span-2">Score · 0–100, higher is better</MetaLabel>
         <MetaLabel>Weighted coverage</MetaLabel>
         <span />
       </div>
@@ -137,9 +139,12 @@ export function OverallRankingTable({
                   <NumericText className="ml-auto shrink-0 text-right text-lg font-semibold sm:ml-0">
                     <span className="sr-only">Score </span>
                     <span data-overall-score={row.score}>{row.score.toFixed(1)}</span>
-                    <span className="text-sm font-normal text-slate-400 sm:sr-only">
-                      <span className="sr-only"> out of 100</span>
-                      <span aria-hidden="true">/100</span>
+                    <span className="sr-only"> out of 100</span>
+                    <span
+                      aria-hidden="true"
+                      className="text-sm font-normal text-slate-400 sm:hidden"
+                    >
+                      /100
                     </span>
                   </NumericText>
                   <div
@@ -209,7 +214,7 @@ function EngineDetails({
           </dd>
         </div>
         <div>
-          <MetaLabel as="dt">Queries scored (unweighted)</MetaLabel>
+          <MetaLabel as="dt">Performance queries scored (unweighted)</MetaLabel>
           <dd className="mt-1 text-sm leading-6 text-slate-200" data-overall-queries>
             {row.scoredQueries} of {row.totalQueries}
           </dd>
@@ -237,64 +242,68 @@ function EngineDetails({
         include complete queries from partial completed runs.
         {row.versions.length > 0 ? ` Published versions: ${row.versions.join(", ")}.` : ""}
       </CaptionText>
-      <div className="relative overflow-x-auto">
-        <table
-          aria-label={`${name} workload contributions`}
-          className="w-full min-w-[32rem] text-left text-sm leading-6 [&_td]:py-2 [&_td]:pr-3 [&_td]:align-top [&_th]:py-2 [&_th]:pr-3"
+      <div>
+        <div
+          aria-hidden="true"
+          className={`hidden ${CONTRIBUTION_GRID} border-b border-border-subtle pb-2`}
         >
-          <thead className="text-slate-400">
-            <tr className="border-b border-border-subtle">
-              <th scope="col" className="font-medium">
-                Workload
-              </th>
-              <th scope="col" className="text-right font-medium">
-                Score
-              </th>
-              <th scope="col" className="text-right font-medium">
-                Scored
-              </th>
-              <th scope="col" className="font-medium">
-                Gaps
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle text-slate-200">
-            {row.families.map((family) => (
-              <tr key={family.id} data-overall-family={family.id}>
-                <th scope="row" className="font-normal">
-                  <QuietButton
-                    size="xs"
-                    className="text-left whitespace-normal"
-                    aria-label={`Compare ${family.title} by workload`}
-                    onClick={() => onSelectFamily(family.id)}
-                  >
-                    {family.title}
-                  </QuietButton>
-                </th>
-                <td className="text-right">
-                  <NumericText>{family.score.toFixed(1)}</NumericText>
-                </td>
-                <td className="text-right whitespace-nowrap">
+          <MetaLabel>Workload</MetaLabel>
+          <MetaLabel className="text-right">Score</MetaLabel>
+          <MetaLabel className="text-right">Performance queries scored</MetaLabel>
+          <MetaLabel>Gaps</MetaLabel>
+        </div>
+        <ul
+          aria-label={`${name} workload contributions`}
+          className="divide-y divide-border-subtle text-sm leading-6 text-slate-200"
+        >
+          {row.families.map((family) => (
+            <li
+              key={family.id}
+              data-overall-family={family.id}
+              className={`relative grid grid-cols-1 gap-x-3 gap-y-1 py-2 ${CONTRIBUTION_GRID}`}
+            >
+              <div className="min-w-0">
+                <QuietButton
+                  size="xs"
+                  className="text-left whitespace-normal"
+                  aria-label={`Compare ${family.title} by workload`}
+                  onClick={() => onSelectFamily(family.id)}
+                >
+                  {family.title}
+                </QuietButton>
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-3 sm:contents">
+                <NumericText className="sm:text-right">
+                  <span className="sm:sr-only">Score </span>
+                  {family.score.toFixed(1)}
+                </NumericText>
+                <span className="whitespace-nowrap sm:text-right" data-overall-family-queries>
                   {family.scoredQueries}/{family.totalQueries}
-                </td>
-                <td className="text-slate-300">
-                  {Object.keys(family.gaps).length > 0 ? (
-                    <ul className="space-y-1">
-                      {groupGaps(family.gaps).map((group) => (
-                        <li key={group.label} data-overall-gap-group={group.label}>
-                          <span className="text-slate-100">{group.label}</span>:{" "}
-                          {group.reasons.map(([reason, count]) => `${reason} ${count}`).join(" · ")}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    "None"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <span className="sm:sr-only"> performance queries</span>
+                </span>
+              </div>
+              <div className="relative min-w-0 text-slate-300">
+                <span className="sr-only">Gaps: </span>
+                {Object.keys(family.gaps).length > 0 ? (
+                  <ul className="space-y-1">
+                    {groupGaps(family.gaps).map((group) => (
+                      <li
+                        key={group.label}
+                        data-overall-gap-group={group.label}
+                        className="relative min-w-0 break-words"
+                      >
+                        <span className="text-slate-100">{group.label}</span>:{" "}
+                        {group.reasons.map(([reason, count]) => `${reason} ${count}`).join(" · ")}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-slate-400">No gaps</span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
       <Disclosure title="Run IDs by workload" lazy={false}>
         <ul className="space-y-1 text-sm leading-6 text-slate-300">

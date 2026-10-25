@@ -1,6 +1,7 @@
 import type { ComparisonFamily } from "../../lib/comparison"
 import { formatDatabaseName } from "../../lib/databaseNames"
 import { runPerformanceProblems, type FamilyEngineResult } from "../../lib/observations"
+import { isCampaignExclusion } from "../../lib/queryOutcomes"
 import { DetailsDialog } from "../layout/DetailsDialog"
 import { ChartFrame, StatusBadge, type StatusTone } from "../layout/Panel"
 import {
@@ -51,8 +52,11 @@ function comparisonOutcome(row: FamilyEngineResult, family: ComparisonFamily): C
     const counts = new Map<string, number>()
     for (const query of incomplete) {
       const status =
-        QUERY_STATUSES.find((entry) => query.steps.some((step) => step.resultStatus === entry)) ??
-        (query.steps.length === 0 ? "not run" : "incomplete")
+        (isCampaignExclusion(query)
+          ? "skipped by campaign"
+          : QUERY_STATUSES.find((entry) =>
+              query.steps.some((step) => step.resultStatus === entry),
+            )) ?? (query.steps.length === 0 ? "not run" : "incomplete")
       counts.set(status, (counts.get(status) ?? 0) + 1)
     }
     const measuredFailure = [...counts.keys()].some((status) => MEASURED_FAILURES.includes(status))
@@ -86,7 +90,7 @@ function comparisonOutcomeSummary(
   const eligible = rows
     .filter((row) => row.eligible && row.score !== null)
     .sort((a, b) => a.score! - b.score!)
-  const qualification = `${eligible.length}/${rows.length} eligible.`
+  const qualification = `${eligible.length} comparable ${eligible.length === 1 ? "result" : "results"}.`
   const [best, next] = eligible
   if (family.track === "smoke")
     return {
@@ -140,8 +144,8 @@ export function EngineComparison({
         <LeadText>{summary.lead}</LeadText>
         <SecondaryText>
           {summary.qualification}
-          {rows.length !== cohort.length ? ` ${rows.length} selected rows shown.` : ""} Geometric
-          mean query-latency ratio; lower is better.
+          {rows.length !== cohort.length ? ` ${rows.length} databases shown.` : ""} Geometric mean
+          query-latency ratio; lower is better.
         </SecondaryText>
       </div>
       <ChartFrame className="@container p-0">
@@ -151,8 +155,8 @@ export function EngineComparison({
         >
           <SecondaryText>#</SecondaryText>
           <SecondaryText>Engine</SecondaryText>
-          <SecondaryText>Strict ratio · lower is better</SecondaryText>
-          <SecondaryText>Completed</SecondaryText>
+          <SecondaryText>Latency ratio · lower is better</SecondaryText>
+          <SecondaryText>Completed · all queries</SecondaryText>
           <SecondaryText>Outcome</SecondaryText>
           <span />
         </div>
@@ -181,7 +185,7 @@ export function EngineComparison({
                 <div className="ml-auto flex min-w-0 items-center justify-end gap-3 @[48rem]:ml-0">
                   {row.score === null ? (
                     <SecondaryText>
-                      <span className="sr-only">No strict ratio</span>—
+                      <span className="sr-only">No latency ratio</span>—
                     </SecondaryText>
                   ) : (
                     <>
@@ -195,7 +199,7 @@ export function EngineComparison({
                         />
                       </div>
                       <NumericText className="shrink-0 text-right text-base font-semibold @[48rem]:w-16">
-                        <span className="sr-only">Strict latency ratio </span>
+                        <span className="sr-only">Latency ratio </span>
                         <span data-publication-score={row.score}>{formatRatio(row.score)}</span>
                       </NumericText>
                     </>
@@ -206,7 +210,7 @@ export function EngineComparison({
                     <NumericText>
                       {row.completed}/{row.total}
                     </NumericText>
-                    <span className="@[48rem]:sr-only"> completed</span>
+                    <span className="@[48rem]:sr-only"> all queries completed</span>
                   </SecondaryText>
                   <div className="min-w-0">
                     <StatusBadge tone={outcome.tone}>{outcome.label}</StatusBadge>
@@ -231,10 +235,7 @@ export function EngineComparison({
           </BodyText>
         ) : null}
       </ChartFrame>
-      <SecondaryText as="div">
-        {eligibleCount} eligible publication {eligibleCount === 1 ? "variant" : "variants"} set the
-        reference medians; hiding engines never changes ratios. <StrictRatioMethod />
-      </SecondaryText>
+      <StrictRatioMethod eligibleCount={eligibleCount} />
     </div>
   )
 }
@@ -242,6 +243,34 @@ export function EngineComparison({
 function EngineDetails({ row, family }: { row: FamilyEngineResult; family: ComparisonFamily }) {
   return (
     <>
+      {row.annotations.length > 0 ? (
+        <div className="space-y-2">
+          <MetaLabel>Recorded explanation</MetaLabel>
+          {row.annotations.map((annotation, index) => (
+            <BodyText key={index} className="text-sm">
+              {annotation.summary}{" "}
+              <a
+                href={annotation.evidence_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent-300 underline"
+              >
+                Source
+              </a>
+            </BodyText>
+          ))}
+        </div>
+      ) : null}
+      {row.queries.some(isCampaignExclusion) ? (
+        <BodyText className="text-sm">
+          Skipped by campaign selection:{" "}
+          {row.queries
+            .filter(isCampaignExclusion)
+            .map((query) => query.queryName)
+            .join(", ")}
+          . These queries were not retried in this run.
+        </BodyText>
+      ) : null}
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         <div>
           <MetaLabel as="dt">Engine</MetaLabel>
@@ -254,7 +283,7 @@ function EngineDetails({ row, family }: { row: FamilyEngineResult; family: Compa
           </dd>
         </div>
         <div>
-          <MetaLabel as="dt">Strict latency ratio</MetaLabel>
+          <MetaLabel as="dt">Latency ratio</MetaLabel>
           <dd className="mt-1 text-base text-slate-100">
             {row.score === null
               ? "Not eligible"
@@ -262,9 +291,15 @@ function EngineDetails({ row, family }: { row: FamilyEngineResult; family: Compa
           </dd>
         </div>
         <div>
-          <MetaLabel as="dt">Execution coverage</MetaLabel>
+          <MetaLabel as="dt">All query positions · execution</MetaLabel>
           <dd className="mt-1 text-base text-slate-100">
             {row.completed}/{row.total} queries with complete iteration evidence
+            <CaptionText>
+              {family.query_names.length} performance queries set the latency ratio.{" "}
+              {family.coverage_query_names.length - family.query_names.length > 0
+                ? `${family.coverage_query_names.length - family.query_names.length} additional coverage positions are excluded from scoring.`
+                : "All positions are performance queries."}
+            </CaptionText>
             <CaptionText>{statusSummary(row)}</CaptionText>
           </dd>
         </div>
@@ -290,9 +325,13 @@ function EngineDetails({ row, family }: { row: FamilyEngineResult; family: Compa
   )
 }
 
-function StrictRatioMethod() {
+function StrictRatioMethod({ eligibleCount }: { eligibleCount: number }) {
   return (
-    <DetailsDialog title="Strict workload comparison method" trigger="How strict ratios work">
+    <DetailsDialog title="Workload comparison method" trigger="How workload ratios work">
+      <BodyText>
+        {eligibleCount} comparable publication results set the fixed reference medians. Hiding a
+        database does not change ratios.
+      </BodyText>
       <BodyText>
         Each family and scale uses its full canonical query set. Eligibility requires a completed,
         non-invalidated run, every required warmup and three successful measured iterations per
@@ -302,7 +341,7 @@ function StrictRatioMethod() {
         penalties are used.
       </BodyText>
       <BodyText>
-        The strict ratio is the geometric mean of per-query median latency divided by the fastest
+        The latency ratio is the geometric mean of per-query median latency divided by the fastest
         eligible publication median. Baselines include the entire eligible publication cohort at
         this system, family and scale; hiding an engine never changes them. An eligible cohort of
         one has a ratio of 1.00× and establishes no comparative advantage.
