@@ -285,8 +285,9 @@ def test_pre_cancelled_workload_never_executes_queries(
     assert metadata["warmup_summary"]["offered"] == 0
 
 
+@pytest.mark.parametrize("failure_status", ["error", "timeout"])
 def test_warmup_request_failure_closes_every_worker_and_never_starts_measurement(
-    database: ProfileDatabase, monkeypatch: pytest.MonkeyPatch
+    database: ProfileDatabase, monkeypatch: pytest.MonkeyPatch, failure_status: streams.RequestStatus
 ) -> None:
     warmed = Barrier(4)
     closed: list[Database] = []
@@ -312,7 +313,7 @@ def test_warmup_request_failure_closes_every_worker_and_never_starts_measurement
     ) -> streams.RequestSample:
         assert phase == "warmup"
         warmed.wait(timeout=5)
-        return streams.RequestSample(query.name, phase, "error" if client_id == 0 else "completed", 1)
+        return streams.RequestSample(query.name, phase, failure_status if client_id == 0 else "completed", 300_400)
 
     real_worker = streams.analytical_worker
     config = streams.AnalyticalConfig(4)
@@ -326,7 +327,8 @@ def test_warmup_request_failure_closes_every_worker_and_never_starts_measurement
         streams.run_analytical_streams(database, config, queries, metadata)
     assert len(closed) == 4
     assert metadata["measurement_started_at"] is None
-    assert metadata["warmup_summary"]["errors"] == 1
+    assert metadata["warmup_summary"]["errors"] == (1 if failure_status == "error" else 0)
+    assert metadata["warmup_summary"]["timeouts"] == (1 if failure_status == "timeout" else 0)
     assert metadata["warmup_summary"]["completed"] == 3
     assert metadata["overall"]["offered"] == 0
     assert metadata["worker_failures"] == []
@@ -531,16 +533,28 @@ def test_request_rechecks_issuance_guard_after_writer_delay(
     assert cast(dict[str, object], storage.steps[1]["metadata"])["request_status"] == "not_issued"
 
 
-class _PostgresTimeout(Exception):
+class _PostgresCancellation(Exception):
     orig: SimpleNamespace = SimpleNamespace(pgcode="57014")
 
 
-@pytest.mark.parametrize("failure", [ValueError("broken query"), TimeoutError("native deadline"), _PostgresTimeout()])
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        (ValueError("broken query"), "error"),
+        (TimeoutError("native deadline"), "timeout"),
+        (_PostgresCancellation("canceling statement due to statement timeout"), "timeout"),
+        (_PostgresCancellation("canceling statement due to user request"), "error"),
+        (_PostgresCancellation(), "error"),
+        (RuntimeError("timeout, query aborted [fd=1, runtime=60332ms, timeout=60000ms]"), "timeout"),
+        (RuntimeError("cancelled by user"), "error"),
+    ],
+)
 def test_request_errors_preserve_evidence_and_clear_worker_state(
     database: ProfileDatabase,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     failure: Exception,
+    expected: str,
 ) -> None:
     def fetch(_self: ProfileDatabase, _query: str) -> pl.DataFrame:
         raise failure
@@ -551,13 +565,14 @@ def test_request_errors_preserve_evidence_and_clear_worker_state(
         database, streams.AnalyticalQuery("a", "select 'a'", {}), 0, 0, "measured", watchdog
     )
     assert sample is not None
-    assert sample.status == ("timeout" if streams._is_timeout(failure) else "error")
+    assert sample.status == expected
     assert not watchdog.exists()
     assert database.current_query_name is None
     assert database.active_step_id is None
     step = cast(StreamStorage, database.result_storage).steps[1]
     assert step["status"] == "failed"
     assert step["error_type"] == type(failure).__name__
+    assert step["error_message"] == str(failure)
     assert step["result_status"] == sample.status
     assert cast(dict[str, object], step["metadata"])["request_status"] == sample.status
 

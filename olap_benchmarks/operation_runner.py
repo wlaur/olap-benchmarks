@@ -32,6 +32,8 @@ from .settings import DatabaseName, Operation, SuiteName, get_settings
 
 _LOGGER = logging.getLogger(__name__)
 
+SELECT_QUERY_CANCELLATION_GRACE_SECONDS = 30
+
 # Polars 2 spills out-of-core sorts (e.g. sorting ClickBench before a time-partitioned load) to the
 # system temp directory under a small default disk budget and aborts the query when it runs out.
 POLARS_SPILL_HEADROOM_MB = 30 * 1024
@@ -160,6 +162,10 @@ def run_operation(
     check_disk_space()
     configure_polars_spill()
     settings = get_settings()
+    query_watchdog_timeout = settings.query_timeout_seconds
+    cancellation_grace = SELECT_QUERY_CANCELLATION_GRACE_SECONDS if operation == "select" else 0
+    if query_watchdog_timeout is not None:
+        query_watchdog_timeout += cancellation_grace
     query_watchdog_path = settings.temporary_directory / f"query-watchdog-{os.getpid()}.json"
     query_watchdog_path.unlink(missing_ok=True)
     if operation == "analytical":
@@ -198,9 +204,12 @@ def run_operation(
                 query_watchdog_path.glob("client-*.json") if operation == "analytical" else (query_watchdog_path,)
             )
             for watchdog in watchdogs:
-                query_name = expired_query(watchdog, settings.query_timeout_seconds)
+                query_name = expired_query(watchdog, query_watchdog_timeout)
                 if query_name is not None:
-                    raise TimeoutError(f"Query {query_name} exceeded {settings.query_timeout_seconds} seconds")
+                    message = f"Query {query_name} exceeded {settings.query_timeout_seconds} seconds"
+                    if cancellation_grace:
+                        message += f" and {cancellation_grace} seconds cancellation grace"
+                    raise TimeoutError(message)
             if deadline is not None and monotonic() > deadline:
                 raise TimeoutError(f"{operation} on {db_instance.name}/{suite} exceeded operation time budget")
             if settings.client_memory_limit_gb is not None and process.pid is not None:

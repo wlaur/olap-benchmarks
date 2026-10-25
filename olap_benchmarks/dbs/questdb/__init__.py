@@ -160,6 +160,9 @@ class QuestDB(Database):
     def start(self) -> str:
         (get_settings().temporary_directory / "questdb/data").mkdir(exist_ok=True, parents=True)
         environment = {"QDB_CAIRO_SQL_COPY_ROOT": "/import"}
+        timeout = get_settings().query_timeout_seconds
+        if timeout is not None:
+            environment["QDB_QUERY_TIMEOUT"] = f"{timeout}s"
         if self.current_suite == "time_series_metrics":
             environment["QDB_CAIRO_SQL_SMALL_MAP_PAGE_SIZE"] = "128K"
 

@@ -11,6 +11,37 @@ from .. import run_metadata
 from ..inputs import fingerprint_input_directory
 
 
+@pytest.mark.parametrize(
+    ("error_type", "message", "expected"),
+    [
+        ("TimeoutError", "Query exceeded 300 seconds", "timeout"),
+        ("TimeoutExpired", "process deadline", "timeout"),
+        ("RuntimeError", "db error: ERROR: timeout, query aborted [fd=1, runtime=60332ms, timeout=60000ms]", "timeout"),
+        ("RuntimeError", "db error: ERROR: canceling statement due to statement timeout", "timeout"),
+        ("OperationalError", "(psycopg2.errors.QueryCanceled) canceling statement due to statement timeout", "timeout"),
+        ("QueryCanceled", "canceling statement due to user request", "error"),
+        ("RuntimeError", "cancelled by user", "error"),
+        ("OperationalError", "SQLSTATE 57014: query canceled", "error"),
+        ("QueryCanceled", None, "error"),
+        ("RuntimeError", "connection timeout", "error"),
+        ("OperationalError", "canceling statement due to lock timeout", "error"),
+        ("OperationalError", "syntax error\n[SQL: SELECT 'timeout, query aborted']", "error"),
+        ("OperationalError", 'syntax error at or near "timeout, query aborted"', "error"),
+        ("RuntimeError", "query aborted", "error"),
+        ("OperationalError", "canceling statement due to user request\n[SQL: SELECT 'statement timeout']", "error"),
+    ],
+)
+def test_step_timeout_classification_requires_deadline_evidence(
+    error_type: str, message: str | None, expected: str
+) -> None:
+    assert (
+        run_metadata.classify_step_result_status(
+            step_type="query", status="failed", error_type=error_type, error_message=message
+        )
+        == expected
+    )
+
+
 def test_run_metadata_records_metric_semantics(monkeypatch: pytest.MonkeyPatch) -> None:
     def no_command(_args: list[str]) -> None:
         return None

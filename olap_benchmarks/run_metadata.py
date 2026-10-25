@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -22,11 +23,25 @@ ExecutionMode = Literal["container", "in_process"]
 StepResultStatus = Literal["ok", "timeout", "unsupported", "wrong_result", "error", "skipped"]
 
 
+def is_query_timeout(*, error_type: str | None, error_message: str | None) -> bool:
+    if error_type in {"TimeoutError", "TimeoutExpired"}:
+        return True
+    diagnostic = (error_message or "").partition("\n")[0].lower()
+    return bool(
+        re.search(
+            r"(?:^|:\s*|\)\s*|\[-?\d+\]\s*)"
+            r"(?:canceling statement due to statement timeout|timeout, query aborted)(?:$|\s|\[)",
+            diagnostic,
+        )
+    )
+
+
 def classify_step_result_status(
     *,
     step_type: str,
     status: str,
     error_type: str | None = None,
+    error_message: str | None = None,
 ) -> StepResultStatus | None:
     if step_type not in ("query", "mutation"):
         return None
@@ -34,7 +49,7 @@ def classify_step_result_status(
         return "ok"
     if status != "failed":
         return None
-    if error_type in {"TimeoutError", "TimeoutExpired"}:
+    if is_query_timeout(error_type=error_type, error_message=error_message):
         return "timeout"
     return "error"
 

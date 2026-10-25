@@ -21,7 +21,7 @@ from .limits import start_query_watchdog
 from .profile import BenchmarkProfile
 from .query_registry import ANSWER_ORDER_KEYS
 from .results.hashing import build_answer_metadata
-from .run_metadata import digest_hashes, sha256_text
+from .run_metadata import digest_hashes, is_query_timeout, sha256_text
 from .settings import DatabaseName, get_settings
 
 if TYPE_CHECKING:
@@ -350,10 +350,6 @@ class RequestSample:
     duration_ms: float
 
 
-def _is_timeout(exc: BaseException) -> bool:
-    return isinstance(exc, TimeoutError) or getattr(getattr(exc, "orig", exc), "pgcode", None) == "57014"
-
-
 def execute_analytical_request(
     worker: Database,
     query: AnalyticalQuery,
@@ -411,7 +407,10 @@ def execute_analytical_request(
         )
         return RequestSample(query.name, phase, "completed", duration_ms)
     except BaseException as exc:
-        status = "timeout" if _is_timeout(exc) else "error"
+        timeout = isinstance(exc, TimeoutError) or is_query_timeout(
+            error_type=type(exc).__name__, error_message=str(exc)
+        )
+        status = "timeout" if timeout else "error"
         worker._finish_timed_step(
             step,
             "failed",

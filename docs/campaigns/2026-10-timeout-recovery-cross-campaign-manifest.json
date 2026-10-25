@@ -1,0 +1,1218 @@
+{
+  "version": 1,
+  "status": "prepared-not-started-docs-commit-approved",
+  "sealed_at_utc": "2026-10-25T13:35:06.177753+00:00",
+  "original_workspace": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7",
+  "continuation_workspace": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-01c9b611",
+  "original_commit": "efaae1c9f31a9c917b074e3c60da74c0572d34e6",
+  "original_commit_tree": "89adf2a2d61e86713f3c24db4dae2a651a6dbe0d",
+  "source_integrity": {
+    "base_object_ids": {
+      "olap_benchmarks": "89d04a45af5ef18dec8d2be722a95433a5f00e1a",
+      "olap_benchmarks/dbs": "1adb0234a5a0b5f66caf042fc5a6de17c45fcd47",
+      "olap_benchmarks/suites": "111e08e35067cc301886f7bed60b5b0e8db46d0b",
+      "scripts": "58c1da449cfd9c58f1033f86c0905488bd37b9ed",
+      "scripts/timeout_recovery.py": "cb15904dacfd9a95d84b30195897206fb2e13a38",
+      "pyproject.toml": "7a4020e86300fca8b3ff9d71dd4c42548a3cba68",
+      "uv.lock": "ee3bb8feab7869f49787a709389f5aa686095ba2",
+      "site": "c36ca9d458bfc5c4a82b91f130bc4ee5c3af9b9c",
+      ".github": "8acf02a351e71e5ac347e9345728b49908eb6f6a",
+      ".pre-commit-config.yaml": "fa49652c5ec8c7269bd9af78927da1d924fe6f17",
+      ".gitignore": "8e417dcb0a27178e1a111dca3874cd74430e2c1a",
+      ".gitattributes": "5db048df3e3ef5c6e2cca726af018f876e5b147d",
+      "AGENTS.md": "28dbd70a309fdb81cbdbb94c2f5f1aa1ea64c643",
+      "CLAUDE.md": "43c994c2d3617f947bcb5adf1933e21dabe46bb5",
+      "alembic": "a03b0239fb452c1c94915d6a0558376f235b00aa",
+      "alembic.ini": "2729f73001b70ab16f80a9bdbdd3ed42c824db8f"
+    },
+    "working_files_compared_byte_for_byte_against_frozen_git_blobs_in_both_worktrees": 1987,
+    "result": "equal-before-continuation-documents",
+    "post_commit_requirement": "Only the three new docs/campaigns continuation files may differ from the base commit. Compare every other tracked blob, executable mode, all source trees and configuration; record actual new clean HEAD in the parent handoff before START and let the unchanged runner freeze it in the new journal.",
+    "allowed_new_documentation_paths": [
+      "docs/campaigns/2026-10-timeout-recovery-continuation-plan.json",
+      "docs/campaigns/2026-10-timeout-recovery-continuation.md",
+      "docs/campaigns/2026-10-timeout-recovery-cross-campaign-manifest.json"
+    ],
+    "runner_sha256": "dd28e4e088ca825d98e5e37ec17acf38d03fa66923856339771da6ae11cadbeb",
+    "all_other_paths_policy": "git diff must be empty against the base after excluding only these exact three files, including staged content, executable modes and every configuration/source path; original plan must be byte-identical. No other untracked files. Clean HEAD is required before START.",
+    "workspace_root": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-01c9b611"
+  },
+  "sealed_original_artifacts": [
+    {
+      "path": "docs/campaigns/2026-10-timeout-recovery-plan.json",
+      "bytes": 143300,
+      "sha256": "bebaa46abd731d1b36f1a0a59472005a45bcc97e6402502ee1a703b73a2007c9"
+    },
+    {
+      "path": "site/public/data/results.db",
+      "bytes": 143929344,
+      "sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f"
+    },
+    {
+      "path": "results/2026-10-timeout-recovery.db",
+      "bytes": 203960320,
+      "sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/final-cleanup.log",
+      "bytes": 394,
+      "sha256": "c3e1b9ebd39c64f9a900344b57be410c34c2b055cd6c3525585b980eee64755b"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/populate.json",
+      "bytes": 17814,
+      "sha256": "42ab9ae323ba8a853d72dec297bd06557140d88d076f3b53490681773f1e5e76"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/populate.log",
+      "bytes": 12490,
+      "sha256": "6744aa80115c969c2d09852a76322272f88ef78af8aa31b271fcbbab43e66421"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/select.json",
+      "bytes": 77412,
+      "sha256": "ff26ad9b74df1958d7ad66c2a5a410284734ecf625cc542afbff0fc4b91f1e9f"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/select.log",
+      "bytes": 929849,
+      "sha256": "4fce8f2505db39203bda761aa9d67132cea7c3a49c1b790dab8921f79c30af5c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/validation.json",
+      "bytes": 170,
+      "sha256": "73cf683e37c7e2cf48750785c8fed59afa4631bd3067f727cd521753c613e9b8"
+    },
+    {
+      "path": "data/temp/timeout-recovery/3f08dd63b5594390add2b02ba8387f59/validation.txt",
+      "bytes": 173,
+      "sha256": "20c644c067982f206283d3440d9cfe8021b01f096967fea0fefe53213a160dc3"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/docker-events.jsonl",
+      "bytes": 13752,
+      "sha256": "166fac3b38fe37d1796cebdca88a7268f4f1495e2971d9bbb2c933ab653588f5"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/final-cleanup.log",
+      "bytes": 267,
+      "sha256": "8c7e90910fd19ee2ef02112042f0a8e5eea059849d749604b7713b498236760a"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/populate.json",
+      "bytes": 8781,
+      "sha256": "ec07746fb08cbadab19dfa7c35bc152e412fd4dd01b41b695a23fcadc39f6dea"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/populate.log",
+      "bytes": 3961,
+      "sha256": "a4d0b2464adb0480309845770014f4c38ba17b64e7d9b99d01962bdfb2306a9e"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/resource-report.json",
+      "bytes": 2646,
+      "sha256": "0ebf3b108630a585dd9a795dfcface13a9dbe6bcb072df210468c1ee296559e1"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/select.json",
+      "bytes": 32314,
+      "sha256": "a317a8e1fa89427a5232b07a66830ef248367134ee80ffea4a5a49f9ea9bcda8"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/select.log",
+      "bytes": 115026,
+      "sha256": "8c394af76aebb64c4b8553ff91ae8302d503c69d7a005d5cfccddc18ea916c4e"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/validation.json",
+      "bytes": 170,
+      "sha256": "73cf683e37c7e2cf48750785c8fed59afa4631bd3067f727cd521753c613e9b8"
+    },
+    {
+      "path": "data/temp/timeout-recovery/428c8be1a19b4d3192d785d54afdb1ce/validation.txt",
+      "bytes": 173,
+      "sha256": "20c644c067982f206283d3440d9cfe8021b01f096967fea0fefe53213a160dc3"
+    },
+    {
+      "path": "data/temp/timeout-recovery/5b2a6914556d46d7993ccce094460689/final-cleanup.log",
+      "bytes": 394,
+      "sha256": "bdf96c4c5af5dda983cf8746c7da066e87db6c1935e317c3716bc4930bcae020"
+    },
+    {
+      "path": "data/temp/timeout-recovery/5b2a6914556d46d7993ccce094460689/populate-review-c897b1560dc442db983418803eaba63a.json",
+      "bytes": 8413,
+      "sha256": "a0f4935f5e98af3b4e893db1de121f0ab1c7d461bac5ebe49b824dfb00704860"
+    },
+    {
+      "path": "data/temp/timeout-recovery/5b2a6914556d46d7993ccce094460689/populate.json",
+      "bytes": 8413,
+      "sha256": "a0f4935f5e98af3b4e893db1de121f0ab1c7d461bac5ebe49b824dfb00704860"
+    },
+    {
+      "path": "data/temp/timeout-recovery/5b2a6914556d46d7993ccce094460689/populate.log",
+      "bytes": 45626,
+      "sha256": "bb0e8b151c80277527f999d0d2fa008fb62df6656973025c3c902199307c86fd"
+    },
+    {
+      "path": "data/temp/timeout-recovery/5b2a6914556d46d7993ccce094460689/resource-report.json",
+      "bytes": 1797,
+      "sha256": "faf0ee3aa4c76bd7d2b738796824827e3778dbd31fe791d84beb14796e9a6744"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/final-cleanup.log",
+      "bytes": 388,
+      "sha256": "4bdeb6464db164c22687c106aeed721c03740dc9d735f4f1b5b5b2916f738a44"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/initial-cleanup.log",
+      "bytes": 388,
+      "sha256": "d762c9a2337d07b6a71f82500ee72ce16e74ab5709b10d8f8baa77a254698078"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/populate.json",
+      "bytes": 9708,
+      "sha256": "ad7cb205d51379be41cbf07a98c1616af4141ca54c1bec775656b0d1929e27db"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/populate.log",
+      "bytes": 173797,
+      "sha256": "43504c629d3f9d0e5446407f3eed2d045491bee876a74b79334653f16315ca51"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/select.json",
+      "bytes": 39481,
+      "sha256": "51bf0e6a3293250462e4cc3c8d9cf180925e2be50bda56bca028664bface0177"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/select.log",
+      "bytes": 365254,
+      "sha256": "82537f9c098ecbf01718731b79793fb3f40d8f2cdff2bddb32dd3b282778f3d1"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/validation.json",
+      "bytes": 170,
+      "sha256": "73cf683e37c7e2cf48750785c8fed59afa4631bd3067f727cd521753c613e9b8"
+    },
+    {
+      "path": "data/temp/timeout-recovery/64905134d1e14966afa92ef0a2689d12/validation.txt",
+      "bytes": 173,
+      "sha256": "20c644c067982f206283d3440d9cfe8021b01f096967fea0fefe53213a160dc3"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/final-cleanup.log",
+      "bytes": 260,
+      "sha256": "c968bef16f061f15e72dc592e3670b0f459b6933c370ae5d1e45cbd7568b1537"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/populate.json",
+      "bytes": 8471,
+      "sha256": "266b54986177acf7feb2405b951294451dc3b2061b9dd4642182a910a0456a53"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/populate.log",
+      "bytes": 3609,
+      "sha256": "3f4ce7531d2ce8a1c27c04adadf035563382b1433422751c0343ff8d784c750d"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/select.json",
+      "bytes": 37284,
+      "sha256": "2a8e08ba13499e0d526fa563230e58ff222ebab5aa33febb590b2b44a90276ce"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/select.log",
+      "bytes": 175291,
+      "sha256": "6d35c26a4eea3fea2cb6e95682b21f4cbf5a11700dd9ff81f0d688f9370daaae"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/validation.json",
+      "bytes": 170,
+      "sha256": "73cf683e37c7e2cf48750785c8fed59afa4631bd3067f727cd521753c613e9b8"
+    },
+    {
+      "path": "data/temp/timeout-recovery/98d1842c66a94809824898bd592481dd/validation.txt",
+      "bytes": 173,
+      "sha256": "20c644c067982f206283d3440d9cfe8021b01f096967fea0fefe53213a160dc3"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/final-cleanup.log",
+      "bytes": 395,
+      "sha256": "cbe892e8e6af68f78efff93c81e67d36c86dad31302af12375f77a8dba88514b"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/populate.json",
+      "bytes": 17824,
+      "sha256": "56cc623776bb39502fd3db36052857a6f405087b791fecd40ea6988d9015901f"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/populate.log",
+      "bytes": 35067,
+      "sha256": "66b74a7bdb14521f3b5f329b8cd662a5b96f4adfdf7703d2282c6162c7f0f156"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/select.json",
+      "bytes": 79309,
+      "sha256": "b5c34e364b9248f9a1e73278977463a8e2c767a6e939c09b92d9a7fe658c5a97"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/select.log",
+      "bytes": 942636,
+      "sha256": "1a0100e9b19f386435658e2a6a4e7b131c3e2478cc4d3df82745bfc869068bf1"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/validation.json",
+      "bytes": 26412,
+      "sha256": "dc0e492feaa93f5acce1c13f80600c8c827b68ffb84750126f0f19efa42624d7"
+    },
+    {
+      "path": "data/temp/timeout-recovery/9fca5bbf25fe4e35a055235230d01827/validation.txt",
+      "bytes": 6912,
+      "sha256": "db0bc7c6e55740d6eb26362e4bdeae61f304ee1bf5d3e848644ddb4e5e3be636"
+    },
+    {
+      "path": "data/temp/timeout-recovery/console-resume-01.log",
+      "bytes": 3170,
+      "sha256": "542574dede1c98bdd88a27687c584530f5734848bcb190440ef3f838b5b35850"
+    },
+    {
+      "path": "data/temp/timeout-recovery/console-resume-02.log",
+      "bytes": 3288,
+      "sha256": "fe64c94a53ee401d092dc617355ae172841c097f1a5bccd26f3f5677a9be0ddd"
+    },
+    {
+      "path": "data/temp/timeout-recovery/console-resume-03.log",
+      "bytes": 3091,
+      "sha256": "82569236cd221b29491b073d709bb7825fca49e56726c6cfc88692bb23685468"
+    },
+    {
+      "path": "data/temp/timeout-recovery/console-resume-04.log",
+      "bytes": 3250,
+      "sha256": "1b4af38a066d36c0fc065b75756a96cd8c516718327b88e95964739c55fa6e08"
+    },
+    {
+      "path": "data/temp/timeout-recovery/console-resume-05.log",
+      "bytes": 3253,
+      "sha256": "fefe258059989856bf87a78d33e21940ddc985247e1b8865e9b10b1bf98f1066"
+    },
+    {
+      "path": "data/temp/timeout-recovery/console-start.log",
+      "bytes": 3215,
+      "sha256": "a3c5b589e9b08d1743c16549ae12d311b66b042d2350c6c5bea471f00e5b7154"
+    },
+    {
+      "path": "data/temp/timeout-recovery/current-postgres-duckdb-actual-sql.json",
+      "bytes": 19911,
+      "sha256": "33e759103e3c9dbe050d4194fb305cdd2955ea642b5a393920fcbb5d9ced5a11"
+    },
+    {
+      "path": "data/temp/timeout-recovery/historical-expanded-validation-queries.json",
+      "bytes": 10884,
+      "sha256": "243bf995d694e4cad96db660baeb770c6ba8c28cfbdf1d688fae7651109ed0bf"
+    },
+    {
+      "path": "data/temp/timeout-recovery/historical-followup-validation-queries.json",
+      "bytes": 3171,
+      "sha256": "b4d5c61bfbbf4dbc25c187ca103538fb8a2d9a27b45be158ca606fcac37f0402"
+    },
+    {
+      "path": "data/temp/timeout-recovery/historical-oct11-validation-queries.json",
+      "bytes": 6,
+      "sha256": "b45c681534d92e14f44e6f5577b0701bd30dc73726b1f68a68cb4bbeca87093c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/historical-postgres-actual-sql.json",
+      "bytes": 19907,
+      "sha256": "e5585e17028fb256bc07a4eca5d781db458569a6319fec1f677f748bacbe21bc"
+    },
+    {
+      "path": "data/temp/timeout-recovery/historical-postgres-q31.json",
+      "bytes": 56657,
+      "sha256": "db714d2578b0ec781e520f8e046e54744535f7f8484e395f6bdcb4af9cb4cb21"
+    },
+    {
+      "path": "data/temp/timeout-recovery/historical-postgres-sql-hashes.json",
+      "bytes": 1563,
+      "sha256": "a257f97935bf735da6b5c5908f886b8e4fbb0dcff7699949d89bbb6d25fdb5aa"
+    },
+    {
+      "path": "data/temp/timeout-recovery/monetdb-clickbench-recovered-medians.json",
+      "bytes": 192,
+      "sha256": "a34de303236855e46c468da80066646594f01242fd1ec9c38428c8883b582e16"
+    },
+    {
+      "path": "data/temp/timeout-recovery/resume-evidence-4e603006068947d48627c7d1d3e795d1.json",
+      "bytes": 918,
+      "sha256": "4f1e72ffa3c9616ae9dfdd85076664fc942008a3a1a7f31feec207b91b3837b6"
+    },
+    {
+      "path": "data/temp/timeout-recovery/resume-evidence-676c8f53b0624156a65c6ef31dcfddbb.json",
+      "bytes": 1375,
+      "sha256": "7aa7a8d2ef983e2e24fb436be5f7d59430156a9cc602016d709ffefe0417feb3"
+    },
+    {
+      "path": "data/temp/timeout-recovery/resume-evidence-79f7e1ce5b9847269202ea4152dbca29.json",
+      "bytes": 308,
+      "sha256": "8f7cb02c4bd23fc8e8c3ead820776490f565c0e1e27686416dd756bd6997453c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/resume-evidence-81c95a9080004f0a988e249fc64083c9.json",
+      "bytes": 613,
+      "sha256": "2b04fd496c49efd53ef4fadf71b80f512d48ea6959a191260be1fff0f6577d5c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/resume-evidence-d1c6fa725b5a483796d2d805cd79f841.json",
+      "bytes": 1070,
+      "sha256": "1cd282168f76a1eb16a157a7fac96e98229e2a57d79c5151d6d29d406756e29c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/runner.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "data/temp/timeout-recovery/selected-affected-query-metadata.json",
+      "bytes": 29032,
+      "sha256": "f69f20841d75c036169fdeacccce249672c7c55a958b4d619cdd56c36c7facfa"
+    },
+    {
+      "path": "data/temp/timeout-recovery/source-running-runs.json",
+      "bytes": 6,
+      "sha256": "b45c681534d92e14f44e6f5577b0701bd30dc73726b1f68a68cb4bbeca87093c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/state.json",
+      "bytes": 4259,
+      "sha256": "26dba9bdd9229afeaf70448d8df1af1c201d8f0c8695f3c163a8c8c94e3ecd47"
+    },
+    {
+      "path": "data/temp/timeout-recovery/summary.json",
+      "bytes": 1434,
+      "sha256": "fe311edb71c9f261c3dbf623eb02d50f9a055feb31417bf907a29f32fbb7fc1c"
+    },
+    {
+      "path": "data/temp/timeout-recovery/supervisor-decisions.jsonl",
+      "bytes": 3466,
+      "sha256": "3bffd56e18e05ba5a082a569489d5e5fa50c740bc63f404402db11ea76935cb1"
+    },
+    {
+      "path": "data/temp/timeout-recovery/validation-blocker-658-695.json",
+      "bytes": 40700,
+      "sha256": "3371bfe992297574d8a5cc94ea85aa8645ab0d97ec4d69d41853489954df97d2"
+    },
+    {
+      "path": "scripts/timeout_recovery.py",
+      "bytes": 36133,
+      "sha256": "dd28e4e088ca825d98e5e37ec17acf38d03fa66923856339771da6ae11cadbeb"
+    },
+    {
+      "path": "data/temp/timeout-recovery-investigation-695.json",
+      "bytes": 12610,
+      "sha256": "a546bcde19b41e8114913832804ea09121be7fe48862a0e478e3561955a87acd"
+    },
+    {
+      "path": "data/temp/timeout-recovery-continuation-baseline-verified/manifest.json",
+      "bytes": 20635,
+      "sha256": "34dfbaee363f735db7eb45c1e5f40ef7bf88c6baf46d8ddbddb581542b013dfe"
+    }
+  ],
+  "original_database_wal_present": false,
+  "original_campaign": {
+    "revision": "2026-10-timeout-recovery",
+    "status": "blocked_or_not_attempted",
+    "attempted_cells": 6,
+    "acknowledged_failure_dispositions": 5,
+    "completed_measurement_cells": 0,
+    "unresolved_validation_blockers": [
+      "2026-10-timeout-recovery/run695"
+    ],
+    "attempts": [
+      {
+        "id": "64905134d1e14966afa92ef0a2689d12",
+        "cell_key": "doris:clickbench:sf1",
+        "started_at": "2026-10-25T10:11:55.212468+00:00",
+        "status": "accepted_failed_select",
+        "phase": "select",
+        "runs": {
+          "populate": "2026-10-timeout-recovery/run685",
+          "select": "2026-10-timeout-recovery/run686"
+        },
+        "error": "RecoveryBlocked: run686 select: failed; FailedQueriesError: 1 of 43 clickbench query failed on doris; see the logged traceback(s) above",
+        "cleanup_confirmed": true,
+        "validation_ok": true,
+        "completed_operations": [
+          "populate"
+        ],
+        "acknowledgment": null
+      },
+      {
+        "id": "98d1842c66a94809824898bd592481dd",
+        "cell_key": "monetdb:clickbench:sf1",
+        "started_at": "2026-10-25T10:22:49.777066+00:00",
+        "status": "accepted_failed_select",
+        "phase": "select",
+        "runs": {
+          "populate": "2026-10-timeout-recovery/run687",
+          "select": "2026-10-timeout-recovery/run688"
+        },
+        "error": "RecoveryBlocked: run688 select: failed; TimeoutError: Query Q32 exceeded 300 seconds",
+        "cleanup_confirmed": true,
+        "validation_ok": true,
+        "completed_operations": [
+          "populate"
+        ],
+        "acknowledgment": null
+      },
+      {
+        "id": "428c8be1a19b4d3192d785d54afdb1ce",
+        "cell_key": "monetdb:chat_threads:sf10",
+        "started_at": "2026-10-25T10:46:04.143542+00:00",
+        "status": "accepted_failed_select",
+        "phase": "select",
+        "runs": {
+          "populate": "2026-10-timeout-recovery/run689",
+          "select": "2026-10-timeout-recovery/run690"
+        },
+        "error": "RecoveryBlocked: run690 select: failed; ProgrammingError: (adbc_driver_manager.ProgrammingError) INVALID_STATE: connection has been closed\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+        "cleanup_confirmed": true,
+        "validation_ok": true,
+        "completed_operations": [
+          "populate"
+        ],
+        "acknowledgment": null
+      },
+      {
+        "id": "5b2a6914556d46d7993ccce094460689",
+        "cell_key": "postgres:clickbench:sf1",
+        "started_at": "2026-10-25T11:02:41.624515+00:00",
+        "status": "accepted_failed_populate",
+        "phase": "populate",
+        "runs": {
+          "populate": "2026-10-timeout-recovery/run691"
+        },
+        "error": "RecoveryBlocked: run691 populate: failed; OSError: Disk reserve reached at /Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/data/dbs: 39.7 GiB free; require 40 GiB",
+        "cleanup_confirmed": true,
+        "validation_ok": false,
+        "completed_operations": [],
+        "acknowledgment": {
+          "reason": "Reviewed run691: full row count verified but canonical index finalization hit the 40GiB disk reserve at39.7GiB; terminal OSError retained and no SELECT launched. Clean frozen provenance and full input manifest match; containers absent, owned cleanup confirmed, free disk restored above160GiB. Continue independent cells.",
+          "recorded_at": "2026-10-25T11:45:36.873352+00:00",
+          "run_identity": "2026-10-timeout-recovery/run691"
+        }
+      },
+      {
+        "id": "3f08dd63b5594390add2b02ba8387f59",
+        "cell_key": "postgres:tpc_ds:sf1",
+        "started_at": "2026-10-25T11:45:37.360356+00:00",
+        "status": "accepted_failed_select",
+        "phase": "select",
+        "runs": {
+          "populate": "2026-10-timeout-recovery/run692",
+          "select": "2026-10-timeout-recovery/run693"
+        },
+        "error": "RecoveryBlocked: run693 select: failed; FailedQueriesError: 1 of 99 tpc_ds query failed on postgres; see the logged traceback(s) above",
+        "cleanup_confirmed": true,
+        "validation_ok": true,
+        "completed_operations": [
+          "populate"
+        ],
+        "acknowledgment": null
+      },
+      {
+        "id": "9fca5bbf25fe4e35a055235230d01827",
+        "cell_key": "postgres:tpc_ds:sf10",
+        "started_at": "2026-10-25T12:03:42.861768+00:00",
+        "status": "blocked",
+        "phase": "select",
+        "runs": {
+          "populate": "2026-10-timeout-recovery/run694",
+          "select": "2026-10-timeout-recovery/run695"
+        },
+        "error": "RecoveryBlocked: run695 select: failed; FailedQueriesError: 5 of 99 tpc_ds queries failed on postgres; see the logged traceback(s) above",
+        "cleanup_confirmed": true,
+        "validation_ok": false,
+        "completed_operations": [
+          "populate"
+        ],
+        "acknowledgment": null
+      }
+    ],
+    "summary_snapshot": {
+      "status": "blocked_or_not_attempted",
+      "settled_cells": [
+        "doris:clickbench:sf1",
+        "monetdb:chat_threads:sf10",
+        "monetdb:clickbench:sf1",
+        "postgres:clickbench:sf1",
+        "postgres:tpc_ds:sf1"
+      ],
+      "completed_measurement_cells": [],
+      "acknowledged_failed_populations": [
+        "postgres:clickbench:sf1"
+      ],
+      "acknowledged_failed_selects": [
+        "doris:clickbench:sf1",
+        "monetdb:chat_threads:sf10",
+        "monetdb:clickbench:sf1",
+        "postgres:tpc_ds:sf1"
+      ],
+      "select_not_attempted_cells": [
+        "postgres:clickbench:sf1",
+        "postgres:tpc_h:sf10",
+        "postgres:tpc_h:sf50",
+        "questdb:rtabench:sf1",
+        "starrocks:time_series:sf1",
+        "starrocks:time_series:sf10",
+        "timescaledb:clickbench:sf1",
+        "timescaledb:rtabench:sf1",
+        "timescaledb:time_series:sf1",
+        "timescaledb:tpc_ds:sf1",
+        "timescaledb:tpc_ds:sf10",
+        "timescaledb:tpc_h:sf50"
+      ],
+      "remaining_cells": [
+        "postgres:tpc_ds:sf10",
+        "postgres:tpc_h:sf10",
+        "postgres:tpc_h:sf50",
+        "questdb:rtabench:sf1",
+        "starrocks:time_series:sf1",
+        "starrocks:time_series:sf10",
+        "timescaledb:clickbench:sf1",
+        "timescaledb:rtabench:sf1",
+        "timescaledb:time_series:sf1",
+        "timescaledb:tpc_ds:sf1",
+        "timescaledb:tpc_ds:sf10",
+        "timescaledb:tpc_h:sf50"
+      ],
+      "analytical_completed_clients": [],
+      "analytical_remaining_clients": [
+        1,
+        4,
+        16
+      ],
+      "analytical_prerequisite_failed": false
+    },
+    "analytical_completed_clients": [],
+    "q30_failure_classification": {
+      "identity": "2026-10-timeout-recovery/run695",
+      "query": "30",
+      "raw_error_type": "OperationalError",
+      "report_category": "300-second PostgreSQL statement_timeout deadline",
+      "raw_evidence_must_remain_unchanged": true
+    },
+    "supervisor_decision_source": "data/temp/timeout-recovery/supervisor-decisions.jsonl",
+    "supervisor_decision_snapshot": [
+      {
+        "at": "2026-10-25T10:22:48.320671+00:00",
+        "decision": "acknowledge_terminal_select_failure",
+        "cell": "doris:clickbench:sf1",
+        "populate_run": "2026-10-timeout-recovery/run685",
+        "select_run": "2026-10-timeout-recovery/run686",
+        "reason": "All 99,997,497 rows verified; canonical 43-query plan attempted. Q32 warmup failed with Doris MEM_LIMIT_EXCEEDED, remaining 42 queries completed all three measured iterations. Read-only row-count/answer-hash/iteration validation passed; clean efaae1c9 provenance and guards unchanged; containers absent and owned cleanup confirmed. Preserve failure and continue independent cells.",
+        "free_gib": 160.51
+      },
+      {
+        "at": "2026-10-25T10:46:02.724606+00:00",
+        "decision": "acknowledge_terminal_select_failure",
+        "cell": "monetdb:clickbench:sf1",
+        "populate_run": "2026-10-timeout-recovery/run687",
+        "select_run": "2026-10-timeout-recovery/run688",
+        "reason": "Full immutable99,997,497-row population and43-query plan, no include/exclude/table filters. Q0-Q31 have three successful measured iterations; Q4/Q9 now complete beyond45s, validated medians52.970614/59.714462s. Q32 warmup exceeded300s and aborted operation; Q33-Q42 never started. Read-only row-count/hash/iteration validation passed. Clean efaae1c9 provenance, unchanged budgets and input manifest confirmed; containers absent, owned store/scratch removed, disk reserve restored. Preserve timeout and unstarted evidence; continue independent cells.",
+        "free_gib": 160.49
+      },
+      {
+        "at": "2026-10-25T11:02:40.083208+00:00",
+        "decision": "acknowledge_terminal_select_failure",
+        "cell": "monetdb:chat_threads:sf10",
+        "populate_run": "2026-10-timeout-recovery/run689",
+        "select_run": "2026-10-timeout-recovery/run690",
+        "reason": "Complete population verified200,000 threads/2,518,234 messages. Full23-query plan with only originalQ15 memory exclusion. Q01-Q14 completed all three measured iterations; Q16 warmup suffered unexpected EOF then connection-closed run error. Retained Docker event confirms OOM in same24GiB container at10:57:40UTC. Q17-Q23 unstarted; no timeout claimed and no new exclusions added. Read-only validation passed, clean frozen provenance/config/input manifest confirmed. Container shutdown and owned cleanup verified, resource pressure removed and disk reserve restored; continue independent PostgreSQL cells.",
+        "free_gib": 160.49
+      },
+      {
+        "at": "2026-10-25T11:45:34.882889+00:00",
+        "decision": "acknowledge_terminal_populate_failure",
+        "cell": "postgres:clickbench:sf1",
+        "populate_run": "2026-10-timeout-recovery/run691",
+        "reason": "Canonical PostgreSQL ClickBench population loaded and verified99,997,497 rows, but index/finalization work hit the unchanged40GiB disk reserve at39.7GiB. Terminal OSError preserved; no SELECT run was launched. Clean frozen provenance/full input manifest/settings confirmed. Benchmark containers absent, owned store and scratch removed, free disk restored above160GiB. Continue independent cells without treating incomplete canonical preparation as a measured result.",
+        "free_gib": 160.48
+      },
+      {
+        "at": "2026-10-25T12:03:41.610976+00:00",
+        "decision": "acknowledge_terminal_select_failure",
+        "cell": "postgres:tpc_ds:sf1",
+        "populate_run": "2026-10-timeout-recovery/run692",
+        "select_run": "2026-10-timeout-recovery/run693",
+        "reason": "Fresh complete population; full 99-query plan and executed SQL hashes match frozen plan. Q11 warmup timed out at 300 seconds, harness continued and all other 98 queries completed three measured iterations. Read-only row-count/hash/iteration validation passed. Clean frozen provenance, full input manifest, budgets, container shutdown and owned cleanup confirmed. Preserve failed Q11; continue independent SF10 cell.",
+        "completed_measured_queries": 98,
+        "failed_queries": [
+          "11"
+        ],
+        "free_gib": 160.45
+      }
+    ],
+    "workspace_root": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7",
+    "journal": "data/temp/timeout-recovery/state.json",
+    "summary": "data/temp/timeout-recovery/summary.json"
+  },
+  "continuation_campaign": {
+    "revision": "2026-10-timeout-recovery-continuation",
+    "branch": "t3/timeout-recovery-continuation",
+    "status": "prepared-not-started",
+    "plan": {
+      "path": "docs/campaigns/2026-10-timeout-recovery-continuation-plan.json",
+      "sha256": "02d4aa301c5fb6f7424b7b6fe14a3612881f0306a4f5554effe3fa9746ad5933",
+      "bytes": 109876
+    },
+    "source_database": {
+      "path": "data/frozen/2026-10-selected-source.db",
+      "bytes": 143929344,
+      "sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f"
+    },
+    "result_database": "results/2026-10-timeout-recovery-continuation.db",
+    "journal": "data/temp/timeout-recovery/state.json",
+    "summary": "data/temp/timeout-recovery/summary.json",
+    "exact_original_cells_slice": [
+      6,
+      17
+    ],
+    "ordered_cells": [
+      "postgres:tpc_h:sf10",
+      "postgres:tpc_h:sf50",
+      "questdb:rtabench:sf1",
+      "starrocks:time_series:sf1",
+      "starrocks:time_series:sf10",
+      "timescaledb:clickbench:sf1",
+      "timescaledb:rtabench:sf1",
+      "timescaledb:time_series:sf1",
+      "timescaledb:tpc_ds:sf1",
+      "timescaledb:tpc_ds:sf10",
+      "timescaledb:tpc_h:sf50"
+    ],
+    "query_slots": 575,
+    "analytical": {
+      "cell_key": "postgres:tpc_h:sf10",
+      "source_run_ids": [
+        670,
+        671,
+        672
+      ],
+      "clients": [
+        1,
+        4,
+        16
+      ],
+      "duration_seconds": 60.0,
+      "seed": 0,
+      "manifest": {
+        "algorithm": "sha256",
+        "digest": "1aceb1b1f21ad379edda0976a55c5ea8c126eb15ca04f92e85d346025ed57022",
+        "files": {
+          "01_pricing_summary": "8aefe77a1c97459bc69acbbcdaf3b8637d8ea22dfc3ac7be732d4446da83b69b",
+          "02_minimum_cost_supplier": "a2219893f952dd2a2586ab297d909ec2d440faabb5e692f24880158aa6877344",
+          "03_shipping_priority": "1f120d790d4914652cbf3fbc0fa28ed6573e4adee61ae7164a8c3d99b7c6b7fe",
+          "04_order_priority": "2a2be89752fc917bc71e1a59168ead9d00d40c40ea0bbe646206e414b372f888",
+          "05_local_supplier_volume": "495def7debb02ab1def31da07fbc88b4796813b754832ce15d54a35dcb104577",
+          "06_revenue_forecast": "3638535fb92a6026b3359a2ad9e6ed7da9ad9080152513e6fd3818d1a853c29f",
+          "07_volume_shipping": "5e8077121a42ca8ebf5ff54e5842a614e839da945b0331e3b63d9ccad2361201",
+          "08_market_share": "948338f54b97a2c49aea15f8c4d609ecf244d00ad7754edcea60b4748504a1ce",
+          "09_product_profit": "af90ccbe30ece396209e6627c10c0086ed54208100357922ee404de8bb867e56",
+          "10_returned_items": "0b48b00cffa3776b32e67e9041191dea25095e2a952ee5251990b9c8585031ed",
+          "11_important_stock": "c35db7e143ab8c56a74ab093e7e67b48770b1194fa3f90506bad21217eaa0599",
+          "12_shipping_modes": "3814c9f4b7a476ee894c477d43cedb299603b1ed0f5315790d52839c8da355bf",
+          "13_customer_distribution": "4a4a0b2c5646b2cad8f220a8f4b73ccb9f0acd45542353d63c18a69227bc20a3",
+          "14_promotion_effect": "e7ec7960a4c49219fc76dc03495a1530aeb30c796413dd1dc9d501b86934f222",
+          "15_top_supplier": "1cb57383eeff60261a1b4b2a141c71d8672729d743a7dfa74d9a4bcaf69c44d4",
+          "16_parts_supplier": "45085e7672cb1500e625e048156fc55369e7a9bc91fd3647c3f7735a870c3ef8",
+          "17_small_quantity_revenue": "dfc7f00ac8a500c2ac2735b05b41b462bbe4af9ce7cd6c37e42d1bb9df4a02e1",
+          "18_large_volume_customer": "8c5076061727d974f96708f0da930fc58843eac297a80c7ad658d64d152a19bb",
+          "19_discounted_revenue": "341f97d1f74deb30aca2a8b0ee849772a3b0e098a06cf12266c63573cb985478",
+          "20_potential_promotion": "fa96ad5cb897bf31ec9b96a6b2a0d1f7132e71e2f481321e6db16628bc3e5fd5",
+          "21_suppliers_waiting": "b29463f30a64e45a795047ee6e557e6c3c1f01fc612acc997873594048e74b59",
+          "22_global_sales_opportunity": "d8ed6332e75f9193391000ba071e17adcf735a2d99c5a4da0f7c13d695ccbd42"
+        }
+      },
+      "warmup": {
+        "iterations_per_query_per_client": 1,
+        "synchronized_measurement_after_all_clients": true
+      },
+      "recorded_budget": {
+        "client_rss_guard_bytes": 30064771072,
+        "client_rss_scope": "sampled RSS of the isolated operation process, all client threads included; not a cgroup limit and not whole-host memory",
+        "configured_engine_memory_bytes": 25769803776,
+        "configured_threads": 10,
+        "effective": {
+          "postgres-benchmark": {
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpusetCpus": "",
+            "Memory": 25769803776,
+            "MemorySwap": 25769803776,
+            "NanoCpus": 10000000000
+          }
+        },
+        "multiplied_by_clients": false,
+        "scope": "server container CPU quota and memory cgroup charge including page cache; client RSS sampled separately; not whole-host memory"
+      },
+      "original_operation_timeout_seconds": 900,
+      "original_query_timeout_seconds": 45,
+      "source_budget_note": "670 and672 record effective cgroup budgets;671 has the same configured settings/start command but no completed budget metadata. No effective values imputed for671."
+    },
+    "actual_start_commit": null,
+    "actual_start_commit_note": "Parent authorized exactly one documentation-only commit after final review checks and corrections. Record its actual new clean HEAD in the parent handoff before explicit START; the committed manifest cannot self-hash. The new journal, run metadata and post-run report record that actual measurement commit. No START has been authorized.",
+    "summary_scope": "Only these 11 cells and the three analytical runs; never the completion of the original 17-cell campaign.",
+    "protocol": {
+      "path": "docs/campaigns/2026-10-timeout-recovery-continuation.md",
+      "sha256": "449e85afec55c39d4fab50e8506f079a174a0371e954939802e76aeb8b78014d",
+      "bytes": 15103
+    },
+    "permitted_top_level_plan_changes": [
+      "workspace",
+      "branch",
+      "revision",
+      "source_database",
+      "provenance",
+      "cells"
+    ],
+    "source_database_relocation": "Parent-approved relocation from site/public/data/results.db to data/frozen/2026-10-selected-source.db in the isolated worktree. Read-only local copy; source_bytes and source_sha256 unchanged. The unchanged runner resolves this relative path beneath plan.workspace and passes its parent and stem to the source query CLI.",
+    "workspace_root": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-01c9b611"
+  },
+  "combined_reporting_contract": {
+    "identity": [
+      "revision",
+      "run_id"
+    ],
+    "step_identity": [
+      "revision",
+      "run_step_id"
+    ],
+    "collision_example": "2026-10-timeout-recovery/run685 and 2026-10-timeout-recovery-continuation/run685 are different runs; IDs are not globally unique.",
+    "original_attempts_remain_visible": 6,
+    "original_acknowledged_failure_dispositions_remain_visible": 5,
+    "original_validation_blocker_remains_unresolved": "2026-10-timeout-recovery/run695",
+    "analytical_status": "Unattempted at preparation; report clients1,4,16 independently after the continuation, including unmet prerequisites or interrupted attempts.",
+    "no_naive_id_merge": true,
+    "no_per_query_splicing": true,
+    "original_raw_and_continuation_raw_remain_separate": true,
+    "publication": "blocked-pending-separate-correctness-and-cohort-review",
+    "known_reference_gap": "2026-10-selected-source/run658 and 2026-10-selected-source/run660 did not reach TPC-DS SF10 Q31/Q49/Q65/Q85. Excluding 2026-10-timeout-recovery/run695 by starting from the selected seed removes that newer observation from the candidate cohort; it does not establish that its discrepancy is fixed or harmless. SF1 agreement does not resolve SF10.",
+    "timescaledb_tpc_ds_sf10_policy": "Any new mismatch must stop for review. Never auto-accept, relabel, suppress, edit marks, or substitute a success-only cohort.",
+    "publication_requires_both_campaigns": true,
+    "never_publish_continuation_database_alone": true
+  },
+  "environment_parity": {
+    "command": "uv sync --frozen --python 3.14",
+    "uv_version": "uv 0.10.12 (00d72dac7 2026-03-19 aarch64-apple-darwin)",
+    "interpreter": {
+      "version": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+      "real_executable": "/Users/williamlauren/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/bin/python3.14"
+    },
+    "interpreter_equal_parent": true,
+    "freeze_equal_parent_after_only_editable_workspace_path_normalization": true,
+    "normalized_freeze_sha256": "ae4ecd7182e39b2b798df62a8c284b9478391bef9ee191b498712af402624546",
+    "package_entries": 129,
+    "local_freeze_sha256": "85cd8a4637c44e4bcd65357f824275f48499d8405ba44fbd84a321ef639ba8ef",
+    "parent_freeze_sha256": "035e4555e890e64794320a919832480aa677cffe1b2bf8e46d0f09753d9e84c9",
+    "normalization": "Only the editable olap-benchmarks absolute workspace prefix; every dependency entry remains identical.",
+    "input_hash_cache_copied": false
+  },
+  "image_parity": {
+    "method": "docker image inspect only; no pulls or containers",
+    "observations": [
+      {
+        "identity": "2026-10-selected-source/run282",
+        "role": "server",
+        "tag": "starrocks/allin1-ubuntu:4.1.6",
+        "digest": "starrocks/allin1-ubuntu@sha256:5cbf09c4c788d2ca41a8e38599b650f04dbc6af0de51ebda0952770fb8333e5d",
+        "image_id": "sha256:59070ab2379b35fb2c3bc71669c6862e30c7771a515800fa7e50ee69d737091f",
+        "local_repo_digests": [
+          "starrocks/allin1-ubuntu@sha256:5cbf09c4c788d2ca41a8e38599b650f04dbc6af0de51ebda0952770fb8333e5d"
+        ],
+        "local_image_id": "sha256:59070ab2379b35fb2c3bc71669c6862e30c7771a515800fa7e50ee69d737091f",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run316",
+        "role": "server",
+        "tag": "questdb/questdb:10.0.1",
+        "digest": "questdb/questdb@sha256:67eaed863ebb2383227919ea9a5499a4a39ceca3862c20b974c84a10e11cdf89",
+        "image_id": "sha256:41ceca901724ad10a0035da0cb0c1f99f88bf3692abdc9090baabdfff1d215f9",
+        "local_repo_digests": [
+          "questdb/questdb@sha256:67eaed863ebb2383227919ea9a5499a4a39ceca3862c20b974c84a10e11cdf89"
+        ],
+        "local_image_id": "sha256:41ceca901724ad10a0035da0cb0c1f99f88bf3692abdc9090baabdfff1d215f9",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run368",
+        "role": "server",
+        "tag": "timescale/timescaledb:2.30.2-pg18",
+        "digest": "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e",
+        "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "local_repo_digests": [
+          "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+        ],
+        "local_image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run372",
+        "role": "server",
+        "tag": "postgres:18.6",
+        "digest": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "local_repo_digests": [
+          "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+        ],
+        "local_image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run381",
+        "role": "server",
+        "tag": "timescale/timescaledb:2.30.2-pg18",
+        "digest": "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e",
+        "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "local_repo_digests": [
+          "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+        ],
+        "local_image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run387",
+        "role": "server",
+        "tag": "timescale/timescaledb:2.30.2-pg18",
+        "digest": "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e",
+        "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "local_repo_digests": [
+          "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+        ],
+        "local_image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run404",
+        "role": "server",
+        "tag": "timescale/timescaledb:2.30.2-pg18",
+        "digest": "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e",
+        "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "local_repo_digests": [
+          "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+        ],
+        "local_image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run458",
+        "role": "server",
+        "tag": "postgres:18.6",
+        "digest": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "local_repo_digests": [
+          "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+        ],
+        "local_image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run465",
+        "role": "server",
+        "tag": "timescale/timescaledb:2.30.2-pg18",
+        "digest": "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e",
+        "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "local_repo_digests": [
+          "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+        ],
+        "local_image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run494",
+        "role": "server",
+        "tag": "starrocks/allin1-ubuntu:4.1.6",
+        "digest": "starrocks/allin1-ubuntu@sha256:5cbf09c4c788d2ca41a8e38599b650f04dbc6af0de51ebda0952770fb8333e5d",
+        "image_id": "sha256:59070ab2379b35fb2c3bc71669c6862e30c7771a515800fa7e50ee69d737091f",
+        "local_repo_digests": [
+          "starrocks/allin1-ubuntu@sha256:5cbf09c4c788d2ca41a8e38599b650f04dbc6af0de51ebda0952770fb8333e5d"
+        ],
+        "local_image_id": "sha256:59070ab2379b35fb2c3bc71669c6862e30c7771a515800fa7e50ee69d737091f",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-selected-source/run660",
+        "role": "server",
+        "tag": "timescale/timescaledb:2.30.2-pg18",
+        "digest": "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e",
+        "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "local_repo_digests": [
+          "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+        ],
+        "local_image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-timeout-recovery/run692",
+        "role": "server",
+        "tag": "postgres:18.6",
+        "digest": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "local_repo_digests": [
+          "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+        ],
+        "local_image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-timeout-recovery/run693",
+        "role": "server",
+        "tag": "postgres:18.6",
+        "digest": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "local_repo_digests": [
+          "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+        ],
+        "local_image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-timeout-recovery/run694",
+        "role": "server",
+        "tag": "postgres:18.6",
+        "digest": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "local_repo_digests": [
+          "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+        ],
+        "local_image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "digest_matches": true,
+        "image_id_matches": true
+      },
+      {
+        "identity": "2026-10-timeout-recovery/run695",
+        "role": "server",
+        "tag": "postgres:18.6",
+        "digest": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "local_repo_digests": [
+          "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+        ],
+        "local_image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+        "digest_matches": true,
+        "image_id_matches": true
+      }
+    ],
+    "all_match": true,
+    "recheck_required": "Immediately before START and in recorded execution metadata; stop and disclose drift."
+  },
+  "baseline_validation_gate": {
+    "owner": "parent",
+    "status": "passed-parent-evidence-independently-rehashed",
+    "system": "macbook-m4-pro",
+    "pins": {
+      "monetdb": "Dec2025-SP4",
+      "clickhouse": "26.9.19.9",
+      "timescaledb": "2.30.2",
+      "duckdb": "2.0.0",
+      "polars": "2.0.0",
+      "questdb": "10.0.1",
+      "postgres": "18.6",
+      "starrocks": "4.1.6",
+      "doris": "4.1.5",
+      "arc": "26.09.3",
+      "tdengine": "3.4.2.8"
+    },
+    "include_failed": true,
+    "mark": false,
+    "scopes": [
+      {
+        "suite": "tpc_h",
+        "scale_factor": 10
+      },
+      {
+        "suite": "tpc_h",
+        "scale_factor": 50
+      },
+      {
+        "suite": "rtabench",
+        "scale_factor": 1
+      },
+      {
+        "suite": "time_series",
+        "scale_factor": 1
+      },
+      {
+        "suite": "time_series",
+        "scale_factor": 10
+      },
+      {
+        "suite": "clickbench",
+        "scale_factor": 1
+      },
+      {
+        "suite": "tpc_ds",
+        "scale_factor": 1
+      },
+      {
+        "suite": "tpc_ds",
+        "scale_factor": 10
+      }
+    ],
+    "positive_control": "Reproduce 16 mismatch groups and exact namespaced step identities for original TPC-DS SF10 including 2026-10-timeout-recovery/run695.",
+    "negative_controls": [
+      "tpc_ds:sf1",
+      "clickbench:sf1"
+    ],
+    "ad_hoc_access": "Read-only olap results query CLI using frozen validator SQL; never direct ad hoc DB connections.",
+    "manifest": {
+      "path": "data/temp/timeout-recovery-continuation-baseline-verified/manifest.json",
+      "bytes": 20635,
+      "sha256": "34dfbaee363f735db7eb45c1e5f40ef7bf88c6baf46d8ddbddb581542b013dfe"
+    },
+    "artifact_directory": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/data/temp/timeout-recovery-continuation-baseline-verified",
+    "method": "Frozen validator SQL extracted from its AST; all database access through read-only olap results query",
+    "positive_control_result": {
+      "mismatch_groups": 16,
+      "exact_step_ids_match": true,
+      "row_count": 0,
+      "iterations": 0
+    },
+    "negative_control_results": [
+      {
+        "suite": "tpc_ds",
+        "scale_factor": 1,
+        "findings": 0
+      },
+      {
+        "suite": "clickbench",
+        "scale_factor": 1,
+        "findings": 0
+      }
+    ],
+    "baseline_results": [
+      {
+        "suite": "tpc_h",
+        "scale_factor": 10,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "tpc_h",
+        "scale_factor": 50,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "rtabench",
+        "scale_factor": 1,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "time_series",
+        "scale_factor": 1,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "time_series",
+        "scale_factor": 10,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "clickbench",
+        "scale_factor": 1,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "tpc_ds",
+        "scale_factor": 1,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      },
+      {
+        "suite": "tpc_ds",
+        "scale_factor": 10,
+        "counts": {
+          "row_count": 0,
+          "answer_hash": 0,
+          "iterations": 0
+        }
+      }
+    ],
+    "nested_artifacts_verified": 102,
+    "nested_artifact_seals": "All generated SQL, outputs, execution records, generator and scratch databases are sealed in the referenced baseline manifest. Reverify them recursively before START and after the campaign.",
+    "original_seals_before_and_after": {
+      "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/site/public/data/results.db": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+      "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/results/2026-10-timeout-recovery.db": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/docs/campaigns/2026-10-timeout-recovery-plan.json": "bebaa46abd731d1b36f1a0a59472005a45bcc97e6402502ee1a703b73a2007c9",
+      "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/olap_benchmarks/results/validation.py": "038304d57bbc99d83ca8de9e9fc788882ce8451900160204d22d5bd1d591635a"
+    },
+    "generator_checks": "Parent reports Ruff format/lint and strict Pyright passed.",
+    "manifest_root": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7",
+    "manifest_absolute_path": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/data/temp/timeout-recovery-continuation-baseline-verified/manifest.json"
+  },
+  "seal_verification_gate": {
+    "before_start": "Rehash all sealed originals immediately before START; compare to this immutable manifest.",
+    "after_campaign": "Rehash again after completion, blockage or interruption.",
+    "on_mismatch": "Stop and investigate; do not rewrite original evidence or silently reseal.",
+    "nested_baseline_artifacts": "Also follow baseline_validation_gate.manifest and verify every artifact relative to its artifact_directory before START and after the campaign."
+  },
+  "prepared_checks": {
+    "runner_safe_check": "passed; 11 cells + 3 analytical runs; no measurements",
+    "pytest": "33 passed in 1.23s",
+    "ruff_check": "passed",
+    "ruff_format_check": "2 files already formatted",
+    "pyright": "0 errors, 0 warnings",
+    "source_seed_query": {
+      "run_count": 312,
+      "max_run_id": 684,
+      "running_runs": 0,
+      "rows_with_id_695": 0,
+      "revision": "2026-10-selected-source"
+    },
+    "input_content_hashing": "Deferred to unchanged per-population START gate; filenames and sizes verified during check.",
+    "campaign_results_initialized": false,
+    "campaign_journal_initialized": false,
+    "containers_started": false,
+    "committed": false,
+    "observed_phase": "pre-commit preparation; the authorized documentation commit is recorded by its actual new clean HEAD in the parent handoff, outside this committed manifest"
+  },
+  "sealed_original_artifacts_root": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7",
+  "original_workspace_scope": "The original sealed campaign evidence, source files and journal remain unchanged. The parent created a baseline scratch directory outside data/temp/timeout-recovery; no claim is made that the entire original workspace is unchanged.",
+  "review_decision": "Final Opus review reports no scientific or semantic objections; parent approves the concrete plan and exactly one commit of the three new documentation files after accuracy corrections and checks. No benchmark START authorization."
+}

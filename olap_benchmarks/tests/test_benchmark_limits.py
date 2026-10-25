@@ -10,6 +10,7 @@ from pathlib import Path
 from time import sleep
 from types import SimpleNamespace
 from typing import Literal, NamedTuple, cast
+from unittest.mock import Mock
 
 import polars as pl
 import psutil
@@ -22,6 +23,7 @@ from .. import suites as suites_module
 from ..dbs.duckdb import DuckDB
 from ..metrics.storage import Storage, WriterMessage, start_writer_process
 from ..settings import Settings
+from ..suites import FailedQueriesError
 from ..suites.time_series_metrics import config as metrics_config
 from ..suites.time_series_ranges import config as ranges_config
 from .test_benchmark_profile import ProfileDatabase, ProfileSuite, RecordingStorage
@@ -192,6 +194,100 @@ def test_query_timeout_records_failure_and_clears_active_step(
     assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
 
 
+@pytest.mark.parametrize("native_timeout", [False, True])
+def test_near_budget_failure_preserves_evidence_clears_marker_and_continues_suite(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, native_timeout: bool
+) -> None:
+    settings.query_timeout_seconds = 300
+    storage = RecordingStorage()
+    database = ProfileDatabase()
+    database._result_storage = cast(Storage, storage)
+    database._run_id = 1
+    database._current_operation = "select"
+    watchdog = settings.temporary_directory / "query.json"
+    database._query_watchdog_path = watchdog
+    now = 0.0
+    seen: list[str] = []
+    failure = RuntimeError("db error: ERROR: canceling statement due to statement timeout")
+
+    def fetch(
+        _self: ProfileDatabase,
+        query: str,
+        schema: Mapping[str, pl.DataType | type[pl.DataType]] | None = None,
+    ) -> pl.DataFrame:
+        nonlocal now
+        name = query.split("'")[1]
+        seen.append(name)
+        if name == "a":
+            now = 300.4
+            assert limits.expired_query(watchdog, 300) == "a"
+            assert limits.expired_query(watchdog, 330) is None
+            if native_timeout:
+                raise failure
+            signal.raise_signal(signal.SIGALRM)
+            raise AssertionError("alarm did not fail the query")
+        now += 0.1
+        return pl.DataFrame({"value": [name]})
+
+    def rollback(_self: ProfileDatabase) -> None:
+        assert not watchdog.exists()
+        assert database.active_step_id is None
+
+    monkeypatch.setattr(limits, "monotonic", lambda: now)
+    monkeypatch.setattr(dbs_module, "perf_counter", lambda: now)
+    monkeypatch.setattr(ProfileDatabase, "fetch", fetch)
+    monkeypatch.setattr(ProfileDatabase, "rollback", rollback)
+    monkeypatch.setattr(ProfileDatabase, "reset_session", Mock())
+
+    with pytest.raises(FailedQueriesError, match="1 of 3"):
+        ProfileSuite(db=database).run_select_queries()
+
+    assert seen == ["a", *(["b"] * 4), *(["c"] * 4)]
+    assert storage.steps[1]["status"] == "failed"
+    assert storage.steps[1]["result_status"] == "timeout"
+    assert storage.steps[1]["error_type"] == ("RuntimeError" if native_timeout else "TimeoutError")
+    assert storage.steps[1]["error_message"] == (str(failure) if native_timeout else "Query exceeded 300 seconds")
+    assert {step["result_status"] for step in storage.steps.values() if step["query_name"] in {"b", "c"}} == {"ok"}
+    assert not watchdog.exists()
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("seconds", "elapsed", "failed"), [(300, 299.9, False), (300, 300.4, True), (None, 400, False)]
+)
+def test_late_fetch_cannot_receive_success_credit_from_watchdog_grace(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, seconds: int | None, elapsed: float, failed: bool
+) -> None:
+    settings.query_timeout_seconds = seconds
+    storage = RecordingStorage()
+    database = ProfileDatabase(abort_at=("", 0))
+    database._result_storage = cast(Storage, storage)
+    database._run_id = 1
+    database._current_operation = "select"
+    watchdog = settings.temporary_directory / "query.json"
+    database._query_watchdog_path = watchdog
+    clock = iter((0.0, elapsed))
+    monkeypatch.setattr(dbs_module, "perf_counter", lambda: next(clock))
+
+    if failed:
+        with pytest.raises(TimeoutError, match="Query exceeded 300 seconds.*300.400s"):
+            database.execute_query_iteration("a", 1, "select 'a'")
+    else:
+        frame, duration = database.execute_query_iteration("a", 1, "select 'a'")
+        assert frame.item() == "a"
+        assert duration == elapsed
+
+    step = storage.steps[1]
+    assert step["status"] == ("failed" if failed else "completed")
+    assert step["result_status"] == ("timeout" if failed else "ok")
+    assert step["row_count"] == (None if failed else 1)
+    if failed:
+        assert step["metadata"] is None
+    assert not watchdog.exists()
+    assert database.active_step_id is None
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
 def test_query_filters_record_skips_without_removing_queries_from_the_plan(settings: Settings) -> None:
     settings.query_include = ("a", "b")
     settings.query_exclude = ("b",)
@@ -269,6 +365,73 @@ class _StuckProcess:
 
 class _MemoryInfo(NamedTuple):
     rss: int
+
+
+@pytest.mark.parametrize("cooperative", [False, True])
+def test_select_outer_watchdog_allows_cleanup_but_kills_unresponsive_query_after_grace(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, cooperative: bool
+) -> None:
+    settings.query_timeout_seconds = 300
+    settings.operation_timeout_seconds = None
+    watchdog = settings.temporary_directory / f"query-watchdog-{os.getpid()}.json"
+    now = 0.0
+    monkeypatch.setattr(limits, "monotonic", lambda: now)
+
+    class CancellingProcess(_StuckProcess):
+        def start(self) -> None:
+            super().start()
+            limits.start_query_watchdog(watchdog, "slow")
+
+        def join(self, timeout: float | None = None) -> None:
+            nonlocal now
+            super().join(timeout)
+            match len(self.joined):
+                case 1:
+                    now = 300.1
+                case 2:
+                    now = 300.4
+                    if cooperative:
+                        watchdog.unlink()
+                        limits.start_query_watchdog(watchdog, "next")
+                case 3:
+                    now = 330.0
+                case 4:
+                    now = 330.1
+                    if cooperative:
+                        watchdog.unlink()
+                        self.killed = True
+                        self.exitcode = 0
+                case _:
+                    raise AssertionError("watchdog failed to kill the unresponsive query")
+
+    process = CancellingProcess()
+
+    def stop_process(_process: BaseProcess) -> None:
+        process.kill()
+
+    def new_process(**_kwargs: object) -> CancellingProcess:
+        return process
+
+    stop = Mock(side_effect=stop_process)
+    monkeypatch.setattr(operation_runner, "get_context", Mock(return_value=SimpleNamespace(Process=new_process)))
+    monkeypatch.setattr(operation_runner, "check_disk_space", lambda: None)
+    monkeypatch.setattr(operation_runner, "configure_polars_spill", lambda: None)
+    monkeypatch.setattr(operation_runner, "_stop_operation", stop)
+
+    def run() -> None:
+        operation_runner.run_operation(
+            DuckDB(), "clickbench", "select", 1, cast("Queue[WriterMessage]", object()), cast("Queue[object]", object())
+        )
+
+    if cooperative:
+        run()
+        stop.assert_not_called()
+    else:
+        with pytest.raises(TimeoutError, match="Query slow exceeded 300 seconds and 30 seconds cancellation grace"):
+            run()
+        stop.assert_called_once_with(process)
+    assert process.joined == [1, 1, 1, 1]
+    assert not watchdog.exists()
 
 
 class _MemoryProcess:
