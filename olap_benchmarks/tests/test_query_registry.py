@@ -140,6 +140,8 @@ def test_answer_order_keys_match_each_registered_engine_sql(
     sql = " ".join(suite.load_query(query_name).lower().split())
     body, separator, actual_order = sql.rpartition(" order by ")
     assert separator, f"{db_name}:{query_name} needs an explicit ORDER BY contract"
+    if query_name == "65" and db_name in ("postgres", "timescaledb"):
+        order = 's_store_name collate "c" nulls first, i_item_desc collate "c" nulls first limit 100;'
     assert actual_order == order, f"{db_name}:{query_name} has a different ORDER BY contract"
     if (db_name, query_name) == ("doris", "18"):
         assert f"rollup_output as ({projection}" in body

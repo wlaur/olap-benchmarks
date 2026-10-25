@@ -1,10 +1,17 @@
+import json
+from collections import Counter
+from collections.abc import Iterator
 from decimal import Decimal
+from fractions import Fraction
+from hashlib import sha256
 from pathlib import Path
 from typing import cast
 from urllib.parse import parse_qs, urlsplit
 
+import duckdb
 import polars as pl
 import pytest
+from pydantic import JsonValue
 from sqlalchemy import Connection
 
 from ..dbs import postgres as postgres_module
@@ -50,7 +57,7 @@ def test_postgres_family_tpcds_shares_only_the_explicit_query_overrides(database
     for query in TPCDS_QUERY_NAMES:
         path = suite.query_path(query)
         assert path is not None
-        if query in ("46", "72", "78"):
+        if query in ("31", "46", "49", "65", "72", "78", "85"):
             assert path == suite.queries_directory / "postgres" / f"{query}.sql"
         elif query in ("01", "04"):
             assert path == suite.queries_directory / database_type().name / f"{query}.sql"
@@ -67,6 +74,171 @@ def test_postgres_family_tpcds_shares_only_the_explicit_query_overrides(database
         for key in text_keys:
             assert f'{key} COLLATE "C" NULLS FIRST' in override
         assert override.endswith("LIMIT 100;\n")
+
+
+def _without_sql_locations(value: JsonValue) -> JsonValue:
+    if isinstance(value, list):
+        return [_without_sql_locations(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _without_sql_locations(item)
+            for key, item in value.items()
+            if key not in ("query_location", "query_location_length")
+        }
+    return value
+
+
+def _sql_tree(connection: duckdb.DuckDBPyConnection, sql: str) -> dict[str, JsonValue]:
+    row = connection.execute("SELECT json_serialize_sql(?)", [sql]).fetchone()
+    assert row is not None
+    parsed = cast(dict[str, JsonValue], json.loads(str(row[0])))
+    assert parsed["error"] is False
+    statements = cast(list[dict[str, JsonValue]], parsed["statements"])
+    assert len(statements) == 1
+    node = cast(dict[str, JsonValue], _without_sql_locations(statements[0]["node"]))
+    assert node["type"] == "SELECT_NODE"
+    return node
+
+
+@pytest.mark.parametrize("database_type", [Postgres, TimescaleDB])
+@pytest.mark.parametrize(
+    ("query", "text_sort_indices", "sort_count", "canonical_sha256", "candidate_sha256"),
+    [
+        (
+            "31",
+            (0,),
+            1,
+            "d1d1ee84af35662f8e0b766c0c7bbc38c1277c243a87433ee10c1e63c30c4d8c",
+            "bc24b32a90c24664424e9cec95ea34974b544c5c192cfdc4875d80cb352a4160",
+        ),
+        (
+            "65",
+            (0, 1),
+            2,
+            "a2f14a96bb6280a725a18e84a94b99fda0a299e0c1aacbdb56a07b40d364ceb3",
+            "82150b95ee4de318010fc68956317cbcc856cfcc5f73c0ff2db869c88a8efbcc",
+        ),
+        (
+            "85",
+            (0,),
+            4,
+            "09f2031d466106cfe8a42db595bf2184d0db3144f1d323b74556b02911bde766",
+            "526af09fbdce11d928ff75dc9a4902b3a3f049a2e6064ddfb921e4d8ed5e5da6",
+        ),
+    ],
+)
+def test_postgres_family_tpcds_collation_only_wraps_approved_outer_sort_keys(
+    database_type: type[Postgres],
+    query: str,
+    text_sort_indices: tuple[int, ...],
+    sort_count: int,
+    canonical_sha256: str,
+    candidate_sha256: str,
+) -> None:
+    suite = database_type().benchmarks["tpc_ds"]
+    canonical = (suite.queries_directory / f"{query}.sql").read_text()
+    override = suite.load_query(query)
+    assert sha256(canonical.encode()).hexdigest() == canonical_sha256
+    assert sha256(override.encode()).hexdigest() == candidate_sha256
+    assert override.replace(' COLLATE "C"', "") == canonical
+
+    with duckdb.connect(":memory:", config={"threads": 1}) as connection:
+        original = _sql_tree(connection, canonical)
+        adapted = _sql_tree(connection, override)
+    modifiers = cast(list[dict[str, JsonValue]], adapted["modifiers"])
+    order_modifiers = [modifier for modifier in modifiers if modifier["type"] == "ORDER_MODIFIER"]
+    assert len(order_modifiers) == 1
+    orders = cast(list[dict[str, JsonValue]], order_modifiers[0]["orders"])
+    assert len(orders) == sort_count
+    for index in text_sort_indices:
+        expression = cast(dict[str, JsonValue], orders[index]["expression"])
+        assert expression["class"] == "COLLATE"
+        assert expression["collation"] == "C"
+        orders[index]["expression"] = expression["child"]
+    assert adapted == original
+
+
+def _sql_nodes(value: JsonValue) -> Iterator[dict[str, JsonValue]]:
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _sql_nodes(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _sql_nodes(child)
+
+
+@pytest.mark.parametrize("database_type", [Postgres, TimescaleDB])
+def test_postgres_family_q49_only_converts_all_twelve_decimal_ratio_operands(database_type: type[Postgres]) -> None:
+    suite = database_type().benchmarks["tpc_ds"]
+    canonical = (suite.queries_directory / "49.sql").read_text()
+    candidate = suite.load_query("49")
+    assert suite.query_path("49") == suite.queries_directory / "postgres" / "49.sql"
+    assert sha256(canonical.encode()).hexdigest() == "2a4a143b28d1dda71b3113b04d4d2e264e95fa9fbe314bbfd7b13c2c060e174e"
+    assert sha256(candidate.encode()).hexdigest() == "4d408183a0884a31edbb341f8ff1ab0f159ed00615f5044e52fb787fd4c3797b"
+    with duckdb.connect(":memory:", config={"threads": 1}) as connection:
+        original = _sql_tree(connection, canonical)
+        adapted = _sql_tree(connection, candidate)
+    decimal_operands = [node for node in _sql_nodes(original) if node.get("class") == "CAST"]
+    assert len(decimal_operands) == 12
+    double_casts = [
+        node
+        for node in _sql_nodes(adapted)
+        if node.get("class") == "CAST"
+        and isinstance(type_expr := node.get("type_expr"), dict)
+        and type_expr.get("type_name") == "DOUBLE"
+    ]
+    assert len(double_casts) == 12
+    converted_operands: list[dict[str, JsonValue]] = []
+    for node in double_casts:
+        assert node["try_cast"] is False
+        assert node["alias"] == ""
+        child = cast(dict[str, JsonValue], node["child"])
+        assert child["class"] == "CAST"
+        assert cast(dict[str, JsonValue], child["type_expr"])["type_name"] == "DECIMAL"
+        assert cast(dict[str, JsonValue], child["child"])["function_name"] == "sum"
+        converted_operands.append(child)
+        node.clear()
+        node.update(child)
+    assert Counter(json.dumps(node, sort_keys=True) for node in converted_operands) == Counter(
+        json.dumps(node, sort_keys=True) for node in decimal_operands
+    )
+    assert adapted == original
+
+
+@pytest.mark.parametrize(
+    ("engine", "expected_sha256"),
+    [
+        ("", "2a4a143b28d1dda71b3113b04d4d2e264e95fa9fbe314bbfd7b13c2c060e174e"),
+        ("clickhouse", "fa14a4eb7a0ba07e49343ed5a463959496f6a3affe83751f2dcd6e5b439ab67b"),
+        ("doris", "6d308bf144bbda11f4d757bc14419cf202dd3c9a90f391a3e9c008fe7716a32a"),
+        ("monetdb", "748434baf46e81a6600af0614100c7a0b8b904aa3f458943050f60d6e958a9ef"),
+        ("starrocks", "221df208bb03df804318a44c9b7e11faa924a56dab0740acff3fe2f89dd19ef8"),
+    ],
+)
+def test_q49_candidate_keeps_base_and_other_engine_sql_unchanged(engine: str, expected_sha256: str) -> None:
+    path = Postgres().benchmarks["tpc_ds"].queries_directory / engine / "49.sql"
+    assert sha256(path.read_bytes()).hexdigest() == expected_sha256
+
+
+def test_q49_exact_aggregate_operands_split_a_rational_tie_after_binary64_conversion() -> None:
+    operands = [
+        (Decimal("12824.8000"), Decimal("12985.1100")),
+        (Decimal("16503.2000"), Decimal("16709.4900")),
+        (Decimal("11832.8000"), Decimal("11980.7100")),
+    ]
+    exact = [Fraction(numerator) / Fraction(denominator) for numerator, denominator in operands]
+    assert exact == [Fraction(80, 81)] * 3
+    decimal = [numerator / denominator for numerator, denominator in operands]
+    assert len(set(decimal)) == 1
+    binary = [float(numerator) / float(denominator) for numerator, denominator in operands]
+    assert [value.hex() for value in binary] == [
+        "0x1.f9add3c0ca458p-1",
+        "0x1.f9add3c0ca458p-1",
+        "0x1.f9add3c0ca459p-1",
+    ]
+    assert [1 + sum(other < value for other in decimal) for value in decimal] == [1, 1, 1]
+    assert [1 + sum(other < value for other in binary) for value in binary] == [1, 1, 3]
 
 
 def test_timescale_specific_tpcds_query_has_priority_over_the_shared_postgres_override(
