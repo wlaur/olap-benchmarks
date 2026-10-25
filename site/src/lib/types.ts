@@ -5,15 +5,6 @@ export interface ProfileScope {
 
 export type BenchmarkOperation = "populate" | "mutate" | "select" | "concurrent"
 
-export interface CatalogRunDimension {
-  system: string
-  suite: string
-  suite_scale_factor: number
-  db: string
-  db_version: string
-  db_driver: string | null
-}
-
 export interface ExplorerQueryMetric {
   run_id: number
   system: string

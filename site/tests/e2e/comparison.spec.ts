@@ -28,33 +28,37 @@ test("rendered eligibility retains fixed coverage, exclusions and execution unkn
   await expect(engine("partial")).toContainText("Not eligible")
   await expect(engine("wrong")).toContainText("Not eligible")
   await expect(engine("invalidated")).toContainText("run invalidated")
-  await expect(engine("latestfailed")).toContainText("run 8")
   await expect(engine("latestfailed")).toContainText("run failed")
   await expect(engine("preparation")).toContainText("documented incomplete preparation")
-  await expect(engine("missing")).toContainText("Execution unknown")
+  await expect(engine("missing")).toContainText("execution unknown")
   await expect(engine("missing")).not.toContainText("unsupported")
-  await expect(engine("specialist")).toContainText("Adapter unimplemented")
-  await engine("fast").getByText("Query execution & validation evidence", { exact: true }).click()
-  await expect(engine("fast").getByText("Regex semantics differ", { exact: false })).toBeVisible()
-  const excludedQuery = engine("fast").getByText("Q28", { exact: true }).locator("..").locator("..")
-  await excludedQuery.getByText("Iterations, statuses & hashes", { exact: true }).click()
+  await expect(engine("specialist")).toContainText("adapter not implemented")
+  await engine("fast").getByRole("button", { name: "fast evidence details", exact: true }).click()
+  const details = page.getByRole("dialog", { name: "fast · ClickBench evidence", exact: true })
+  await details.getByText("Query execution & validation evidence", { exact: true }).click()
+  await expect(details.getByText("Regex semantics differ", { exact: false })).toBeVisible()
+  const excluded = details.getByText("Q28", { exact: true }).locator("..").locator("..")
+  await excluded.getByText("Iterations, statuses & hashes", { exact: true }).click()
   await expect(
-    engine("fast")
-      .getByText(/recorded exclusion: Adapter has no implementation/)
-      .first(),
+    details.getByText(/recorded exclusion: Adapter has no implementation/).first(),
   ).toBeVisible()
+  await page.keyboard.press("Escape")
   await engine("missing")
-    .getByText(/Run context & preparation/)
+    .getByRole("button", { name: "missing evidence details", exact: true })
+    .click()
+  const missing = page.getByRole("dialog", { name: "missing · ClickBench evidence", exact: true })
+  await missing.getByText(/Run context & preparation/).click()
+  await expect(missing.getByText("Unknown — not recorded", { exact: true }).first()).toBeVisible()
+  await expect(
+    missing.getByText("Preparation unknown; tuning unknown.", { exact: false }),
+  ).toBeVisible()
+  await page.keyboard.press("Escape")
+  await engine("latestfailed")
+    .getByRole("button", { name: "latestfailed evidence details", exact: true })
     .click()
   await expect(
-    engine("missing").getByText("Unknown — not recorded", { exact: true }).first(),
-  ).toBeVisible()
-  await expect(
-    engine("missing").getByText("Preparation unknown; tuning unknown.", { exact: false }),
-  ).toBeVisible()
-  await page.getByText("Visible engines", { exact: true }).click()
-  await page.getByRole("button", { name: "fast", exact: true }).click()
-  await expect(engine("slow").locator("[data-publication-score]")).toHaveText("4.00×")
+    page.getByRole("dialog", { name: "latestfailed · ClickBench evidence", exact: true }),
+  ).toContainText("run 8")
 })
 
 test("mismatched comparison metadata fails visibly without publishing scores", async ({ page }) => {
@@ -75,10 +79,15 @@ test("explorer keeps Q28 SQL and coverage while excluding it from comparable per
   await usePublicationFixture(page, fixture.buffer)
   await page.goto("#/explorer/clickbench?query=Q28")
   await expect(page.getByRole("heading", { name: "Database comparison" })).toBeVisible()
-  await expect(page.getByText(/2 fixed performance queries · 3 coverage positions/)).toBeVisible()
-  await expect(page.getByRole("combobox", { name: "Query" })).toContainText("Q28")
-  await expect(page.getByRole("heading", { name: "Selected query evidence · Q28" })).toBeVisible()
+  await expect(page.getByLabel("SQL query viewer")).toHaveCount(0)
+  await page.getByRole("button", { name: "Inspect a query", exact: true }).click()
+  await expect(page.getByRole("combobox", { name: "Query to inspect" })).toContainText("Q28")
+  await expect(page.locator('[data-query-engine="fast"]')).toHaveAttribute(
+    "data-query-outcome",
+    "unsupported",
+  )
   await expect(page.getByLabel("SQL query viewer")).toContainText(/SELECT/i)
+  await page.keyboard.press("Escape")
   await expect(
     page
       .getByRole("listitem", { name: "fast comparison", exact: true })
@@ -93,18 +102,15 @@ test("explorer visibility preserves the publication baseline and catalog uses re
   await page.goto("#/explorer/clickbench?databases=fast,slow")
   const slow = page.getByRole("listitem", { name: "slow comparison", exact: true })
   await expect(slow.locator("[data-publication-score]")).toHaveText("4.00×")
-  await page.getByText("Change analysis").click()
-  await page
-    .locator("button:not([data-sql-variant])")
-    .filter({ hasText: /^fast$/ })
-    .click()
+  await page.getByText("Change comparison", { exact: true }).click()
+  await page.getByRole("button", { name: "fast", exact: true }).click()
   await expect(slow.locator("[data-publication-score]")).toHaveText("4.00×")
   await page.goto("#/catalog?suite=clickbench")
-  await page.getByRole("button", { name: "Show coverage", exact: true }).click()
+  await page.getByRole("heading", { name: "Coverage by scale and system", exact: true }).click()
   const missing = page
     .getByRole("row")
     .filter({ has: page.getByRole("rowheader", { name: "missing", exact: true }) })
-  await expect(missing).toContainText("Execution unknown")
+  await expect(missing).toContainText("execution unknown")
   const specialist = page
     .getByRole("row")
     .filter({ has: page.getByRole("rowheader", { name: "specialist", exact: true }) })

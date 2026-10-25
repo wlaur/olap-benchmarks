@@ -1,8 +1,9 @@
 import { useEffect } from "react"
-import { Navigate, Route, Routes, useParams } from "react-router-dom"
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom"
 
 import { Navbar } from "./components/layout/Navbar"
-import { NoticeStrip } from "./components/layout/Panel"
+import { NoticeStrip, PanelCard } from "./components/layout/Panel"
+import { BodyText, SectionTitle } from "./components/Typography"
 import {
   getDefaultBenchmarkId,
   isBenchmarkSuiteId,
@@ -25,13 +26,23 @@ function ExplorerRoute({
   suitesError: string | null
 }) {
   const { suiteId: rawId } = useParams<{ suiteId: string }>()
+  const location = useLocation()
 
-  if (suitesError) {
-    return <p className="text-sm text-red-300">Failed to load suites: {suitesError}</p>
-  }
-
-  if (suitesLoading || benchmarkDefinitions.length === 0) {
-    return <p className="text-sm text-slate-400">Loading suites...</p>
+  if (suitesError || suitesLoading || benchmarkDefinitions.length === 0) {
+    return (
+      <PanelCard className="space-y-4 p-4 sm:p-6" aria-busy={suitesLoading}>
+        <SectionTitle as="h1">Explorer</SectionTitle>
+        <div role={suitesError ? "alert" : "status"}>
+          <BodyText>
+            {suitesError
+              ? `Failed to load suites: ${suitesError}`
+              : suitesLoading
+                ? "Loading workloads…"
+                : "No benchmark suites are available."}
+          </BodyText>
+        </div>
+      </PanelCard>
+    )
   }
 
   const suiteId = isBenchmarkSuiteId(rawId, benchmarkDefinitions)
@@ -39,12 +50,17 @@ function ExplorerRoute({
     : getDefaultBenchmarkId(benchmarkDefinitions)
   const suiteDefinition = benchmarkDefinitions.find((definition) => definition.id === suiteId)
 
+  if (!isBenchmarkSuiteId(rawId, benchmarkDefinitions)) {
+    return <Navigate to={`/explorer/${suiteId}${location.search}`} replace />
+  }
+
   if (!suiteDefinition) {
     return <p className="text-sm text-red-300">Suite {suiteId} is not configured.</p>
   }
 
   return (
     <ExplorerPage
+      key={suiteId}
       suiteId={suiteId}
       suiteDefinition={suiteDefinition}
       benchmarkDefinitions={benchmarkDefinitions}
@@ -83,7 +99,7 @@ export function App() {
     <div className="flex h-dvh min-h-screen flex-col overflow-hidden bg-surface-primary text-slate-100">
       {navbar}
       {systemError ? (
-        <NoticeStrip tone="warning" className="mx-4 my-3 shrink-0">
+        <NoticeStrip role="alert" tone="warning" className="mx-4 my-3 shrink-0">
           Failed to load results: {systemError}
         </NoticeStrip>
       ) : null}

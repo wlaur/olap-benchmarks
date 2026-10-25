@@ -1,10 +1,28 @@
-import { Fragment } from "react"
+import type { ReactNode } from "react"
 
 import { useAnalyticalData } from "../../hooks/useAnalyticalData"
 import type { AnalyticalRun, AnalyticalSummary } from "../../lib/analytical"
+import { formatDatabaseName } from "../../lib/databaseNames"
 import { formatLatencyMs } from "../../lib/format"
-import { ChartFrame, NoticeStrip, PanelDisclosure } from "../layout/Panel"
-import { BodyText, MetaLabel } from "../Typography"
+import { useAppStore } from "../../stores/useAppStore"
+import { DetailsDialog } from "../layout/DetailsDialog"
+import { Disclosure } from "../layout/Disclosure"
+import {
+  ChartFrame,
+  NoticeStrip,
+  PanelDisclosure,
+  StatusBadge,
+  type StatusTone,
+} from "../layout/Panel"
+import {
+  BodyText,
+  CaptionText,
+  ItemTitle,
+  LeadText,
+  MetaLabel,
+  NumericText,
+  SecondaryText,
+} from "../Typography"
 
 const unknown = "Unknown"
 const integer = (value: number | null) => (value === null ? unknown : value.toLocaleString("en-US"))
@@ -13,6 +31,28 @@ const qps = (value: number | null) =>
   value === null ? unknown : value.toLocaleString("en-US", { maximumSignificantDigits: 4 })
 const gib = (value: number | null) =>
   value === null ? unknown : `${(value / 1024 ** 3).toFixed(1)} GiB`
+
+function engineLabel(run: AnalyticalRun) {
+  return `${formatDatabaseName(run.row.db)} ${run.row.db_version || ""}`.trim()
+}
+
+function runOutcome(run: AnalyticalRun): { label: string; tone: StatusTone } {
+  if (run.row.status !== "completed")
+    return {
+      label: `${run.row.status || unknown}${run.row.error_type ? `: ${run.row.error_type}` : ""}`,
+      tone: run.row.status === "failed" ? "failure" : "neutral",
+    }
+  const { errors, timeouts } = run.overall
+  if (errors === null || timeouts === null)
+    return { label: "Completed · error counts unknown", tone: "warning" }
+  if (errors > 0 || timeouts > 0)
+    return { label: `Completed · ${errors} errors, ${timeouts} timeouts`, tone: "warning" }
+  return { label: "Completed", tone: "positive" }
+}
+
+function analyticalTakeaway(runs: readonly AnalyticalRun[]): string {
+  return `${runs.filter((run) => run.row.status === "completed").length}/${runs.length} runs completed`
+}
 
 function Latency({ summary }: { summary: AnalyticalSummary }) {
   return (
@@ -40,11 +80,20 @@ function Latency({ summary }: { summary: AnalyticalSummary }) {
 
 function RecordedObject({ value }: { value: Record<string, unknown> | null }) {
   return value === null || Object.keys(value).length === 0 ? (
-    <BodyText>{unknown}</BodyText>
+    <SecondaryText>{unknown}</SecondaryText>
   ) : (
-    <pre className="max-h-64 overflow-auto text-xs break-all whitespace-pre-wrap text-slate-300">
+    <pre className="max-h-64 overflow-auto font-mono text-sm break-all whitespace-pre-wrap text-slate-300">
       {JSON.stringify(value, null, 2)}
     </pre>
+  )
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <MetaLabel as="dt">{label}</MetaLabel>
+      <dd className="mt-1 text-sm leading-6 break-words text-slate-100">{children}</dd>
+    </div>
   )
 }
 
@@ -53,223 +102,267 @@ function RunEvidence({ run }: { run: AnalyticalRun }) {
     .filter((value) => value?.trim())
     .join(": ")
   return (
-    <details className="text-xs leading-5 text-slate-300">
-      <summary className="cursor-pointer">
-        Run {run.row.id} · per-query, manifest &amp; budget evidence
-      </summary>
-      <div className="mt-3 space-y-3">
-        <BodyText className="text-xs">
-          Measurement: {run.startedAt ?? unknown} → {run.finishedAt ?? unknown}. Drain:{" "}
-          {seconds(run.drainSeconds)}. Run finished: {run.row.finished_at ?? unknown}.
-        </BodyText>
-        {error ? <BodyText className="text-xs">Recorded run error: {error}</BodyText> : null}
-        {run.limitations.length > 0 ? (
-          <ul className="list-disc space-y-1 pl-4 text-amber-200/90">
-            {run.limitations.map((limitation) => (
-              <li key={limitation}>{limitation}</li>
-            ))}
-          </ul>
-        ) : null}
-        <BodyText className="text-xs">
-          Full canonical manifest required: {integer(run.canonicalCount)} queries. Selected:{" "}
-          {integer(run.selectedCount)}; documented skips: {integer(run.skipCount)}. Coverage:{" "}
-          {run.manifestStatus}. Every canonical position must be selected or have a documented skip;
-          skips change the workload. Manifest hashes identify recorded SQL; coverage alone does not
-          establish equivalent inputs, semantics or correctness.
-        </BodyText>
-        <div className="overflow-x-auto">
-          <table
-            aria-label={`Run ${run.row.id} per-query evidence`}
-            className="w-full text-left text-xs [&_td]:p-2 [&_td]:align-top [&_th]:p-2 [&_th]:font-medium [&_th]:text-slate-400"
-          >
-            <thead>
-              <tr>
-                <th scope="col">Query / manifest</th>
-                <th scope="col">Offered</th>
-                <th scope="col">Completed</th>
-                <th scope="col">Errors / timeouts</th>
-                <th scope="col">QPS</th>
-                <th scope="col">Completed latency</th>
+    <>
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+        <Fact label="Workload">
+          {run.row.suite} · SF {run.row.suite_scale_factor} · {run.row.system}
+        </Fact>
+        <Fact label="Engine">
+          {engineLabel(run)}
+          {run.row.db_driver ? ` · ${run.row.db_driver}` : ""}
+        </Fact>
+        <Fact label="Status">
+          {run.row.status || unknown} · run {run.row.id}
+        </Fact>
+        <Fact label="Window actual / requested">
+          {seconds(run.elapsedSeconds)} / {seconds(run.requestedSeconds)}
+        </Fact>
+        <Fact label="Completed / offered">
+          {integer(run.overall.completed)} / {integer(run.overall.offered)}
+        </Fact>
+        <Fact label="Errors / timeouts">
+          {integer(run.overall.errors)} / {integer(run.overall.timeouts)}
+        </Fact>
+        <Fact label="Throughput">{qps(run.overall.qps)} QPS</Fact>
+        <Fact label="Mixed-query latency">
+          <Latency summary={run.overall} />
+        </Fact>
+      </dl>
+      <SecondaryText>
+        Measurement: {run.startedAt ?? unknown} → {run.finishedAt ?? unknown}. Drain:{" "}
+        {seconds(run.drainSeconds)}. Run finished: {run.row.finished_at ?? unknown}.
+      </SecondaryText>
+      {error ? <SecondaryText>Recorded run error: {error}</SecondaryText> : null}
+      {run.limitations.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-amber-200">
+          {run.limitations.map((limitation) => (
+            <li key={limitation}>{limitation}</li>
+          ))}
+        </ul>
+      ) : null}
+      <SecondaryText>
+        Full canonical manifest required: {integer(run.canonicalCount)} queries. Selected:{" "}
+        {integer(run.selectedCount)}; documented skips: {integer(run.skipCount)}. Coverage:{" "}
+        {run.manifestStatus}. Every canonical position must be selected or have a documented skip;
+        skips change the workload. Manifest hashes identify recorded SQL; coverage alone does not
+        establish equivalent inputs, semantics or correctness.
+      </SecondaryText>
+      <div className="relative overflow-x-auto">
+        <table
+          aria-label={`Run ${run.row.id} per-query evidence`}
+          className="w-full text-left text-sm leading-6 [&_td]:p-2 [&_td]:align-top [&_th]:p-2 [&_th]:font-medium [&_th]:text-slate-300"
+        >
+          <thead>
+            <tr>
+              <th scope="col">Query / manifest</th>
+              <th scope="col">Offered</th>
+              <th scope="col">Completed</th>
+              <th scope="col">Errors / timeouts</th>
+              <th scope="col">QPS</th>
+              <th scope="col">Completed latency</th>
+            </tr>
+          </thead>
+          <tbody className="text-slate-200">
+            {run.queries.map((query) => (
+              <tr key={query.name} className="border-t border-border-subtle">
+                <th scope="row" className="max-w-80 break-words">
+                  <span className="text-slate-50">{query.name}</span> · {query.manifestStatus}
+                  {query.hash ? (
+                    <div title={query.hash} className="font-mono">
+                      SQL sha256 {query.hash.slice(0, 12)}…
+                    </div>
+                  ) : null}
+                  {query.skip ? <div>{query.skip}</div> : null}
+                </th>
+                <td>{integer(query.summary.offered)}</td>
+                <td>{integer(query.summary.completed)}</td>
+                <td>
+                  {integer(query.summary.errors)} / {integer(query.summary.timeouts)}
+                </td>
+                <td>{qps(query.summary.qps)}</td>
+                <td>
+                  <Latency summary={query.summary} />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {run.queries.map((query) => (
-                <tr key={query.name} className="border-t border-border-subtle">
-                  <th scope="row" className="max-w-80 break-words">
-                    <span className="text-slate-100">{query.name}</span> · {query.manifestStatus}
-                    {query.hash ? (
-                      <div title={query.hash} className="font-mono">
-                        SQL sha256 {query.hash.slice(0, 12)}…
-                      </div>
-                    ) : null}
-                    {query.skip ? <div>{query.skip}</div> : null}
-                  </th>
-                  <td>{integer(query.summary.offered)}</td>
-                  <td>{integer(query.summary.completed)}</td>
-                  <td>
-                    {integer(query.summary.errors)} / {integer(query.summary.timeouts)}
-                  </td>
-                  <td>{qps(query.summary.qps)}</td>
-                  <td>
-                    <Latency summary={query.summary} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {run.queries.length === 0 ? (
-            <BodyText className="p-2 text-xs">Per-query evidence unknown.</BodyText>
-          ) : null}
-        </div>
-        <ChartFrame className="space-y-2">
-          <MetaLabel>Recorded budget scope</MetaLabel>
-          <BodyText className="text-xs">{run.budget.scope ?? unknown}</BodyText>
-          <BodyText className="text-xs">
-            Shared across clients:{" "}
-            {run.budget.shared === null
-              ? unknown
-              : run.budget.shared
-                ? "Yes (recorded)"
-                : "No (recorded)"}
-            . Configured threads: {integer(run.budget.threads)}; engine memory:{" "}
-            {gib(run.budget.engineBytes)}; operation RSS guard: {gib(run.budget.rssBytes)}.
-          </BodyText>
-          <BodyText className="text-xs">RSS scope: {run.budget.rssScope ?? unknown}</BodyText>
-          <BodyText className="text-xs">
-            Engine settings, process pools and server cgroups have different enforcement scopes.
-            Readbacks do not establish whole-host resource equivalence or cache-hit behavior.
-          </BodyText>
-          <details>
-            <summary className="cursor-pointer">Effective budget readback</summary>
-            <RecordedObject value={run.budget.effective} />
-          </details>
-          <details>
-            <summary className="cursor-pointer">Per-worker runtime &amp; cache evidence</summary>
-            <RecordedObject value={run.workerRuntime} />
-          </details>
-        </ChartFrame>
-        <details>
-          <summary className="cursor-pointer">Recorded analytical metadata</summary>
-          <RecordedObject value={run.recorded} />
-        </details>
+            ))}
+          </tbody>
+        </table>
+        {run.queries.length === 0 ? (
+          <SecondaryText className="p-2">Per-query evidence unknown.</SecondaryText>
+        ) : null}
       </div>
-    </details>
+      <Disclosure title="Recorded budget scope">
+        <SecondaryText>{run.budget.scope ?? unknown}</SecondaryText>
+        <SecondaryText>
+          Shared across clients:{" "}
+          {run.budget.shared === null
+            ? unknown
+            : run.budget.shared
+              ? "Yes (recorded)"
+              : "No (recorded)"}
+          . Configured threads: {integer(run.budget.threads)}; engine memory:{" "}
+          {gib(run.budget.engineBytes)}; operation RSS guard: {gib(run.budget.rssBytes)}.
+        </SecondaryText>
+        <SecondaryText>RSS scope: {run.budget.rssScope ?? unknown}</SecondaryText>
+        <SecondaryText>
+          Engine settings, process pools and server cgroups have different enforcement scopes.
+          Readbacks do not establish whole-host resource equivalence or cache-hit behavior.
+        </SecondaryText>
+        <Disclosure title="Effective budget readback">
+          <RecordedObject value={run.budget.effective} />
+        </Disclosure>
+      </Disclosure>
+      <Disclosure title="Per-worker runtime & cache evidence">
+        <RecordedObject value={run.workerRuntime} />
+      </Disclosure>
+      <Disclosure title="Recorded analytical metadata">
+        <RecordedObject value={run.recorded} />
+      </Disclosure>
+    </>
   )
+}
+
+function groupRuns(runs: readonly AnalyticalRun[], suiteTitles: ReadonlyMap<string, string>) {
+  const groups = new Map<string, AnalyticalRun[]>()
+  for (const run of runs) {
+    const key = `${suiteTitles.get(run.row.suite) ?? run.row.suite} · SF ${run.row.suite_scale_factor} · ${run.row.system}`
+    groups.set(key, [...(groups.get(key) ?? []), run])
+  }
+  return [...groups].map(([title, entries]) => ({
+    title,
+    runs: entries.sort(
+      (a, b) =>
+        a.row.db.localeCompare(b.row.db) ||
+        (a.clients ?? 0) - (b.clients ?? 0) ||
+        a.row.id - b.row.id,
+    ),
+  }))
 }
 
 export function AnalyticalEvidence() {
   const { runs, loading, error } = useAnalyticalData()
+  const benchmarkDefinitions = useAppStore((state) => state.benchmarkDefinitions)
+  const suiteTitles = new Map(
+    benchmarkDefinitions.map((definition) => [definition.id, definition.title]),
+  )
   return (
     <>
       {error ? (
-        <NoticeStrip tone="warning">Failed to load analytical evidence: {error}</NoticeStrip>
+        <NoticeStrip tone="warning" role="alert">
+          Failed to load analytical evidence: {error}
+        </NoticeStrip>
       ) : null}
-      <section
-        hidden={runs.length === 0}
-        aria-label="Analytical concurrency evidence"
-        aria-busy={loading}
-      >
-        <PanelDisclosure title="Analytical concurrency evidence">
-          <MetaLabel>Duration-based streams · analytical-streams-v1</MetaLabel>
-          <BodyText>
-            Closed-loop clients with one outstanding fetch each. Every retained run is shown,
-            including failed attempts.
-          </BodyText>
-          <BodyText className="text-xs leading-5">
-            Actual windows include drain, answer hashing and request logging; requested duration
-            limits new requests. Warmup is excluded. Overall latency reflects each run’s achieved
-            query mix, which can differ across engines; inspect per-query counts and latencies
-            before comparing. No combined score is calculated. These measurements are separate from
-            the resident-hot fixed SELECT ranking. Full-suite evidence requires the full canonical
-            query manifest; documented skips and filtered subsets change the workload and remain
-            listed in each run’s evidence.
-          </BodyText>
-          <BodyText className="text-xs leading-5">
-            Latency uses completed samples and recorded nearest-rank summaries. Minimum n: p50 ≥ 5,
-            p95 ≥ 100, p99 ≥ 1,000. Unknown (&lt;minimum n) means insufficient_samples; other
-            missing or invalid evidence stays Unknown. Thresholds do not establish percentile
-            confidence or query correctness.
-          </BodyText>
-          <ChartFrame className="overflow-x-auto p-0">
-            {loading ? (
-              <div role="status" className="p-3">
-                <BodyText>Loading analytical measurements…</BodyText>
+      <section aria-label="Analytical concurrency evidence" aria-busy={loading}>
+        <PanelDisclosure
+          title="Analytical concurrency evidence"
+          meta="Throughput with concurrent clients · separate from the SELECT ranking"
+        >
+          {loading ? (
+            <div role="status">
+              <SecondaryText>Loading analytical measurements…</SecondaryText>
+            </div>
+          ) : runs.length === 0 ? (
+            <BodyText>
+              {error
+                ? "Analytical results unavailable."
+                : "No analytical runs recorded for this publication."}
+            </BodyText>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <LeadText>{analyticalTakeaway(runs)}</LeadText>
+                <SecondaryText>
+                  Engines achieved different query mixes within each window, so throughput is not a
+                  ranking and no combined score is calculated. Unknown values stay unknown.
+                </SecondaryText>
               </div>
-            ) : (
-              <table
-                aria-label="Analytical stream measurements"
-                className="w-full text-left text-xs [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:px-3 [&_th]:py-2 [&_th]:font-medium [&_th]:text-slate-400"
-              >
-                <thead>
-                  <tr>
-                    <th scope="col">Suite / SF / system</th>
-                    <th scope="col">Engine / version</th>
-                    <th scope="col">Clients</th>
-                    <th scope="col">Run</th>
-                    <th scope="col">
-                      Window
-                      <br />
-                      actual / requested
-                    </th>
-                    <th scope="col">Completed</th>
-                    <th scope="col">Errors / timeouts</th>
-                    <th scope="col">QPS</th>
-                    <th scope="col">Mixed-query latency</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runs.map((run) => (
-                    <Fragment key={run.row.id}>
-                      <tr
-                        data-analytical-run={run.row.id}
-                        className="border-t border-border-default"
-                      >
-                        <th scope="row">
-                          <span className="text-slate-100">{run.row.suite}</span>
-                          <div>
-                            SF {run.row.suite_scale_factor} · {run.row.system}
-                          </div>
-                        </th>
-                        <td>
-                          {run.row.db}
-                          <div className="text-slate-400">
-                            {run.row.db_version || unknown}
-                            {run.row.db_driver ? ` · ${run.row.db_driver}` : ""}
-                          </div>
-                        </td>
-                        <td>{integer(run.clients)}</td>
-                        <td>
-                          {run.row.status || unknown}
-                          <div className="text-slate-400">#{run.row.id}</div>
-                        </td>
-                        <td className="whitespace-nowrap">
-                          {seconds(run.elapsedSeconds)} / {seconds(run.requestedSeconds)}
-                        </td>
-                        <td>
-                          {integer(run.overall.completed)}
-                          <div className="text-slate-400">
-                            of {integer(run.overall.offered)} offered
-                          </div>
-                        </td>
-                        <td>
-                          {integer(run.overall.errors)} / {integer(run.overall.timeouts)}
-                        </td>
-                        <td>{qps(run.overall.qps)}</td>
-                        <td>
-                          <Latency summary={run.overall} />
-                        </td>
-                      </tr>
+              {groupRuns(runs, suiteTitles).map((group) => (
+                <ChartFrame key={group.title} className="relative overflow-x-auto p-0">
+                  <table
+                    aria-label={`Analytical stream measurements · ${group.title}`}
+                    className="w-full min-w-[30rem] text-left text-sm leading-6 [&_td]:px-3 [&_td]:py-2 [&_td]:align-middle [&_th]:px-3 [&_th]:py-2"
+                  >
+                    <caption className="border-b border-border-default px-3 py-2 text-left">
+                      <ItemTitle>{group.title}</ItemTitle>
+                    </caption>
+                    <thead className="text-slate-400">
                       <tr>
-                        <td colSpan={9} className="border-t border-border-subtle">
-                          <RunEvidence run={run} />
-                        </td>
+                        <th scope="col" className="font-medium">
+                          Engine
+                        </th>
+                        <th scope="col" className="text-right font-medium">
+                          Clients
+                        </th>
+                        <th scope="col" className="text-right font-medium">
+                          QPS
+                        </th>
+                        <th scope="col" className="font-medium">
+                          Outcome
+                        </th>
+                        <th scope="col">
+                          <span className="sr-only">Details</span>
+                        </th>
                       </tr>
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </ChartFrame>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle text-slate-100">
+                      {group.runs.map((run) => {
+                        const outcome = runOutcome(run)
+                        return (
+                          <tr key={run.row.id} data-analytical-run={run.row.id}>
+                            <th scope="row" className="font-medium">
+                              {engineLabel(run)}
+                            </th>
+                            <td className="text-right">
+                              <NumericText>{integer(run.clients)}</NumericText>
+                            </td>
+                            <td className="text-right" data-analytical-qps>
+                              <NumericText>{qps(run.overall.qps)}</NumericText>
+                            </td>
+                            <td>
+                              <StatusBadge tone={outcome.tone}>{outcome.label}</StatusBadge>
+                            </td>
+                            <td className="text-right">
+                              <DetailsDialog
+                                title={`Run ${run.row.id} · ${engineLabel(run)} · ${integer(run.clients)} clients`}
+                                trigger="Details"
+                                triggerLabel={`Run ${run.row.id} details`}
+                              >
+                                <RunEvidence run={run} />
+                              </DetailsDialog>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </ChartFrame>
+              ))}
+              <Disclosure title="How to read concurrency results">
+                <BodyText>
+                  Duration-based streams (analytical-streams-v1): closed-loop clients with one
+                  outstanding fetch each. Every retained run is shown, including failed attempts.
+                </BodyText>
+                <BodyText>
+                  Actual windows include drain, answer hashing and request logging; requested
+                  duration limits new requests. Warmup is excluded. Overall latency reflects each
+                  run&apos;s achieved query mix, which can differ across engines; inspect per-query
+                  counts and latencies before comparing. These measurements are separate from the
+                  resident-hot fixed SELECT ranking. Full-suite evidence requires the full canonical
+                  query manifest; documented skips and filtered subsets change the workload and
+                  remain listed in each run&apos;s evidence.
+                </BodyText>
+                <BodyText>
+                  Latency uses completed samples and recorded nearest-rank summaries. Minimum n: p50
+                  ≥ 5, p95 ≥ 100, p99 ≥ 1,000. Unknown (&lt;minimum n) means insufficient_samples;
+                  other missing or invalid evidence stays Unknown. Thresholds do not establish
+                  percentile confidence or query correctness.
+                </BodyText>
+              </Disclosure>
+              <CaptionText>
+                Each run&apos;s details hold windows, percentiles, manifests and budgets.
+              </CaptionText>
+            </>
+          )}
         </PanelDisclosure>
       </section>
     </>

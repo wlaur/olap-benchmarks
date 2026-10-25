@@ -1,90 +1,39 @@
-import { Check } from "lucide-react"
+import { CATALOG_OUTCOME_LABELS, type CatalogSuiteSummary } from "../../lib/catalog"
+import { formatDatabaseName } from "../../lib/databaseNames"
+import { BodyText } from "../Typography"
 
-import type { CatalogSuiteSummary } from "../../lib/catalog"
-import { Skeleton } from "../Skeleton"
-
-export function CatalogCoverageMatrix({
-  summary,
-  loading,
-}: {
-  summary: CatalogSuiteSummary | null
-  loading: boolean
-}) {
-  if (loading || summary === null) {
-    return (
-      <div className="space-y-2 py-2">
-        {Array.from({ length: 6 }, (_, index) => (
-          <Skeleton key={index} className="h-9 w-full" />
-        ))}
-      </div>
-    )
-  }
+export function CatalogCoverageMatrix({ summary }: { summary: CatalogSuiteSummary }) {
+  if (summary.scales.length === 0) return <BodyText>No published scales or recorded runs.</BodyText>
 
   return (
     <>
-      <div className="divide-y divide-border-subtle sm:hidden" role="list" aria-label="Coverage">
-        {summary.databases.map((database) => (
-          <div
-            key={database.database}
-            role="listitem"
-            aria-label={`${formatDatabaseName(database.database)} coverage`}
-            className="px-1 py-3"
-          >
-            <div className="flex min-w-0 items-baseline justify-between gap-3">
-              <span className="truncate text-xs font-semibold text-slate-200">
-                {formatDatabaseName(database.database)}
-              </span>
-              <span
-                className="max-w-[55%] truncate text-right text-xs text-slate-500"
-                title={database.versions.join(", ")}
-              >
-                {database.versions.length > 0 ? database.versions.join(", ") : "Version unknown"}
-              </span>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {summary.scales.map((scale) => {
-                const systems = database.systemsByScale.get(scale) ?? []
-                return (
-                  <span
-                    key={scale}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-surface-inset px-2 py-1 text-[0.7rem] text-slate-400"
-                    title={systems.join(", ")}
-                  >
-                    <strong className="font-semibold text-slate-300">SF {scale}</strong>
-                    {systems.length > 0 ? (
-                      <>
-                        <Check className="h-3 w-3 text-emerald-300" strokeWidth={2} />
-                        {systems.length}
-                      </>
-                    ) : !database.implemented ? (
-                      "Adapter unimplemented"
-                    ) : database.registeredScales.includes(scale) ? (
-                      "Execution unknown"
-                    ) : (
-                      "Scale not registered"
-                    )}
-                  </span>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="panel-scrollbar hidden overflow-x-auto sm:block">
-        <table className="w-full min-w-[38rem] border-separate border-spacing-0 text-left text-xs">
+      <BodyText className="max-w-prose text-sm">
+        Each entry is a recorded run. Query counts describe complete execution evidence within the
+        full coverage set, including queries excluded from performance comparisons.
+      </BodyText>
+      <div
+        role="region"
+        aria-label="Coverage by database and scale"
+        tabIndex={0}
+        className="panel-scrollbar overflow-x-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent-300 focus-visible:ring-inset"
+      >
+        <table className="w-full min-w-[38rem] border-collapse text-left text-sm">
+          <caption className="sr-only">
+            Recorded workload coverage by database, scale and system
+          </caption>
           <thead>
             <tr>
-              <th className="border-b border-border-default px-3 py-2 font-semibold text-slate-400">
+              <th
+                scope="col"
+                className="border-b border-border-default px-3 py-3 font-semibold text-slate-300"
+              >
                 Database
-              </th>
-              <th className="border-b border-border-default px-3 py-2 font-semibold text-slate-400">
-                Versions
               </th>
               {summary.scales.map((scale) => (
                 <th
                   key={scale}
-                  className="border-b border-border-default px-3 py-2 text-center font-semibold text-slate-400"
+                  scope="col"
+                  className="border-b border-border-default px-3 py-3 font-semibold text-slate-300"
                 >
                   SF {scale}
                 </th>
@@ -93,36 +42,43 @@ export function CatalogCoverageMatrix({
           </thead>
           <tbody>
             {summary.databases.map((database) => (
-              <tr key={database.database} className="group">
-                <th className="border-b border-border-subtle px-3 py-2.5 font-semibold text-slate-200 group-last:border-b-0">
+              <tr key={database.database}>
+                <th
+                  scope="row"
+                  className="border-b border-border-subtle px-3 py-4 align-top font-semibold text-slate-100"
+                >
                   {formatDatabaseName(database.database)}
                 </th>
-                <td className="max-w-56 border-b border-border-subtle px-3 py-2.5 text-slate-500 group-last:border-b-0">
-                  <span className="block truncate" title={database.versions.join(", ")}>
-                    {database.versions.length > 0 ? database.versions.join(", ") : "No results"}
-                  </span>
-                </td>
                 {summary.scales.map((scale) => {
-                  const systems = database.systemsByScale.get(scale) ?? []
+                  const runs = database.runs.filter((run) => run.scale === scale)
                   return (
                     <td
                       key={scale}
-                      className="border-b border-border-subtle px-3 py-2.5 text-center group-last:border-b-0"
-                      title={systems.join(", ")}
+                      className="min-w-64 border-b border-border-subtle px-3 py-4 align-top text-slate-300"
                     >
-                      {systems.length > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 font-medium text-slate-300">
-                          <Check className="h-3.5 w-3.5 text-emerald-300" strokeWidth={2} />
-                          {systems.length} {systems.length === 1 ? "system" : "systems"}
-                        </span>
+                      {runs.length > 0 ? (
+                        <ul className="space-y-4">
+                          {runs.map((run) => (
+                            <li key={run.runId} className="space-y-1" data-catalog-run={run.runId}>
+                              <p className="font-medium text-slate-100">
+                                {CATALOG_OUTCOME_LABELS[run.outcome]} · {run.completedQueries}/
+                                {run.totalQueries} queries
+                              </p>
+                              {run.queryOutcomes.length > 0 ? (
+                                <p>{run.queryOutcomes.join(" · ")}</p>
+                              ) : null}
+                              <p className="break-words text-slate-400">
+                                {run.system} · {run.version} · run {run.runId}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : !database.implemented ? (
+                        "Adapter unimplemented"
+                      ) : database.registeredScales.includes(scale) ? (
+                        "No recorded run · execution unknown"
                       ) : (
-                        <span className="text-slate-500">
-                          {!database.implemented
-                            ? "Adapter unimplemented"
-                            : database.registeredScales.includes(scale)
-                              ? "Execution unknown"
-                              : "Scale not registered"}
-                        </span>
+                        "Scale not registered"
                       )}
                     </td>
                   )
@@ -134,19 +90,4 @@ export function CatalogCoverageMatrix({
       </div>
     </>
   )
-}
-
-function formatDatabaseName(database: string) {
-  const labels: Record<string, string> = {
-    clickhouse: "ClickHouse",
-    datafusion: "DataFusion",
-    duckdb: "DuckDB",
-    monetdb: "MonetDB",
-    postgres: "PostgreSQL",
-    questdb: "QuestDB",
-    starrocks: "StarRocks",
-    tdengine: "TDengine",
-    timescaledb: "TimescaleDB",
-  }
-  return labels[database] ?? database
 }

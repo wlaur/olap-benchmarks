@@ -61,13 +61,14 @@ test("published analytical evidence keeps warmup failures unknown", async ({ pag
       expect(run.overall.qps).toBeNull()
       expect(run.overall.completed ?? 0).toBe(0)
       expect(run.overall.percentiles.every((percentile) => percentile.valueMs === null)).toBe(true)
-      await expect(row.locator("td").nth(6)).toHaveText("Unknown")
-      await expect(row).toContainText("p50 Unknown")
-      const evidence = section
-        .getByText(`Run ${run.id} · per-query, manifest & budget evidence`, { exact: true })
-        .locator("..")
-      await evidence.locator("summary").first().click()
-      await expect(evidence.getByText(/Recorded run error:/)).toBeVisible()
+      await expect(row.locator("[data-analytical-qps]")).toHaveText("Unknown")
+      await expect(row).toContainText("failed")
+      await row.getByRole("button", { name: `Run ${run.id} details` }).click()
+      const dialog = page.getByRole("dialog")
+      await expect(dialog).toContainText("p50 Unknown")
+      await expect(dialog.getByText(/Recorded run error:/)).toBeVisible()
+      await page.keyboard.press("Escape")
+      await expect(dialog).toBeHidden()
     } else {
       expect(run.status).toBe("completed")
       expect(run.overall.qps).toBeGreaterThan(0)
@@ -75,6 +76,7 @@ test("published analytical evidence keeps warmup failures unknown", async ({ pag
       expect(run.overall.timeouts).toBe(0)
     }
   }
+  await expect(section.getByText("9/12 runs completed", { exact: true })).toBeVisible()
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: 900 })
     expect(
@@ -97,34 +99,45 @@ test("analytical runs retain qualified latency, failures and drilldown without a
   await expect(section).toBeVisible()
   const rows = section.locator("[data-analytical-run]")
   await expect(rows).toHaveCount(4)
+  await expect(section.getByText(/achieved different query mixes/)).toBeVisible()
+  await expect(section.getByText("2/4 runs completed", { exact: true })).toBeVisible()
   const polars = section.locator('[data-analytical-run="101"]')
-  await expect(polars).toContainText("polars")
-  await expect(polars).toContainText("1.35.0")
-  await expect(polars).toContainText("65.00s / 60.00s")
+  await expect(polars).toContainText("Polars 1.35.0")
   await expect(polars).toContainText("1.846")
-  await expect(polars).toContainText("p99 Unknown (<1000)")
-  await expect(section.locator('[data-analytical-run="100"]')).toContainText("p50 Unknown (<5)")
+  await expect(polars).toContainText("Completed")
   await expect(section.locator('[data-analytical-run="102"]')).toContainText("failed")
-  await expect(section.locator('[data-analytical-run="103"]')).toContainText("Unknown / Unknown")
-  await expect(section.getByText(/achieved query mix/)).toBeVisible()
-  const evidence = section
-    .getByText("Run 101 · per-query, manifest & budget evidence", { exact: true })
-    .locator("..")
-  await evidence.locator("summary").first().click()
+  await expect(section.locator('[data-analytical-run="103"] [data-analytical-qps]')).toHaveText(
+    "Unknown",
+  )
+  await section.getByRole("button", { name: "Run 100 details" }).click()
+  await expect(page.getByRole("dialog")).toContainText("p50 Unknown (<5)")
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  const trigger = polars.getByRole("button", { name: "Run 101 details" })
+  await trigger.focus()
+  await page.keyboard.press("Enter")
+  const evidence = page.getByRole("dialog", { name: /^Run 101/ })
+  await expect(evidence).toContainText("65.00s / 60.00s")
+  await expect(evidence).toContainText("p99 Unknown (<1000)")
   await expect(evidence.getByText(/Full canonical manifest required: 3 queries/)).toBeVisible()
   await expect(evidence.getByText(/unsupported: Documented analytical fixture skip/)).toBeVisible()
-  const queryTable = section.getByRole("table", { name: "Run 101 per-query evidence" })
+  const queryTable = evidence.getByRole("table", { name: "Run 101 per-query evidence" })
   await expect(queryTable.getByRole("row").filter({ hasText: "Q1" })).toContainText("120")
   await expect(queryTable.getByRole("row", { name: /^Q2 ·/ })).toContainText("0 / 0")
+  await evidence.getByText("Recorded budget scope", { exact: true }).click()
   await expect(evidence.getByText(/Shared across clients: Yes \(recorded\)/)).toBeVisible()
   await evidence.getByText("Per-worker runtime & cache evidence", { exact: true }).click()
   await expect(evidence.getByText(/Cache hits are not instrumented/).first()).toBeVisible()
-  await section
-    .getByText("Run 103 · per-query, manifest & budget evidence", { exact: true })
-    .click()
+  await page.keyboard.press("Escape")
+  await expect(evidence).toBeHidden()
+  await expect(trigger).toBeFocused()
+  await section.getByRole("button", { name: "Run 103 details" }).click()
+  const failed = page.getByRole("dialog", { name: /^Run 103/ })
+  await expect(failed).toContainText("Unknown / Unknown")
   await expect(
-    section.getByText(/Analytical metadata missing, invalid or unsupported/),
+    failed.getByText(/Analytical metadata missing, invalid or unsupported/),
   ).toBeVisible()
+  await page.keyboard.press("Escape")
   await expect(
     page
       .getByRole("listitem", { name: "fast comparison", exact: true })
@@ -136,25 +149,19 @@ test("analytical runs retain qualified latency, failures and drilldown without a
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true)
   }
-  await evidence.locator("summary").first().click()
-  await section
-    .getByText("Run 103 · per-query, manifest & budget evidence", { exact: true })
-    .click()
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 })
     await section.screenshot({ path: testInfo.outputPath(`analytical-${width}.png`) })
   }
 })
 
-test("publications with no analytical runs have no visible analytical section", async ({
-  page,
-}) => {
+test("publications with no analytical runs show an explicit empty disclosure", async ({ page }) => {
   await usePublicationFixture(page, empty.buffer)
   await page.goto("#/")
   await page.getByRole("button", { name: "By workload", exact: true }).click()
   await expect(page.getByRole("listitem", { name: "fast comparison", exact: true })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Analytical concurrency evidence" })).toHaveCount(
-    0,
-  )
-  await expect(page.getByRole("region", { name: "Analytical concurrency evidence" })).toHaveCount(0)
+  await page.getByRole("heading", { name: "Analytical concurrency evidence" }).click()
+  await expect(
+    page.getByText("No analytical runs recorded for this publication.", { exact: true }),
+  ).toBeVisible()
 })

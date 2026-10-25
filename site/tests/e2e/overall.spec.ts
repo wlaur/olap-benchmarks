@@ -81,8 +81,11 @@ test(
       expect(row.coverage + row.recordedGapCoverage + row.unmeasuredCoverage).toBeCloseTo(100, 10)
       const rendered = page.locator(`[data-overall-engine="${row.db}"]`)
       await expect(rendered.locator("[data-overall-score]")).toHaveText(expected.score.toFixed(1))
-      await expect(rendered.locator("summary")).toContainText(
-        `${expected.queries}/871 queries scored`,
+      await expect(rendered.locator("summary").first()).toContainText(
+        `${row.coverage.toFixed(0)}% weighted coverage`,
+      )
+      await expect(rendered.locator("[data-overall-queries]")).toHaveText(
+        `${expected.queries} of 871`,
       )
       await expect(rendered.locator("[data-overall-coverage]")).toBeHidden()
     }
@@ -90,15 +93,9 @@ test(
     const list = page.getByRole("list", { name: "Overall database ranking", exact: true })
     await expect(list.getByRole("listitem")).toHaveCount(11)
     await expect(list).not.toContainText("Not eligible")
-    await page.getByText("Visible engines", { exact: true }).click()
-    await page.getByRole("button", { name: "duckdb", exact: true }).click()
-    await expect(list.getByRole("listitem")).toHaveCount(10)
-    for (const expected of pinned.rows.slice(1)) {
+    for (const [index, expected] of pinned.rows.entries()) {
       const row = page.locator(`[data-overall-engine="${expected.db}"]`)
-      await expect(row.locator("[data-overall-score]")).toHaveText(expected.score.toFixed(1))
-      await expect(row.locator("[data-overall-rank]")).toHaveText(
-        String(pinned.rows.indexOf(expected) + 1),
-      )
+      await expect(row.locator("[data-overall-rank]")).toHaveText(String(index + 1))
     }
   },
 )
@@ -112,7 +109,7 @@ test("overall rows and contributions fit desktop, iPad and mobile widths", async
   for (const width of [1440, 1024, 834, 768, 640, 390]) {
     await page.setViewportSize({ width, height: 1000 })
     await expect(row.locator("[data-overall-coverage]")).toBeHidden()
-    await row.locator("summary").click()
+    await row.locator("summary").first().click()
     await expect(row.locator("[data-overall-coverage]")).toBeVisible()
     await expect(row).toContainText("partial completed runs")
     await expect(row).toContainText("run failed")
@@ -130,17 +127,14 @@ test("overall rows and contributions fit desktop, iPad and mobile widths", async
     expect(overflows).toEqual([])
     if ([1440, 1024, 390].includes(width))
       await page.screenshot({ path: testInfo.outputPath(`overall-${width}.png`) })
-    await row.locator("summary").click()
+    await row.locator("summary").first().click()
   }
-  await row.locator("summary").click()
+  await row.locator("summary").first().click()
   await row.getByRole("button", { name: "Compare TPC-DS by workload", exact: true }).click()
   await expect(
-    page.getByRole("heading", { name: "Compare by workload family", exact: true }),
+    page.getByRole("heading", { name: "Compare one workload", exact: true }),
   ).toBeVisible()
-  await expect(page.getByRole("button", { name: "TPC-DS", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  )
+  await expect(page.getByRole("combobox", { name: "Workload" })).toContainText("TPC-DS")
 })
 
 test("partial results earn fixed-denominator credit and blocked evidence stays distinct", async ({
@@ -155,16 +149,24 @@ test("partial results earn fixed-denominator credit and blocked evidence stays d
     await expect(row("slow").locator("[data-overall-score]")).toHaveText("25.0")
     await expect(row("partial").locator("[data-overall-score]")).toHaveText("50.0")
     for (const db of ["partial", "latestfailed", "specialist"])
-      await row(db).locator("summary").click()
+      await row(db).locator("summary").first().click()
     await expect(row("partial").locator("[data-overall-recorded-gaps]")).toHaveText("50.0%")
     await expect(row("latestfailed").locator("[data-overall-score]")).toHaveText("0.0")
     await expect(row("latestfailed").locator("[data-overall-recorded-gaps]")).toHaveText("100.0%")
     await expect(row("specialist").locator("[data-overall-no-run]")).toHaveText("100.0%")
     await expect(row("latestfailed")).toContainText("run failed")
     await expect(row("specialist")).toContainText("Adapter unimplemented")
-    await page.getByText("Overall ranking method", { exact: true }).click()
-    await expect(page.getByText(/^Each query earns 100 × fastest median/)).toBeVisible()
-    await expect(page.getByRole("link", { name: "Full ranking methodology" })).toBeVisible()
+    await expect(
+      row("latestfailed").locator('[data-overall-gap-group="Run failed, blocked or incomplete"]'),
+    ).not.toHaveCount(0)
+    await expect(
+      row("latestfailed").locator('[data-overall-gap-group="Measured failures"]'),
+    ).toHaveCount(0)
+    await expect(row("specialist").locator('[data-overall-gap-group="Not run"]')).not.toHaveCount(0)
+    await page.getByRole("button", { name: "How the score works" }).click()
+    const method = page.getByRole("dialog", { name: "Overall ranking method" })
+    await expect(method.getByText(/^Each query earns 100 × fastest median/)).toBeVisible()
+    await expect(method.getByRole("link", { name: "Full ranking methodology" })).toBeVisible()
   } finally {
     await fixture.cleanup()
   }

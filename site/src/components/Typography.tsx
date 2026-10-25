@@ -2,121 +2,103 @@ import type { ElementType, ReactNode } from "react"
 
 import { cn } from "../lib/cn"
 
-function Text({
-  as,
-  children,
-  className,
-}: {
+interface TextProps {
   as?: ElementType
   children: ReactNode
   className?: string
-}) {
-  const Tag = as ?? "p"
-
-  return <Tag className={className}>{children}</Tag>
+  id?: string
 }
 
-export function MetaLabel({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
+function Text({ as, children, className, id }: TextProps) {
+  const Tag = as ?? "p"
+
+  return (
+    <Tag className={className} id={id}>
+      {children}
+    </Tag>
+  )
+}
+
+export function MetaLabel({ as, className, ...props }: TextProps) {
   return (
     <Text
       as={as}
-      className={cn(
-        "text-[0.6875rem] font-semibold tracking-[0.13em] text-slate-400 uppercase",
-        className,
-      )}
-    >
-      {children}
-    </Text>
+      className={cn("text-sm leading-5 font-medium text-slate-400", className)}
+      {...props}
+    />
   )
 }
 
-export function DisplayTitle({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
+export function DisplayTitle({ as, className, ...props }: TextProps) {
   return (
-    <Text as={as} className={cn("text-3xl font-semibold tracking-tight text-slate-50", className)}>
-      {children}
-    </Text>
+    <Text
+      as={as}
+      className={cn("text-3xl font-semibold tracking-tight text-balance text-slate-50", className)}
+      {...props}
+    />
   )
 }
 
-export function SectionTitle({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
+export function SectionTitle({ as, className, ...props }: TextProps) {
   return (
-    <Text as={as} className={cn("text-lg font-semibold tracking-tight text-slate-50", className)}>
-      {children}
-    </Text>
+    <Text
+      as={as}
+      className={cn("text-xl leading-7 font-semibold tracking-tight text-slate-50", className)}
+      {...props}
+    />
   )
 }
 
-export function BodyText({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
+export function ItemTitle({ as, className, ...props }: TextProps) {
   return (
-    <Text as={as} className={cn("font-sans text-sm text-slate-300", className)}>
-      {children}
-    </Text>
+    <Text
+      as={as ?? "span"}
+      className={cn("text-base leading-6 font-semibold text-slate-50", className)}
+      {...props}
+    />
   )
 }
 
-export function NumericText({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
+export function LeadText({ as, className, ...props }: TextProps) {
+  return (
+    <Text
+      as={as}
+      className={cn("max-w-[70ch] text-lg leading-7 text-pretty text-slate-50", className)}
+      {...props}
+    />
+  )
+}
+
+export function BodyText({ as, className, ...props }: TextProps) {
+  return (
+    <Text
+      as={as}
+      className={cn("max-w-[75ch] text-base leading-7 text-slate-200", className)}
+      {...props}
+    />
+  )
+}
+
+export function SecondaryText({ as, className, ...props }: TextProps) {
+  return (
+    <Text
+      as={as}
+      className={cn("max-w-[75ch] text-sm leading-6 text-slate-300", className)}
+      {...props}
+    />
+  )
+}
+
+export function NumericText({ as, className, ...props }: TextProps) {
   return (
     <Text
       as={as ?? "span"}
       className={cn("font-mono text-sm text-slate-100 tabular-nums", className)}
-    >
-      {children}
-    </Text>
+      {...props}
+    />
   )
 }
 
-export function CaptionText({
-  as,
-  children,
-  className,
-}: {
-  as?: ElementType
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <Text as={as} className={cn("text-[10px] leading-tight text-slate-400", className)}>
-      {children}
-    </Text>
-  )
+export function CaptionText({ as, className, ...props }: TextProps) {
+  return <Text as={as} className={cn("text-sm leading-5 text-slate-400", className)} {...props} />
 }

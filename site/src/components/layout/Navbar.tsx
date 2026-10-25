@@ -28,7 +28,7 @@ export function Navbar({
   return (
     <header className="border-b border-border-default bg-surface-primary/95 backdrop-blur">
       <div className="px-4 py-2">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex min-w-0 shrink-0 items-center gap-2">
             <NavLink
               to="/"
@@ -42,35 +42,48 @@ export function Navbar({
             </NavLink>
           </div>
 
-          <nav className="flex shrink-0 items-center gap-2">
+          <nav
+            aria-label="Primary"
+            className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2"
+          >
             <NavLink
               to="/"
               end
               className={({ isActive }) =>
-                `inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-xs transition ${
+                `inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium transition sm:px-3 ${
                   isActive ? activeNavClass : inactiveNavTextClass
                 }`
               }
             >
-              <Home size={16} strokeWidth={1.8} />
+              <Home aria-hidden="true" size={16} strokeWidth={1.8} className="max-sm:hidden" />
               Home
             </NavLink>
             <NavLink
               to="/explorer/time_series"
-              className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-xs transition ${
+              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium transition sm:px-3 ${
                 isExplorerActive ? activeNavClass : inactiveNavTextClass
               }`}
             >
-              <FlaskConical size={16} strokeWidth={1.8} />
+              <FlaskConical
+                aria-hidden="true"
+                size={16}
+                strokeWidth={1.8}
+                className="max-sm:hidden"
+              />
               Explorer
             </NavLink>
             <NavLink
               to="/catalog"
-              className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-xs transition ${
+              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium transition sm:px-3 ${
                 isCatalogActive ? activeNavClass : inactiveNavTextClass
               }`}
             >
-              <BookOpenText size={16} strokeWidth={1.8} />
+              <BookOpenText
+                aria-hidden="true"
+                size={16}
+                strokeWidth={1.8}
+                className="max-sm:hidden"
+              />
               Catalog
             </NavLink>
           </nav>

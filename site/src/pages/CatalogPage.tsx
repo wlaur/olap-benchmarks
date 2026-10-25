@@ -1,20 +1,19 @@
-import { Database, ExternalLink, Layers3, Server, type LucideIcon } from "lucide-react"
-import { useMemo, useState } from "react"
+import { ArrowUpRight, Layers3 } from "lucide-react"
+import { useMemo } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { CatalogCoverageMatrix } from "../components/catalog/CatalogCoverageMatrix"
 import { CatalogQueryList } from "../components/catalog/CatalogQueryList"
-import { CatalogSuiteList } from "../components/catalog/CatalogSuiteList"
 import { QuietButton } from "../components/controls/Control"
 import { ControlSelect, ControlSelectSkeleton } from "../components/controls/ControlSelect"
-import { PanelCard, PanelHeader } from "../components/layout/Panel"
+import { PanelCard, PanelDisclosure, PanelHeader } from "../components/layout/Panel"
 import { CampaignNotice } from "../components/methodology/ComparisonScopeNotices"
-import { EngineComparison } from "../components/methodology/EngineComparison"
-import { BodyText, MetaLabel, SectionTitle } from "../components/Typography"
+import { Skeleton } from "../components/Skeleton"
+import { BodyText, DisplayTitle, MetaLabel, SectionTitle } from "../components/Typography"
 import { useCatalogData } from "../hooks/useCatalogData"
-import { isBenchmarkSuiteId } from "../lib/benchmarks"
-import { buildCatalogSuiteSummary, getSqlDialects } from "../lib/catalog"
-import { compareFamily } from "../lib/observations"
+import { buildCatalogSuiteSummary, catalogAvailability, getSqlDialects } from "../lib/catalog"
+import { formatDatabaseName } from "../lib/databaseNames"
+import { suiteDescriptions } from "../lib/suiteDescriptions"
 import { useAppStore } from "../stores/useAppStore"
 
 export function CatalogPage() {
@@ -22,28 +21,24 @@ export function CatalogPage() {
   const benchmarkDefinitions = useAppStore((state) => state.benchmarkDefinitions)
   const suitesLoading = useAppStore((state) => state.suitesLoading)
   const suitesError = useAppStore((state) => state.suitesError)
+  const selectedSystem = useAppStore((state) => state.selectedSystem)
   const catalog = useCatalogData()
-  const [showCoverage, setShowCoverage] = useState(false)
-  const summaries = useMemo(
+  const definition =
+    benchmarkDefinitions.find((entry) => entry.id === searchParams.get("suite")) ??
+    benchmarkDefinitions[0]
+  const summary = useMemo(
     () =>
-      benchmarkDefinitions.map((definition) =>
-        buildCatalogSuiteSummary(definition, catalog.dimensions, catalog.data?.manifest ?? null),
-      ),
-    [benchmarkDefinitions, catalog.dimensions, catalog.data],
+      definition && catalog.data
+        ? buildCatalogSuiteSummary(definition, catalog.data.runs, catalog.data.manifest)
+        : null,
+    [definition, catalog.data],
   )
-  const requestedSuite = searchParams.get("suite") ?? undefined
-  const selectedSuiteId = isBenchmarkSuiteId(requestedSuite, benchmarkDefinitions)
-    ? requestedSuite
-    : (benchmarkDefinitions[0]?.id ?? null)
-  const selectedSummary =
-    summaries.find((summary) => summary.definition.id === selectedSuiteId) ?? null
-  const manifestEntries = selectedSummary
-    ? (catalog.queriesManifest[selectedSummary.definition.queriesKey] ?? {})
-    : {}
+  const description = definition ? suiteDescriptions[definition.id] : undefined
+  const manifestEntries = definition ? (catalog.queriesManifest[definition.queriesKey] ?? {}) : {}
   const requestedQuery = searchParams.get("query") ?? ""
-  const selectedQuery = selectedSummary?.queryNames.includes(requestedQuery)
+  const selectedQuery = summary?.queryNames.includes(requestedQuery)
     ? requestedQuery
-    : (selectedSummary?.queryNames[0] ?? "")
+    : (summary?.queryNames[0] ?? "")
   const selectedSqlEntry = manifestEntries[selectedQuery]
   const sqlDialects = getSqlDialects(selectedSqlEntry)
   const requestedDialect = searchParams.get("sql_database") ?? ""
@@ -52,235 +47,246 @@ export function CatalogPage() {
     : (sqlDialects[0] ?? "")
   const loading = suitesLoading || catalog.loading
   const error = suitesError ?? catalog.error
-  const systems = unique(catalog.dimensions.map((row) => row.system))
-  const databases = unique(catalog.dimensions.map((row) => row.db))
-  const explorerScale = selectedSummary?.scales[0] ?? 1
-  const selectedSystem = useAppStore((state) => state.selectedSystem)
   const family =
-    catalog.data?.manifest.families.find(
-      (entry) => entry.suite === selectedSuiteId && entry.track === "raw",
-    ) ?? catalog.data?.manifest.families.find((entry) => entry.suite === selectedSuiteId)
-  const evidenceRows =
-    family && catalog.data && selectedSystem
-      ? compareFamily(
-          family,
-          explorerScale,
-          selectedSystem,
-          catalog.data.runs,
-          catalog.data.manifest,
-        )
-      : []
+    summary?.families.find((entry) => entry.coverage_query_names.includes(requestedQuery)) ??
+    summary?.families.find((entry) => entry.track === "raw") ??
+    summary?.families[0]
+  const explorerScale = family?.scale_factors[0] ?? summary?.scales[0]
+  const explorerSystem = summary?.systems.includes(selectedSystem ?? "")
+    ? selectedSystem
+    : summary?.systems[0]
+  const explorerParams = new URLSearchParams({ mode: "database" })
+  if (family) explorerParams.set("family", family.id)
+  if (explorerScale !== undefined) explorerParams.set("scale", String(explorerScale))
+  if (explorerSystem) explorerParams.set("system", explorerSystem)
+  if (requestedQuery && summary?.queryNames.includes(requestedQuery)) {
+    explorerParams.set("query", requestedQuery)
+    if (selectedDialect && selectedDialect !== "base") {
+      explorerParams.set("sql_database", selectedDialect)
+    }
+  }
+  const tracks = [...new Set(summary?.families.map((entry) => entry.track) ?? [])]
+  const includedFamilies =
+    summary?.families.filter((entry) => entry.track === "raw" && entry.weight > 0) ?? []
+  const overallInclusion =
+    includedFamilies.length === 0
+      ? "Not included"
+      : tracks.some((track) => track !== "raw")
+        ? "Raw track only"
+        : "Included"
 
   function handleSuiteSelect(suiteId: string) {
-    setSearchParams({ suite: suiteId }, { replace: true })
+    setSearchParams({ suite: suiteId })
   }
 
   function handleQuerySelect(query: string) {
-    const nextSearchParams = new URLSearchParams(searchParams)
-    if (selectedSuiteId) nextSearchParams.set("suite", selectedSuiteId)
-    nextSearchParams.set("query", query)
-    nextSearchParams.delete("sql_database")
-    setSearchParams(nextSearchParams, { replace: true })
+    const next = new URLSearchParams(searchParams)
+    if (definition) next.set("suite", definition.id)
+    next.set("query", query)
+    next.delete("sql_database")
+    setSearchParams(next, { replace: true })
   }
 
   function handleDialectSelect(dialect: string) {
-    const nextSearchParams = new URLSearchParams(searchParams)
-    if (dialect === "base") nextSearchParams.delete("sql_database")
-    else nextSearchParams.set("sql_database", dialect)
-    setSearchParams(nextSearchParams, { replace: true })
+    const next = new URLSearchParams(searchParams)
+    if (definition) next.set("suite", definition.id)
+    next.set("query", selectedQuery)
+    if (dialect === "base") next.delete("sql_database")
+    else next.set("sql_database", dialect)
+    setSearchParams(next, { replace: true })
   }
 
   return (
-    <div className="flex min-h-full w-full min-w-0 flex-col gap-4 pb-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <MetaLabel>Inventory</MetaLabel>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-50">Benchmark catalog</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
-          <CatalogStat
-            icon={Layers3}
-            value={benchmarkDefinitions.length}
-            label={benchmarkDefinitions.length === 1 ? "suite" : "suites"}
+    <div className="mx-auto w-full max-w-5xl space-y-5 pb-6 font-sans">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <DisplayTitle as="h1">Benchmark catalog</DisplayTitle>
+        {suitesLoading ? (
+          <ControlSelectSkeleton
+            label="Suite"
+            labelMode="always"
+            className="min-h-11 w-full sm:w-80"
           />
-          <CatalogStat
-            icon={Database}
-            value={databases.length}
-            label={databases.length === 1 ? "database" : "databases"}
-          />
-          <CatalogStat
-            icon={Server}
-            value={systems.length}
-            label={systems.length === 1 ? "system" : "systems"}
-          />
-        </div>
-      </header>
-
-      <CampaignNotice />
-
-      <div className="xl:hidden">
-        {loading || selectedSuiteId === null ? (
-          <ControlSelectSkeleton label="Suite" labelMode="always" className="w-full" />
-        ) : (
+        ) : definition ? (
           <ControlSelect
             ariaLabel="Suite"
             label="Suite"
-            value={selectedSuiteId}
+            value={definition.id}
             onChange={handleSuiteSelect}
-            options={benchmarkDefinitions.map((definition) => ({
-              value: definition.id,
-              label: definition.title,
-            }))}
-            icon={<Layers3 className="h-3 w-3" strokeWidth={1.8} />}
+            options={benchmarkDefinitions.map((entry) => ({ value: entry.id, label: entry.title }))}
+            icon={<Layers3 className="size-4" aria-hidden="true" />}
             labelMode="always"
-            className="min-h-10 w-full"
+            className="min-h-11 w-full sm:w-80"
           />
-        )}
-      </div>
+        ) : null}
+      </header>
 
-      {error ? (
-        <div className="border-y border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
-          Failed to load catalog: {error}
-        </div>
-      ) : null}
-
-      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)]">
-        <PanelCard className="hidden p-3 xl:sticky xl:top-4 xl:block">
-          <PanelHeader className="px-1 pb-2">
-            <div>
-              <SectionTitle as="h2">Suites</SectionTitle>
-              <p className="mt-1 text-xs text-slate-500">
-                {benchmarkDefinitions.length} configured
-              </p>
+      <section aria-label="Workload overview" aria-busy={loading && !error}>
+        <PanelCard className="space-y-5 p-4 sm:p-6">
+          <PanelHeader>
+            <div className="min-w-0 space-y-2">
+              <SectionTitle as="h2">{definition?.title ?? "Workload"}</SectionTitle>
+              {description ? (
+                <BodyText className="max-w-prose">{description.purpose}</BodyText>
+              ) : null}
             </div>
           </PanelHeader>
-          <CatalogSuiteList
-            summaries={summaries}
-            selectedSuiteId={selectedSuiteId}
-            loading={loading}
-            onSelect={handleSuiteSelect}
-          />
-        </PanelCard>
+          {error ? (
+            <div className="space-y-3">
+              <p role="alert" className="text-base text-red-200">
+                Catalog results could not be loaded.
+              </p>
+              <QuietButton onClick={() => window.location.reload()}>
+                Retry loading catalog
+              </QuietButton>
+            </div>
+          ) : loading ? (
+            <div role="status" className="space-y-4">
+              <BodyText>Loading workload results…</BodyText>
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : !definition ? (
+            <BodyText>No benchmark suites are configured.</BodyText>
+          ) : !summary ? (
+            <BodyText>No publication evidence is available for this workload.</BodyText>
+          ) : (
+            <>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+                <div>
+                  <dt className="text-slate-400">Queries</dt>
+                  <dd className="mt-1 font-semibold text-slate-100">{summary.queryNames.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Published scales</dt>
+                  <dd className="mt-1 font-semibold text-slate-100">
+                    {summary.scales.length > 0
+                      ? summary.scales.map((scale) => `SF ${scale}`).join(", ")
+                      : "None"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Tracks</dt>
+                  <dd className="mt-1 font-semibold text-slate-100">
+                    {tracks.length > 0
+                      ? tracks.map((track) => track[0]!.toUpperCase() + track.slice(1)).join(", ")
+                      : "None published"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Overall score</dt>
+                  <dd className="mt-1 font-semibold text-slate-100">{overallInclusion}</dd>
+                </div>
+              </dl>
 
-        <div className="grid min-w-0 gap-4">
-          <PanelCard className="p-3 sm:p-4">
-            <PanelHeader className="mb-4 flex-wrap">
-              <div>
-                <MetaLabel>Queries</MetaLabel>
-                <SectionTitle as="h2" className="mt-1">
-                  {selectedSummary?.definition.title ?? "Benchmark"} SQL
+              <div className="space-y-3 border-t border-border-default pt-5">
+                <SectionTitle as="h3">
+                  {summary.recordedDatabaseCount === 0
+                    ? "No recorded query runs for this workload"
+                    : `Results recorded for ${summary.recordedDatabaseCount} of ${summary.databases.length} databases`}
                 </SectionTitle>
-                <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
-                  {selectedSummary?.queryNames.length ?? 0} queries · select one, then switch
-                  database dialects.
-                </p>
+                <BodyText className="max-w-prose text-sm">
+                  Execution coverage across published scales
+                  {summary.systems.length > 0
+                    ? ` and ${summary.systems.length} ${summary.systems.length === 1 ? "system" : "systems"}`
+                    : ""}
+                  . Complete execution does not establish correctness or ranking eligibility.
+                </BodyText>
+                <Link
+                  to={`/explorer/${definition.id}?${explorerParams}`}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-strong bg-surface-elevated px-4 py-2 text-base font-medium text-slate-100 outline-none hover:bg-surface-inset focus-visible:ring-2 focus-visible:ring-accent-300"
+                >
+                  Explore results
+                  <ArrowUpRight className="size-4" aria-hidden="true" />
+                </Link>
               </div>
-            </PanelHeader>
+
+              <ul aria-label="Database availability" className="divide-y divide-border-subtle">
+                {summary.databases.map((database) => (
+                  <li
+                    key={database.database}
+                    data-catalog-engine={database.database}
+                    className="grid gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
+                  >
+                    <span className="font-semibold text-slate-100">
+                      {formatDatabaseName(database.database)}
+                    </span>
+                    <span className="text-slate-300">{catalogAvailability(database)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </PanelCard>
+      </section>
+
+      {error ? (
+        <PanelDisclosure title="Load error details">
+          <BodyText className="break-words">{error}</BodyText>
+        </PanelDisclosure>
+      ) : null}
+
+      {!loading && !error && summary ? (
+        <div key={definition?.id} className="space-y-4">
+          <PanelDisclosure title="Queries and SQL">
+            <BodyText className="text-sm">
+              Choose a query, then open its SQL. Query definitions do not establish that an engine
+              executed them.
+            </BodyText>
             <CatalogQueryList
-              key={selectedSuiteId}
-              queryNames={selectedSummary?.queryNames ?? []}
+              queryNames={summary.queryNames}
               selectedQuery={selectedQuery}
               selectedDialect={selectedDialect}
               sqlEntry={selectedSqlEntry}
-              loading={loading}
               onSelectQuery={handleQuerySelect}
               onSelectDialect={handleDialectSelect}
             />
-          </PanelCard>
-
-          <PanelCard className="p-3 sm:p-4">
-            <PanelHeader className="flex-wrap sm:items-center">
-              <div className="min-w-0">
-                <MetaLabel>Availability</MetaLabel>
-                <SectionTitle as="h2" className="mt-1">
-                  Recorded execution coverage
-                </SectionTitle>
-                <p className="mt-1 font-sans text-xs leading-5 text-slate-500">
-                  {selectedSummary?.databases.length ?? 0} databases ·{" "}
-                  {selectedSummary?.systems.length ?? 0}{" "}
-                  {(selectedSummary?.systems.length ?? 0) === 1 ? "system" : "systems"}
+          </PanelDisclosure>
+          <PanelDisclosure title="Coverage by scale and system">
+            <CatalogCoverageMatrix summary={summary} />
+          </PanelDisclosure>
+          <PanelDisclosure title="Workload and publication context">
+            <CampaignNotice />
+            <BodyText className="max-w-prose">
+              Complete execution requires recorded warmup and measured iterations for every query in
+              the published coverage set. Partial execution retains missing, unsupported, skipped
+              and failed query outcomes. Run failures and invalidation are shown separately. These
+              labels do not replace performance eligibility or answer-validation evidence in
+              Explorer.
+            </BodyText>
+            <BodyText className="max-w-prose">
+              No recorded run means execution is unknown. Adapter unimplemented describes the
+              harness registration snapshot, not the database’s capabilities. The catalog uses the
+              selected publication’s latest run for each engine, version, driver, system and scale.
+            </BodyText>
+            {summary.families.map((entry) => (
+              <div
+                key={entry.id}
+                className="space-y-1 border-t border-border-subtle pt-3 text-sm text-slate-300"
+              >
+                <MetaLabel>{entry.title}</MetaLabel>
+                <p>
+                  {entry.track} track · {entry.query_names.length} performance queries ·{" "}
+                  {entry.coverage_query_names.length} coverage queries ·{" "}
+                  {entry.track === "raw" && entry.weight > 0
+                    ? `overall weight ${entry.weight}`
+                    : "excluded from overall score"}
                 </p>
-                <BodyText className="mt-1 text-xs leading-5 text-slate-500">
-                  A check means a run is recorded, including partial or failed execution. It does
-                  not establish full query coverage or performance eligibility. Registration
-                  identifies adapter implementation; missing results leave execution unknown.
-                </BodyText>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <QuietButton
-                  size="sm"
-                  aria-expanded={showCoverage}
-                  onClick={() => setShowCoverage((current) => !current)}
-                >
-                  {showCoverage ? "Hide coverage" : "Show coverage"}
-                </QuietButton>
-                {selectedSummary ? (
-                  <Link
-                    to={makeExplorerHref(
-                      selectedSummary.definition.id,
-                      explorerScale,
-                      selectedQuery,
-                      selectedDialect,
-                    )}
-                    className="inline-flex min-h-8 items-center gap-2 rounded-md border border-border-default bg-surface-inset px-2.5 text-xs font-medium text-slate-300 transition-colors outline-none hover:border-slate-500 hover:bg-surface-raised hover:text-slate-50 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-slate-300/20"
-                  >
-                    Open explorer
-                    <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  </Link>
-                ) : null}
-              </div>
-            </PanelHeader>
-            {showCoverage ? (
-              <div className="mt-3 border-t border-border-subtle pt-3">
-                <CatalogCoverageMatrix summary={selectedSummary} loading={loading} />
-                {family ? (
-                  <details className="mt-4 text-xs text-slate-400">
-                    <summary className="cursor-pointer">
-                      Query evidence · {family.title} · SF {explorerScale} · {selectedSystem}
-                    </summary>
-                    <div className="mt-3">
-                      <EngineComparison
-                        rows={evidenceRows}
-                        family={family}
-                        eligibleCount={evidenceRows.filter((row) => row.eligible).length}
-                      />
-                    </div>
-                  </details>
-                ) : null}
-              </div>
+            ))}
+            {description ? (
+              <a
+                href={`https://github.com/wlaur/olap-benchmarks/blob/main/${description.source}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center text-base text-accent-300 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-accent-300"
+              >
+                Workload source
+              </a>
             ) : null}
-          </PanelCard>
+          </PanelDisclosure>
         </div>
-      </div>
+      ) : null}
     </div>
   )
-}
-
-function CatalogStat({
-  icon: Icon,
-  value,
-  label,
-}: {
-  icon: LucideIcon
-  value: number
-  label: string
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Icon className="h-3.5 w-3.5 text-slate-500" strokeWidth={1.8} />
-      <strong className="font-semibold text-slate-200 tabular-nums">{value}</strong>
-      {label}
-    </span>
-  )
-}
-
-function unique(values: readonly string[]) {
-  return [...new Set(values)]
-}
-
-function makeExplorerHref(suiteId: string, scale: number, query: string, dialect: string) {
-  const searchParams = new URLSearchParams({ scale: String(scale) })
-  if (query) searchParams.set("query", query)
-  if (dialect && dialect !== "base") searchParams.set("sql_database", dialect)
-  return `/explorer/${suiteId}?${searchParams.toString()}`
 }

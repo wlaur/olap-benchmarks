@@ -5,7 +5,7 @@ import { record } from "../../lib/comparison"
 import { formatLatencyMs } from "../../lib/format"
 import type { FamilyEngineResult, QueryObservation, RunObservation } from "../../lib/observations"
 import { ChartFrame } from "../layout/Panel"
-import { BodyText, CaptionText, MetaLabel } from "../Typography"
+import { CaptionText, MetaLabel, SecondaryText } from "../Typography"
 
 function fact(value: unknown): string {
   if (value === null || value === undefined || value === "") return "Unknown — not recorded"
@@ -27,8 +27,8 @@ export function RunContext({
   const options = record(metadata.options)
   const settings = record(metadata.settings)
   return (
-    <details className="min-w-0 text-xs text-slate-400">
-      <summary className="cursor-pointer py-2 text-slate-300">
+    <details className="min-w-0 text-sm leading-6 text-slate-300">
+      <summary className="flex min-h-10 cursor-pointer items-center rounded-md text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300/60">
         Run context &amp; preparation{run ? ` · run ${run.runId}` : " · no recorded run"}
       </summary>
       <ChartFrame className="mt-1 space-y-3">
@@ -59,8 +59,8 @@ export function RunContext({
             "Recorded run error": run?.error ?? (run ? "None recorded" : null),
           }).map(([label, value]) => (
             <div key={label} className="min-w-0">
-              <dt className="text-slate-500">{label}</dt>
-              <dd className="mt-0.5 font-mono [overflow-wrap:anywhere] break-words text-slate-300">
+              <dt className="text-slate-400">{label}</dt>
+              <dd className="mt-0.5 font-mono text-sm [overflow-wrap:anywhere] break-words text-slate-200">
                 {fact(value)}
               </dd>
             </div>
@@ -68,12 +68,12 @@ export function RunContext({
         </dl>
         <MetaLabel>Preparation &amp; tuning evidence</MetaLabel>
         {annotations.length === 0 ? (
-          <BodyText className="text-xs">
+          <SecondaryText>
             Preparation unknown; tuning unknown. No sourced annotation supplied.
-          </BodyText>
+          </SecondaryText>
         ) : (
           annotations.map((annotation, index) => (
-            <p key={index} className="leading-5">
+            <SecondaryText key={index}>
               Preparation: {annotation.preparation}. Tuning: {annotation.tuning ?? "unknown"}.{" "}
               {annotation.summary}{" "}
               <a
@@ -84,7 +84,7 @@ export function RunContext({
               >
                 Source
               </a>
-            </p>
+            </SecondaryText>
           ))
         )}
       </ChartFrame>
@@ -96,7 +96,7 @@ export function ValidationSummary({ queries }: { queries: readonly QueryObservat
   const counts = new Map<string, number>()
   for (const query of queries) counts.set(query.evidence, (counts.get(query.evidence) ?? 0) + 1)
   return (
-    <p className="text-xs leading-5 text-slate-400">
+    <p className="text-sm leading-6 text-slate-300">
       {counts.size > 0
         ? [...counts].map(([evidence, count]) => `${count} ${evidence}`).join(" · ")
         : "Unknown — no query evidence recorded"}
@@ -112,9 +112,9 @@ export function QueryEvidence({
   comparable: boolean
 }) {
   return (
-    <div className="min-w-0 rounded-md border border-border-subtle p-2 text-xs text-slate-400">
+    <div className="min-w-0 rounded-md border border-border-subtle p-3 text-sm leading-6 text-slate-300">
       <div className="flex flex-wrap justify-between gap-2">
-        <strong className="text-slate-200">{query.queryName}</strong>
+        <strong className="[overflow-wrap:anywhere] text-slate-100">{query.queryName}</strong>
         <span>{comparable ? "Performance set" : "Coverage only"}</span>
       </div>
       <p className="mt-1">
@@ -130,8 +130,10 @@ export function QueryEvidence({
         <p className="mt-1 text-amber-200">{query.reasons.join("; ")}</p>
       ) : null}
       <details className="mt-1">
-        <summary className="cursor-pointer">Iterations, statuses &amp; hashes</summary>
-        <div className="mt-1 space-y-1 font-mono [overflow-wrap:anywhere] break-words">
+        <summary className="flex min-h-10 cursor-pointer items-center rounded-md text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300/60">
+          Iterations, statuses &amp; hashes
+        </summary>
+        <div className="mt-1 space-y-2 font-mono text-sm [overflow-wrap:anywhere] break-words">
           {query.steps.length === 0
             ? "No iterations recorded"
             : query.steps.map((step) => (
@@ -164,10 +166,10 @@ export function EngineEvidence({
       <RunContext run={row.run} annotations={row.annotations} />
       {row.queries.length > 0 ? (
         <details
-          className="text-xs text-slate-400"
+          className="text-sm leading-6 text-slate-300"
           onToggle={(event) => setExpanded(event.currentTarget.open)}
         >
-          <summary className="cursor-pointer py-2">
+          <summary className="flex min-h-10 cursor-pointer items-center rounded-md text-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-300/60">
             Query execution &amp; validation evidence
           </summary>
           {expanded ? (
@@ -183,7 +185,7 @@ export function EngineEvidence({
           ) : null}
         </details>
       ) : null}
-      <CaptionText className="mt-1 leading-4">
+      <CaptionText className="mt-1">
         Hashes compare canonicalized answers. They do not prove exact schemas or agreement with an
         independent oracle.
       </CaptionText>
