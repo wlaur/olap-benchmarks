@@ -59,7 +59,12 @@ def test_postgres_parallel_copy_keeps_its_worker_cap(monkeypatch: pytest.MonkeyP
 @pytest.mark.parametrize("database_type", [Postgres, TimescaleDB])
 @pytest.mark.parametrize(
     ("operation", "seconds", "expected"),
-    [("select", 45, "-cstatement_timeout=45000"), ("select", None, None), ("populate", 45, None)],
+    [
+        ("select", 45, "-cstatement_timeout=45000"),
+        ("select", 300, "-cstatement_timeout=300000"),
+        ("select", None, None),
+        ("populate", 45, None),
+    ],
 )
 def test_postgres_connectorx_bounds_select_statements_only(
     database_type: type[Postgres],

@@ -128,6 +128,12 @@ class TimescaleRTABench(RTABench["TimescaleDB"]):
 
 
 class TimescaleClickbench(Clickbench["TimescaleDB"]):
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        kwargs = dict(super().query_fetch_kwargs(query_name))
+        if query_name == "Q18":
+            kwargs["schema"] = {"m": pl.Int64}
+        return kwargs
+
     def compress_table(self) -> None:
         self.db.execute("SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('hits') i")
         self.db.execute("vacuum freeze analyze hits", autocommit=True)

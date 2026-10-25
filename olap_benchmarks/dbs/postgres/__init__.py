@@ -3,7 +3,9 @@ import re
 import uuid
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from hashlib import sha256
+from math import isfinite
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Literal, cast
@@ -40,6 +42,19 @@ def _postgres_connection_string() -> str:
 
 
 PostgresFetchMethod = Literal["connectorx", "python"]
+
+
+def _apply_fetch_schema(df: pl.DataFrame, schema: Mapping[str, pl.DataType | type[pl.DataType]]) -> pl.DataFrame:
+    for name, dtype in schema.items():
+        if not dtype.is_integer():
+            continue
+        column = df.get_column(name)
+        if column.dtype.is_float() or isinstance(column.dtype, pl.Decimal):
+            values = cast(list[Decimal | float | None], column.to_list())
+            if any(value is not None and (not isfinite(value) or value != int(value)) for value in values):
+                raise ValueError(f"Column {name} contains non-integral values; cannot cast to {dtype}")
+    return df.cast(cast(pl.Schema, schema))
+
 
 COPY_BATCH_ROWS = 1_000_000
 COPY_BATCH_MAX_CELLS = 64_000_000
@@ -167,6 +182,12 @@ class PostgresRTABench(RTABench["Postgres"]):
 
 
 class PostgresClickbench(Clickbench["Postgres"]):
+    def query_fetch_kwargs(self, query_name: str) -> dict[str, Any]:
+        kwargs = dict(super().query_fetch_kwargs(query_name))
+        if query_name == "Q18":
+            kwargs["schema"] = {"m": pl.Int64}
+        return kwargs
+
     def index_table(self) -> None:
         statements = dedent("""
                 CREATE INDEX adveng on hits (advengineid);
@@ -799,7 +820,7 @@ class Postgres(Database):
             df = pl.read_database_uri(sql, self._query_connection_string())
 
         if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
+            df = _apply_fetch_schema(df, schema)
 
         return df
 
@@ -825,15 +846,10 @@ class Postgres(Database):
         columns = result.keys()
         rows = result.fetchall()
 
-        if not rows:
-            if schema:
-                return pl.DataFrame(schema=cast(pl.Schema, schema))
-            return pl.DataFrame({col: [] for col in columns})
-
         df = pl.DataFrame({col: [row[idx] for row in rows] for idx, col in enumerate(columns)})
 
         if schema is not None:
-            df = df.cast(cast(pl.Schema, schema))
+            df = _apply_fetch_schema(df, schema)
 
         return df
 

@@ -439,7 +439,9 @@ class Database(BaseModel, ABC):
             status=status,
             result_status=result_status
             if result_status is not None
-            else classify_step_result_status(step_type=step_type, status=status, error_type=error_type),
+            else classify_step_result_status(
+                step_type=step_type, status=status, error_type=error_type, error_message=error_message
+            ),
             row_count=row_count,
             error_type=error_type,
             error_message=error_message,
@@ -697,10 +699,13 @@ class Database(BaseModel, ABC):
         start_query_watchdog(self._query_watchdog_path, query_name)
 
         try:
+            timeout = get_settings().query_timeout_seconds if self._current_operation == "select" else None
             t0 = perf_counter()
-            with query_deadline(get_settings().query_timeout_seconds if self._current_operation == "select" else None):
+            with query_deadline(timeout):
                 df = self.fetch(query, **kwargs)
             duration_seconds = perf_counter() - t0
+            if timeout is not None and duration_seconds > timeout:
+                raise TimeoutError(f"Query exceeded {timeout} seconds (fetch returned after {duration_seconds:.3f}s)")
         except BaseException as exc:
             self._finish_timed_step(
                 step_id=step_id,
