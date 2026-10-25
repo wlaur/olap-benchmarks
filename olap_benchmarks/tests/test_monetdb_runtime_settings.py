@@ -9,6 +9,7 @@ from ..dbs.monetdb import (
     MONETDB_RUNTIME_SESSION_SQL,
     MonetDB,
 )
+from ..settings import get_settings
 
 
 class RecordingMonetDB(MonetDB):
@@ -69,7 +70,11 @@ def test_operation_records_effective_server_and_current_session_settings() -> No
             "args": ("phase", "monetdb_runtime_settings"),
             "status": "completed",
             "step_type": "phase",
-            "metadata": {"environment": database.environment, "session": database.session},
+            "metadata": {
+                "environment": database.environment,
+                "session": database.session,
+                "session_units": {"querytimeout": "seconds"},
+            },
         }
     ]
     assert "sys.current_sessionid()" in MONETDB_RUNTIME_SESSION_SQL
@@ -88,7 +93,38 @@ def test_runtime_capture_preserves_restrictive_settings_for_diagnosis() -> None:
 
     database.before_benchmark_operation()
 
-    assert database.steps[0]["metadata"] == {"environment": database.environment, "session": database.session}
+    assert database.steps[0]["metadata"] == {
+        "environment": database.environment,
+        "session": database.session,
+        "session_units": {"querytimeout": "seconds"},
+    }
+
+
+@pytest.mark.parametrize("seconds", [300, None])
+def test_runtime_capture_records_native_timeout_seconds(seconds: int | None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(get_settings(), "query_timeout_seconds", seconds)
+    database = RecordingMonetDB()
+    database._current_operation = "select"
+    database.session["querytimeout"] = seconds or 0
+
+    database.before_benchmark_operation()
+
+    metadata = database.steps[0]["metadata"]
+    assert metadata["session"]["querytimeout"] == (seconds or 0)
+    assert metadata["session_units"]["querytimeout"] == "seconds"
+
+
+@pytest.mark.parametrize("observed", [0, 300_000, 300_000_000])
+def test_runtime_capture_rejects_an_ineffective_select_timeout(observed: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(get_settings(), "query_timeout_seconds", 300)
+    database = RecordingMonetDB()
+    database._current_operation = "select"
+    database.session["querytimeout"] = observed
+
+    with pytest.raises(RuntimeError, match="MonetDB query timeout mismatch: requested 300 seconds"):
+        database.before_benchmark_operation()
+
+    assert database.steps[0]["status"] == "failed"
 
 
 @pytest.mark.parametrize("session_rows", [0, 2])

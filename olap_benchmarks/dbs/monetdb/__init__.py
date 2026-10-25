@@ -108,7 +108,12 @@ class MonetDB(Database):
             **super().run_options,
             "client_application": MONETDB_APPLICATION,
             "session_tracking": "client_application+clientpid",
+            "native_query_timeout_seconds": self._select_query_timeout_seconds,
         }
+
+    @property
+    def _select_query_timeout_seconds(self) -> int | None:
+        return get_settings().query_timeout_seconds if self._current_operation == "select" else None
 
     @property
     def benchmark_settings(self) -> Mapping[str, object]:
@@ -139,19 +144,30 @@ class MonetDB(Database):
         if reconnect:
             self.close_connection()
 
-        if self._connection is not None:
-            return self._connection
+        if self._connection is None:
+            engine = create_engine(
+                self.connection_string,
+                # avoid crash "ImportError: sys.meta_path is None, Python is likely shutting down"
+                # not clear why this happens
+                pool_reset_on_return=None,
+            )
+            try:
+                self._connection = engine.connect()
+            except BaseException:
+                engine.dispose()
+                raise
 
-        engine = create_engine(
-            self.connection_string,
-            # avoid crash "ImportError: sys.meta_path is None, Python is likely shutting down"
-            # not clear why this happens
-            pool_reset_on_return=None,
-        )
+        try:
+            connection = self.bind_query_recorder(self._connection)
+            timeout = self._select_query_timeout_seconds
+            if connection.info.get("olap_query_timeout_seconds") != timeout:
+                connection.execute(text(f"CALL sys.setquerytimeout({timeout or 0})")).close()
+                connection.info["olap_query_timeout_seconds"] = timeout
+        except BaseException:
+            self.close_connection()
+            raise
 
-        self._connection = self.bind_query_recorder(engine.connect())
-
-        return self._connection
+        return connection
 
     def _session_state(self) -> tuple[int, int]:
         engine = create_engine(_monetdb_observer_uri(), pool_reset_on_return=None)
@@ -224,6 +240,12 @@ class MonetDB(Database):
             session = self.fetch(MONETDB_RUNTIME_SESSION_SQL)
             if session.height != 1:
                 raise RuntimeError(f"Expected one current MonetDB session, observed {session.height}")
+            timeout = self._select_query_timeout_seconds
+            if timeout is not None and session.item(0, "querytimeout") != timeout:
+                raise RuntimeError(
+                    f"MonetDB query timeout mismatch: requested {timeout} seconds, "
+                    f"observed {session.item(0, 'querytimeout')} seconds"
+                )
         except BaseException as exc:
             self._finish_step(
                 step_id,
@@ -237,7 +259,11 @@ class MonetDB(Database):
             step_id,
             status="completed",
             step_type="phase",
-            metadata={"environment": environment, "session": session.row(0, named=True)},
+            metadata={
+                "environment": environment,
+                "session": session.row(0, named=True),
+                "session_units": {"querytimeout": "seconds"},
+            },
         )
 
     def after_benchmark_operation(self) -> None:
