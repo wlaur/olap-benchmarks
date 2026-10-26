@@ -272,6 +272,8 @@ test(
       )
       const entry = manifest[suite!][query!]
       expect(displayed.trim()).toBe((entry.db_overrides[db!] ?? entry.sql).trim())
+      await page.keyboard.press("Escape")
+      await expect(page.getByRole("dialog")).not.toBeVisible()
     }
     for (const query of ["31", "49", "65", "85"]) {
       const entry = manifest.tpc_ds[query]
