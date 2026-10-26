@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "results_db_sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+  "version": 2,
+  "results_db_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
   "policy_id": "fixed-workloads-v1",
   "retrospective": true,
   "families": [
@@ -2172,40 +2172,10 @@
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
     },
     {
-      "db": "timescaledb",
-      "suite": "clickbench",
-      "scale_factor": 1,
-      "run_id": 404,
-      "preparation": "incomplete",
-      "tuning": null,
-      "summary": "Population 398 failed before compression; this SELECT cohort does not establish completed compressed storage.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-audit-coverage.md"
-    },
-    {
       "db": "monetdb",
       "suite": "tpc_h",
       "scale_factor": 50,
       "run_id": 449,
-      "preparation": "incomplete",
-      "tuning": null,
-      "summary": "The full lineitem load did not complete within resource limits. Only queries whose required tables were verified are measured.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
-    },
-    {
-      "db": "postgres",
-      "suite": "tpc_h",
-      "scale_factor": 50,
-      "run_id": 458,
-      "preparation": "incomplete",
-      "tuning": null,
-      "summary": "The full lineitem load did not complete within resource limits. Only queries whose required tables were verified are measured.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-expanded.md"
-    },
-    {
-      "db": "timescaledb",
-      "suite": "tpc_h",
-      "scale_factor": 50,
-      "run_id": 465,
       "preparation": "incomplete",
       "tuning": null,
       "summary": "The full lineitem load did not complete within resource limits. Only queries whose required tables were verified are measured.",
@@ -2229,16 +2199,6 @@
       "preparation": "observed",
       "tuning": null,
       "summary": "Seven-day hypertables and all 75 compressible chunks were verified. wide1000 remains rowstore; larger wide layouts exceed table limits. Scope is 90 of 120 queries.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
-    },
-    {
-      "db": "doris",
-      "suite": "clickbench",
-      "scale_factor": 1,
-      "run_id": 511,
-      "preparation": "observed",
-      "tuning": null,
-      "summary": "Actual query sessions recorded SQL-answer and aggregate-result caches disabled. Data/predicate caches remain enabled. FE 6 GiB and BE 18 GiB share the 24 GiB budget.",
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
     },
     {
@@ -2269,26 +2229,6 @@
       "preparation": "unknown",
       "tuning": "Q08 filtered projection before JSON extraction was adopted after exact fixtures and full-data comparisons; Q16/Q17 candidates were rejected.",
       "summary": "All 23 query positions completed. The source report separates tuning diagnostics from the selected campaign timings.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
-    },
-    {
-      "db": "monetdb",
-      "suite": "chat_threads",
-      "scale_factor": 10,
-      "run_id": 522,
-      "preparation": "unknown",
-      "tuning": "Q08 filtered projection before JSON extraction was adopted after exact fixtures and full-data comparisons; Q16/Q17 candidates were rejected.",
-      "summary": "20 of 23 queries are measured. Q15's server crash and independent Q16/Q17 timeouts remain documented failure evidence. Unattempted queries were not assumed to fail.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
-    },
-    {
-      "db": "monetdb",
-      "suite": "clickbench",
-      "scale_factor": 1,
-      "run_id": 525,
-      "preparation": "observed",
-      "tuning": "Q5 grouped distinct rewrite was adopted after exact fixture and full-store comparisons.",
-      "summary": "40 of 43 queries are measured. Q4/Q9/Q32 timeout exclusions remain. Q18 localization is incomplete; its original SQL remains.",
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-configuration-correction.md"
     },
     {
@@ -2680,6 +2620,286 @@
       "tuning": null,
       "summary": "All eight canonical table counts and full manual column-statistics readiness recorded. Pricing means use exact decimal sums before division after both-scale gates; result-cache attestations retained.",
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
+    },
+    {
+      "db": "doris",
+      "suite": "clickbench",
+      "scale_factor": 1,
+      "run_id": 686,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery/run685 completed for this whole SELECT attempt (2026-10-timeout-recovery/run686). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "monetdb",
+      "suite": "chat_threads",
+      "scale_factor": 10,
+      "run_id": 688,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical population completed, but SELECT explicitly excluded 15_part_type_distribution. Its 14 successful queries remain visible; this attempt has no whole-canonical certificate and earns zero overall credit. The later Q16 failure and raw outcomes are unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "postgres",
+      "suite": "tpc_ds",
+      "scale_factor": 1,
+      "run_id": 691,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery/run692 completed for this whole SELECT attempt (2026-10-timeout-recovery/run693). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "postgres",
+      "suite": "tpc_h",
+      "scale_factor": 10,
+      "run_id": 693,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-continuation/run685 completed for this whole SELECT attempt (2026-10-timeout-recovery-continuation/run686). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "starrocks",
+      "suite": "time_series",
+      "scale_factor": 1,
+      "run_id": 698,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-remaining/run689 completed for this whole SELECT attempt (2026-10-timeout-recovery-remaining/run690). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "starrocks",
+      "suite": "time_series",
+      "scale_factor": 10,
+      "run_id": 700,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-remaining/run691 completed for this whole SELECT attempt (2026-10-timeout-recovery-remaining/run692). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "questdb",
+      "suite": "rtabench",
+      "scale_factor": 1,
+      "run_id": 702,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-corrective/run685 completed for this whole SELECT attempt (2026-10-timeout-recovery-corrective/run686). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "timescaledb",
+      "suite": "time_series",
+      "scale_factor": 1,
+      "run_id": 705,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-corrective/run688 completed for this whole SELECT attempt (2026-10-timeout-recovery-corrective/run689). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "monetdb",
+      "suite": "clickbench",
+      "scale_factor": 1,
+      "run_id": 707,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical population completed. The post-SELECT session_baseline_after check failed when Q32 reached the 300-second query deadline plus 30-second outer grace. Independent cleanup succeeded and answer validation was clean; this is not a wrong-answer finding or quarantine. The 96 successful measurements remain visible, but the uncertified attempt earns zero overall credit.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "postgres",
+      "suite": "tpc_h",
+      "scale_factor": 50,
+      "run_id": 709,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-corrective/run692 completed for this whole SELECT attempt (2026-10-timeout-recovery-corrective/run693). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "timescaledb",
+      "suite": "tpc_h",
+      "scale_factor": 50,
+      "run_id": 711,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-corrective/run694 completed for this whole SELECT attempt (2026-10-timeout-recovery-corrective/run695). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "timescaledb",
+      "suite": "clickbench",
+      "scale_factor": 1,
+      "run_id": 713,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Canonical full population 2026-10-timeout-recovery-corrective/run696 completed for this whole SELECT attempt (2026-10-timeout-recovery-corrective/run697). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    }
+  ],
+  "overall_policy": "relative-speed-v2",
+  "certificate_policy": "certified-terminal-partial-v1",
+  "certificates": [
+    {
+      "selected_run_id": 686,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "doris",
+        "db_version": "4.1.5",
+        "db_driver": null,
+        "suite": "clickbench",
+        "scale_factor": 1,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery",
+        "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+        "run_id": 686
+      },
+      "run_content_sha256": "156a1d6eca52fdde7461e54fe37efccd11898d093634e0930dac28ba7d37414d",
+      "population": {
+        "selected_run_id": 685,
+        "origin": {
+          "revision": "2026-10-timeout-recovery",
+          "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+          "run_id": 685
+        },
+        "run_content_sha256": "b0771d7910e671439d5cb469b2e915af366d296ab0d52a0de68b3513e8ece58e",
+        "audit": {
+          "path": "certificates/run686/population-audit.json",
+          "sha256": "2ef79572ece50e2e6cb2c8400698563c53bbbe25fcc13f5b4ebe733f44eaaa5b"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run686/lineage.json",
+        "sha256": "22fd7c19199ae1db830e1299ea113b182e448a9afad7f6bab6b89a1e434d3a23"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+      }
+    },
+    {
+      "selected_run_id": 691,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "postgres",
+        "db_version": "18.6",
+        "db_driver": null,
+        "suite": "tpc_ds",
+        "scale_factor": 1,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery",
+        "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+        "run_id": 693
+      },
+      "run_content_sha256": "ddf26722cf5ea4d7dcecd87e9c6a4b177a11997088e4d5a2eb770adff64ee7fe",
+      "population": {
+        "selected_run_id": 690,
+        "origin": {
+          "revision": "2026-10-timeout-recovery",
+          "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+          "run_id": 692
+        },
+        "run_content_sha256": "87c6f2e2432d7078d103dc243583218c4110d30accd863131b426e44e52d03e5",
+        "audit": {
+          "path": "certificates/run691/population-audit.json",
+          "sha256": "51e598d6b0a2d594ce91e20d9d5adf00cea4d875335e2846d35e163ed23de003"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run691/lineage.json",
+        "sha256": "d14befc8db9645a12b76dd6a7edb258e5902ea94342732674df93f3e1ac8d051"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+      }
+    },
+    {
+      "selected_run_id": 709,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "postgres",
+        "db_version": "18.6",
+        "db_driver": null,
+        "suite": "tpc_h",
+        "scale_factor": 50,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-corrective",
+        "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+        "run_id": 693
+      },
+      "run_content_sha256": "75dce0be17e464c2952892a956b166cbc117a54d43a6edfa53786672b6a76836",
+      "population": {
+        "selected_run_id": 708,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-corrective",
+          "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+          "run_id": 692
+        },
+        "run_content_sha256": "2132115ea38985423bc72b69900273e9081f100781c4a0588c3bd0a8dc40028e",
+        "audit": {
+          "path": "certificates/run709/population-audit.json",
+          "sha256": "97d309320cdf280aebadef8077a3a3f7d8222dea52fe498cc9936002acc8314b"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run709/lineage.json",
+        "sha256": "7f031476a826fe96b2bc9c9cad63c9135e9c0053a63017608620ac03f0176357"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+      }
+    },
+    {
+      "selected_run_id": 711,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "timescaledb",
+        "db_version": "2.30.2",
+        "db_driver": null,
+        "suite": "tpc_h",
+        "scale_factor": 50,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-corrective",
+        "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+        "run_id": 695
+      },
+      "run_content_sha256": "d00cab7224f937b01ed93a1017bdb919610e93f82ddd22cdbcdae3972ba40b9a",
+      "population": {
+        "selected_run_id": 710,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-corrective",
+          "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+          "run_id": 694
+        },
+        "run_content_sha256": "3e2b369c63e4e9b3e6ba11956c05d537b6fd62a20d39884f1e7ea8e16cdfb672",
+        "audit": {
+          "path": "certificates/run711/population-audit.json",
+          "sha256": "00982c3a2e96bc293a571b8d35ebcc2ce04eb178c88e99d394c9891b0b782d7d"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run711/lineage.json",
+        "sha256": "2bae5fc2f921e5f15db7c2cbf552a7984b7cfb01d97829d84db330e513fa2732"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+      }
     }
   ]
 }

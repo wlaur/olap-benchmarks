@@ -92,7 +92,7 @@ function overview(families, runs, extra = {}) {
 }
 
 function score(families, runs, extra) {
-  return aggregateOverview(overview(families, runs, extra))
+  return aggregateOverview(overview(families, runs, extra), { version: 1 })
 }
 
 const engine = (result, db) => result.rows.find((row) => row.db === db)
@@ -140,7 +140,7 @@ describe("relative-speed overall score", () => {
       [run("reference", f), run("slow", f, [10, 10]), run("partial", f, [1, null])],
     )
     expect(data[0].scales[0].rows.find((r) => r.db === "partial").eligible).toBe(false)
-    const result = aggregateOverview(data)
+    const result = aggregateOverview(data, { version: 1 })
     expect(engine(result, "reference")).toMatchObject({ score: 100, coverage: 100 })
     expect(engine(result, "slow")).toMatchObject({ score: 10, coverage: 100 })
     expect(engine(result, "partial")).toMatchObject({
@@ -170,7 +170,7 @@ describe("relative-speed overall score", () => {
     const strict = data[0].scales[0].rows
     expect(strict.find((row) => row.db === "uneven").score).toBeCloseTo(10)
     expect(strict.find((row) => row.db === "steady").score).toBeCloseTo(4)
-    const result = aggregateOverview(data)
+    const result = aggregateOverview(data, { version: 1 })
     expect(engine(result, "uneven").score).toBeCloseTo(50.5)
     expect(engine(result, "steady").score).toBe(25)
     expect(engine(result, "uneven").rank).toBeLessThan(engine(result, "steady").rank)
@@ -396,7 +396,7 @@ describe("relative-speed overall score", () => {
       observations = data[0].scales[0].rows.find((row) => row.db === "alternate").queries
     for (const query of observations)
       expect(query).toMatchObject({ complete: true, warmup: 2, measured: 3 })
-    const result = aggregateOverview(data)
+    const result = aggregateOverview(data, { version: 1 })
     expect(engine(result, "alternate")).toMatchObject({
       score: 0,
       coverage: 0,
@@ -511,7 +511,9 @@ describe("relative-speed overall score", () => {
     bad.queries.get("Q3")[2].hash = "different"
     const data = overview([f], [run("ref", observed), run("peer", observed), bad])
     expect(data[0].scales[0].rows.find((row) => row.db === "bad").eligible).toBe(true)
-    expect(() => aggregateOverview(data)).toThrow("Unresolved answer conflict: bad, a, SF 1, Q3")
+    expect(() => aggregateOverview(data, { version: 1 })).toThrow(
+      "Unresolved answer conflict: bad, a, SF 1, Q3",
+    )
   })
 
   test("a scoped semantic exclusion zeros only that engine's third query", () => {
@@ -560,7 +562,7 @@ describe("relative-speed overall score", () => {
         evidence: "hash-limited",
         evidenceReason: "result exceeds hash size limit",
       })
-    expect(engine(aggregateOverview(data), "limited")).toMatchObject({
+    expect(engine(aggregateOverview(data, { version: 1 }), "limited")).toMatchObject({
       score: 10,
       coverage: 100,
       recordedGapCoverage: 0,
@@ -779,5 +781,106 @@ describe("relative-speed overall score", () => {
       ).toBe(row.totalQueries)
       expect(row.coverage + row.recordedGapCoverage + row.unmeasuredCoverage).toBeCloseTo(100)
     }
+  })
+})
+
+function certified(selected) {
+  return {
+    selected_run_id: selected.runId,
+    cell: {
+      system: selected.system,
+      db: selected.db,
+      db_version: selected.version,
+      db_driver: selected.driver,
+      suite: selected.suite,
+      scale_factor: selected.scale,
+      benchmark_profile: "resident-hot-v1",
+    },
+    origin: { revision: "raw", results_db_sha256: "a".repeat(64), run_id: selected.runId },
+    run_content_sha256: "b".repeat(64),
+    population: {
+      selected_run_id: 1,
+      origin: { revision: "raw", results_db_sha256: "a".repeat(64), run_id: 1 },
+      run_content_sha256: "c".repeat(64),
+      audit: { path: "population.json", sha256: "d".repeat(64) },
+    },
+    lineage: { path: "lineage.json", sha256: "e".repeat(64) },
+    validation: { path: "validation.json", sha256: "f".repeat(64) },
+  }
+}
+
+function v2Fixture() {
+  const f = family("a", 3)
+  const partial = run("partial", f, [2, 2, null], 1, { status: "failed", error: "query timeout" })
+  partial.metadata.benchmark_profile.id = "resident-hot-v1"
+  partial.queries.get("Q2")[0].status = "failed"
+  partial.queries.get("Q2")[0].resultStatus = "timeout"
+  const peers = [run("ref", f), run("peer", f, [10, 10, 10])]
+  const data = overview([f], [...peers, partial])
+  const manifest = {
+    version: 2,
+    overall_policy: "relative-speed-v2",
+    certificates: [certified(partial)],
+  }
+  return { f, partial, peers, data, manifest }
+}
+
+describe("certified terminal partial v2 eligibility", () => {
+  test("credits complete queries, zeros failed and missing positions, retains v1 and strict policy", () => {
+    const { data, manifest, partial } = v2Fixture()
+    const strict = data[0].scales[0].rows.find((row) => row.db === "partial")
+    expect(strict).toMatchObject({ eligible: false, score: null })
+    expect(strict.reasons).toContain("run failed")
+    const result = aggregateOverview(data, manifest)
+    expect(result.policy).toBe("relative-speed-v2")
+    expect(engine(result, "partial")).toMatchObject({ scoredQueries: 1, totalQueries: 3 })
+    expect(engine(result, "partial").score).toBeCloseTo(50 / 3)
+    expect(engine(result, "partial").coverage).toBeCloseTo(100 / 3)
+    expect(engine(result, "partial").families[0].gaps).toEqual({
+      timeout: 1,
+      "Incomplete measurements": 1,
+    })
+    expect(engine(aggregateOverview(data, { version: 1 }), "partial").score).toBe(0)
+    expect(
+      engine(aggregateOverview(data, { ...manifest, certificates: [] }), "partial").score,
+    ).toBe(0)
+    expect(partial).toMatchObject({ status: "failed", error: "query timeout" })
+  })
+
+  test.each(["invalidation", "preparation"])("certification cannot bypass %s", (defect) => {
+    const { data, manifest, partial } = v2Fixture()
+    if (defect === "invalidation") partial.metadata.invalidation = { reason: "bad" }
+    else
+      data[0].scales[0].rows
+        .find((row) => row.db === "partial")
+        .annotations.push({ preparation: "incomplete" })
+    expect(engine(aggregateOverview(data, manifest), "partial").score).toBe(0)
+  })
+
+  test.each(["wrong_result", "conflict"])("whole-run %s blocks certification", (defect) => {
+    const { data, manifest, partial } = v2Fixture()
+    if (defect === "wrong_result") partial.queries.get("Q2")[0].resultStatus = "wrong_result"
+    else data[0].scales[0].rows.find((row) => row.db === "partial").queries[1].evidence = "conflict"
+    expect(() => aggregateOverview(data, manifest)).toThrow("wrong answers or answer conflicts")
+  })
+
+  test.each(["status", "profile", "cell"])("rejects stale certificate %s", (defect) => {
+    const { data, manifest, partial } = v2Fixture()
+    if (defect === "status") partial.status = "running"
+    else if (defect === "profile") partial.metadata.benchmark_profile.id = "other"
+    else manifest.certificates[0].cell.db = "other"
+    expect(() => aggregateOverview(data, manifest)).toThrow("does not match selected run")
+  })
+
+  test("certified contributions keep fixed full-publication references and minimum peers", () => {
+    const { f, partial, peers, manifest } = v2Fixture()
+    for (const step of partial.queries.get("Q1")) step.durationS = 0.5
+    const result = aggregateOverview(overview([f], [...peers, partial]), manifest)
+    expect(engine(result, "ref").score).toBeCloseTo(250 / 3)
+    expect(engine(result, "partial").score).toBeCloseTo(100 / 3)
+    expect(result.queryCount).toBe(3)
+    expect(() => aggregateOverview(overview([f], [peers[0], partial]), manifest)).toThrow(
+      "At least two usable query results required",
+    )
   })
 })

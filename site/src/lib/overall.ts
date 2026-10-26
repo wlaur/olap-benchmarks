@@ -1,11 +1,9 @@
 import { record, type ComparisonFamily } from "./comparison"
-import {
-  runPerformanceProblems,
-  type FamilyEngineResult,
-  type QueryObservation,
-} from "./observations"
+import { type FamilyEngineResult, type QueryObservation } from "./observations"
+import { overallRunEligibility, type OverallContext } from "./overallEligibility"
 
-export const OVERALL_POLICY = "relative-speed-v1"
+export const OVERALL_POLICY_V1 = "relative-speed-v1"
+export const OVERALL_POLICY_V2 = "relative-speed-v2"
 
 export interface FamilyOverview {
   family: ComparisonFamily
@@ -68,7 +66,10 @@ function rankOf(score: number, scores: readonly number[]): number {
   return 1 + scores.filter((other) => Number(other.toFixed(1)) > shown).length
 }
 
-export function aggregateOverview(overview: readonly FamilyOverview[]): OverallRanking {
+export function aggregateOverview(
+  overview: readonly FamilyOverview[],
+  manifest: OverallContext,
+): OverallRanking {
   const included = overview.filter(({ family }) => family.weight > 0 && family.track === "raw")
   const engines = [
     ...new Set(
@@ -118,7 +119,7 @@ export function aggregateOverview(overview: readonly FamilyOverview[]): OverallR
         else {
           selected.set(db, row)
           accumulators.get(db)!.recordedRunIds.push(row.run.runId)
-          const blockers = runPerformanceProblems(row.run, row.annotations)
+          const blockers = overallRunEligibility(row, manifest)
           if (blockers.length > 0) problems.set(db, blockers.join("; "))
         }
       }
@@ -256,7 +257,7 @@ export function aggregateOverview(overview: readonly FamilyOverview[]): OverallR
     row.rankRange = [Math.min(...ranks), Math.max(...ranks)]
   }
   return {
-    policy: OVERALL_POLICY,
+    policy: manifest.version === 2 ? OVERALL_POLICY_V2 : OVERALL_POLICY_V1,
     familyCount: included.length,
     queryCount: included.reduce(
       (sum, { family }) => sum + family.query_names.length * family.scale_factors.length,

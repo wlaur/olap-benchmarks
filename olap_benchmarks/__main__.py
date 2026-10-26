@@ -732,9 +732,16 @@ def query(sql: str, revision: Revision = "default") -> None:
 def publication_metadata(
     output_directory: Path = Path("site/public/data"),
     annotations_path: Path | None = None,
+    certificates_path: Path | None = None,
+    evidence_directory: Path | None = None,
 ) -> None:
     """Refresh comparison metadata without changing the published measurements."""
-    destination = write_comparison_manifest(output_directory, annotations_path=annotations_path)
+    destination = write_comparison_manifest(
+        output_directory,
+        annotations_path=annotations_path,
+        certificates_path=certificates_path,
+        evidence_directory=evidence_directory,
+    )
     print(f"Wrote {destination}")
 
 

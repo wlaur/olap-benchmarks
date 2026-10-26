@@ -1,7 +1,7 @@
 {
-  "results_db_sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+  "results_db_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
   "families": 11,
-  "policy": "relative-speed-v1",
+  "policy": "relative-speed-v2",
   "queries": 871,
   "rows": [
     {
@@ -9,7 +9,7 @@
       "coverage": 100,
       "db": "duckdb",
       "queries": 871,
-      "score": 79.9
+      "score": 80
     },
     {
       "band": [2, 2],
@@ -20,17 +20,17 @@
     },
     {
       "band": [3, 4],
-      "coverage": 74.9,
-      "db": "monetdb",
-      "queries": 788,
-      "score": 29.8
+      "coverage": 81.8,
+      "db": "starrocks",
+      "queries": 789,
+      "score": 28.4
     },
     {
       "band": [3, 4],
-      "coverage": 81.7,
-      "db": "starrocks",
-      "queries": 787,
-      "score": 28.5
+      "coverage": 62.5,
+      "db": "monetdb",
+      "queries": 729,
+      "score": 27.5
     },
     {
       "band": [5, 6],
@@ -44,21 +44,21 @@
       "coverage": 45.2,
       "db": "doris",
       "queries": 319,
-      "score": 11.7
+      "score": 12.4
     },
     {
       "band": [6, 8],
-      "coverage": 44.6,
+      "coverage": 45.5,
       "db": "questdb",
-      "queries": 426,
-      "score": 10.4
+      "queries": 429,
+      "score": 10.5
     },
     {
       "band": [7, 10],
-      "coverage": 75.1,
+      "coverage": 79.6,
       "db": "postgres",
-      "queries": 622,
-      "score": 8.2
+      "queries": 644,
+      "score": 8.3
     },
     {
       "band": [8, 10],
@@ -69,10 +69,10 @@
     },
     {
       "band": [9, 10],
-      "coverage": 66.1,
+      "coverage": 79.6,
       "db": "timescaledb",
-      "queries": 509,
-      "score": 6.7
+      "queries": 573,
+      "score": 7.4
     },
     {
       "band": [11, 11],
@@ -89,11 +89,12 @@
     "jsonbench/10/doris/polars",
     "chat_threads/1/timescaledb/monetdb",
     "tpc_h/10/starrocks/doris",
+    "tpc_h/10/postgres/timescaledb",
     "tpc_ds/10/starrocks/doris",
     "tpc_ds/10/starrocks/monetdb",
     "tpc_ds/10/doris/monetdb",
     "join_order/1/clickhouse/postgres",
     "join_order/1/monetdb/postgres"
   ],
-  "within_workload_pairs": 207
+  "within_workload_pairs": 234
 }

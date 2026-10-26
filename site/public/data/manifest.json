@@ -1,16 +1,16 @@
 {
-  "published_at": "2026-10-22T14:07:38.797471+00:00",
-  "revision": "2026-10-followup",
-  "source": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-3dcf1cb2/results/2026-10-followup.db",
+  "published_at": "2026-10-26T04:49:00.754869+00:00",
+  "revision": "2026-10-timeout-recovery-curated",
+  "source": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-e42242ca/results/2026-10-timeout-recovery-curated.db",
   "merged": false,
   "publication": {
     "kind": "campaign",
-    "title": "Benchmark campaign: 2026-10-followup",
-    "report_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md",
+    "title": "Benchmark campaign: 2026-10-timeout-recovery-curated",
+    "report_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md",
     "select_cohorts": 127,
-    "completed_select_cohorts": 125,
-    "failed_select_cohorts": 2,
-    "partial_select_cohorts": 34,
+    "completed_select_cohorts": 119,
+    "failed_select_cohorts": 8,
+    "partial_select_cohorts": 30,
     "source_commits": [
       "085cfa564ab29a79a1329bc6a5e99e558284aa17",
       "0bc884c858482bdf5750f1e663b826ca1b3f677c",
@@ -18,19 +18,15 @@
       "2a1af7d7282b06d5709e5f6a3a1bdefa3a85200b",
       "2c0d5e664306c27738c35f2cbf5badd3878dcd0b",
       "2f9ad4e2eecf3bdf509d2c11282838bab77c8770",
-      "3204f0978672a82b85cb8213ae6b6dc0fd932a1f",
       "3532769feddeb41e5272668f34d771ab5f0182e1",
       "37daaae2932045b0960b1e09d76d10c9c90a5aec",
       "42c38e1450939da70b218197089880803e1a4ad7",
-      "47f36f3d03560c20fa17423035bb43619c4bd1f4",
       "489ead800582c6c4e8211df6dab468cf276d4515",
       "4ea3c820f5e710a2ebeabb6aaec0cd0effce362b",
-      "4f5cae4cc887ca15b270c0aab8ca4e0b3c9135db",
       "5f84e3752512e8c659d50d0e509eb8789f91386d",
       "6c6a3c3c8413acf7c3bf4e7b997d2f665a28f9c1",
       "74418f2a99a947c5a0a1192f2bda51cc50f53b54",
       "7a0c82c6182582273723499b8bd687cece4ed92c",
-      "7c043d9d2134395dc4638c4805f3be37674948d4",
       "7f63c11ce2d754c41659e6e7037e602644cc3597",
       "810aa020de6f97963a861792941bfaeded9caa23",
       "84f09054ef2337b85edea139c977399c36911ff6",
@@ -40,9 +36,9 @@
       "96ecbf5ce4bb4e8a9464da13c9b361d435d9cfa7",
       "98621b4121f9c3dbc692fbdfdf4d9c550be78e34",
       "9aaf7865ab6efb26bf986bcec8be01ebbc54be15",
+      "9acda00c6b40df50f405103e04f335c782452cd5",
       "a02a8af358ff18cd805b73c0c1567c49467db08d",
       "a049301274597ab9c7f68a3cd5952787a0a79c58",
-      "a8bd52ebd57996886678b843a2c4cda91b49bdf6",
       "af10d7a7a5b46ff3b044791bf6c671d06641fc71",
       "af294aa3ec1cd3877d5947ad7d975483c0ae752f",
       "b5f91534663e80e132a6bd9c1f7b26fa6efd9f42",
@@ -56,7 +52,10 @@
       "d2f1549f998735fc8350fe54c5d229093f6ea8c8",
       "d3a6ccb8b600c341697cc93ab5300bbfd62e1b0a",
       "d7fe4e727de3807dde7c2b32cd9fc0077f637437",
-      "e55b553407307d804d14e9d22fb0830e5fdfc4e2"
+      "e55b553407307d804d14e9d22fb0830e5fdfc4e2",
+      "ed78de3b03153036735fec2a414c6556e3a63dcf",
+      "efaae1c9f31a9c917b074e3c60da74c0572d34e6",
+      "f5b24e2307684866b13dda289ac62b82289cf287"
     ],
     "analytical_runs": 12,
     "analytical_track": "analytical-streams-v1"
@@ -67,13 +66,13 @@
     "minimum_reader_engine_version": "v1.4.0",
     "writer_engine_version": "2.0.0"
   },
-  "results_db_sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
-  "results_db_bytes": 143929344,
+  "results_db_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
+  "results_db_bytes": 152842240,
   "table_counts": {
     "system_snapshot": 1,
     "run": 312,
-    "run_step": 39778,
-    "run_metric": 177294,
-    "query_execution": 153543
+    "run_step": 39978,
+    "run_metric": 279863,
+    "query_execution": 157217
   }
 }

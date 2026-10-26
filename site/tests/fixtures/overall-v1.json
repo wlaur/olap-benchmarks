@@ -1,0 +1,99 @@
+{
+  "results_db_sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+  "families": 11,
+  "policy": "relative-speed-v1",
+  "queries": 871,
+  "rows": [
+    {
+      "band": [1, 1],
+      "coverage": 100,
+      "db": "duckdb",
+      "queries": 871,
+      "score": 79.9
+    },
+    {
+      "band": [2, 2],
+      "coverage": 100,
+      "db": "clickhouse",
+      "queries": 871,
+      "score": 41.1
+    },
+    {
+      "band": [3, 4],
+      "coverage": 74.9,
+      "db": "monetdb",
+      "queries": 788,
+      "score": 29.8
+    },
+    {
+      "band": [3, 4],
+      "coverage": 81.7,
+      "db": "starrocks",
+      "queries": 787,
+      "score": 28.5
+    },
+    {
+      "band": [5, 6],
+      "coverage": 45.5,
+      "db": "polars",
+      "queries": 323,
+      "score": 15.1
+    },
+    {
+      "band": [5, 9],
+      "coverage": 45.2,
+      "db": "doris",
+      "queries": 319,
+      "score": 11.7
+    },
+    {
+      "band": [6, 8],
+      "coverage": 44.6,
+      "db": "questdb",
+      "queries": 426,
+      "score": 10.4
+    },
+    {
+      "band": [7, 10],
+      "coverage": 75.1,
+      "db": "postgres",
+      "queries": 622,
+      "score": 8.2
+    },
+    {
+      "band": [8, 10],
+      "coverage": 43.8,
+      "db": "arc",
+      "queries": 421,
+      "score": 7.4
+    },
+    {
+      "band": [9, 10],
+      "coverage": 66.1,
+      "db": "timescaledb",
+      "queries": 509,
+      "score": 6.7
+    },
+    {
+      "band": [11, 11],
+      "coverage": 9.1,
+      "db": "tdengine",
+      "queries": 120,
+      "score": 1.9
+    }
+  ],
+  "within_workload_inversions": [
+    "time_series_ranges/1/clickhouse/polars",
+    "time_series_ranges/1/arc/tdengine",
+    "clickbench/1/starrocks/polars",
+    "jsonbench/10/doris/polars",
+    "chat_threads/1/timescaledb/monetdb",
+    "tpc_h/10/starrocks/doris",
+    "tpc_ds/10/starrocks/doris",
+    "tpc_ds/10/starrocks/monetdb",
+    "tpc_ds/10/doris/monetdb",
+    "join_order/1/clickhouse/postgres",
+    "join_order/1/monetdb/postgres"
+  ],
+  "within_workload_pairs": 207
+}

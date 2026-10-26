@@ -317,3 +317,70 @@ test("validation conflict blocks performance without removing execution coverage
     evidence: "conflict",
   })
 })
+
+import { validateSelectedCertificates } from "../../src/lib/overallEligibility.ts"
+
+function certifiedManifest() {
+  return {
+    ...manifest,
+    version: 2,
+    overall_policy: "relative-speed-v2",
+    certificate_policy: "certified-terminal-partial-v1",
+    certificates: [
+      {
+        selected_run_id: 7,
+        cell: {
+          system: "host",
+          db: "partial",
+          db_version: "1",
+          db_driver: null,
+          suite: "clickbench",
+          scale_factor: 1,
+          benchmark_profile: "resident-hot-v1",
+        },
+        origin: { revision: "raw", results_db_sha256: "b".repeat(64), run_id: 9 },
+        run_content_sha256: "c".repeat(64),
+        population: {
+          selected_run_id: 6,
+          origin: { revision: "raw", results_db_sha256: "b".repeat(64), run_id: 8 },
+          run_content_sha256: "d".repeat(64),
+          audit: { path: "pop.json", sha256: "e".repeat(64) },
+        },
+        lineage: { path: "lineage.json", sha256: "e".repeat(64) },
+        validation: { path: "validation.json", sha256: "f".repeat(64) },
+      },
+    ],
+  }
+}
+
+test("explicit schema 2 accepts a bound certificate and reader verifies selected identity", () => {
+  const parsed = parseComparisonManifest(certifiedManifest(), manifest.results_db_sha256)
+  const selected = run("partial", [1], { status: "failed" })
+  selected.metadata.benchmark_profile.id = "resident-hot-v1"
+  expect(() => validateSelectedCertificates(parsed, [selected])).not.toThrow()
+  expect(() => validateSelectedCertificates(parsed, [])).toThrow("does not match selected run 7")
+  expect(() => validateSelectedCertificates(parsed, [selected, selected])).toThrow("does not match")
+  expect(() => validateSelectedCertificates(parsed, [{ ...selected, version: "other" }])).toThrow(
+    "does not match",
+  )
+})
+
+test.each([
+  ["unknown schema", (m) => (m.version = 3)],
+  ["unknown overall policy", (m) => (m.overall_policy = "relative-speed-v3")],
+  ["missing certificate policy", (m) => delete m.certificate_policy],
+  ["missing certificates", (m) => delete m.certificates],
+  ["extra policy field", (m) => (m.extra = true)],
+  ["duplicate certificate", (m) => m.certificates.push(m.certificates[0])],
+  ["subset certificate", (m) => (m.certificates[0].queries = ["Q1"])],
+  ["missing proof", (m) => delete m.certificates[0].validation],
+  ["bad origin hash", (m) => (m.certificates[0].origin.results_db_sha256 = "bad")],
+  ["bad fingerprint", (m) => (m.certificates[0].run_content_sha256 = "bad")],
+  ["bad population ID", (m) => (m.certificates[0].population.selected_run_id = 0)],
+  ["extra lineage field", (m) => (m.certificates[0].lineage.ok = true)],
+  ["v1 with v2 certificates", (m) => (m.version = 1)],
+])("certification metadata rejects %s", (_, change) => {
+  const value = certifiedManifest()
+  change(value)
+  expect(() => parseComparisonManifest(value, manifest.results_db_sha256)).toThrow()
+})
