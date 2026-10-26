@@ -205,7 +205,7 @@ export function HomeScoreTable() {
               </SecondaryText>
               <CoverageLegend />
             </div>
-            <OverallMethod />
+            <OverallMethod policy={overview.overall.policy} />
           </div>
         </>
       ) : active && cell ? (
@@ -282,7 +282,7 @@ export function HomeScoreTable() {
   )
 }
 
-function OverallMethod() {
+function OverallMethod({ policy }: { policy: string }) {
   return (
     <DetailsDialog title="Overall ranking method" trigger="How the score works">
       <BodyText>
@@ -293,10 +293,12 @@ function OverallMethod() {
       </BodyText>
       <BodyText>
         Each scored query requires one successful warmup and three successful measured iterations
-        from an otherwise valid completed run. Other missing queries do not discard that evidence.
-        Failed runs, invalidation and documented incomplete preparation block the whole run.
-        Conflicting answers, mixed inputs or fewer than two usable engines per query block the
-        overall ranking.
+        from an eligible run. Other missing queries do not discard that evidence.{" "}
+        {policy === "relative-speed-v2"
+          ? "V2 also credits successful queries from certified terminal failed runs after a whole-run population, lineage and answer audit; failed or missing queries score zero. Raw failures remain visible and strict workload comparisons still exclude failed runs."
+          : "V1 requires a completed run; failed runs score zero for the whole cell."}{" "}
+        Invalidation and documented incomplete preparation block the whole run. Conflicting answers,
+        mixed inputs or fewer than two usable engines per query block the overall ranking.
       </BodyText>
       <BodyText>
         Weighted coverage is the share of performance queries with a usable result, averaged with
@@ -305,7 +307,7 @@ function OverallMethod() {
         reasons are in each database&apos;s details.
       </BodyText>
       <BodyText>
-        Reference medians include complete queries from partial completed runs across the whole
+        Reference medians include complete queries from eligible partial runs across the whole
         publication. Prepared and smoke tracks and zero-weight families are excluded. Scores
         describe the published speed and coverage, not universal database capability or an overall
         latency multiplier. Equal family weights are an explicit workload-mix choice. The details

@@ -146,6 +146,8 @@ def write_comparison_manifest(
     output_directory: Path,
     *,
     annotations_path: Path | None = None,
+    certificates_path: Path | None = None,
+    evidence_directory: Path | None = None,
 ) -> Path:
     manifest = cast(dict[str, object], json.loads((output_directory / "manifest.json").read_text()))
     db_path = output_directory / "results.db"
@@ -185,6 +187,20 @@ def write_comparison_manifest(
         ],
         "annotations": _annotations(annotation_source, runs),
     }
+    if certificates_path is not None:
+        from .certification import validate_certificates
+
+        if evidence_directory is None:
+            raise ValueError("Certificates require an evidence directory")
+        certificates = validate_certificates(db_path, certificates_path, evidence_directory, result["annotations"])
+        result.update(
+            version=2,
+            overall_policy="relative-speed-v2",
+            certificate_policy="certified-terminal-partial-v1",
+            certificates=certificates,
+        )
+    elif evidence_directory is not None:
+        raise ValueError("An evidence directory requires certificates")
     destination = output_directory / "comparison.json"
     destination.write_text(f"{json.dumps(result, indent=2)}\n")
     return destination

@@ -21,11 +21,11 @@ export function useHomeOverview(system: string | null) {
   )
   const aggregation = useMemo(() => {
     try {
-      return { overall: aggregateOverview(families), error: null }
+      return { overall: aggregateOverview(families, data?.manifest ?? { version: 1 }), error: null }
     } catch (cause: unknown) {
-      return { overall: aggregateOverview([]), error: String(cause) }
+      return { overall: aggregateOverview([], { version: 1 }), error: String(cause) }
     }
-  }, [families])
+  }, [families, data])
   return {
     families,
     overall: aggregation.overall,

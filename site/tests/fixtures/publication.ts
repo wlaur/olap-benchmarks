@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -58,7 +59,7 @@ function literal(value: unknown): string {
   return `'${String(value).replaceAll("'", "''")}'`
 }
 
-export async function makePublicationFixture(): Promise<{
+export async function makePublicationFixture(certifiedPartial = false): Promise<{
   buffer: Buffer
   cleanup: () => Promise<void>
 }> {
@@ -96,7 +97,11 @@ export async function makePublicationFixture(): Promise<{
         const runId = index + 1
         const failed = runId === 8
         const metadata = {
-          benchmark_profile: { warmup_iterations: 1, measured_iterations: 3 },
+          benchmark_profile: {
+            id: "resident-hot-v1",
+            warmup_iterations: 1,
+            measured_iterations: 3,
+          },
           input: { manifest_sha256: "same-input" },
           ...(db === "invalidated" ? { invalidation: { reason: "bad preparation" } } : {}),
         }
@@ -119,8 +124,9 @@ export async function makePublicationFixture(): Promise<{
           JSON.stringify(metadata),
         ]
         await connection.run(`insert into publication.run values (${row.map(literal).join(",")})`)
-        if (failed) continue
+        if (failed && !certifiedPartial) continue
         for (const query of ["Q1", "Q2", "Q28"]) {
+          if (failed && query !== "Q1") continue
           for (let iteration = 1; iteration <= 4; iteration++) {
             if (db === "partial" && query === "Q2" && iteration === 4) continue
             const status =
@@ -178,7 +184,11 @@ export async function usePublicationFixture(
   await page.route("**/data/manifest.json", (route) =>
     route.fulfill({
       json: {
-        results_db_sha256: SHA,
+        results_db_sha256:
+          (comparison as { version: number }).version === 2
+            ? createHash("sha256").update(buffer).digest("hex")
+            : SHA,
+        results_db_bytes: buffer.byteLength,
         results_db_format: {
           storage_compatibility_version: "v1.4.0",
           minimum_reader_engine_version: "v1.4.0",

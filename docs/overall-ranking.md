@@ -6,12 +6,16 @@ All publication databases remain listed, including those with partial or no
 comparable evidence. This index describes the selected measurements and harness;
 it does not establish a universal database winner or predict unmeasured capability.
 
-The policy is `relative-speed-v1`. It replaces `bounded-log-utility-v1` with a
-direct relative-speed calculation and no slowdown cutoff. It is a
-retrospective index of existing measurements, not a measurement policy declared
-before the campaign. The dated campaign report's “no overall winner” statement
-remains a historical description of its original publication; this later index
-adds an explicit aggregation policy without rerunning or changing those results.
+Comparison metadata explicitly versions eligibility. Schema 1 uses
+`relative-speed-v1`: a failed run earns zero for its entire cell. Schema 2 uses
+`relative-speed-v2` with `certified-terminal-partial-v1`: individually usable
+queries in a certified terminal failed SELECT may contribute; failed and missing
+queries still earn zero. Neither policy changes the relative-speed formula,
+fixed denominator, reference medians or strict workload comparison.
+
+Both are retrospective indices. The dated campaign report's original “no overall
+winner” statement remains historical. The frozen v1 acceptance results below
+remain a v1 baseline, not a claim about a later v2 publication.
 
 ## Fixed workload and weights
 
@@ -50,9 +54,10 @@ memory and storage remain separate observations.
 
 ## Usable measurements and publication errors
 
-A database's selected run for a family/scale must be completed, non-invalidated
-and free of a recorded run error, with a known input fingerprint and no
-documented incomplete preparation. Its adapter and scale must be registered.
+Under v1, a database's selected run for a family/scale must be completed,
+non-invalidated and free of a recorded run error, with a known input fingerprint
+and no documented incomplete preparation. V2 additionally admits a failed run
+only with a certificate for that entire selected SELECT. Its adapter and scale must be registered.
 A query is usable when exactly one warmup and three measured
 iterations succeed with the correct iteration identities, the measured fetch
 durations are positive and finite, and no wrong-result flag, answer conflict or
@@ -60,8 +65,17 @@ documented semantic exclusion blocks comparison. Its timing `t` is the median
 of those three measurements.
 
 **Completed partial runs may contribute their individually usable queries.**
-A failed or otherwise blocked run contributes zero for its entire database /
-family / scale cell, even if some earlier queries completed. Successful execution
+An uncertified failed run or otherwise blocked run contributes zero for its
+entire cell. V2 certification requires the full canonical population and query
+plan, clean provenance, exact raw and final database hashes, selected and origin
+run identities, whole-run content fingerprints (including metrics and snapshot),
+the actual population origin and mapped ID, hashed population and lineage audits,
+and a clean report covering ALL answers and iterations. The publisher reruns the
+existing publication gate and read-only answer validation including failed runs.
+Invalidation, wrong results, conflicts, incomplete preparation and interrupted or
+unsuccessful validation cannot be certified. Certificates never select a subset
+of successful queries. The reader verifies database bytes and selected identity;
+raw failure status and errors remain visible. Successful execution
 alone is not independent correctness proof: peer hashes, repeat-only evidence,
 hash limits and unknown correctness remain distinguishable in the explorer.
 
@@ -84,7 +98,7 @@ publication.
 ## Relative-speed points
 
 For each canonical query/scale, `t*` is the fastest usable median across the
-entire publication, including usable queries in completed partial runs. A usable
+entire publication, including usable queries in eligible partial runs. A usable
 timing `t` earns:
 
 ```text
@@ -151,7 +165,7 @@ by default and remain available on the overview.
 
 The **By workload** view retains its strict family/scale latency comparison:
 every required query must be usable, and the geometric mean of median-latency
-ratios is lower-is-better. Partial completed runs can earn overall points without
+ratios is lower-is-better. Eligible partial runs can earn overall points without
 qualifying for that strict score.
 
 Relative-speed points use an arithmetic average of reciprocal latency ratios.
@@ -191,7 +205,7 @@ rank sensitivity and the exact engine pairs whose workload order differs:
 
 ## Measurement limits and reproduction
 
-The evidence is revision `2026-10-followup`, selected release asset **143,929,344
+The historical v1 acceptance evidence is revision `2026-10-followup`, selected release asset **143,929,344
 bytes**, SHA-256
 `832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f`.
 The application calculates scores in `site/src/lib/overall.ts` using its shared
@@ -209,13 +223,43 @@ execution kernels, predict production workloads or establish a general
 memory-efficiency ranking. The four time-series families plus RTABench carry
 5/11 of the weight, an explicit workload-mix choice.
 
-One campaign asymmetry affects PostgreSQL and TimescaleDB TPC-DS: SF1 Q11 was
-an explicit exclusion, so completed partial runs may earn credit for the other
-98 positions. At SF10, the external Q11 watchdog failed the entire run, so all
-positions earn zero, including earlier completions. This policy retains that
-recorded distinction.
+In that historical v1 publication, PostgreSQL and TimescaleDB TPC-DS SF1 Q11
+was explicitly excluded, allowing completed partial runs to score the other 98
+positions. At SF10, an external Q11 watchdog failed the entire run, so v1 awarded
+zero for all positions, including earlier completions.
+
+In the curated recovery publication, PostgreSQL SF1 instead retains a terminal
+failed run with an observed Q11 timeout and a whole-run certificate: its other
+98 usable queries can score under v2. TimescaleDB SF1 retains its historical
+explicit exclusion. Unproven SF10 failed cohorts have no certificate and remain
+zero. The unfinished newer TPC-DS generation, including interrupted PostgreSQL
+final/run688, is deferred. The [curated recovery report](campaigns/2026-10-timeout-recovery-curated.md)
+records the selected generation and exact origins.
 
 The [follow-up report](campaigns/2026-10-followup.md) records tuning, replacements
 and limitations. Changes to the asset, query sets, weights or scoring policy can
 change the ranking; a difference between editions alone does not demonstrate a
 database speed improvement.
+
+## Reproducing v2 metadata
+
+Finish the normal publication/export first. Then generate the final validation
+report with `olap_benchmarks.results.certification.write_validation_report` and
+provide the certificate sidecar to the existing command:
+
+```sh
+uv run olap results publication-metadata --output-directory site/public/data \
+  --annotations-path annotations.json --certificates-path certificates.json \
+  --evidence-directory evidence
+```
+
+This writes comparison metadata only; it never rewrites `results.db`. Ordinary
+publication and metadata generation without certificates remain explicitly v1.
+The certificate models in `olap_benchmarks/results/certification.py` define exact
+fields, rejecting missing or extra fields, duplicate IDs, stale hashes and wrong
+cells. The evidence directory supplies `<origin.revision>.db` sealed raw archives
+(symlinks are supported), the hashed reports and their referenced evidence.
+Canonical input files must be available read-only through the normal input-data
+setting to verify population row counts. Use `run_content_sha256(db_path, run_id)`
+for the fingerprint; all scientific fields and embedded metadata are preserved,
+while relational IDs are normalized for the curator's import mapping.

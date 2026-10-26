@@ -6,6 +6,7 @@ import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url"
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url"
 import { Kysely } from "kysely"
 
+import { fetchComparisonDocument, parseComparisonManifest, record } from "./comparison"
 import type { DB } from "./generated/db"
 import { assertResultsReaderCompatible, parseResultsDbFormat } from "./resultsFormat"
 import { fetchResultsManifest } from "./resultsManifest"
@@ -39,12 +40,25 @@ async function initDuckDb(): Promise<duckdb.AsyncDuckDB> {
     const manifest = await fetchResultsManifest()
     const format = parseResultsDbFormat(manifest.results_db_format)
     assertResultsReaderCompatible(format, await database.getVersion())
-    await database.registerFileURL(
-      RESULTS_DB_FILE,
-      `${BASE}data/results.db`,
-      duckdb.DuckDBDataProtocol.HTTP,
-      false,
-    )
+    const document = await fetchComparisonDocument()
+    if (record(document).version !== 1) {
+      const comparison = parseComparisonManifest(document, manifest.results_db_sha256)
+      const response = await fetch(`${BASE}data/results.db`)
+      if (!response.ok) throw new Error(`Failed to load certified results.db: ${response.status}`)
+      const bytes = await response.arrayBuffer()
+      const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))
+      const digest = [...hash].map((value) => value.toString(16).padStart(2, "0")).join("")
+      if (digest !== comparison.results_db_sha256 || bytes.byteLength !== manifest.results_db_bytes)
+        throw new Error("Certified results.db bytes do not match the publication binding")
+      await database.registerFileBuffer(RESULTS_DB_FILE, new Uint8Array(bytes))
+    } else {
+      await database.registerFileURL(
+        RESULTS_DB_FILE,
+        `${BASE}data/results.db`,
+        duckdb.DuckDBDataProtocol.HTTP,
+        false,
+      )
+    }
     await database.open({
       path: RESULTS_DB_FILE,
       accessMode: duckdb.DuckDBAccessMode.READ_ONLY,

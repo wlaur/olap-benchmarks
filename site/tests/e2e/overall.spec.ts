@@ -36,16 +36,17 @@ test(
           rows: compareFamily(family, scale, systems[0]!, runs, manifest),
         })),
       }))
-      const result = aggregateOverview(families)
+      const result = aggregateOverview(families, manifest)
       let pairs = 0
       const inversions: string[] = []
       for (const entry of families.filter(
         ({ family }) => family.weight > 0 && family.track === "raw",
       )) {
         for (const cell of entry.scales) {
-          const single = aggregateOverview([
-            { family: { ...entry.family, scale_factors: [cell.scale] }, scales: [cell] },
-          ])
+          const single = aggregateOverview(
+            [{ family: { ...entry.family, scale_factors: [cell.scale] }, scales: [cell] }],
+            manifest,
+          )
           const eligible = cell.rows.filter((row) => row.eligible)
           for (let a = 0; a < eligible.length; a++) {
             for (let b = a + 1; b < eligible.length; b++) {

@@ -3,6 +3,7 @@ import { sql } from "kysely"
 import { fetchComparisonManifest, record, type ComparisonManifest } from "./comparison"
 import { getKyselyDb } from "./duckdb"
 import type { IterationObservation, RunObservation } from "./observations"
+import { validateSelectedCertificates } from "./overallEligibility"
 import { fetchProfileScope } from "./queries"
 
 export interface ComparisonData {
@@ -28,7 +29,10 @@ export function fetchComparisonData(): Promise<ComparisonData> {
 async function loadComparisonData(): Promise<ComparisonData> {
   const manifest = await fetchComparisonManifest()
   const [db, scope] = await Promise.all([getKyselyDb(), fetchProfileScope()])
-  if (!scope.active) return { manifest, runs: [] }
+  if (!scope.active) {
+    validateSelectedCertificates(manifest, [])
+    return { manifest, runs: [] }
+  }
   const runRows = await db
     .selectFrom("run")
     .leftJoin("system_snapshot", "system_snapshot.id", "run.system_snapshot_id")
@@ -50,6 +54,7 @@ async function loadComparisonData(): Promise<ComparisonData> {
       "system_snapshot.memory_total_mb",
       sql<string | null>`cast(run.metadata as varchar)`.as("run_metadata"),
       sql<string>`cast(coalesce(run.finished_at, run.started_at) as varchar)`.as("finished_at"),
+      sql<boolean>`run.finished_at is not null`.as("terminal"),
     ])
     .where("run.operation", "=", "select")
     .where("run.benchmark_profile", "=", scope.active.id)
@@ -76,7 +81,7 @@ async function loadComparisonData(): Promise<ComparisonData> {
       suite: row.suite,
       scale: row.suite_scale_factor,
       status: row.status,
-      finishedAt: row.finished_at,
+      finishedAt: manifest.version === 2 && !row.terminal ? "" : row.finished_at,
       snapshotId: row.system_snapshot_id,
       metadata: parseMetadata(row.run_metadata),
       snapshot: {
@@ -90,6 +95,7 @@ async function loadComparisonData(): Promise<ComparisonData> {
     })
   }
   const runs = [...latest.values()]
+  validateSelectedCertificates(manifest, runs)
   if (runs.length === 0) return { manifest, runs }
   const byRun = new Map(runs.map((run) => [run.runId, run]))
   const steps = await db
