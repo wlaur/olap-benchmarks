@@ -1,0 +1,59 @@
+{
+  "user_request": "Finalize now, leave unfinished work in progress, close system, push remote and summarize",
+  "benchmark_status": "stopped_by_user_no_owned_runners_containers_writers_WAL",
+  "source_head": "479fab502e0a2ca97e27b74473f3f68773092bf6",
+  "published_main": "eddb31a744064ab7efc8015ef81ff93ba1d6812c",
+  "active_revision": "2026-10-timeout-recovery-final",
+  "final_attempt": "run688 failed KeyboardInterrupt Interrupted by user at2026-10-26T04:12:58.346959Z duringQ81warmup;79queries316ok/237measured;Q11timeout;validationincompletefalse;noACKeligible",
+  "settled_first_final_cell": "TimescaleDS1run686failedQ11;98queries294measured;cleanvalidation;acceptedfailedSELECT",
+  "unstarted_cells": [
+    "timescaledb:tpc_ds:sf10",
+    "postgres:tpc_ds:sf10",
+    "monetdb:clickbench:sf1"
+  ],
+  "pending": [
+    "Review interruptedPGSF1evidence before continuation/certification; no plainresume or ACK whilevalidationfalse",
+    "Finish remaining measurements under reviewed continuation",
+    "Implement selected validated-success eligibility policy with strict proof/tests",
+    "Curate whole attempts with namespace/ID/SQL lineage, publish coherent dataset and metadata",
+    "Final archive/remote verification then task-owned worktree cleanup"
+  ],
+  "retained": "Frozen source worktrees, all raw statuses/journals and evidence; unrelatedcaffeinate94398/old4stoppedcontainers untouched",
+  "policy_choice": {
+    "selected_by_user": "Count validated successful queries; failed or missing queries score 0",
+    "status": "authorized_for_future_implementation_not_implemented_or_published",
+    "unchanged_formula_denominators": "100 * fastest / median; 871 fixed positions,11 equal raw families,Q28 exclusion unchanged",
+    "required_followup": "Versioned whole-attempt certification and clean answer/iteration/provenance proof, lineage/SQL audits, tests and atomic policy+dataset publication; no credit merely from raw successful durations."
+  },
+  "remote_backup": {
+    "assets": [
+      {
+        "name": "timeout-recovery-20261026-source-468549d42d1d.bundle",
+        "bytes": 4445269,
+        "sha256": "468549d42d1d7a7bfff33acacac00043879a2343f14ca9392dafa5029a6d642e",
+        "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-20261026-source-468549d42d1d.bundle",
+        "github_digest": "sha256:468549d42d1d7a7bfff33acacac00043879a2343f14ca9392dafa5029a6d642e"
+      },
+      {
+        "name": "timeout-recovery-20261026-evidence-a8192c23b118.tar.gz",
+        "bytes": 284266603,
+        "sha256": "a8192c23b11807fe9d7733c0f7b8197494d1be9aa750b728628661d5fed147aa",
+        "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-20261026-evidence-a8192c23b118.tar.gz",
+        "github_digest": "sha256:a8192c23b11807fe9d7733c0f7b8197494d1be9aa750b728628661d5fed147aa"
+      },
+      {
+        "name": "timeout-recovery-20261026-checkpoint-e4e49329dea2.json",
+        "bytes": 4227,
+        "sha256": "e4e49329dea20f531a3ce1010155670328f82052b41fd8e5ac2cb29770b065a8",
+        "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-20261026-checkpoint-e4e49329dea2.json",
+        "github_digest": "sha256:e4e49329dea20f531a3ce1010155670328f82052b41fd8e5ac2cb29770b065a8"
+      }
+    ],
+    "source_bundle_restore_verified": true,
+    "evidence_files": 1707,
+    "unique_payloads_verified": 827,
+    "private_env_files_excluded": 1
+  },
+  "published_dataset": "Previous reviewed dataset remains on the site; recovered raw data is not a publication.",
+  "resume_warning": "Do not use plain --resume or accept the interrupted PostgreSQL SELECT: validation_ok=false and the SELECT audit was not reached. Review the preserved evidence and a continuation plan first. Do not rewrite raw statuses or splice queries."
+}
