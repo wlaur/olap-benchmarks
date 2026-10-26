@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "results_db_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
+  "results_db_sha256": "97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d",
   "policy_id": "fixed-workloads-v1",
   "retrospective": true,
   "families": [
@@ -2542,16 +2542,6 @@
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
     },
     {
-      "db": "postgres",
-      "suite": "tpc_ds",
-      "scale_factor": 10,
-      "run_id": 658,
-      "preparation": "observed",
-      "tuning": null,
-      "summary": "All 24 canonical table counts verified. Preparation completed, but the Q11 operation watchdog stopped this SELECT after 11 fully measured queries. Other positions retain their recorded partial, timeout or unstarted outcomes; this cohort is unranked.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
-    },
-    {
       "db": "timescaledb",
       "suite": "device_telemetry",
       "scale_factor": 1,
@@ -2570,16 +2560,6 @@
       "tuning": "Bounded traversal candidates rejected",
       "summary": "Canonical telemetry preparation and SELECT readiness recorded for 4,863,454 readings and device metadata. Evidence applies to this static-read workload. Tested rewrites were rejected; measured cohorts retain their original layout.",
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#bounded-tuning"
-    },
-    {
-      "db": "timescaledb",
-      "suite": "tpc_ds",
-      "scale_factor": 10,
-      "run_id": 660,
-      "preparation": "observed",
-      "tuning": null,
-      "summary": "All 24 canonical table counts verified. Preparation completed, but the Q11 operation watchdog stopped this SELECT after 10 fully measured queries. Other positions retain their recorded partial, timeout or unstarted outcomes; this cohort is unranked.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md#correctness-and-relational-coverage"
     },
     {
       "db": "doris",
@@ -2642,26 +2622,6 @@
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
     },
     {
-      "db": "postgres",
-      "suite": "tpc_ds",
-      "scale_factor": 1,
-      "run_id": 691,
-      "preparation": "observed",
-      "tuning": null,
-      "summary": "Canonical full population 2026-10-timeout-recovery/run692 completed for this whole SELECT attempt (2026-10-timeout-recovery/run693). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
-    },
-    {
-      "db": "postgres",
-      "suite": "tpc_h",
-      "scale_factor": 10,
-      "run_id": 693,
-      "preparation": "observed",
-      "tuning": null,
-      "summary": "Canonical full population 2026-10-timeout-recovery-continuation/run685 completed for this whole SELECT attempt (2026-10-timeout-recovery-continuation/run686). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
-    },
-    {
       "db": "starrocks",
       "suite": "time_series",
       "scale_factor": 1,
@@ -2702,16 +2662,6 @@
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
     },
     {
-      "db": "monetdb",
-      "suite": "clickbench",
-      "scale_factor": 1,
-      "run_id": 707,
-      "preparation": "observed",
-      "tuning": null,
-      "summary": "Canonical population completed. The post-SELECT session_baseline_after check failed when Q32 reached the 300-second query deadline plus 30-second outer grace. Independent cleanup succeeded and answer validation was clean; this is not a wrong-answer finding or quarantine. The 96 successful measurements remain visible, but the uncertified attempt earns zero overall credit.",
-      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
-    },
-    {
       "db": "postgres",
       "suite": "tpc_h",
       "scale_factor": 50,
@@ -2740,6 +2690,66 @@
       "tuning": null,
       "summary": "Canonical full population 2026-10-timeout-recovery-corrective/run696 completed for this whole SELECT attempt (2026-10-timeout-recovery-corrective/run697). All recorded answers and iterations passed the sealed validation. Failed and missing positions retain their recorded outcomes.",
       "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md"
+    },
+    {
+      "db": "timescaledb",
+      "suite": "tpc_ds",
+      "scale_factor": 1,
+      "run_id": 715,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Whole canonical attempt 2026-10-timeout-recovery-final/run686 used its own complete population run685. All recorded successful answers and iterations validated. Raw failures and missing measurements remain unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md"
+    },
+    {
+      "db": "postgres",
+      "suite": "tpc_ds",
+      "scale_factor": 1,
+      "run_id": 717,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Whole canonical attempt 2026-10-timeout-recovery-deferred-20261026/run686 used its own complete population run685. All recorded successful answers and iterations validated. Raw failures and missing measurements remain unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md"
+    },
+    {
+      "db": "timescaledb",
+      "suite": "tpc_ds",
+      "scale_factor": 10,
+      "run_id": 719,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Whole canonical attempt 2026-10-timeout-recovery-deferred-20261026/run688 used its own complete population run687. All recorded successful answers and iterations validated. Raw failures and missing measurements remain unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md"
+    },
+    {
+      "db": "postgres",
+      "suite": "tpc_ds",
+      "scale_factor": 10,
+      "run_id": 721,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Whole canonical attempt 2026-10-timeout-recovery-deferred-20261026/run690 used its own complete population run689. All recorded successful answers and iterations validated. Raw failures and missing measurements remain unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md"
+    },
+    {
+      "db": "monetdb",
+      "suite": "clickbench",
+      "scale_factor": 1,
+      "run_id": 723,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Whole canonical attempt 2026-10-timeout-recovery-deferred-20261026/run692 used its own complete population run691. All recorded successful answers and iterations validated. Raw failures and missing measurements remain unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md"
+    },
+    {
+      "db": "postgres",
+      "suite": "tpc_h",
+      "scale_factor": 10,
+      "run_id": 725,
+      "preparation": "observed",
+      "tuning": null,
+      "summary": "Whole canonical attempt 2026-10-timeout-recovery-deferred-20261026/run694 used its own complete population run693. All recorded successful answers and iterations validated. Raw failures and missing measurements remain unchanged.",
+      "evidence_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md"
     }
   ],
   "overall_policy": "relative-speed-v2",
@@ -2771,56 +2781,17 @@
         },
         "run_content_sha256": "b0771d7910e671439d5cb469b2e915af366d296ab0d52a0de68b3513e8ece58e",
         "audit": {
-          "path": "certificates/run686/population-audit.json",
-          "sha256": "2ef79572ece50e2e6cb2c8400698563c53bbbe25fcc13f5b4ebe733f44eaaa5b"
+          "path": "retained-certificates/run686/population-audit.json",
+          "sha256": "701c84d345ae525fc8a852133a8be76b4020dd17cd437f4e1ee708bcc44658b8"
         }
       },
       "lineage": {
-        "path": "certificates/run686/lineage.json",
-        "sha256": "22fd7c19199ae1db830e1299ea113b182e448a9afad7f6bab6b89a1e434d3a23"
+        "path": "retained-certificates/run686/lineage.json",
+        "sha256": "a000ba1cc192d3c08497768dffc162b832cbeb75fcca0c7054bc9b9a3843424e"
       },
       "validation": {
         "path": "validation.json",
-        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
-      }
-    },
-    {
-      "selected_run_id": 691,
-      "cell": {
-        "system": "macbook-m4-pro",
-        "db": "postgres",
-        "db_version": "18.6",
-        "db_driver": null,
-        "suite": "tpc_ds",
-        "scale_factor": 1,
-        "benchmark_profile": "resident-hot-v1"
-      },
-      "origin": {
-        "revision": "2026-10-timeout-recovery",
-        "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
-        "run_id": 693
-      },
-      "run_content_sha256": "ddf26722cf5ea4d7dcecd87e9c6a4b177a11997088e4d5a2eb770adff64ee7fe",
-      "population": {
-        "selected_run_id": 690,
-        "origin": {
-          "revision": "2026-10-timeout-recovery",
-          "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
-          "run_id": 692
-        },
-        "run_content_sha256": "87c6f2e2432d7078d103dc243583218c4110d30accd863131b426e44e52d03e5",
-        "audit": {
-          "path": "certificates/run691/population-audit.json",
-          "sha256": "51e598d6b0a2d594ce91e20d9d5adf00cea4d875335e2846d35e163ed23de003"
-        }
-      },
-      "lineage": {
-        "path": "certificates/run691/lineage.json",
-        "sha256": "d14befc8db9645a12b76dd6a7edb258e5902ea94342732674df93f3e1ac8d051"
-      },
-      "validation": {
-        "path": "validation.json",
-        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
       }
     },
     {
@@ -2849,17 +2820,17 @@
         },
         "run_content_sha256": "2132115ea38985423bc72b69900273e9081f100781c4a0588c3bd0a8dc40028e",
         "audit": {
-          "path": "certificates/run709/population-audit.json",
-          "sha256": "97d309320cdf280aebadef8077a3a3f7d8222dea52fe498cc9936002acc8314b"
+          "path": "retained-certificates/run709/population-audit.json",
+          "sha256": "beafd141194da725486c67423546ab924251017db413831fe4c746ec0cdcfc6b"
         }
       },
       "lineage": {
-        "path": "certificates/run709/lineage.json",
-        "sha256": "7f031476a826fe96b2bc9c9cad63c9135e9c0053a63017608620ac03f0176357"
+        "path": "retained-certificates/run709/lineage.json",
+        "sha256": "2ad37d8e77c188cd337cfe8eebc485439bf4c814081c76f313256ddd071971dc"
       },
       "validation": {
         "path": "validation.json",
-        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
       }
     },
     {
@@ -2888,17 +2859,212 @@
         },
         "run_content_sha256": "3e2b369c63e4e9b3e6ba11956c05d537b6fd62a20d39884f1e7ea8e16cdfb672",
         "audit": {
-          "path": "certificates/run711/population-audit.json",
-          "sha256": "00982c3a2e96bc293a571b8d35ebcc2ce04eb178c88e99d394c9891b0b782d7d"
+          "path": "retained-certificates/run711/population-audit.json",
+          "sha256": "aa547bac227454d72b8e31b3e43cb23e258c5ed8e2bd0167b543c0c1fe4fe074"
         }
       },
       "lineage": {
-        "path": "certificates/run711/lineage.json",
-        "sha256": "2bae5fc2f921e5f15db7c2cbf552a7984b7cfb01d97829d84db330e513fa2732"
+        "path": "retained-certificates/run711/lineage.json",
+        "sha256": "2f79bc1df2ee34ecf53c54b33015602762eabe8f8e2adc30992ea0ad36040fba"
       },
       "validation": {
         "path": "validation.json",
-        "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
+      }
+    },
+    {
+      "selected_run_id": 715,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "timescaledb",
+        "db_version": "2.30.2",
+        "db_driver": null,
+        "suite": "tpc_ds",
+        "scale_factor": 1,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-final",
+        "results_db_sha256": "2d55a9915b80101885eccb92048401d75e02e23b279046d86f475f5dfb07000c",
+        "run_id": 686
+      },
+      "run_content_sha256": "91cb5cc52c46254a6ec99f3465d3d095f73a1067bd602eab5e4aebc2afa77cc5",
+      "population": {
+        "selected_run_id": 714,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-final",
+          "results_db_sha256": "2d55a9915b80101885eccb92048401d75e02e23b279046d86f475f5dfb07000c",
+          "run_id": 685
+        },
+        "run_content_sha256": "c2c3372c7643154572f4e31a59195fd21b5a723d1550df13a4a37359775c238e",
+        "audit": {
+          "path": "certificates/run715/population-audit.json",
+          "sha256": "79128e009e2880977ceb79882d7c74beed981db421f532eef607cd6bf2bb08f3"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run715/lineage.json",
+        "sha256": "a1dfd8771e1e554f505861ce32fe2dc5a32c93d19c7e3ad8bdc9ff57f6e99ea4"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
+      }
+    },
+    {
+      "selected_run_id": 717,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "postgres",
+        "db_version": "18.6",
+        "db_driver": null,
+        "suite": "tpc_ds",
+        "scale_factor": 1,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-deferred-20261026",
+        "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+        "run_id": 686
+      },
+      "run_content_sha256": "9404e13ab17e3ee35f84957967b7c58ee9c7af3e5a06baa1a8e3fc4c2dcc7a42",
+      "population": {
+        "selected_run_id": 716,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-deferred-20261026",
+          "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+          "run_id": 685
+        },
+        "run_content_sha256": "44e0dcb212ec6b681d706a1c0da74e248f5f36fcbe00c6a5124317f97411d84a",
+        "audit": {
+          "path": "certificates/run717/population-audit.json",
+          "sha256": "fd9c46f25e2bae77eb27a4dcad56e710887b9481e2eb5db836380f403603d2f4"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run717/lineage.json",
+        "sha256": "57f05995c60b859e563c6751a7ab065b9a1c7d80eff072427c393a60fa046e29"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
+      }
+    },
+    {
+      "selected_run_id": 719,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "timescaledb",
+        "db_version": "2.30.2",
+        "db_driver": null,
+        "suite": "tpc_ds",
+        "scale_factor": 10,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-deferred-20261026",
+        "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+        "run_id": 688
+      },
+      "run_content_sha256": "3c706d21450b70618f58d1e1d5f77f801b10c191819bcb846a42a1de271e58a8",
+      "population": {
+        "selected_run_id": 718,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-deferred-20261026",
+          "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+          "run_id": 687
+        },
+        "run_content_sha256": "1c0831567895007849b68428c67f8edc4b1b5e1a20b59cff8c099b748f9c75bb",
+        "audit": {
+          "path": "certificates/run719/population-audit.json",
+          "sha256": "5e19c0862e46d8e16cbc99649ba080665760d15a34ab9a99f23d4c9e69842473"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run719/lineage.json",
+        "sha256": "ccce6db4913cd22f2ae0ebe8d4e0633fee61b7ed149b567ae1d6280d0f0c5145"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
+      }
+    },
+    {
+      "selected_run_id": 721,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "postgres",
+        "db_version": "18.6",
+        "db_driver": null,
+        "suite": "tpc_ds",
+        "scale_factor": 10,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-deferred-20261026",
+        "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+        "run_id": 690
+      },
+      "run_content_sha256": "d1c6e261467ab7c016c5ede20ef2f6c73d2972436750f688f73ebd00ab71c36e",
+      "population": {
+        "selected_run_id": 720,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-deferred-20261026",
+          "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+          "run_id": 689
+        },
+        "run_content_sha256": "704d28afb139bbda6ae05d1490948428bd38633cdc3feb36397cc378f9e4b0c6",
+        "audit": {
+          "path": "certificates/run721/population-audit.json",
+          "sha256": "0091ede6124b3c7126e2c030bef1e23392688eceea6dcb52b22237c687c0a6f3"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run721/lineage.json",
+        "sha256": "7a8a3011a8f13ec6c2bc39cd4bf946f9b239ace334364aa7e3fd430a57c67e5b"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
+      }
+    },
+    {
+      "selected_run_id": 723,
+      "cell": {
+        "system": "macbook-m4-pro",
+        "db": "monetdb",
+        "db_version": "Dec2025-SP4",
+        "db_driver": "adbc",
+        "suite": "clickbench",
+        "scale_factor": 1,
+        "benchmark_profile": "resident-hot-v1"
+      },
+      "origin": {
+        "revision": "2026-10-timeout-recovery-deferred-20261026",
+        "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+        "run_id": 692
+      },
+      "run_content_sha256": "935fa868e9252234802038fd7e645b7a63fbdfe4343629f87408f2274303ece1",
+      "population": {
+        "selected_run_id": 722,
+        "origin": {
+          "revision": "2026-10-timeout-recovery-deferred-20261026",
+          "results_db_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+          "run_id": 691
+        },
+        "run_content_sha256": "78b862334f5933148808b95b6adf23a8145ca72cbd0705d1ccb2e0a264207eb1",
+        "audit": {
+          "path": "certificates/run723/population-audit.json",
+          "sha256": "cacab921ea3523d4913580443b18e25ac1d7ab5cb36dd4109f1d17425686235c"
+        }
+      },
+      "lineage": {
+        "path": "certificates/run723/lineage.json",
+        "sha256": "8ec34503eb1c74066b6244a165aa03e068dc7bfcf0b2525c5d7ff2d2e9004c4f"
+      },
+      "validation": {
+        "path": "validation.json",
+        "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
       }
     }
   ]

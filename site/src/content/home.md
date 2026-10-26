@@ -9,4 +9,4 @@
 - **Correctness:** successful execution is not independent verification. Result details show peer-hash agreement and exclusions.
 - **Not comparable:** across systems, or with published TPC benchmarks.
 
-Sources: [curated recovery report](https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md) · [historical follow-up report](https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md) · [suite catalog](#/catalog)
+Sources: [deferred results](https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md) · [prior curated recovery report](https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md) · [historical follow-up report](https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-followup.md) · [suite catalog](#/catalog)

@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "revision": "2026-10-timeout-recovery-deferred-publication",
+  "measurement_head": "743cc81f1b3d0e689d86aabbc2d6c1019ef7a962",
+  "raw_deferred_results_sha256": "6e6baccfde803dc6a098f4bbdc7c90e269bf9b489f0d787eb51793aa55d6ffe2",
+  "baseline_results_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
+  "results_db_sha256": "97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d",
+  "certified_select_run_ids": [
+    686,
+    709,
+    711,
+    715,
+    717,
+    719,
+    721,
+    723
+  ],
+  "artifacts": [
+    {
+      "path": "site/public/data/manifest.json",
+      "bytes": 3489,
+      "sha256": "bc4140cd0188af42943b4f0da369336d07faa352f3d780c545514b77bf19a5a1"
+    },
+    {
+      "path": "site/public/data/comparison.json",
+      "bytes": 100843,
+      "sha256": "702a205d90027e60396370776f81de889e040b617719f169d1d4330fa10d5f82"
+    },
+    {
+      "path": "site/public/data/queries.json",
+      "bytes": 4621177,
+      "sha256": "c09a97f6d01cadcf6b99b8e2aa3d4a23a2fe9e18b2d0278869ec425c86ffb3a0"
+    },
+    {
+      "path": "data/temp/deferred-publication/certificates.json",
+      "bytes": 11963,
+      "sha256": "8915546487b314b3441c3e497af4c68d51b01941fc3c5a6f9dd5892bc0cb0731"
+    },
+    {
+      "path": "data/temp/deferred-publication/validation.json",
+      "bytes": 302,
+      "sha256": "c8225bc18dff607e34c65ea285521343932ead223e8a13fda484e20a4959dd62"
+    },
+    {
+      "path": "data/temp/deferred-publication/selection.json",
+      "bytes": 5160,
+      "sha256": "75506b9656284a45b810f4d66d337adac13090fb30b783bf6e8c724a401c3a1e"
+    },
+    {
+      "path": "data/temp/deferred-publication/sql-audit.json",
+      "bytes": 4446559,
+      "sha256": "8e9401c63eaf48d2dd0664a83c943f0ce6482cbabaaf9da8f40fb7b05a45f35e"
+    },
+    {
+      "path": "docs/campaigns/2026-10-timeout-recovery-deferred-results.md",
+      "bytes": 11010,
+      "sha256": "681ee83989f028a0751411bb5b0d1a1ff4bb845b03d4ff8eca5b6464adc0374a"
+    }
+  ],
+  "release_assets": [
+    {
+      "release": "runs",
+      "asset": "timeout-recovery-deferred-source-a0576ddc17b7.bundle",
+      "bytes": 4500940,
+      "sha256": "a0576ddc17b7b582dca4c2141087367a7d61df06513c8a0f36653f477b0be3df",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-deferred-source-a0576ddc17b7.bundle"
+    },
+    {
+      "release": "runs",
+      "asset": "timeout-recovery-deferred-evidence-582821cffb5b.tar.gz",
+      "bytes": 115683399,
+      "sha256": "582821cffb5b3b872703ae10e15c3d71074232e30964ac74668110b69afa7b9d",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-deferred-evidence-582821cffb5b.tar.gz"
+    },
+    {
+      "release": "runs",
+      "asset": "timeout-recovery-deferred-proof-97476b95cac0.tar.gz",
+      "bytes": 16971694,
+      "sha256": "97476b95cac070577ff911fa12148506c809f46f52d80d39dd755ad52dda4f41",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-deferred-proof-97476b95cac0.tar.gz"
+    },
+    {
+      "release": "data",
+      "asset": "results-97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d.db",
+      "bytes": 158347264,
+      "sha256": "97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/data/results-97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d.db"
+    },
+    {
+      "release": "runs",
+      "asset": "timeout-recovery-20261026-evidence-a8192c23b118.tar.gz",
+      "bytes": 284266603,
+      "sha256": "a8192c23b11807fe9d7733c0f7b8197494d1be9aa750b728628661d5fed147aa",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-20261026-evidence-a8192c23b118.tar.gz",
+      "role": "Retained raw origins, exact source heads and prior certificate proofs"
+    },
+    {
+      "release": "runs",
+      "asset": "timeout-recovery-20261026-source-468549d42d1d.bundle",
+      "bytes": 4445269,
+      "sha256": "468549d42d1d7a7bfff33acacac00043879a2343f14ca9392dafa5029a6d642e",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-20261026-source-468549d42d1d.bundle",
+      "role": "Retained raw origins, exact source heads and prior certificate proofs"
+    },
+    {
+      "release": "runs",
+      "asset": "timeout-recovery-curated-proof-5b24f96cd57c.tar.gz",
+      "bytes": 8593321,
+      "sha256": "5b24f96cd57cd0a87a7a39bcf2976d6b99baf3a10e65730f54cf24cbc2e5dc1a",
+      "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-curated-proof-5b24f96cd57c.tar.gz",
+      "role": "Retained raw origins, exact source heads and prior certificate proofs"
+    }
+  ],
+  "remote_size_and_digest_verified": true,
+  "proof_archive_files": 291
+}

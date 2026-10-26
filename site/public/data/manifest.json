@@ -1,15 +1,15 @@
 {
-  "published_at": "2026-10-26T04:49:00.754869+00:00",
-  "revision": "2026-10-timeout-recovery-curated",
-  "source": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-e42242ca/results/2026-10-timeout-recovery-curated.db",
+  "published_at": "2026-10-26T15:34:46.759427+00:00",
+  "revision": "2026-10-timeout-recovery-deferred-publication",
+  "source": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7/results/2026-10-timeout-recovery-deferred-publication.db",
   "merged": false,
   "publication": {
     "kind": "campaign",
-    "title": "Benchmark campaign: 2026-10-timeout-recovery-curated",
-    "report_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-curated.md",
+    "title": "Benchmark campaign: 2026-10-timeout-recovery-deferred-publication",
+    "report_url": "https://github.com/wlaur/olap-benchmarks/blob/main/docs/campaigns/2026-10-timeout-recovery-deferred-results.md",
     "select_cohorts": 127,
-    "completed_select_cohorts": 119,
-    "failed_select_cohorts": 8,
+    "completed_select_cohorts": 118,
+    "failed_select_cohorts": 9,
     "partial_select_cohorts": 30,
     "source_commits": [
       "085cfa564ab29a79a1329bc6a5e99e558284aa17",
@@ -21,10 +21,12 @@
       "3532769feddeb41e5272668f34d771ab5f0182e1",
       "37daaae2932045b0960b1e09d76d10c9c90a5aec",
       "42c38e1450939da70b218197089880803e1a4ad7",
+      "479fab502e0a2ca97e27b74473f3f68773092bf6",
       "489ead800582c6c4e8211df6dab468cf276d4515",
       "4ea3c820f5e710a2ebeabb6aaec0cd0effce362b",
       "5f84e3752512e8c659d50d0e509eb8789f91386d",
       "6c6a3c3c8413acf7c3bf4e7b997d2f665a28f9c1",
+      "743cc81f1b3d0e689d86aabbc2d6c1019ef7a962",
       "74418f2a99a947c5a0a1192f2bda51cc50f53b54",
       "7a0c82c6182582273723499b8bd687cece4ed92c",
       "7f63c11ce2d754c41659e6e7037e602644cc3597",
@@ -40,7 +42,6 @@
       "a02a8af358ff18cd805b73c0c1567c49467db08d",
       "a049301274597ab9c7f68a3cd5952787a0a79c58",
       "af10d7a7a5b46ff3b044791bf6c671d06641fc71",
-      "af294aa3ec1cd3877d5947ad7d975483c0ae752f",
       "b5f91534663e80e132a6bd9c1f7b26fa6efd9f42",
       "b6363e69bbfabf629403e4f822d28bbd8d411406",
       "ba6c95509355f1961c286ad289e9e119a822de49",
@@ -66,13 +67,13 @@
     "minimum_reader_engine_version": "v1.4.0",
     "writer_engine_version": "2.0.0"
   },
-  "results_db_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
-  "results_db_bytes": 152842240,
+  "results_db_sha256": "97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d",
+  "results_db_bytes": 158347264,
   "table_counts": {
     "system_snapshot": 1,
     "run": 312,
-    "run_step": 39978,
-    "run_metric": 279863,
-    "query_execution": 157217
+    "run_step": 40025,
+    "run_metric": 323559,
+    "query_execution": 157978
   }
 }

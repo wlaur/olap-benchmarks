@@ -228,13 +228,23 @@ was explicitly excluded, allowing completed partial runs to score the other 98
 positions. At SF10, an external Q11 watchdog failed the entire run, so v1 awarded
 zero for all positions, including earlier completions.
 
-In the curated recovery publication, PostgreSQL SF1 instead retains a terminal
+In the first curated recovery publication, PostgreSQL SF1 retained a terminal
 failed run with an observed Q11 timeout and a whole-run certificate: its other
-98 usable queries can score under v2. TimescaleDB SF1 retains its historical
-explicit exclusion. Unproven SF10 failed cohorts have no certificate and remain
-zero. The unfinished newer TPC-DS generation, including interrupted PostgreSQL
-final/run688, is deferred. The [curated recovery report](campaigns/2026-10-timeout-recovery-curated.md)
-records the selected generation and exact origins.
+98 usable queries could score under v2. That edition retained TimescaleDB SF1's
+historical exclusion and uncertified SF10 failures. Its
+[curated recovery report](campaigns/2026-10-timeout-recovery-curated.md) remains
+the record for that frozen asset.
+
+The [deferred-results edition](campaigns/2026-10-timeout-recovery-deferred-results.md)
+replaces all four PostgreSQL/TimescaleDB TPC-DS cells with whole cohorts using the
+approved byte-order collation and binary64 Q49 contract. Both SF1 cohorts have
+98 usable queries and both SF10 cohorts have 94; the failed queries remain zero.
+All four terminal failed SELECTs have whole-run certificates. MonetDB ClickBench
+also has a new certified failed cohort: Q32 timed out, and later queries completed
+in the same SELECT. Its 41 usable comparable positions can score; Q28 retains
+its global exclusion. The interrupted PostgreSQL final/run688 remains archived
+and unselected. No scoring formula, weights, denominators or strict workload
+eligibility changed.
 
 The [follow-up report](campaigns/2026-10-followup.md) records tuning, replacements
 and limitations. Changes to the asset, query sets, weights or scoring policy can

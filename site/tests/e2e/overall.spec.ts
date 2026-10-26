@@ -148,7 +148,7 @@ test("overall rows and contributions fit desktop, iPad and mobile widths", async
     await row.locator("summary").first().click()
     await expect(row.locator("[data-overall-coverage]")).toBeVisible()
     await expect(row).toContainText("partial completed runs")
-    await expect(row).toContainText("run failed")
+    await expect(row).toContainText("timeout")
     await expect(row).toContainText("Scored run IDs")
     await expect(row).toContainText("Performance queries scored")
     for (const family of await row.locator("[data-overall-family]").all()) {
@@ -258,7 +258,9 @@ test(
     const manifest = await (await page.request.get("data/queries.json")).json()
     for (const [suite, query, db] of [
       ["tpc_ds", "46", "timescaledb"],
-      ["tpc_ds", "49", "postgres"],
+      ...["31", "49", "65", "85"].flatMap((queryName) =>
+        ["postgres", "timescaledb"].map((engine) => ["tpc_ds", queryName, engine]),
+      ),
       ["chat_threads", "06_thread_fetch_payload", "arc"],
     ]) {
       await page.goto(`#/explorer/${suite}?query=${query}&sql_database=${db}`)
@@ -275,11 +277,10 @@ test(
       await page.keyboard.press("Escape")
       await expect(page.getByRole("dialog")).not.toBeVisible()
     }
-    for (const query of ["31", "49", "65", "85"]) {
-      const entry = manifest.tpc_ds[query]
-      const sql = entry.db_overrides.postgres ?? entry.sql
-      expect(sql).not.toContain('COLLATE "C"')
-      expect(sql).not.toContain("DOUBLE PRECISION")
+    for (const db of ["postgres", "timescaledb"]) {
+      for (const query of ["31", "65", "85"])
+        expect(manifest.tpc_ds[query].db_overrides[db]).toContain('COLLATE "C"')
+      expect(manifest.tpc_ds["49"].db_overrides[db].match(/double precision/gi)).toHaveLength(12)
     }
   },
 )
