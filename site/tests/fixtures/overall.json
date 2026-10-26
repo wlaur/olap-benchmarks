@@ -1,5 +1,5 @@
 {
-  "results_db_sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c",
+  "results_db_sha256": "97494a6742ba6d71cfb21cdd3c7f129010d8db8cbf511142a232d747f4561c8d",
   "families": 11,
   "policy": "relative-speed-v2",
   "queries": 871,
@@ -9,14 +9,21 @@
       "coverage": 100,
       "db": "duckdb",
       "queries": 871,
-      "score": 80
+      "score": 79.9
     },
     {
       "band": [2, 2],
       "coverage": 100,
       "db": "clickhouse",
       "queries": 871,
-      "score": 41.1
+      "score": 41
+    },
+    {
+      "band": [3, 4],
+      "coverage": 71.4,
+      "db": "monetdb",
+      "queries": 770,
+      "score": 29.2
     },
     {
       "band": [3, 4],
@@ -26,25 +33,18 @@
       "score": 28.4
     },
     {
-      "band": [3, 4],
-      "coverage": 62.5,
-      "db": "monetdb",
-      "queries": 729,
-      "score": 27.5
-    },
-    {
       "band": [5, 6],
       "coverage": 45.5,
       "db": "polars",
       "queries": 323,
-      "score": 15.1
+      "score": 15
     },
     {
       "band": [5, 9],
       "coverage": 45.2,
       "db": "doris",
       "queries": 319,
-      "score": 12.4
+      "score": 12.3
     },
     {
       "band": [6, 8],
@@ -55,23 +55,23 @@
     },
     {
       "band": [7, 10],
-      "coverage": 79.6,
+      "coverage": 84,
       "db": "postgres",
-      "queries": 644,
-      "score": 8.3
+      "queries": 738,
+      "score": 8.5
+    },
+    {
+      "band": [8, 10],
+      "coverage": 84,
+      "db": "timescaledb",
+      "queries": 667,
+      "score": 7.6
     },
     {
       "band": [8, 10],
       "coverage": 43.8,
       "db": "arc",
       "queries": 421,
-      "score": 7.4
-    },
-    {
-      "band": [9, 10],
-      "coverage": 79.6,
-      "db": "timescaledb",
-      "queries": 573,
       "score": 7.4
     },
     {

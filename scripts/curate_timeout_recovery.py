@@ -358,8 +358,10 @@ def sql_audit(con: duckdb.DuckDBPyConnection, manifest: Record, output: Path) ->
     return result
 
 
-def baseline_audit(con: duckdb.DuckDBPyConnection, baseline: Path, output: Path) -> None:
-    checked_source(baseline, BASELINE_SHA)
+def baseline_audit(
+    con: duckdb.DuckDBPyConnection, baseline: Path, output: Path, *, expected_sha256: str = BASELINE_SHA
+) -> None:
+    checked_source(baseline, expected_sha256)
     retained = read_json(output / "baseline-identity-map.json")["retained_run_ids"]
     con.execute(f"attach {sql_path(baseline)} as seed (read_only)")
     ids = ",".join(map(str, retained))
