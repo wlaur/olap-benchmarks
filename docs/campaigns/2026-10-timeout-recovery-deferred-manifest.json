@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "status": "prepared-not-started",
+  "workspace": "/Users/williamlauren/.t3/worktrees/olap-benchmarks/t3-416ee4f7",
+  "branch": "t3/simplify-overview-scoring",
+  "revision": "2026-10-timeout-recovery-deferred-20261026",
+  "source_parent": "d1753c488460fab1a171d8bbd8f68dfee3ac01fc",
+  "plan": {
+    "path": "docs/campaigns/2026-10-timeout-recovery-deferred-plan.json",
+    "bytes": 64254,
+    "sha256": "3f5826b437df924e14204a811689a448b5f7e4b48a3dbc83346ab725f671b64d"
+  },
+  "protocol": {
+    "path": "docs/campaigns/2026-10-timeout-recovery-deferred.md",
+    "bytes": 6373,
+    "sha256": "9b018702bcc07ffcdf962f00a23ff81f61f660f5cc02af00e5e46237b92e49ed"
+  },
+  "ordered_cells": [
+    "postgres:tpc_ds:sf1",
+    "timescaledb:tpc_ds:sf10",
+    "postgres:tpc_ds:sf10",
+    "monetdb:clickbench:sf1",
+    "postgres:tpc_h:sf10"
+  ],
+  "query_slots": 362,
+  "analytical_clients": [
+    16
+  ],
+  "unchanged_contracts": [
+    "settings",
+    "pins",
+    "all nine inputs",
+    "input_directory",
+    "seed size/SHA",
+    "exact four deferred Cells",
+    "exact PostgreSQL TPC-H SF10 Cell",
+    "analytical fields except clients"
+  ],
+  "expected_images": [
+    {
+      "tag": "postgres:18.6",
+      "image_id": "sha256:0336095afa072c685c93021dcfa4a5fee9cbce25ecd65121b58226c787afc0d0",
+      "repo_digests": [
+        "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+      ],
+      "all_prior_observations_match": true
+    },
+    {
+      "tag": "timescale/timescaledb:2.30.2-pg18",
+      "image_id": "sha256:db1495de1e31cc5b81ef4b3d9a34f2d7a7655258224f88f316330c095c81518b",
+      "repo_digests": [
+        "timescale/timescaledb@sha256:e72689191e1c977892c53d6f2c344dbc4a9657a867dc8cc1899229f9d3672b2e"
+      ],
+      "all_prior_observations_match": true
+    },
+    {
+      "tag": "wlaur/monetdb-container:11.55.9-1",
+      "image_id": "sha256:cba0b6f8d38e880a2f2d2585af4283e96c0ced910b3000420959602c3a89938d",
+      "repo_digests": [
+        "wlaur/monetdb-container@sha256:b7238498164cd26a0b7bd9391d51948dca5c69f490f888186d3204320abaecf7"
+      ],
+      "all_prior_observations_match": true
+    }
+  ],
+  "runner": {
+    "path": "scripts/timeout_recovery.py",
+    "bytes": 36133,
+    "sha256": "dd28e4e088ca825d98e5e37ec17acf38d03fa66923856339771da6ae11cadbeb"
+  },
+  "validator": {
+    "path": "olap_benchmarks/results/validation.py",
+    "bytes": 20999,
+    "sha256": "038304d57bbc99d83ca8de9e9fc788882ce8451900160204d22d5bd1d591635a"
+  },
+  "source_archive": {
+    "asset": "timeout-recovery-20261026-evidence-a8192c23b118.tar.gz",
+    "sha256": "a8192c23b11807fe9d7733c0f7b8197494d1be9aa750b728628661d5fed147aa",
+    "objects": 827,
+    "paths": 1707
+  },
+  "prior_final_raw": {
+    "sha256": "2d55a9915b80101885eccb92048401d75e02e23b279046d86f475f5dfb07000c",
+    "interrupted_run": "2026-10-timeout-recovery-final/run688",
+    "unchanged": true
+  },
+  "baseline_manifest_sha256": "34dfbaee363f735db7eb45c1e5f40ef7bf88c6baf46d8ddbddb581542b013dfe",
+  "seed": {
+    "path": "data/frozen/2026-10-selected-source.db",
+    "bytes": 143929344,
+    "sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+    "mode": "0444"
+  },
+  "start_free_disk_bytes": 166429982720,
+  "runtime_free_disk_bytes": 42949672960,
+  "publication_status": "No new results published; existing c47a7 asset remains frozen.",
+  "measurement_head": "Record actual clean documentation HEAD in ignored pre-START handoff.",
+  "self_hash": "Record manifest SHA in ignored handoff; manifest does not hash itself."
+}
