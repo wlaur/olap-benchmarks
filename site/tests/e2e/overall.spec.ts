@@ -12,7 +12,8 @@ test(
   { tag: "@overall-publication" },
   async ({ page }, testInfo) => {
     const response = await page.request.get("data/manifest.json")
-    expect((await response.json()).results_db_sha256).toBe(pinned.results_db_sha256)
+    if (process.env.UPDATE_OVERALL_FIXTURE !== "1")
+      expect((await response.json()).results_db_sha256).toBe(pinned.results_db_sha256)
     await page.goto("#/")
     const evidence = await page.evaluate(async () => {
       const readerPath = "/olap-benchmarks/src/lib/observationReader.ts"
@@ -67,6 +68,33 @@ test(
       body: JSON.stringify(evidence, null, 2),
       contentType: "application/json",
     })
+    if (process.env.UPDATE_OVERALL_FIXTURE === "1") {
+      const { writeFile } = await import("node:fs/promises")
+      const manifest = await (await page.request.get("data/manifest.json")).json()
+      await writeFile(
+        new URL("../fixtures/overall.json", import.meta.url),
+        JSON.stringify(
+          {
+            results_db_sha256: manifest.results_db_sha256,
+            families: evidence.familyCount,
+            policy: evidence.policy,
+            queries: evidence.queryCount,
+            rows: evidence.rows.map((row) => ({
+              band: row.rankRange,
+              coverage: Number(row.coverage.toFixed(1)),
+              db: row.db,
+              queries: row.scoredQueries,
+              score: Number(row.score.toFixed(1)),
+            })),
+            within_workload_inversions: evidence.inversions,
+            within_workload_pairs: evidence.pairs,
+          },
+          null,
+          2,
+        ) + "\n",
+      )
+      return
+    }
     expect(evidence.policy).toBe(pinned.policy)
     expect(evidence.systems).toHaveLength(1)
     expect(evidence.familyCount).toBe(pinned.families)
@@ -94,9 +122,10 @@ test(
     const list = page.getByRole("list", { name: "Overall database ranking", exact: true })
     await expect(list.getByRole("listitem")).toHaveCount(11)
     await expect(list).not.toContainText("Not eligible")
-    for (const [index, expected] of pinned.rows.entries()) {
+    for (const expected of pinned.rows) {
+      const rank = 1 + pinned.rows.filter((other) => other.score > expected.score).length
       const row = page.locator(`[data-overall-engine="${expected.db}"]`)
-      await expect(row.locator("[data-overall-rank]")).toHaveText(String(index + 1))
+      await expect(row.locator("[data-overall-rank]")).toHaveText(String(rank))
     }
   },
 )
@@ -106,10 +135,12 @@ test("overall rows and contributions fit desktop, iPad and mobile widths", async
 }, testInfo) => {
   await page.goto("#/")
   const row = page.locator('[data-overall-engine="postgres"]')
-  await expect(row.locator("[data-overall-score]")).toHaveText("8.2")
+  const expected = pinned.rows.find((entry) => entry.db === "postgres")!
+  const rank = 1 + pinned.rows.filter((other) => other.score > expected.score).length
+  await expect(row.locator("[data-overall-score]")).toHaveText(expected.score.toFixed(1))
   await expect(page.getByText("Score · 0–100, higher is better", { exact: true })).toBeVisible()
   await expect(row.locator("summary").first()).toHaveAccessibleName(
-    /^Rank 8 PostgreSQL Score 8\.2 out of 100 75% weighted coverage$/,
+    `Rank ${rank} PostgreSQL Score ${expected.score.toFixed(1)} out of 100 ${expected.coverage.toFixed(0)}% weighted coverage`,
   )
   for (const width of [1440, 1024, 834, 768, 640, 390]) {
     await page.setViewportSize({ width, height: 1000 })
@@ -219,3 +250,34 @@ test("overall verification errors are visible while workload evidence remains ac
     await fixture.cleanup()
   }
 })
+
+test(
+  "curated Explorer SQL displays the frozen measured generation",
+  { tag: "@overall-publication" },
+  async ({ page }) => {
+    const manifest = await (await page.request.get("data/queries.json")).json()
+    for (const [suite, query, db] of [
+      ["tpc_ds", "46", "timescaledb"],
+      ["tpc_ds", "49", "postgres"],
+      ["chat_threads", "06_thread_fetch_payload", "arc"],
+    ]) {
+      await page.goto(`#/explorer/${suite}?query=${query}&sql_database=${db}`)
+      await page.getByRole("button", { name: "Inspect a query", exact: true }).click()
+      const viewer = page.getByLabel("SQL query viewer")
+      await expect(viewer).toBeVisible()
+      const displayed = await viewer.evaluate((element) =>
+        [...element.querySelectorAll(":scope > div > span:nth-child(even)")]
+          .map((line) => (line.textContent === "\u00a0" ? "" : line.textContent))
+          .join("\n"),
+      )
+      const entry = manifest[suite!][query!]
+      expect(displayed.trim()).toBe((entry.db_overrides[db!] ?? entry.sql).trim())
+    }
+    for (const query of ["31", "49", "65", "85"]) {
+      const entry = manifest.tpc_ds[query]
+      const sql = entry.db_overrides.postgres ?? entry.sql
+      expect(sql).not.toContain('COLLATE "C"')
+      expect(sql).not.toContain("DOUBLE PRECISION")
+    }
+  },
+)

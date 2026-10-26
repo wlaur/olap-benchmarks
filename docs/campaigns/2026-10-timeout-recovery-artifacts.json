@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "proof_archive": {
+    "asset": "timeout-recovery-curated-proof-5b24f96cd57c.tar.gz",
+    "bytes": 8593321,
+    "sha256": "5b24f96cd57cd0a87a7a39bcf2976d6b99baf3a10e65730f54cf24cbc2e5dc1a",
+    "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-curated-proof-5b24f96cd57c.tar.gz"
+  },
+  "original_archive": {
+    "url": "https://github.com/wlaur/olap-benchmarks/releases/download/runs/timeout-recovery-20261026-evidence-a8192c23b118.tar.gz",
+    "sha256": "a8192c23b11807fe9d7733c0f7b8197494d1be9aa750b728628661d5fed147aa"
+  },
+  "sources": [
+    {
+      "revision": "2026-10-timeout-recovery",
+      "sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "object": "objects/4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "restore_as": "2026-10-timeout-recovery.db"
+    },
+    {
+      "revision": "2026-10-timeout-recovery-continuation",
+      "sha256": "8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "object": "objects/8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "restore_as": "2026-10-timeout-recovery-continuation.db"
+    },
+    {
+      "revision": "2026-10-timeout-recovery-remaining",
+      "sha256": "866d71728da75556a3c1dded5c62528b356c04b42f39c56b281b79d12f3b32a6",
+      "object": "objects/866d71728da75556a3c1dded5c62528b356c04b42f39c56b281b79d12f3b32a6",
+      "restore_as": "2026-10-timeout-recovery-remaining.db"
+    },
+    {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "object": "objects/4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "restore_as": "2026-10-timeout-recovery-corrective.db"
+    },
+    {
+      "revision": "2026-10-timeout-recovery-final",
+      "sha256": "2d55a9915b80101885eccb92048401d75e02e23b279046d86f475f5dfb07000c",
+      "object": "objects/2d55a9915b80101885eccb92048401d75e02e23b279046d86f475f5dfb07000c",
+      "restore_as": "2026-10-timeout-recovery-final.db"
+    },
+    {
+      "revision": "baseline",
+      "sha256": "832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+      "object": "objects/832e28599501d125f2f4e0e35bb5251803955fbe1f6066f02c949c9df59f833f",
+      "restore_as": "baseline.db"
+    }
+  ],
+  "publication": [
+    {
+      "path": "site/public/data/results.db",
+      "sha256": "c47a7f7c04963684a2125a63578cf7fdca84c4c028ed2e05ceece1ed7ec4ac0c"
+    },
+    {
+      "path": "site/public/data/manifest.json",
+      "sha256": "304aa31097c8a0c9c431448c092c5acfa4e9d16783ee3ab659df038708537aeb"
+    },
+    {
+      "path": "site/public/data/comparison.json",
+      "sha256": "f3da91ccfaa281bb40cc5636095236fb00dc4d9c04f8ea4950d5ee98f54d9114"
+    },
+    {
+      "path": "site/public/data/queries.json",
+      "sha256": "9699b41f740b702a3a7a1aa6098cd26da988ecde8f70407d79e35884b902544d"
+    }
+  ],
+  "reports": [
+    {
+      "path": "annotation-dispositions.json",
+      "bytes": 29536,
+      "sha256": "bdc871140839bf89691f03cf5c6e159565ab52db653ca008afd277b49f812c25"
+    },
+    {
+      "path": "annotations.json",
+      "bytes": 29212,
+      "sha256": "7002e4065287cfbfd016348e04f0dbe639ef7e3f9352689c7fadbbe75220c47a"
+    },
+    {
+      "path": "baseline-identity-map.json",
+      "bytes": 5845,
+      "sha256": "4b25b0217456deacec89702ac3158fa3aa211bc02de72ef5a66ecb9ff5e61dff"
+    },
+    {
+      "path": "baseline-preservation.json",
+      "bytes": 1021,
+      "sha256": "a689d833f4c193540ba308118036da6e510d46c8188d013418b305b0f3b3277e"
+    },
+    {
+      "path": "build-summary.json",
+      "bytes": 12823,
+      "sha256": "708879aa91173ad5499e5ef7ef3927d1bf6e040d06df56dd859f1deda275116f"
+    },
+    {
+      "path": "certificates.json",
+      "bytes": 5981,
+      "sha256": "91fbf2859375df78e16cfe017ed4f269214477f8a87c9ace7d88012001d22725"
+    },
+    {
+      "path": "certification-dispositions.json",
+      "bytes": 2667,
+      "sha256": "1a4dccf6086f401cff74ab64521a8a8fc726e6e0c5459cac84418a7a7515bfaf"
+    },
+    {
+      "path": "export-summary.json",
+      "bytes": 273,
+      "sha256": "07904a9e70bac116f437ad909a9efc1aeebf12f617b7b611622d1e9176186206"
+    },
+    {
+      "path": "full-run-audit.json",
+      "bytes": 71794321,
+      "sha256": "3d06ccc6cdbac0f922fac25f5f994fc7b1833422d98369de2320e6c3dd98dd61"
+    },
+    {
+      "path": "original-queries.json",
+      "bytes": 4594013,
+      "sha256": "b6575e3291addd8d6317d9dce77aa48bc090604fb61bac53d561641217211243"
+    },
+    {
+      "path": "population-associations.json",
+      "bytes": 87543,
+      "sha256": "e93ba31da51b971824f563ce1c4a0de47ce86e78672f28d29ca72be17951e4dd"
+    },
+    {
+      "path": "queries.json",
+      "bytes": 4600673,
+      "sha256": "9699b41f740b702a3a7a1aa6098cd26da988ecde8f70407d79e35884b902544d"
+    },
+    {
+      "path": "query-manifest-adjustments.json",
+      "bytes": 1534,
+      "sha256": "403b33760774bad77b6525480878add913ed57b480dba5834873ef505e973fad"
+    },
+    {
+      "path": "readonly-validation.json",
+      "bytes": 170,
+      "sha256": "73cf683e37c7e2cf48750785c8fed59afa4631bd3067f727cd521753c613e9b8"
+    },
+    {
+      "path": "restore-index.json",
+      "bytes": 2550,
+      "sha256": "fc205fc1b9d97a415a527a38c1eea64da16009794fb4d18581063107b4f8a29f"
+    },
+    {
+      "path": "sealed-evidence.json",
+      "bytes": 58626,
+      "sha256": "9028fcda06254c45619a3c1bf2a647f7ac83691f3d08405431a324059a183420"
+    },
+    {
+      "path": "selection.json",
+      "bytes": 11348,
+      "sha256": "44475f4b05c668f392205aa27df61426041c836181773ba12dbe276711b11ecb"
+    },
+    {
+      "path": "sql-audit.json",
+      "bytes": 4430674,
+      "sha256": "317eb96cbad759ffa541dcd7728ea8d0de9fc4577a44eb1990767a59ce8e64ad"
+    },
+    {
+      "path": "validation.json",
+      "bytes": 302,
+      "sha256": "303fd05c7bb3c4b6b059ee4d9417809282b5e0a137ef852cea0636ed48090b1b"
+    }
+  ]
+}

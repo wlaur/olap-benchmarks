@@ -1,0 +1,408 @@
+[
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 685
+    },
+    "selected_run_id": 685,
+    "replaced_baseline_run_id": 510,
+    "db": "doris",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 686
+    },
+    "selected_run_id": 686,
+    "replaced_baseline_run_id": 511,
+    "db": "doris",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 689
+    },
+    "selected_run_id": 687,
+    "replaced_baseline_run_id": 517,
+    "db": "monetdb",
+    "suite": "chat_threads",
+    "scale_factor": 10,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 690
+    },
+    "selected_run_id": 688,
+    "replaced_baseline_run_id": 522,
+    "db": "monetdb",
+    "suite": "chat_threads",
+    "scale_factor": 10,
+    "operation": "select",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 691
+    },
+    "selected_run_id": 689,
+    "replaced_baseline_run_id": 388,
+    "db": "postgres",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 692
+    },
+    "selected_run_id": 690,
+    "replaced_baseline_run_id": 572,
+    "db": "postgres",
+    "suite": "tpc_ds",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery",
+      "results_db_sha256": "4ee1ce8950bd62375533a06535d719c1156469aa1869d29d6b4520f0fe788e57",
+      "run_id": 693
+    },
+    "selected_run_id": 691,
+    "replaced_baseline_run_id": 365,
+    "db": "postgres",
+    "suite": "tpc_ds",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-continuation",
+      "results_db_sha256": "8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "run_id": 685
+    },
+    "selected_run_id": 692,
+    "replaced_baseline_run_id": 669,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-continuation",
+      "results_db_sha256": "8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "run_id": 686
+    },
+    "selected_run_id": 693,
+    "replaced_baseline_run_id": 372,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "operation": "select",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-continuation",
+      "results_db_sha256": "8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "run_id": 687
+    },
+    "selected_run_id": 694,
+    "replaced_baseline_run_id": 670,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "operation": "analytical",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-continuation",
+      "results_db_sha256": "8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "run_id": 688
+    },
+    "selected_run_id": 695,
+    "replaced_baseline_run_id": 671,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "operation": "analytical",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-continuation",
+      "results_db_sha256": "8cb46edbd80a09d784a767359f3569454dd5064db9a89b147818140b119ebcae",
+      "run_id": 689
+    },
+    "selected_run_id": 696,
+    "replaced_baseline_run_id": 672,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 10,
+    "operation": "analytical",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-remaining",
+      "results_db_sha256": "866d71728da75556a3c1dded5c62528b356c04b42f39c56b281b79d12f3b32a6",
+      "run_id": 689
+    },
+    "selected_run_id": 697,
+    "replaced_baseline_run_id": 281,
+    "db": "starrocks",
+    "suite": "time_series",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-remaining",
+      "results_db_sha256": "866d71728da75556a3c1dded5c62528b356c04b42f39c56b281b79d12f3b32a6",
+      "run_id": 690
+    },
+    "selected_run_id": 698,
+    "replaced_baseline_run_id": 282,
+    "db": "starrocks",
+    "suite": "time_series",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-remaining",
+      "results_db_sha256": "866d71728da75556a3c1dded5c62528b356c04b42f39c56b281b79d12f3b32a6",
+      "run_id": 691
+    },
+    "selected_run_id": 699,
+    "replaced_baseline_run_id": 491,
+    "db": "starrocks",
+    "suite": "time_series",
+    "scale_factor": 10,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-remaining",
+      "results_db_sha256": "866d71728da75556a3c1dded5c62528b356c04b42f39c56b281b79d12f3b32a6",
+      "run_id": 692
+    },
+    "selected_run_id": 700,
+    "replaced_baseline_run_id": 494,
+    "db": "starrocks",
+    "suite": "time_series",
+    "scale_factor": 10,
+    "operation": "select",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 685
+    },
+    "selected_run_id": 701,
+    "replaced_baseline_run_id": 312,
+    "db": "questdb",
+    "suite": "rtabench",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 686
+    },
+    "selected_run_id": 702,
+    "replaced_baseline_run_id": 316,
+    "db": "questdb",
+    "suite": "rtabench",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 687
+    },
+    "selected_run_id": 703,
+    "replaced_baseline_run_id": 386,
+    "db": "timescaledb",
+    "suite": "rtabench",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 688
+    },
+    "selected_run_id": 704,
+    "replaced_baseline_run_id": 379,
+    "db": "timescaledb",
+    "suite": "time_series",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 689
+    },
+    "selected_run_id": 705,
+    "replaced_baseline_run_id": 381,
+    "db": "timescaledb",
+    "suite": "time_series",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 690
+    },
+    "selected_run_id": 706,
+    "replaced_baseline_run_id": 524,
+    "db": "monetdb",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 691
+    },
+    "selected_run_id": 707,
+    "replaced_baseline_run_id": 525,
+    "db": "monetdb",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 692
+    },
+    "selected_run_id": 708,
+    "replaced_baseline_run_id": 452,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 693
+    },
+    "selected_run_id": 709,
+    "replaced_baseline_run_id": 458,
+    "db": "postgres",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "operation": "select",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 694
+    },
+    "selected_run_id": 710,
+    "replaced_baseline_run_id": 459,
+    "db": "timescaledb",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 695
+    },
+    "selected_run_id": 711,
+    "replaced_baseline_run_id": 465,
+    "db": "timescaledb",
+    "suite": "tpc_h",
+    "scale_factor": 50,
+    "operation": "select",
+    "status": "failed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 696
+    },
+    "selected_run_id": 712,
+    "replaced_baseline_run_id": 398,
+    "db": "timescaledb",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "populate",
+    "status": "completed"
+  },
+  {
+    "origin": {
+      "revision": "2026-10-timeout-recovery-corrective",
+      "results_db_sha256": "4f2a23a776effef7cb85c4b3cc3cc5492e555e2957117819db0d7d79be7e4dba",
+      "run_id": 697
+    },
+    "selected_run_id": 713,
+    "replaced_baseline_run_id": 404,
+    "db": "timescaledb",
+    "suite": "clickbench",
+    "scale_factor": 1,
+    "operation": "select",
+    "status": "completed"
+  }
+]

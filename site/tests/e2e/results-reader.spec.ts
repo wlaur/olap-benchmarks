@@ -121,6 +121,7 @@ test("published results open in the pinned browser engine", async ({ page }) => 
 
 test("DuckDB 2.0 v1.4-compatible storage preserves evidence in the browser", async ({ page }) => {
   await declareFormat(page, FORMAT)
+  await page.route("**/data/comparison.json", (route) => route.fulfill({ json: { version: 1 } }))
   await page.route("**/data/results.db", (route) =>
     route.fulfill({
       body: fixture,
@@ -177,6 +178,7 @@ test("unsupported results show an actionable error in the results page", async (
 
 test("native 2.0 storage cannot masquerade as a compatible publication", async ({ page }) => {
   await declareFormat(page, FORMAT)
+  await page.route("**/data/comparison.json", (route) => route.fulfill({ json: { version: 1 } }))
   await page.route("**/data/results.db", (route) =>
     route.fulfill({
       body: nativeFixture,
